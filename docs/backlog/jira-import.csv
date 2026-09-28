@@ -33,23 +33,6 @@ Fuente: PENDIENTES.md [PERMISOS-SERVER-ACTIONS] · Doc del área: docs/areas/pla
 *Dónde:* {{apps/web/app/auth/callback/route.ts}}.
 
 Fuente: PENDIENTES.md [AUTH-CALLBACK-NEXT] · Doc del área: docs/areas/plataforma.md",AUTH-CALLBACK-NEXT,Plataforma,P0,Media,seguridad
-[LLAMADAS-EMBED-ROTO] /sales/llamadas no muestra ninguna llamada,Bug,Highest,ventas,p0,sev-alta,bug,,,"*Tipo:* bug
-
-*Severidad:* Alta
-
-*Estado verificado:* ítem nuevo. {{getSalesCallsAction}} ({{app/fathom/actions.ts:337-349}}) hace {{.from(""fathom_calls"").select(""…, call_analyses(…)"")}}. {{call_analyses.fathom_call_id}} es {{TEXT}} sin FK ({{20260614100000_call_analysis_deep.sql:18}}) y en producción la tabla sólo tiene FKs a {{organizations}} y {{profiles}}. PostgREST no puede embeber sin relación y responde error; el {{catch}} devuelve {{[]}}, así que la pantalla siempre dice que no hay llamadas.
-
-*Riesgo:* Siempre: la consulta falla en cada carga (call_analyses no tiene FK a fathom_calls, confirmado en producción) y el error se traga, así que la pantalla muestra «no hay llamadas» sin ningún aviso ni log.
-
-*Impacto:* Todas las orgs: Ventas → Llamadas está inutilizable. Los datos no se pierden (están en la base) pero el equipo comercial no puede revisar sus llamadas ni sus análisis desde ahí.
-
-*Qué hay que hacer:* consultar {{call_analyses}} aparte por {{fathom_call_id in (…)}} y unir en JS (o agregar {{fathom_calls.id}} como FK en {{call_analyses}}). Loguear el error en vez de tragarlo.
-
-*Criterio de aceptación:* En una org con fathom_calls de purpose = 'sales', Ventas → Llamadas lista la misma cantidad de llamadas que devuelve el count en la base, con su análisis cuando existe en call_analyses; si la consulta falla, el error queda en los logs del servidor en vez de mostrarse la lista vacía; hay un test que cubre la unión de llamadas con sus análisis
-
-*Dónde:* {{apps/web/app/fathom/actions.ts}}, {{apps/web/components/sales/sales-calls-list.tsx}}.
-
-Fuente: PENDIENTES.md [LLAMADAS-EMBED-ROTO] · Doc del área: docs/areas/ventas.md",LLAMADAS-EMBED-ROTO,Ventas,P0,Alta,bug
 [CLOSING-LIST-1000] El calendario y la lista de Closing pierden los turnos más recientes,Bug,Highest,ventas,p0,sev-alta,bug,,,"*Tipo:* bug
 
 *Severidad:* Alta
@@ -687,7 +670,7 @@ Fuente: PENDIENTES.md [CALENDLY-CRONS-SUPERPUESTOS] · Doc del área: docs/areas
 
 *Severidad:* Alta
 
-*Estado verificado:* ítem nuevo. El análisis profundo ({{generateDeepCallAnalysis}} → {{call_analyses}}) sólo se dispara desde {{finalizeAssociatedCall}} ({{lib/fathom/process-call.ts:470-512}}), que corre cuando la grabación quedó vinculada a un *cliente*, sin mirar {{purpose}}: una 1-1 de entrega de ≥10 min se analiza como venta (costo de Sonnet y ruido en ranking/objeciones), y una venta con un lead nunca se analiza. Además no se pasa {{closerName}} ni {{closer_id}}: {{call_analyses.closer_name}} queda null y {{getTeamRankingAction}} agrupa todo en ""Sin nombre"". Busca {{form_answers}} por {{ilike lead_name}} en vez de usar {{closing_call_id}}.
+*Estado verificado:* ítem nuevo. El análisis profundo ({{generateDeepCallAnalysis}} → {{call_analyses}}) sólo se dispara desde {{finalizeAssociatedCall}} ({{lib/fathom/process-call.ts:470-512}}), que corre cuando la grabación quedó vinculada a un *cliente*, sin mirar {{purpose}}: una 1-1 de entrega de ≥10 min se analiza como venta (costo de Sonnet y ruido en ranking/objeciones), y una venta con un lead nunca se analiza. Además no se pasa {{closerName}} ni {{closer_id}}: {{call_analyses.closer_name}} queda null y {{getTeamRankingAction}} agrupa todo en ""Sin nombre"". Busca {{form_answers}} por {{ilike lead_name}} en vez de usar {{closing_call_id}}. En producción (2026-09-28) las 19 filas de {{call_analyses}} tienen {{fathom_call_id}} null (todas creadas el 2026-07-05, no por este flujo): ninguna se puede atribuir a una llamada, así que Ventas → Llamadas lista las 18 llamadas de venta sin análisis.
 
 *Riesgo:* Siempre que una 1-1 de entrega de 10 min o más se asocia a un cliente, se analiza como venta; y ninguna llamada de venta con un lead (sin cliente) se analiza.
 

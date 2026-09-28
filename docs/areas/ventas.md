@@ -26,7 +26,7 @@ layout `app/(platform)/layout.tsx` corta el render si el rol lo tiene en `none`.
 | `/sales/metrics` | `app/(platform)/sales/metrics/page.tsx` → `components/sales/sales-metrics-redesign.tsx` | KPIs de cierre/show/leads por rango de fechas, ranking de equipo (`call_analyses`), objeciones frecuentes, fallback a `metrics_snapshots` importados |
 | `/sales/closing` | `app/(platform)/sales/closing/page.tsx` → `components/closing/closing-overview.tsx` | Tabs por hash: `#calendario`, `#lista`, `#seguimiento` (tabla de leads, `leads-table.tsx`), `#equipo` (`closers-ranking.tsx`). Drawer de turno con botones de resultado, modal de cierre con pago (`payment-modal.tsx`) y de no-cierre/no-show (`call-outcome-modal.tsx`). `?call=<id>` abre un turno |
 | `/sales/cobros` | `app/(platform)/sales/cobros/page.tsx` → `components/sales/cobros-page.tsx` | Tabla por cliente: plan, días restantes, tipo de pago, adeudado, monto. Historial y registro de cuotas con comprobante (`client-payments-section.tsx`). `?cliente=<id>` lo abre desplegado |
-| `/sales/llamadas` | `app/(platform)/sales/llamadas/page.tsx` → `components/sales/sales-calls-list.tsx` | Llamadas de Fathom con `purpose = 'sales'` y su `call_analyses` (ver bug en "Limitaciones") |
+| `/sales/llamadas` | `app/(platform)/sales/llamadas/page.tsx` → `components/sales/sales-calls-list.tsx` | Llamadas de Fathom con `purpose = 'sales'` (últimas 100) y su `call_analyses`, unidos en código por `fathom_call_id` (`lib/fathom/sales-calls.ts`) |
 
 Superficies de Ventas que viven en otras pantallas:
 
@@ -142,7 +142,16 @@ cron /api/integrations/fathom/process (10 min, espera 30 min por llamada) → pr
         → timeline + problemas del cliente + análisis profundo (QStash /api/queue/process-fathom-analysis,
           o inline si no hay QStash) → call_analyses → RAG
       si no → asociación por título (associate.ts): unmatched / pending_review / finalize
+
+/sales/llamadas → getSalesCallsAction: fathom_calls (purpose = 'sales', últimas 100)
+                  + call_analyses por fathom_call_id in (…) → attachCallAnalyses (lib/fathom/sales-calls.ts)
 ```
+
+- **Unión llamada ↔ análisis:** `call_analyses.fathom_call_id` guarda el ID de la grabación en Fathom
+  (el mismo texto que `fathom_calls.fathom_call_id`), no `fathom_calls.id`, y no hay FK entre las
+  tablas: PostgREST no puede embeberlas, así que la pantalla hace dos lecturas y las une por
+  organización + ID de grabación. Si falla la lectura de llamadas, la pantalla muestra un aviso (el
+  error va a los logs); si falla la de análisis, muestra las llamadas sin análisis y lo loguea.
 
 - **Ventana de sync:** desde `last_sync_at`, pero nunca antes de `connected_at` (el historial no se trae)
   (`lib/fathom/sync-window.ts`). Excepción: si no hay ninguna de las dos fechas, trae todo.
@@ -244,9 +253,6 @@ Orden sugerido: (1) sacar `conversations` del provider y de métricas/embudo, (2
 
 Detalle y prioridad en [`PENDIENTES.md` § Ventas](../../PENDIENTES.md#ventas).
 
-- **`/sales/llamadas` siempre vacía** `[LLAMADAS-EMBED-ROTO]`: `getSalesCallsAction` embebe
-  `call_analyses(...)` desde `fathom_calls`, pero no hay FK entre las dos tablas (verificado en prod);
-  PostgREST rechaza la consulta y el `catch` devuelve `[]`.
 - **Tab Equipo de Closing siempre vacío** `[CLOSER-AMOUNT-CLOSED]`: `getCloserMetricsAction` pide
   `closing_calls.amount_closed`, que no existe.
 - **Closing pierde turnos por el techo de 1.000 filas** `[CLOSING-LIST-1000]`: `listClosingCallsAction`

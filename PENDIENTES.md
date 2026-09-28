@@ -64,7 +64,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|
 | `[PERMISOS-SERVER-ACTIONS]` | Plataforma | Alta | Los permisos por módulo no protegen datos, sólo pantallas |
 | `[AUTH-CALLBACK-NEXT]` | Plataforma | Media | Open redirect en `/auth/callback` (nuevo) |
-| `[LLAMADAS-EMBED-ROTO]` | Ventas | Alta | `/sales/llamadas` no muestra ninguna llamada |
 | `[CLOSING-LIST-1000]` | Ventas | Alta | El calendario y la lista de Closing pierden los turnos más recientes |
 | `[ZERNIO-KEY-GLOBAL]` | Marketing | Crítica | Una org sin Zernio usa la key global de Zernio |
 | `[EMBUDOS-WEBHOOK-PERDIDA]` | Embudos y Lanzamientos | Crítica | Webhooks de pagos y GHL que responden 200 sin haber guardado el evento |
@@ -82,7 +81,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|---|---|
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 2 | 14 | 33 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
-| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 2 | 15 | 16 | 8 |
+| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 15 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 1 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
@@ -805,16 +804,6 @@ Doc del área: [`docs/areas/ventas.md`](./docs/areas/ventas.md)
 
 ### Ventas · P0
 
-#### [LLAMADAS-EMBED-ROTO] `/sales/llamadas` no muestra ninguna llamada
-- **Tipo:** bug
-- **Severidad:** Alta
-- **Estado verificado:** ítem nuevo. `getSalesCallsAction` (`app/fathom/actions.ts:337-349`) hace `.from("fathom_calls").select("…, call_analyses(…)")`. `call_analyses.fathom_call_id` es `TEXT` sin FK (`20260614100000_call_analysis_deep.sql:18`) y en producción la tabla sólo tiene FKs a `organizations` y `profiles`. PostgREST no puede embeber sin relación y responde error; el `catch` devuelve `[]`, así que la pantalla siempre dice que no hay llamadas.
-- **Riesgo:** Siempre: la consulta falla en cada carga (call_analyses no tiene FK a fathom_calls, confirmado en producción) y el error se traga, así que la pantalla muestra «no hay llamadas» sin ningún aviso ni log.
-- **Impacto:** Todas las orgs: Ventas → Llamadas está inutilizable. Los datos no se pierden (están en la base) pero el equipo comercial no puede revisar sus llamadas ni sus análisis desde ahí.
-- **Qué hay que hacer:** consultar `call_analyses` aparte por `fathom_call_id in (…)` y unir en JS (o agregar `fathom_calls.id` como FK en `call_analyses`). Loguear el error en vez de tragarlo.
-- **Criterio de aceptación:** En una org con fathom_calls de purpose = 'sales', Ventas → Llamadas lista la misma cantidad de llamadas que devuelve el count en la base, con su análisis cuando existe en call_analyses; si la consulta falla, el error queda en los logs del servidor en vez de mostrarse la lista vacía; hay un test que cubre la unión de llamadas con sus análisis
-- **Dónde:** `apps/web/app/fathom/actions.ts`, `apps/web/components/sales/sales-calls-list.tsx`.
-
 #### [CLOSING-LIST-1000] El calendario y la lista de Closing pierden los turnos más recientes
 - **Tipo:** bug
 - **Severidad:** Alta
@@ -882,7 +871,7 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 #### [FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas
 - **Tipo:** bug
 - **Severidad:** Alta
-- **Estado verificado:** ítem nuevo. El análisis profundo (`generateDeepCallAnalysis` → `call_analyses`) sólo se dispara desde `finalizeAssociatedCall` (`lib/fathom/process-call.ts:470-512`), que corre cuando la grabación quedó vinculada a un **cliente**, sin mirar `purpose`: una 1-1 de entrega de ≥10 min se analiza como venta (costo de Sonnet y ruido en ranking/objeciones), y una venta con un lead nunca se analiza. Además no se pasa `closerName` ni `closer_id`: `call_analyses.closer_name` queda null y `getTeamRankingAction` agrupa todo en "Sin nombre". Busca `form_answers` por `ilike lead_name` en vez de usar `closing_call_id`.
+- **Estado verificado:** ítem nuevo. El análisis profundo (`generateDeepCallAnalysis` → `call_analyses`) sólo se dispara desde `finalizeAssociatedCall` (`lib/fathom/process-call.ts:470-512`), que corre cuando la grabación quedó vinculada a un **cliente**, sin mirar `purpose`: una 1-1 de entrega de ≥10 min se analiza como venta (costo de Sonnet y ruido en ranking/objeciones), y una venta con un lead nunca se analiza. Además no se pasa `closerName` ni `closer_id`: `call_analyses.closer_name` queda null y `getTeamRankingAction` agrupa todo en "Sin nombre". Busca `form_answers` por `ilike lead_name` en vez de usar `closing_call_id`. En producción (2026-09-28) las 19 filas de `call_analyses` tienen `fathom_call_id` null (todas creadas el 2026-07-05, no por este flujo): ninguna se puede atribuir a una llamada, así que Ventas → Llamadas lista las 18 llamadas de venta sin análisis.
 - **Riesgo:** Siempre que una 1-1 de entrega de 10 min o más se asocia a un cliente, se analiza como venta; y ninguna llamada de venta con un lead (sin cliente) se analiza.
 - **Impacto:** El ranking del equipo y las objeciones en Métricas mezclan entregas con ventas y agrupan todo en «Sin nombre»: datos que el negocio usa para evaluar closers salen incorrectos, más costo de Sonnet en llamadas que no corresponden.
 - **Qué hay que hacer:** disparar el análisis cuando `purpose = 'sales'` (con o sin cliente), usar `closing_call_id` para `form_answers` y `closing_calls.closer_id` para el closer.
