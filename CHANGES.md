@@ -58,12 +58,18 @@ Se descartó agregar una FK: `call_analyses.fathom_call_id` es único global y `
 `(organization_id, fathom_call_id)`, así que la FK obligaba a una migración compuesta sin beneficio para la
 pantalla. Se une también por `organization_id` para no cruzar orgs.
 
-**Verificación:** typecheck OK; `pnpm test` 1222 tests (5 nuevos en `lib/fathom/__tests__/sales-calls.test.ts`);
-lint sin errores. En producción (lectura): 18 `fathom_calls` con `purpose = 'sales'` (una org) → la pantalla
-debería listar 18. No se probó la pantalla con sesión real (bloque en `verificacion-manual.md`).
+**Verificación:** typecheck OK; `pnpm test` 1227 tests (10 nuevos: 5 de la unión en
+`lib/fathom/__tests__/sales-calls.test.ts` y 5 de la action con Supabase simulado en
+`app/fathom/__tests__/get-sales-calls-action.test.ts`, que rechaza cualquier embed de `call_analyses` con el
+PGRST200 real); lint sin errores. Con el `actions.ts` de `main` los 5 tests de la action fallan (reproducen la
+lista vacía). En producción (sólo lectura, 2026-09-28): la consulta vieja con supabase-js responde
+`PGRST200: Could not find a relationship between 'fathom_calls' and 'call_analyses'`; las dos nuevas se aceptan.
+Simulando por SQL (`role authenticated` + claims con `active_business_org_id`, transacción read-only) al único
+founder con acceso a la org con llamadas de venta (entra desde el holding): ve 18 de 18 llamadas y 0 análisis. No
+se vio la pantalla renderizada con una sesión real (bloque en `verificacion-manual.md`).
 
-**Riesgos / deuda técnica pendiente:** las 19 filas de `call_analyses` en prod tienen `fathom_call_id` null
-(creadas el 2026-07-05, fuera del flujo actual), así que hoy ninguna llamada muestra análisis; queda anotado en
+**Riesgos / deuda técnica pendiente:** las 19 filas de `call_analyses` en prod son de otra org (sin llamadas de
+venta) y tienen `fathom_call_id` null (creadas el 2026-07-05, fuera del flujo actual), así que hoy ninguna llamada muestra análisis; queda anotado en
 `[FATHOM-DEEP-ANALISIS-ALCANCE]`, que es lo que hace que las ventas con lead no se analicen.
 
 ---
