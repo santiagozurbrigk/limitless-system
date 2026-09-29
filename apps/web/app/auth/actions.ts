@@ -18,6 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { paths } from "@/routes";
+import { CUENTA_DESACTIVADA_MESSAGE } from "@/lib/auth/cuenta-desactivada";
 
 export type AuthActionState = {
   error?: string;
@@ -26,6 +27,9 @@ export type AuthActionState = {
 
 function mapAuthError(message: string): string {
   const lower = message.toLowerCase();
+  if (lower.includes("banned")) {
+    return CUENTA_DESACTIVADA_MESSAGE;
+  }
   if (lower.includes("invalid login credentials")) {
     return "Email o contraseña incorrectos.";
   }

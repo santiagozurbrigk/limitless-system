@@ -12,6 +12,10 @@ import {
   TEMP_PASSWORD_EXPIRED_QUERY,
 } from "@/lib/auth/temp-password-expiry";
 import { createClient } from "@/lib/supabase/server";
+import {
+  CUENTA_DESACTIVADA_MESSAGE,
+  estaDesactivado,
+} from "@/lib/auth/cuenta-desactivada";
 import { paths } from "@/routes";
 
 export type AuthContext = {
@@ -47,9 +51,14 @@ async function resolveAuthContext(): Promise<AuthSuccess | AuthFailure> {
     .eq("id", user.id)
     .maybeSingle();
 
-  let { organizationId, accountType } = await loadProfileOrganizationContext(
-    user.id
-  );
+  const profileContext = await loadProfileOrganizationContext(user.id);
+  if (estaDesactivado(profileContext.isActive)) {
+    return {
+      ok: false,
+      error: NextResponse.json({ error: CUENTA_DESACTIVADA_MESSAGE }, { status: 403 }),
+    };
+  }
+  let { organizationId, accountType } = profileContext;
   let role = profileRow?.role ?? "founder";
 
   if (!organizationId) {

@@ -24,6 +24,10 @@ import {
   type MutationResult,
 } from "@/lib/server/action-result";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  banParaEstado,
+  MOTIVO_BAN_DESACTIVADO,
+} from "@/lib/auth/cuenta-desactivada";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
@@ -44,6 +48,47 @@ import type { z } from "zod";
 
 function revalidateTeam() {
   revalidatePath(paths.platform.team.root);
+}
+
+/**
+ * SCRUM-8: además de `profiles.is_active`, el acceso se corta en Auth.
+ * Desactivar banea al usuario (no vuelve a iniciar sesión ni renueva el
+ * token) y vence las invitaciones que haya creado; reactivar lo desbanea.
+ * Sólo se llama después de confirmar que el perfil es de la org.
+ */
+async function sincronizarAccesoEnAuth(memberId: string, activo: boolean) {
+  const admin = createAdminClient();
+  const fallo = (detalle: string) =>
+    new Error(
+      `El perfil quedó ${activo ? "activo" : "desactivado"}, pero no se pudo actualizar su acceso: ${detalle}`
+    );
+
+  if (!activo) {
+    const { error: invitacionesError } = await admin
+      .from("team_invitations")
+      .update({ status: "expired" })
+      .eq("invited_by", memberId)
+      .eq("status", "pending");
+    if (invitacionesError) throw fallo(invitacionesError.message);
+
+    const { error } = await admin.auth.admin.updateUserById(memberId, {
+      ban_duration: banParaEstado(false),
+      app_metadata: { ban_motivo: MOTIVO_BAN_DESACTIVADO },
+    });
+    if (error) throw fallo(error.message);
+    return;
+  }
+
+  // Reactivar: sólo se levanta el ban que puso la baja desde Equipo.
+  const { data, error: lecturaError } = await admin.auth.admin.getUserById(memberId);
+  if (lecturaError) throw fallo(lecturaError.message);
+  if (data.user?.app_metadata?.ban_motivo !== MOTIVO_BAN_DESACTIVADO) return;
+
+  const { error } = await admin.auth.admin.updateUserById(memberId, {
+    ban_duration: banParaEstado(true),
+    app_metadata: { ban_motivo: null },
+  });
+  if (error) throw fallo(error.message);
 }
 
 function canManageTeam(role: string | undefined): boolean {
@@ -346,13 +391,27 @@ export async function updateMemberRoleAction(
       return { ok: true as const };
     }
 
-    const { error } = await supabase
+    const { data: anterior } = await supabase
+      .from("profiles")
+      .select("is_active")
+      .eq("id", parsedMemberId)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+
+    const { data: actualizados, error } = await supabase
       .from("profiles")
       .update(updates)
       .eq("id", parsedMemberId)
-      .eq("organization_id", organizationId);
+      .eq("organization_id", organizationId)
+      .select("id");
 
     if (error) throw new Error(error.message);
+    if (!actualizados?.length) throw new Error("Miembro no encontrado");
+
+    // Auth sólo se toca si el estado cambió de verdad.
+    if (isActive !== undefined && anterior?.is_active !== isActive) {
+      await sincronizarAccesoEnAuth(parsedMemberId, isActive);
+    }
 
     revalidateTeam();
     return { ok: true };
@@ -379,13 +438,17 @@ export async function deactivateMemberAction(
 
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
-    const { error } = await supabase
+    const { data: actualizados, error } = await supabase
       .from("profiles")
       .update({ is_active: false })
       .eq("id", parsedMemberId)
-      .eq("organization_id", organizationId);
+      .eq("organization_id", organizationId)
+      .select("id");
 
     if (error) throw new Error(error.message);
+    if (!actualizados?.length) throw new Error("Miembro no encontrado");
+
+    await sincronizarAccesoEnAuth(parsedMemberId, false);
 
     revalidateTeam();
     return { ok: true };

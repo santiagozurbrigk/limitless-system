@@ -67,7 +67,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | `[CLOSING-LIST-1000]` | Ventas | Alta | El calendario y la lista de Closing pierden los turnos más recientes |
 | `[EMBUDOS-WEBHOOK-PERDIDA]` | Embudos y Lanzamientos | Crítica | Webhooks de pagos y GHL que responden 200 sin haber guardado el evento |
 | `[1A1-CLAVE-ANTHROPIC-ROTA]` | Agente de negocio e IA | Alta | Una organización sin clave válida y sin clave global |
-| `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` | Operaciones, Finanzas y Producto | Crítica | Un miembro desactivado sigue entrando y viendo todo [Operaciones y equipo] |
 | `[OAUTH-ESTADO-SIN-FIRMA]` | Infraestructura, seguridad y tests (transversal) | Crítica | Los callbacks OAuth conectan la integración a la org que diga una cookie sin firmar |
 | `[DR-BACKUPS-SUPABASE]` | Infraestructura, seguridad y tests (transversal) | Crítica | La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración |
 | `[PERMISOS-SERVER-ACTIONS/infra]` | Infraestructura, seguridad y tests (transversal) | Alta | Los roles no se hacen cumplir en la base ni en las actions (incluye AUD-SEG-1) |
@@ -82,7 +81,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
-| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 1 | 7 | 15 | 10 |
+| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 3 | 25 | 42 | 13 |
 
 ---
@@ -1871,23 +1870,6 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 Doc del área: [`docs/areas/operaciones.md`](./docs/areas/operaciones.md)
 
 ### Operaciones, Finanzas y Producto · P0
-
-#### [EQUIPO-DESACTIVAR-NO-BLOQUEA] Un miembro desactivado sigue entrando y viendo todo [Operaciones y equipo]
-- **Tipo:** seguridad
-- **Severidad:** Crítica
-- **Estado verificado:** `deactivateMemberAction` y `updateMemberRoleAction` (`app/team/actions.ts`) sólo ponen
-  `profiles.is_active = false`. Nada lo lee: no está en `lib/supabase/middleware.ts` (que sí lee
-  `must_change_password`), ni en `lib/auth/bootstrap.ts`, ni en `get_my_organization_id()`, ni en ninguna policy.
-  Los únicos lectores son `app/fathom/member-actions.ts`, `lib/super-admin/queries.ts` y `lib/team/mapper.ts`
-  (que sólo lo muestra en la lista de Equipo). `docs/archivo/OPERATIONAL_NOTES.md`
-  afirma lo contrario ("Un miembro desactivado no puede iniciar sesión").
-- **Riesgo:** Si el founder desactiva a un miembro (típicamente al despedirlo), entonces esa persona sigue entrando con su sesión o su contraseña y ve y edita todo lo que su rol permitía. Pasa siempre; el founder cree que lo cortó porque la lista de Equipo lo muestra inactivo.
-- **Impacto:** Cualquier org que haya desactivado a alguien: un ex-integrante conserva acceso a clientes, ventas, finanzas y puede borrar o sacar datos. El único corte real hoy es el ban desde super-admin (lo hace Limitless, no el founder).
-- **Qué hay que hacer:** al desactivar, banear el usuario en Auth (`auth.admin.updateUserById(id, { ban_duration })`)
-  o revocar sesiones, y además cortar en el middleware si `is_active = false`. Idealmente que
-  `get_my_organization_id()` devuelva null para inactivos.
-- **Criterio de aceptación:** Con la sesión de un miembro abierta, el founder lo desactiva en Equipo y al recargar cualquier página el miembro queda sin acceso; al intentar iniciar sesión de nuevo con sus credenciales es rechazado; hay un test que cubre que un perfil inactivo no pasa el middleware
-- **Dónde:** `apps/web/app/team/actions.ts`, `apps/web/lib/supabase/middleware.ts`, migración nueva.
 
 ### Operaciones, Finanzas y Producto · P1
 

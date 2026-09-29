@@ -7,6 +7,7 @@ import {
   updateMemberRoleAction,
 } from "@/app/team/actions";
 import { es } from "@/lib/locale/es";
+import { useToast } from "@/providers/toast-provider";
 import { formatRelativeTime } from "@/lib/format";
 import type { CustomRole, TeamMember } from "@/types/team";
 
@@ -49,6 +50,7 @@ function MemberActions({
   onUpdated: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const { push } = useToast();
 
   if (!canManage) return null;
 
@@ -61,7 +63,10 @@ function MemberActions({
       disabled={pending || member.status === "inactive"}
       onClick={() =>
         startTransition(async () => {
-          await deactivateMemberAction(member.id);
+          const result = await deactivateMemberAction(member.id);
+          if (!result.success) {
+            push({ title: "No se pudo desactivar", description: result.error });
+          }
           onUpdated();
         })
       }
@@ -83,6 +88,7 @@ function RoleSelect({
   onUpdated: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const { push } = useToast();
   const assignableRoles = customRoles.filter((r) => !r.isDefault);
 
   if (member.role === "founder") {
@@ -110,9 +116,12 @@ function RoleSelect({
       disabled={pending}
       onChange={(e) =>
         startTransition(async () => {
-          await updateMemberRoleAction(member.id, {
+          const result = await updateMemberRoleAction(member.id, {
             customRoleId: e.target.value || null,
           });
+          if (!result.success) {
+            push({ title: "No se pudo cambiar el rol", description: result.error });
+          }
           onUpdated();
         })
       }

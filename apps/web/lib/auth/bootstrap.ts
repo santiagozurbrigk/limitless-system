@@ -7,6 +7,10 @@ import {
   resolveEffectiveOrganizationId,
 } from "@/lib/holding/resolve-org";
 import { createClient } from "@/lib/supabase/server";
+import {
+  CUENTA_DESACTIVADA_MESSAGE,
+  estaDesactivado,
+} from "@/lib/auth/cuenta-desactivada";
 
 function defaultOrgName(email: string): string {
   const local = email.split("@")[0]?.trim();
@@ -124,6 +128,8 @@ export type ProfileOrganizationContext = {
    * Un miembro invitado al holding comparte `accountType` pero no esto.
    */
   canManageHolding: boolean;
+  /** `profiles.is_active`; `null` si todavía no hay perfil. */
+  isActive: boolean | null;
 };
 
 export async function loadProfileOrganizationContext(
@@ -132,12 +138,12 @@ export async function loadProfileOrganizationContext(
   const admin = createAdminClient();
   const { data: profile } = await admin
     .from("profiles")
-    .select("organization_id, role, is_holding_admin, organizations(account_type)")
+    .select("organization_id, role, is_holding_admin, is_active, organizations(account_type)")
     .eq("id", userId)
     .maybeSingle();
 
   if (!profile) {
-    return { organizationId: null, accountType: null, canManageHolding: false };
+    return { organizationId: null, accountType: null, canManageHolding: false, isActive: null };
   }
 
   const accountTypeRaw = readAccountType(
@@ -149,6 +155,7 @@ export async function loadProfileOrganizationContext(
     accountType: accountTypeRaw === "holding" ? "holding" : "founder",
     canManageHolding:
       profile.role === "founder" || profile.is_holding_admin === true,
+    isActive: (profile.is_active as boolean | null) ?? null,
   };
 }
 
@@ -187,9 +194,14 @@ async function resolveOrganizationId(): Promise<string> {
     throw new Error("Sesión no válida");
   }
 
-  const { organizationId, accountType } = await loadProfileOrganizationContext(
-    user.id
-  );
+  const { organizationId, accountType, isActive } =
+    await loadProfileOrganizationContext(user.id);
+
+  // SCRUM-8: la org se resuelve con el service role, así que la RLS no la
+  // corta; un perfil desactivado no pasa de acá.
+  if (estaDesactivado(isActive)) {
+    throw new Error(CUENTA_DESACTIVADA_MESSAGE);
+  }
 
   if (!organizationId) {
     const boot = await ensureUserBootstrap(user);
