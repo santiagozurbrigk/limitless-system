@@ -47,7 +47,6 @@ Relevadas con grep de `process.env.*` en `apps/` y `packages/` (89 nombres, incl
 
 | Variable | Ex | Vercel | Quién la usa |
 |---|---|---|---|
-| `ZERNIO_API_KEY` | sí | sí | fallback global (`lib/zernio/client.ts`, `integration.ts`); la key normal es por org |
 | `ZERNIO_BASE_URL` | **no** | no | `lib/zernio/constants.ts` (default `https://zernio.com/api/v1`) |
 | `ZERNIO_WEBHOOK_SECRET` | **no** | **no** | `app/api/integrations/zernio/webhook/route.ts` — sin ella el webhook responde 503 (`[ENV-ZERNIO-WEBHOOK-SECRET]`) |
 | `CALENDLY_CLIENT_ID`, `CALENDLY_CLIENT_SECRET`, `CALENDLY_REDIRECT_URI` | sí | sí | rutas `app/api/integrations/calendly/**` |

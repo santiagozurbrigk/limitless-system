@@ -34,6 +34,45 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-29 — Una org sin Zernio ya no usa la key global de Zernio `[ZERNIO-KEY-GLOBAL]`
+
+**Rama:** `claude/busy-shannon-h92831`
+**Commit(s):** este — `fix(zernio): sin key global; el cron de anuncios sólo recorre integraciones activas`
+**Módulo(s) afectado(s):** Marketing: `lib/zernio/integration.ts`, `lib/zernio/client.ts`,
+`lib/marketing/ad-metrics-snapshot.ts`, `app/integrations/zernio/actions.ts`; tests nuevos
+`lib/zernio/__tests__/integration.test.ts` y `lib/marketing/__tests__/ad-metrics-snapshot-orgs.test.ts`.
+
+**Qué se hizo:**
+- `getZernioApiKeyForOrganization` devuelve sólo la key de la integración activa de la org; sin fila activa o sin
+  `api_key` devuelve `null` (antes caía a `process.env.ZERNIO_API_KEY`). Lo heredan las 20 llamadas (12 archivos) a
+  `getZernioClientForOrganization`/`getZernioApiKeyForOrganization` (anuncios, comentarios, inbox, sync,
+  embudos): sin integración tiran "Zernio no está conectado".
+- `captureAdMetricsForAllOrganizations` filtra `is_active = true` y `api_key is not null`.
+- Se borraron de `client.ts` `resolveEnvApiKey`, `defaultClient`, `zernioCreateProfile` y los 15 exports
+  `zernio*` con key global (0 callers).
+- Las actions de inbox y comentarios (`listZernioConversationsAction`, `listZernioCommentsAction`,
+  `getZernioPostCommentsAction`) exigen `api_key` además de la fila activa, así una fila activa sin key devuelve
+  vacío en vez de tirar.
+- Se sacó `ZERNIO_API_KEY` de `.env.example` y de `docs/operacion/entorno-y-deploy.md`.
+
+**Por qué / finalidad:** `ZERNIO_API_KEY` existe en Vercel en Production y Preview (sensitive, creada el
+2026-07-09; verificado hoy por metadata, sin leer el valor). Si era una key real, las 21 orgs sin Zernio veían
+anuncios y comentarios de otra cuenta. En producción hay 9 integraciones, las 9 activas y con key propia, así que
+ninguna dependía del fallback. `ad_metrics_daily` tiene 0 filas: el cron nunca llegó a escribir datos ajenos.
+
+**Decisiones de diseño relevantes:** se borró el fallback del todo en vez de dejarlo para `NODE_ENV !== "production"`:
+Preview en Vercel también corre con `NODE_ENV=production` y en local convenía que fallara igual que en prod.
+Tests con `vi.mock` del admin client (primer uso en el repo); contra el código anterior fallan 6 de 7.
+FUNCIONAL: F-MKT-13 y F-MKT-15 pasan a Funciona (se borraron H-MKT-13 y H-MKT-15); F-MKT-14 pasa a Sin verificar
+(0 días guardados en producción) con `[EMBUDOS-CUENTAS-REALES]` y `[EMBUDOS-CRON-ERRORES]`.
+
+**Riesgos / deuda técnica pendiente:** falta borrar `ZERNIO_API_KEY` de Vercel a mano (el conector no tiene
+operación de borrado; ya no la lee ningún código). Verificación en pantalla con una org sin Zernio:
+`docs/operacion/verificacion-manual.md` § Marketing V1. Los informes de `docs/auditoria/` citan el ítem como abierto:
+son una foto del 2026-09-23 y no se tocaron.
+
+---
+
 ### 2026-09-28 — Ventas → Llamadas vuelve a listar las llamadas de venta `[LLAMADAS-EMBED-ROTO]`
 
 **Rama:** `claude/charming-cray-rjhdqv`

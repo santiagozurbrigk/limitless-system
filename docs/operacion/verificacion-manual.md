@@ -566,13 +566,16 @@ lead no aparece (`[CALENDLY-CLOSER-SIN-LEAD]`). Revisar también logs de choque 
 
 Marcas: ⚠️ alta probabilidad de falla · 🔒 verifica seguridad · ⭐ verifica regla central
 
-### V1. Key global de Zernio 🔒⚠️
-**Prerrequisitos:** acceso a Vercel (env de Production) y una org de prueba **sin** Zernio conectado.
-1. En Vercel → Settings → Environment Variables, buscar `ZERNIO_API_KEY` en Production (sin revelar el valor).
-2. Si existe: con la org sin Zernio, abrir `/marketing/anuncios` y `/comentarios`.
-3. Correr `curl -X POST "$APP_URL/api/cron/capture-ad-metrics" -H "Authorization: Bearer $CRON_SECRET"` y mirar `ad_metrics_daily` por `organization_id`.
+### V1. Una org sin Zernio no ve datos de otra cuenta 🔒
+Desde 2026-09-29 el código no usa ninguna key global de Zernio y hay tests que lo cubren. Falta verlo en pantalla,
+con una sesión real.
+**Prerrequisitos:** acceso a Vercel y una org de prueba **sin** Zernio conectado.
+0. En Vercel → Settings → Environment Variables, confirmar que `ZERNIO_API_KEY` ya no existe (Production y Preview).
+   Si sigue, borrarla: ningún código la lee.
+1. Con esa org, abrir `/marketing/anuncios` y `/comentarios`.
+2. Correr `curl -X POST "$APP_URL/api/cron/capture-ad-metrics" -H "Authorization: Bearer $CRON_SECRET"` y mirar `ad_metrics_daily` por `organization_id`.
 
-**Esperado:** la org sin Zernio ve "no conectado" y no aparecen filas para orgs sin integración activa. Si ve anuncios o comentarios, es fuga entre cuentas (`[ZERNIO-KEY-GLOBAL]`).
+**Esperado:** Anuncios muestra "Zernio no está conectado" y Comentarios "Conectá Zernio"; la respuesta del cron sólo lista orgs con integración activa y no aparecen filas para las demás.
 
 ### V2. Sync de contenido e historias (BUG-1) ⭐
 **Prerrequisitos:** org con Zernio conectado a Instagram y una historia publicada hace < 24 h.

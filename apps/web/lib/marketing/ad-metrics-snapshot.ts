@@ -154,14 +154,16 @@ export async function captureAdMetricsForOrganization(
   return { organizationId, status: "ok", adsCaptured: rows.length };
 }
 
-/** Captura para todas las orgs con Zernio conectado. */
+/** Captura para todas las orgs con Zernio conectado (integración activa y con key). */
 export async function captureAdMetricsForAllOrganizations(
   targetDate: Date = new Date()
 ): Promise<AdMetricsSnapshotResult[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("zernio_integrations")
-    .select("organization_id");
+    .select("organization_id")
+    .eq("is_active", true)
+    .not("api_key", "is", null);
 
   if (error || !data) return [];
 

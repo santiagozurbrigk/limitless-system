@@ -51,7 +51,7 @@ La bandeja de ventas (`/sales/inbox`) pasó por tres proveedores en seis semanas
 - El análisis de DMs confía en el texto que manda el navegador (`[ZERNIO-ANALISIS-UNTRUSTED]`) y los DMs no van
   envueltos como contenido no confiable hacia la IA (`[AUDITORIA-ABIERTOS §3.6]`).
 - Dependencia fuerte de un proveedor sin documentación local ni timeouts (`[ZERNIO-DOCS]`, `[API-TIMEOUTS]`,
-  `[AUDITORIA §3 confiabilidad 1]`); una org sin Zernio puede caer en la key global (`[ZERNIO-KEY-GLOBAL]`).
+  `[AUDITORIA §3 confiabilidad 1]`). Una org sin Zernio ve "no conectado": no hay key global (resuelto el 2026-09-29).
 
 ## Evidencia
 

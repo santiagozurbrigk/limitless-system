@@ -97,62 +97,6 @@ Funcionalidad: F-IA-25 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlo
 * Martín: hoy no se sabe si la clave de Limitless está cargada en producción; confirmar con quien administra Vercel antes de estimar.
 
 Funcionalidad: F-IA-26 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-26]",H-IA-26,Agente de negocio e IA,P0,Alta,1A1-CLAVE-ANTHROPIC-ROTA AGENTE-SIN-FALLBACK-CLAVE IA-CLAVES-INVALIDAS,
-"[H-MKT-01] Ver toda mi biblioteca de contenido, siempre al día",Story,Highest,historia,marketing,p0,sev-critica,para-confirmar,,"*Historia:* Como founder, quiero ver todas mis publicaciones de Instagram y YouTube en la biblioteca, con sus números reales y actualizadas solas, para saber qué contenido me funciona sin revisar cada red por separado.
-
-*Criterios de aceptación:*
-* Dada una cuenta con más de 50 publicaciones (en producción hay 150), cuando abro la biblioteca, entonces puedo llegar a todas, no sólo a las 50 primeras.
-* Dado un usuario de un holding que cambió al negocio activo, cuando abre Contenido, entonces ve las publicaciones de ese negocio y la actualización corre contra ese negocio (hoy ve la biblioteca vacía o un aviso de ""Zernio no está conectado"").
-* Dada una empresa que no conectó Zernio, cuando entra a la biblioteca, entonces ve el aviso de ""no conectado"" y nunca contenido de otra cuenta.
-* Cuando Zernio devuelve una publicación sin números reconocibles, entonces la biblioteca conserva los números que ya tenía en vez de mostrarla en cero.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [MKT-CONTENT-LIMITE-50] La biblioteca muestra sólo 50 piezas (P2)
-* [MKT-HOLDING-ORG] Contenido, Drive y Trial Reels ignoran el negocio activo del holding (P1)
-* [ZERNIO-KEY-GLOBAL] Una org sin Zernio usa la key global de Zernio (P0)
-* [AUDITORIA §3 confiabilidad 11] La sync de contenido escribe ceros si el analytics no se reconoce (P2)
-
-*Para confirmar:*
-* Martín: la solución de las 150 piezas puede ser paginar o filtrar por tipo y fecha; que Agustín elija cuál prefiere ver en pantalla.
-
-Funcionalidad: F-MKT-01 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-01]",H-MKT-01,Marketing,P0,Crítica,MKT-CONTENT-LIMITE-50 MKT-HOLDING-ORG ZERNIO-KEY-GLOBAL AUDITORIA §3 confiabilidad 11,
-[H-MKT-13] Ver el gasto y los resultados de mis anuncios de Meta,Story,Highest,historia,marketing,p0,sev-critica,,,"*Historia:* Como founder, quiero ver mis anuncios de Meta con lo que gasté y lo que obtuve, en general y por publicación, para decidir dónde poner la plata.
-
-*Criterios de aceptación:*
-* Dada una empresa sin Zernio conectado (o con la conexión desactivada), cuando abre Anuncios o la solapa Anuncios de una publicación, entonces ve ""no conectado"" y nunca anuncios de otra cuenta.
-* Dada una empresa con Zernio y anuncios activos, cuando abre Anuncios, entonces ve sus anuncios con gasto y resultados.
-* Quedó anotado si la clave general de Zernio existe en producción.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [ZERNIO-KEY-GLOBAL] Una org sin Zernio usa la key global de Zernio (P0)
-
-Funcionalidad: F-MKT-13 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-13]",H-MKT-13,Marketing,P0,Crítica,ZERNIO-KEY-GLOBAL,
-[H-MKT-14] Guardar el gasto diario de anuncios para Embudos,Story,Highest,historia,marketing,p0,sev-critica,para-confirmar,,"*Historia:* Como founder, quiero que todos los días se guarde lo que gasté en anuncios el día anterior, para ver en Embudos cómo evolucionó el gasto.
-
-*Criterios de aceptación:*
-* Dada una empresa con la conexión de Zernio desactivada o sin conectar, cuando corre el guardado diario, entonces no se guarda ningún gasto a su nombre.
-* Dada una empresa con anuncios activos, cuando pasa un día, entonces queda guardado un registro por anuncio del día anterior, sin duplicados, y el gasto coincide con el panel de Meta.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [ZERNIO-KEY-GLOBAL] Una org sin Zernio usa la key global de Zernio (P0)
-
-*Para confirmar:*
-* Martín: en producción no hay todavía ningún día guardado; hace falta probarlo con una cuenta con anuncios activos (y ver si el monto viene en centavos).
-
-Funcionalidad: F-MKT-14 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-14]",H-MKT-14,Marketing,P0,Crítica,ZERNIO-KEY-GLOBAL,
-[H-MKT-15] Responder y ocultar comentarios de todas mis cuentas,Story,Highest,historia,marketing,p0,sev-critica,para-confirmar,,"*Historia:* Como miembro del equipo, quiero ver los comentarios de todas las cuentas en un solo lugar y responderlos u ocultarlos, para atender a la audiencia sin entrar a cada red.
-
-*Criterios de aceptación:*
-* Dada una empresa sin Zernio conectado, cuando abre Comentarios, entonces ve ""no conectado"" y nunca comentarios de otra cuenta.
-* Dado un comentario, cuando lo respondo o lo oculto desde Comentarios, entonces el cambio se ve en Instagram.
-* En el detalle de una publicación, la solapa Comentarios muestra sus comentarios sólo para leer.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [ZERNIO-KEY-GLOBAL] Una org sin Zernio usa la key global de Zernio (P0)
-
-*Para confirmar:*
-* Martín: no está probado que ocultar un comentario funcione en Zernio sin indicar la cuenta; hay que probarlo con una cuenta real.
-
-Funcionalidad: F-MKT-15 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-15]",H-MKT-15,Marketing,P0,Crítica,ZERNIO-KEY-GLOBAL,
 "[H-OPS-20] Que los permisos por rol protejan los datos, no sólo las pantallas",Story,Highest,historia,operaciones-y-equipo,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero crear roles y decidir por módulo si no tienen acceso, sólo ven o tienen acceso completo, y que eso se cumpla de verdad, para que cada persona toque sólo lo que le corresponde.
 
 *Criterios de aceptación:*
@@ -857,6 +801,23 @@ Funcionalidad: F-IA-27 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/
 * ---
 
 Funcionalidad: F-IA-28 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-28]",H-IA-28,Agente de negocio e IA,P1,Alta,IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN,
+"[H-MKT-01] Ver toda mi biblioteca de contenido, siempre al día",Story,High,historia,marketing,p1,sev-media,para-confirmar,,"*Historia:* Como founder, quiero ver todas mis publicaciones de Instagram y YouTube en la biblioteca, con sus números reales y actualizadas solas, para saber qué contenido me funciona sin revisar cada red por separado.
+
+*Criterios de aceptación:*
+* Dada una cuenta con más de 50 publicaciones (en producción hay 150), cuando abro la biblioteca, entonces puedo llegar a todas, no sólo a las 50 primeras.
+* Dado un usuario de un holding que cambió al negocio activo, cuando abre Contenido, entonces ve las publicaciones de ese negocio y la actualización corre contra ese negocio (hoy ve la biblioteca vacía o un aviso de ""Zernio no está conectado"").
+* Dada una empresa que no conectó Zernio, cuando entra a la biblioteca, entonces ve el aviso de ""no conectado"" y nunca contenido de otra cuenta.
+* Cuando Zernio devuelve una publicación sin números reconocibles, entonces la biblioteca conserva los números que ya tenía en vez de mostrarla en cero.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [MKT-CONTENT-LIMITE-50] La biblioteca muestra sólo 50 piezas (P2)
+* [MKT-HOLDING-ORG] Contenido, Drive y Trial Reels ignoran el negocio activo del holding (P1)
+* [AUDITORIA §3 confiabilidad 11] La sync de contenido escribe ceros si el analytics no se reconoce (P2)
+
+*Para confirmar:*
+* Martín: la solución de las 150 piezas puede ser paginar o filtrar por tipo y fecha; que Agustín elija cuál prefiere ver en pantalla.
+
+Funcionalidad: F-MKT-01 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-01]",H-MKT-01,Marketing,P1,Media,MKT-CONTENT-LIMITE-50 MKT-HOLDING-ORG AUDITORIA §3 confiabilidad 11,
 [H-MKT-04] Comparar una publicación con el promedio de todo mi contenido,Story,High,historia,marketing,p1,sev-media,,,"*Historia:* Como founder, quiero abrir una publicación y ver sus números comparados con el promedio de todo mi contenido, para saber si le fue mejor o peor que de costumbre.
 
 *Criterios de aceptación:*
@@ -927,6 +888,19 @@ Funcionalidad: F-MKT-10 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * Agustín: si el founder no sube música, ¿la versión 3 lleva una música por defecto libre de derechos (hay que conseguirla, tarea TRIAL-4) o sale con el audio original?
 
 Funcionalidad: F-MKT-11 · No funciona · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-11]",H-MKT-11,Marketing,P1,Media,TRIAL-REELS-MUSICA,
+[H-MKT-14] Guardar el gasto diario de anuncios para Embudos,Story,High,historia,marketing,p1,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que todos los días se guarde lo que gasté en anuncios el día anterior, para ver en Embudos cómo evolucionó el gasto.
+
+*Criterios de aceptación:*
+* Dada una empresa con anuncios activos, cuando pasa un día, entonces queda guardado un registro por anuncio del día anterior, sin duplicados, y el gasto coincide con el panel de Meta.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [EMBUDOS-CUENTAS-REALES] Conectar las cuentas y correr la verificación 🔴 (P1)
+* [EMBUDOS-CRON-ERRORES] ghl-sync sigue devolviendo ok con ceros cuando falla una org (P2)
+
+*Para confirmar:*
+* Martín: en producción no hay todavía ningún día guardado; hace falta probarlo con una cuenta con anuncios activos (y ver si el monto viene en centavos).
+
+Funcionalidad: F-MKT-14 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-14]",H-MKT-14,Marketing,P1,Alta,EMBUDOS-CUENTAS-REALES EMBUDOS-CRON-ERRORES,
 [H-MKT-16] Recibir al instante los comentarios y mensajes nuevos,Story,High,historia,marketing,p1,sev-baja,para-confirmar,,"*Historia:* Como founder, quiero que cada comentario o mensaje nuevo que llega por Zernio quede guardado en el momento, para tener un registro histórico aunque después se borre de la red.
 
 *Criterios de aceptación:*

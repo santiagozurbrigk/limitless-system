@@ -518,7 +518,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un usuario de un holding que cambió al negocio activo, cuando abre Contenido, entonces ve las publicaciones de ese negocio y la actualización corre contra ese negocio (hoy ve la biblioteca vacía o un aviso de "Zernio no está conectado").
   - Dada una empresa que no conectó Zernio, cuando entra a la biblioteca, entonces ve el aviso de "no conectado" y nunca contenido de otra cuenta.
   - Cuando Zernio devuelve una publicación sin números reconocibles, entonces la biblioteca conserva los números que ya tenía en vez de mostrarla en cero.
-- **Tareas técnicas:** `[MKT-CONTENT-LIMITE-50]`, `[MKT-HOLDING-ORG]`, `[ZERNIO-KEY-GLOBAL]`, `[AUDITORIA §3 confiabilidad 11]`
+- **Tareas técnicas:** `[MKT-CONTENT-LIMITE-50]`, `[MKT-HOLDING-ORG]`, `[AUDITORIA §3 confiabilidad 11]`
 - **Para confirmar:** Martín: la solución de las 150 piezas puede ser paginar o filtrar por tipo y fecha; que Agustín elija cuál prefiere ver en pantalla.
 
 ### [H-MKT-02] Ver mis historias de Instagram como historias
@@ -606,34 +606,13 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Tareas técnicas:** `[TRIAL-REELS-MUSICA]`
 - **Para confirmar:** Agustín: si el founder no sube música, ¿la versión 3 lleva una música por defecto libre de derechos (hay que conseguirla, tarea TRIAL-4) o sale con el audio original?
 
-### [H-MKT-13] Ver el gasto y los resultados de mis anuncios de Meta
-- **Funcionalidad:** F-MKT-13 · Con fallas
-- **Historia:** Como founder, quiero ver mis anuncios de Meta con lo que gasté y lo que obtuve, en general y por publicación, para decidir dónde poner la plata.
-- **Criterios de aceptación:**
-  - Dada una empresa sin Zernio conectado (o con la conexión desactivada), cuando abre Anuncios o la solapa Anuncios de una publicación, entonces ve "no conectado" y nunca anuncios de otra cuenta.
-  - Dada una empresa con Zernio y anuncios activos, cuando abre Anuncios, entonces ve sus anuncios con gasto y resultados.
-  - Quedó anotado si la clave general de Zernio existe en producción.
-- **Tareas técnicas:** `[ZERNIO-KEY-GLOBAL]`
-- **Para confirmar:** —
-
 ### [H-MKT-14] Guardar el gasto diario de anuncios para Embudos
-- **Funcionalidad:** F-MKT-14 · Con fallas
+- **Funcionalidad:** F-MKT-14 · Sin verificar
 - **Historia:** Como founder, quiero que todos los días se guarde lo que gasté en anuncios el día anterior, para ver en Embudos cómo evolucionó el gasto.
 - **Criterios de aceptación:**
-  - Dada una empresa con la conexión de Zernio desactivada o sin conectar, cuando corre el guardado diario, entonces no se guarda ningún gasto a su nombre.
   - Dada una empresa con anuncios activos, cuando pasa un día, entonces queda guardado un registro por anuncio del día anterior, sin duplicados, y el gasto coincide con el panel de Meta.
-- **Tareas técnicas:** `[ZERNIO-KEY-GLOBAL]`
+- **Tareas técnicas:** `[EMBUDOS-CUENTAS-REALES]`, `[EMBUDOS-CRON-ERRORES]`
 - **Para confirmar:** Martín: en producción no hay todavía ningún día guardado; hace falta probarlo con una cuenta con anuncios activos (y ver si el monto viene en centavos).
-
-### [H-MKT-15] Responder y ocultar comentarios de todas mis cuentas
-- **Funcionalidad:** F-MKT-15 · Con fallas
-- **Historia:** Como miembro del equipo, quiero ver los comentarios de todas las cuentas en un solo lugar y responderlos u ocultarlos, para atender a la audiencia sin entrar a cada red.
-- **Criterios de aceptación:**
-  - Dada una empresa sin Zernio conectado, cuando abre Comentarios, entonces ve "no conectado" y nunca comentarios de otra cuenta.
-  - Dado un comentario, cuando lo respondo o lo oculto desde Comentarios, entonces el cambio se ve en Instagram.
-  - En el detalle de una publicación, la solapa Comentarios muestra sus comentarios sólo para leer.
-- **Tareas técnicas:** `[ZERNIO-KEY-GLOBAL]`
-- **Para confirmar:** Martín: no está probado que ocultar un comentario funcione en Zernio sin indicar la cuenta; hay que probarlo con una cuenta real.
 
 ### [H-MKT-16] Recibir al instante los comentarios y mensajes nuevos
 - **Funcionalidad:** F-MKT-16 · Sin verificar

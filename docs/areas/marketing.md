@@ -168,7 +168,7 @@ Overview → recomputeContentAssetAttribution (escribe contadores en content_ass
 
 | Proveedor | Qué se lee / escribe | Cliente | Sin conexión |
 |---|---|---|---|
-| Zernio | Posts, historias, analytics, ads, comentarios, crear borradores, subir media | `lib/zernio/client.ts`, `lib/zernio/integration.ts` | `getZernioClientForOrganization` **cae a `ZERNIO_API_KEY` global** si la org no tiene fila (ver Reglas) |
+| Zernio | Posts, historias, analytics, ads, comentarios, crear borradores, subir media | `lib/zernio/client.ts`, `lib/zernio/integration.ts` `getZernioClientForOrganization` tira "Zernio no está conectado" si la org no tiene integración activa con key; anuncios muestra ese aviso y comentarios "Conectá Zernio" (sin key global, ver Reglas) |
 | Google (OAuth unificado) | Drive (lectura/descarga), Forms, YouTube Data + Analytics | `lib/google/*`, token en `lib/google/get-access-token.ts` | Análisis, Trial Reels y Administrar piden conectar Google |
 | YouTube (API key alternativa) | Canal y videos | `app/youtube/actions.ts`, `lib/google/sync-youtube.ts` | — |
 | Typeform (OAuth) | Forms y respuestas | `lib/typeform/sync.ts` | Empty state |
@@ -208,9 +208,8 @@ timeout. **No hay copia local de la documentación de Zernio** en `docs/external
 | `listPostAnalytics` | GET | `/analytics?source=all&limit=50&accountId=&platform=&profileId=` | ✓ | nadie |
 | `getAccountAnalytics` | GET | `/analytics/account/{accountId}?startDate=&endDate=` | — | nadie |
 | `getPostsAnalytics` | GET | `/analytics/posts` | — | nadie |
-| `zernioCreateProfile` (export suelto) | POST | `/profiles` | — | nadie |
 
-Los exports `zernio*` del final de `client.ts` usan la key global y ninguno tiene callers. Analytics:
+`client.ts` sólo exporta `createZernioClient(apiKey)`: no hay cliente con key global. Analytics:
 usar siempre `resolvePostAnalytics` (`lib/zernio/resolve-analytics.ts`), que devuelve
 `{ metrics, lastUpdated, recognized }` y reconoce formato plano o anidado por plataforma
 (`{instagram:{…}}` o `{platforms:{…}}`, que suma). `profileId` siempre por `extractProfileId()`
@@ -239,10 +238,12 @@ como JSON.
 - **Holding:** content, sync, Drive y Trial Reels resuelven la org con `getCurrentProfile().organization_id`
   en vez de `requireOrganizationId()`, así que **ignoran el negocio activo** del holding (auditoría §3 salud 7).
   El resto del área (overview, ads, comentarios, forms, UTMs, lead magnets) usa `requireOrganizationId()`.
-- **Fallback a `ZERNIO_API_KEY`:** `getZernioApiKeyForOrganization` devuelve la key global si la org no tiene
-  fila activa (o si la fila no tiene `api_key`). Si esa variable está seteada en producción, una org sin Zernio vería los datos de la cuenta
-  global y el cron `capture-ad-metrics` (que recorre `zernio_integrations` **sin** filtrar `is_active`)
-  guardaría anuncios ajenos. `.env.example` la trae como `sk_pending`.
+- **Sin key global de Zernio:** `getZernioApiKeyForOrganization` devuelve sólo la key de la integración activa de
+  la org (`is_active = true` y `api_key` no nulo); si no hay, devuelve `null` y `getZernioClientForOrganization` tira
+  "Zernio no está conectado". No existe `ZERNIO_API_KEY`: una org sin Zernio nunca lee datos de otra cuenta. El cron
+  `capture-ad-metrics` recorre sólo integraciones activas y con key; las actions de inbox y comentarios exigen
+  `api_key` además de la fila activa. Tests: `lib/zernio/__tests__/integration.test.ts`,
+  `lib/marketing/__tests__/ad-metrics-snapshot-orgs.test.ts`.
 - **Scope Google:** `drive.readonly`; por eso `createDriveFolderAction` es un stub que siempre tira error
   (el botón "Nueva carpeta" de Administrar falla siempre). Se pide `youtube.upload` y ningún código lo usa.
 - **UTM:** `youtube_video_id` debe ser el external id de YouTube; `resolveYoutubeVideoExternalId` convierte el
@@ -259,7 +260,6 @@ como JSON.
 - Música propia de Trial Reels nunca llega al worker (zod la descarta) y no hay pantalla para subirla `[TRIAL-REELS-MUSICA]`, `[TRIAL-4]`.
 - `WORKER_AUTH_SECRET` viaja en la URL de QStash y se loguea `[TRIAL-SECRET-EN-URL]`.
 - Overview y Conexión con Ventas sobre tablas legacy `[MKT-OVERVIEW-LEGACY]`, `[MKT-SALES-CONN-VACIA]`.
-- Fallback a key global de Zernio `[ZERNIO-KEY-GLOBAL]`.
 - Formularios sin paginar y con `external_response_id` único global `[AUDITORIA-ABIERTOS]` punto 6.
 - YouTube sin cron y métricas congeladas `[YT-SIN-CRON]`.
 - `cleanup-trial-reels` reprocesa los mismos jobs para siempre `[TRIAL-CLEANUP-LOOP]`.
@@ -293,7 +293,7 @@ Sin cubrir: `resolve-analytics.ts` `[T-11]`, `lib/utm/*` `[T-5]`, `overview-metr
 ## Archivos clave
 
 1. `apps/web/lib/zernio/client.ts` — todas las llamadas a Zernio
-2. `apps/web/lib/zernio/integration.ts` — key por org, fallback global, lookup por account/profile
+2. `apps/web/lib/zernio/integration.ts` — key por org (sin fallback global), lookup por account/profile
 3. `apps/web/lib/zernio/resolve-analytics.ts` — normalización de métricas
 4. `apps/web/app/marketing/content/sync-actions.ts` — sync de contenido e historias
 5. `apps/web/lib/marketing/sync-content-metrics.ts` + `app/api/cron/sync-content-metrics/route.ts`

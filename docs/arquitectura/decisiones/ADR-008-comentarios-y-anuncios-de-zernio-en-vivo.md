@@ -47,7 +47,7 @@ reportes.
 - La copia de `zernio_comments` es un dato a medias: hoy 0 filas porque el webhook responde 503 en producción
   (`[ENV-ZERNIO-WEBHOOK-SECRET]`, `[ZERNIO-WEBHOOK-SIN-EVENTOS]`).
 - El spend es de la org entera, no por embudo (`[EMBUDOS-MEDIDAS-POR-EMBUDO]`); el cron de captura recorre
-  `zernio_integrations` sin filtrar `is_active` y puede caer en la key global (`[ZERNIO-KEY-GLOBAL]`).
+  sólo integraciones activas con key propia (sin key global desde 2026-09-29).
 - Lo que sí se persiste de Zernio (`content_pieces`) puede quedar con ceros cuando el analytics no se reconoce
   (`[AUD-CONF-11]`) — el mismo problema que ADR-010 prohíbe.
 

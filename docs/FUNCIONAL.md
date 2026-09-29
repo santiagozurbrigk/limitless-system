@@ -41,21 +41,20 @@ cambio, igual que el doc técnico del área.
 | [Plataforma](#plataforma) | 30 | 11 | 14 | 1 | 3 | 1 |
 | [Clientes](#clientes) | 28 | 20 | 5 | 0 | 1 | 2 |
 | [Ventas](#ventas) | 28 | 12 | 9 | 4 | 2 | 1 |
-| [Marketing](#marketing) | 27 | 7 | 10 | 4 | 3 | 3 |
+| [Marketing](#marketing) | 27 | 9 | 7 | 4 | 3 | 4 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 24 | 10 | 4 | 1 | 3 | 6 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | 28 | 13 | 10 | 1 | 3 | 1 |
 | [Operaciones y equipo](#operaciones-y-equipo) | 23 | 14 | 5 | 1 | 2 | 1 |
 | [Finanzas](#finanzas) | 12 | 6 | 4 | 0 | 2 | 0 |
 | [Producto](#producto) | 15 | 13 | 0 | 0 | 2 | 0 |
 | [Discord](#discord) | 13 | 0 | 2 | 0 | 1 | 10 |
-| **Total** | **228** | **106** | **63** | **12** | **22** | **25** |
+| **Total** | **228** | **108** | **60** | **12** | **22** | **26** |
 
 Lecturas rápidas:
 
 - **Discord** está casi todo **Sin verificar**: nunca se probó contra un servidor real (`[DISCORD-SIN-PROBAR]`).
-- **Plataforma, Marketing y Ventas** concentran las fallas: permisos, la clave global de Zernio
-  (`[ZERNIO-KEY-GLOBAL]`), el tope de 1.000 turnos de Closing (`[CLOSING-LIST-1000]`) y pantallas que
-  leen el inbox viejo, que está vacío.
+- **Plataforma, Marketing y Ventas** concentran las fallas: permisos, el tope de 1.000 turnos de Closing
+  (`[CLOSING-LIST-1000]`) y pantallas que leen el inbox viejo, que está vacío.
 - **Producto y Clientes** son las áreas más sanas.
 
 ## Plataforma
@@ -80,7 +79,7 @@ Doc técnico: [`docs/areas/plataforma.md`](./areas/plataforma.md) · permisos y 
 | F-PLA-12 | Un founder nuevo no entra a la plataforma hasta completar 3 pasos: moneda y zona horaria, oferta principal y avatar; si ya los tenía cargados, se saltea | Funciona | `ONBOARDING-VERIFICAR`, `ONBOARDING-SKIP-SIN-UI` | [`areas/plataforma.md` § Onboarding del founder](./areas/plataforma.md#onboarding-del-founder) · `app/(platform)/onboarding/page.tsx` | |
 | F-PLA-13 | El founder ve en el Panel una lista de configuración pendiente (fuente de datos, primer embudo, histórico, equipo) con contador en la barra, y puede ocultar ítems | Funciona | `ONBOARDING-VERIFICAR` | [`areas/plataforma.md` § Onboarding del founder](./areas/plataforma.md#onboarding-del-founder) · `components/onboarding/setup-checklist.tsx` | |
 | F-PLA-14 | El sistema muestra un recorrido guiado la primera vez que alguien entra a Embudos, Contenido, Agente y Bandeja | Funciona | `ONBOARDING-VERIFICAR` | [`areas/plataforma.md` § Onboarding del founder](./areas/plataforma.md#onboarding-del-founder) · `components/onboarding/tour-runner.tsx` | |
-| F-PLA-15 | El founder ve en el Panel General sus KPIs, embudo de ventas, ingresos, ventas, ranking de closers y métricas de redes | Con fallas | `CLOSING-LIST-1000`, `ZERNIO-KEY-GLOBAL`, `EMBUDO-PANEL-DMS`, `DASHBOARD-CODIGO-MUERTO` | [`areas/plataforma.md` § Panel General](./areas/plataforma.md#panel-general) · `app/(platform)/dashboard/page.tsx` | |
+| F-PLA-15 | El founder ve en el Panel General sus KPIs, embudo de ventas, ingresos, ventas, ranking de closers y métricas de redes | Con fallas | `CLOSING-LIST-1000`, `EMBUDO-PANEL-DMS`, `DASHBOARD-CODIGO-MUERTO` | [`areas/plataforma.md` § Panel General](./areas/plataforma.md#panel-general) · `app/(platform)/dashboard/page.tsx` | |
 | F-PLA-16 | El founder puede ver en el Panel métricas propias (custom) | A medias | `DASHBOARD-CODIGO-MUERTO` | [`areas/plataforma.md` § Limitaciones conocidas y deuda](./areas/plataforma.md#limitaciones-conocidas-y-deuda) · `components/dashboard/dashboard-page-content.tsx` (se piden al servidor y no se dibujan) | |
 | F-PLA-17 | El usuario puede editar su perfil y cambiar su contraseña desde Ajustes | Funciona | — | [`areas/plataforma.md` § Ajustes](./areas/plataforma.md#ajustes) · `app/(platform)/settings/page.tsx` | |
 | F-PLA-18 | El equipo puede editar los datos generales de la organización (nombre, web, moneda, zona horaria) desde Ajustes | Con fallas | `PERMISOS-SERVER-ACTIONS` | [`areas/plataforma.md` § Ajustes](./areas/plataforma.md#ajustes) · `app/(platform)/settings/page.tsx` | |
@@ -255,7 +254,7 @@ Doc técnico: [`docs/areas/marketing.md`](./areas/marketing.md)
 
 | ID | Funcionalidad | Estado | Pendientes que la afectan | Evidencia | Octubre |
 |---|---|---|---|---|---|
-| F-MKT-01 | El founder puede ver su biblioteca de contenido (posts, reels, historias, videos) traída de Zernio, filtrarla por tipo y ordenarla por fecha, vistas o engagement; se actualiza sola al entrar si pasaron más de 30 minutos | Con fallas | `MKT-HOLDING-ORG`, `ZERNIO-KEY-GLOBAL`, `MKT-CONTENT-LIMITE-50`, `AUDITORIA §3 confiabilidad 11` | [`areas/marketing.md` § Contenido desde Zernio](./areas/marketing.md#contenido-desde-zernio) · `app/(platform)/marketing/content/page.tsx` | |
+| F-MKT-01 | El founder puede ver su biblioteca de contenido (posts, reels, historias, videos) traída de Zernio, filtrarla por tipo y ordenarla por fecha, vistas o engagement; se actualiza sola al entrar si pasaron más de 30 minutos | Con fallas | `MKT-HOLDING-ORG`, `MKT-CONTENT-LIMITE-50`, `AUDITORIA §3 confiabilidad 11` | [`areas/marketing.md` § Contenido desde Zernio](./areas/marketing.md#contenido-desde-zernio) · `app/(platform)/marketing/content/page.tsx` | |
 | F-MKT-02 | El sistema importa las historias de Instagram de las últimas 24 horas y las muestra como historias (no como reels) | Sin verificar | `BUG-1`, `ZERNIO-DOCS` | [`areas/marketing.md` § Reglas de negocio](./areas/marketing.md#reglas-de-negocio-y-decisiones-no-obvias) · `app/marketing/content/sync-actions.ts` | |
 | F-MKT-03 | El sistema actualiza las métricas de cada pieza (likes, vistas, alcance, guardados…) todos los días a las 03:00 hora Argentina, sin pisar con ceros cuando Zernio no manda datos | Funciona | `AUDITORIA §3 confiabilidad 11`, `T-11`, `ZERNIO-METRICAS-429` | [`areas/marketing.md` § Contenido desde Zernio](./areas/marketing.md#contenido-desde-zernio) · `app/api/cron/sync-content-metrics/route.ts` | |
 | F-MKT-04 | El founder puede abrir el detalle de una pieza y ver sus métricas comparadas con el promedio de su contenido | Con fallas | `MKT-HOLDING-ORG`, `MKT-CONTENT-LIMITE-50` | [`areas/marketing.md` § Pantallas y rutas](./areas/marketing.md#pantallas-y-rutas) · `app/(platform)/marketing/content/[id]/page.tsx` | |
@@ -267,9 +266,9 @@ Doc técnico: [`docs/areas/marketing.md`](./areas/marketing.md)
 | F-MKT-10 | El founder puede elegir qué versiones de Trial Reels subir y el sistema las deja como borradores en Zernio, escalonadas en el tiempo, y le avisa por mail al terminar | Con fallas | `TRIAL-SECRET-EN-URL`, `TRIAL-RETRY-GENERACION` | [`areas/marketing.md` § Trial Reels](./areas/marketing.md#trial-reels) · `app/api/queue/publish-reel-variation/route.ts` | |
 | F-MKT-11 | El founder puede usar su propia música en la versión con música de Trial Reels | No funciona | `TRIAL-REELS-MUSICA`, `TRIAL-4` | [`areas/marketing.md` § Limitaciones conocidas](./areas/marketing.md#limitaciones-conocidas-y-deuda) · `components/marketing/trial-reels/reel-music-upload.tsx` | |
 | F-MKT-12 | El sistema borra los videos de Trial Reels con más de 30 días | Funciona | `TRIAL-CLEANUP-LOOP` | [`areas/marketing.md` § Trial Reels](./areas/marketing.md#trial-reels) · `app/api/cron/cleanup-trial-reels/route.ts` | |
-| F-MKT-13 | El founder puede ver sus anuncios de Meta con gasto y resultados, en general y por pieza de contenido | Con fallas | `ZERNIO-KEY-GLOBAL` | [`areas/marketing.md` § Resto](./areas/marketing.md#resto) · `app/(platform)/marketing/anuncios/page.tsx` | |
-| F-MKT-14 | El sistema guarda todos los días el gasto de anuncios del día anterior para el histórico de Embudos | Con fallas | `ZERNIO-KEY-GLOBAL` | [`areas/marketing.md` § Resto](./areas/marketing.md#resto) · `app/api/cron/capture-ad-metrics/route.ts` | |
-| F-MKT-15 | El equipo puede ver los comentarios de todas las cuentas y responderlos u ocultarlos desde Comentarios; en el detalle de cada pieza se ven sólo en lectura | Con fallas | `ZERNIO-KEY-GLOBAL` | [`areas/marketing.md` § Resto](./areas/marketing.md#resto) · `app/(platform)/comentarios/page.tsx` | |
+| F-MKT-13 | El founder puede ver sus anuncios de Meta con gasto y resultados, en general y por pieza de contenido | Funciona | — | [`areas/marketing.md` § Resto](./areas/marketing.md#resto) · `app/(platform)/marketing/anuncios/page.tsx` | |
+| F-MKT-14 | El sistema guarda todos los días el gasto de anuncios del día anterior para el histórico de Embudos | Sin verificar | `EMBUDOS-CUENTAS-REALES`, `EMBUDOS-CRON-ERRORES` | [`areas/marketing.md` § Resto](./areas/marketing.md#resto) · `app/api/cron/capture-ad-metrics/route.ts` | |
+| F-MKT-15 | El equipo puede ver los comentarios de todas las cuentas y responderlos u ocultarlos desde Comentarios; en el detalle de cada pieza se ven sólo en lectura | Funciona | — | [`areas/marketing.md` § Resto](./areas/marketing.md#resto) · `app/(platform)/comentarios/page.tsx` | |
 | F-MKT-16 | El sistema recibe al instante de Zernio los comentarios y mensajes nuevos (webhook) | Sin verificar | `ZERNIO-WEBHOOK-SIN-EVENTOS`, `ZERNIO-DOCS` | [`areas/marketing.md` § Resto](./areas/marketing.md#resto) · `app/api/integrations/zernio/webhook/route.ts` | |
 | F-MKT-17 | El founder puede ver en el Overview de Marketing sus KPIs, embudo y mapa de calor de contenido | No funciona | `MKT-OVERVIEW-LEGACY`, `AUDITORIA §3 salud 1` | [`areas/marketing.md` § Reglas de negocio](./areas/marketing.md#reglas-de-negocio-y-decisiones-no-obvias) · `app/(platform)/marketing/page.tsx` | |
 | F-MKT-18 | El founder puede ver cómo se reparte su contenido entre Autoridad, Atracción, Nutrición y Venta, con una lectura de la IA | Funciona | — | [`areas/marketing.md` § Pantallas y rutas](./areas/marketing.md#pantallas-y-rutas) · `app/(platform)/marketing/page.tsx` | |
