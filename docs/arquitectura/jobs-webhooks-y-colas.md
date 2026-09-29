@@ -68,7 +68,7 @@ Lo que falta en los crons (detalle en `pendientes-infra`): no hay lock entre cor
 | `/api/webhooks/unipile` y `/api/integrations/unipile/webhook` | Unipile | Secreto compartido `UNIPILE_WEBHOOK_SECRET` (header `Unipile-Auth`/`x-unipile-secret`/`x-webhook-secret` o `?secret=`), **fail-closed 503** sin variable | — | — | Las dos rutas llaman a `handleUnipileIncomingWebhook`; legacy |
 | `/api/integrations/unipile/callback` | Unipile (hosted auth) | `verifyUnipileSecret` | — | — | |
 | `/api/integrations/zernio/webhook` | Zernio | HMAC sobre raw body (`x-zernio-signature`, `x-hub-signature-256` o `x-signature`) con `ZERNIO_WEBHOOK_SECRET`, **503 sin variable** | — | — | Escribe `zernio_messages`/`zernio_comments` |
-| `/api/integrations/calendly/webhook` | Calendly | HMAC `t.body` con `webhook_signing_key` de la integración + rate limit | **no** valida `t` | índice único en `closing_calls` | |
+| `/api/integrations/calendly/webhook` | Calendly | HMAC `t.body` con `webhook_signing_key` de la integración + rate limit (`lib/calendly/webhook-signature.ts`); la clave `NO_WEBHOOK_SIGNING_KEY` de las integraciones sin suscripción nunca vale | `t` a ±5 min del reloj | índice único en `closing_calls` | |
 | `/api/integrations/fathom/webhook/[token]` | Fathom (por miembro) | token en la URL → un solo secreto; HMAC | — | — | vía recomendada |
 | `/api/integrations/fathom/webhook` | Fathom (legacy) | HMAC contra el `webhook_secret` de cada org (o `FATHOM_WEBHOOK_SECRET`) + rate limit; **409** si la firma valida para más de una org | — | — | |
 | `/api/integrations/manychat/webhook/[token]` | ManyChat (External Request) | token de la URL contra `manychat_integrations.webhook_token` + rate limit | — | — | 404 si el token no existe |
