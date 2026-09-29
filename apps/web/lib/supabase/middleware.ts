@@ -11,6 +11,10 @@ import { isSuperAdminEmail } from "@/lib/auth/require-super-admin";
 import { shouldRedirectToGate } from "@/lib/onboarding/gate-routing";
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured } from "./env";
 import { isPublicPath } from "./public-paths";
+import {
+  accionSesion,
+  CUENTA_DESACTIVADA_QUERY,
+} from "@/lib/auth/cuenta-desactivada";
 
 /** POST de Server Actions: no redirigir a login (devolvería HTML y rompe el cliente). */
 function isServerActionRequest(request: NextRequest): boolean {
@@ -93,7 +97,7 @@ export async function updateSession(request: NextRequest) {
     const { data: profile } = await admin
       .from("profiles")
       .select(
-        "must_change_password, temp_password_expires_at, role, organization_id, organizations(account_type, skip_onboarding)"
+        "must_change_password, temp_password_expires_at, role, organization_id, is_active, organizations(account_type, skip_onboarding)"
       )
       .eq("id", user.id)
       .maybeSingle();
@@ -111,6 +115,20 @@ export async function updateSession(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = paths.auth.login;
       url.searchParams.set("error", TEMP_PASSWORD_EXPIRED_QUERY);
+      return NextResponse.redirect(url);
+    }
+
+    // SCRUM-8: un miembro desactivado no sigue con su sesión. Igual que la
+    // contraseña temporal vencida: se cierra la sesión y vuelve al login.
+    const sesion = accionSesion(profile?.is_active, isServerActionRequest(request));
+    if (sesion !== "seguir") {
+      await supabase.auth.signOut();
+      if (sesion === "cerrar") {
+        return supabaseResponse;
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = paths.auth.login;
+      url.searchParams.set("error", CUENTA_DESACTIVADA_QUERY);
       return NextResponse.redirect(url);
     }
 

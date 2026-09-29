@@ -14,6 +14,10 @@ import {
   TEMP_PASSWORD_EXPIRED_MESSAGE,
   TEMP_PASSWORD_EXPIRED_QUERY,
 } from "@/lib/auth/temp-password-expiry";
+import {
+  CUENTA_DESACTIVADA_MESSAGE,
+  CUENTA_DESACTIVADA_QUERY,
+} from "@/lib/auth/cuenta-desactivada";
 
 const initialState: AuthActionState = {};
 
@@ -33,6 +37,9 @@ export function SupabaseLoginForm() {
     }
     if (searchParams.get("error") === TEMP_PASSWORD_EXPIRED_QUERY) {
       setCallbackError(TEMP_PASSWORD_EXPIRED_MESSAGE);
+    }
+    if (searchParams.get("error") === CUENTA_DESACTIVADA_QUERY) {
+      setCallbackError(CUENTA_DESACTIVADA_MESSAGE);
     }
   }, [searchParams]);
 

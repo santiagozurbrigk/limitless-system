@@ -133,7 +133,7 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
 - `inviteTeamMemberAction` (sólo `role = 'founder'`): crea el usuario en Auth con **contraseña temporal**
   (`generateTempPassword`), inserta el `profile` con `role: 'member'` y el `custom_role_id` elegido, y devuelve
   las credenciales para que el founder las pase a mano. El middleware obliga a cambiarla al primer login.
-- `updateMemberRoleAction` cambia `custom_role_id` / `is_active`; `deactivateMemberAction` pone `is_active = false`.
+- `updateMemberRoleAction` cambia `custom_role_id` / `is_active`; `deactivateMemberAction` pone `is_active = false`. Las dos, al cambiar `is_active`, banean o desbanean al usuario en Auth, y al desactivar vencen las invitaciones que haya creado (SCRUM-8).
 - Roles: `createCustomRoleAction`, `deleteCustomRoleAction` (no borra `is_default`). Permisos consolidados a
   13 módulos (`constants/permission-modules.ts`); las claves viejas se traducen al leer.
 - Resolución de permisos: `lib/auth/get-current-permissions.ts`. Founder = todo `full`. Sin rol cargado
@@ -174,7 +174,6 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
 - **El worker carga el video entero en memoria y en `/tmp`** (la subida se corta en `NEXT_PUBLIC_SOP_VIDEO_MAX_MB`,
   50 MB por defecto; el bucket acepta hasta 1 GB) y mide la duración decodificando
   todo con `-f null` `[OPS-SOP-VIDEO-MEMORIA]`.
-- **Un miembro desactivado sigue entrando**: `is_active` no se mira en login, middleware ni RLS `[EQUIPO-DESACTIVAR-NO-BLOQUEA]`.
 - **Las escrituras del agente/Fathom/clientes no mantienen `assignee_ids`** `[WORKBOARD-ASIGNACION-AGENTE]`.
 - **Cerrar una tarea arrastrándola no registra quién la cerró** (`moveWorkboardTaskAction` no toca `completed_by/at`) `[WORKBOARD-CIERRE-ARRASTRANDO]`.
 - **El SOP desde video no puede tener capturas**: ninguna pantalla las sube contra el job `[OPS-SOP-VIDEO-CAPTURAS]`.

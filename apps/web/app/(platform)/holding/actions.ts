@@ -34,6 +34,10 @@ import {
 } from "@/lib/validations";
 import type { z } from "zod";
 import { paths } from "@/routes";
+import {
+  CUENTA_DESACTIVADA_MESSAGE,
+  estaDesactivado,
+} from "@/lib/auth/cuenta-desactivada";
 
 async function requireHoldingProfile() {
   const supabase = await createClient();
@@ -42,11 +46,12 @@ async function requireHoldingProfile() {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  const { organizationId, accountType, canManageHolding } =
+  const { organizationId, accountType, canManageHolding, isActive } =
     await loadProfileOrganizationContext(
     user.id
   );
 
+  if (estaDesactivado(isActive)) throw new Error(CUENTA_DESACTIVADA_MESSAGE);
   if (!organizationId) throw new Error("Sin perfil");
   if (accountType !== "holding") {
     throw new Error("No sos dueño de un holding");

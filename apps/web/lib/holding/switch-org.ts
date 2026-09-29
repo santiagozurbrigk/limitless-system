@@ -133,11 +133,10 @@ export async function isHoldingUser(): Promise<{
   } = await supabase.auth.getUser();
   if (!user) return { isHolding: false };
 
-  const { organizationId, accountType } = await loadProfileOrganizationContext(
-    user.id
-  );
+  const { organizationId, accountType, isActive } =
+    await loadProfileOrganizationContext(user.id);
 
-  if (!organizationId || accountType !== "holding") {
+  if (isActive === false || !organizationId || accountType !== "holding") {
     return { isHolding: false };
   }
 

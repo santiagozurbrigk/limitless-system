@@ -34,6 +34,26 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-29 — Un miembro desactivado ya no entra (SCRUM-8)
+
+**Rama:** `fix/SCRUM-8-miembro-desactivado-sin-acceso`
+**Commit(s):** este
+**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20260929110000_miembro_desactivado_sin_acceso.sql`), `lib/supabase/middleware.ts`, `lib/auth/{bootstrap,require-auth,cuenta-desactivada}.ts`, `app/team/actions.ts`, `components/auth/supabase-login-form.tsx`
+
+**Qué se hizo:**
+- **Base:** `get_my_organization_id()` devuelve null para un perfil con `is_active = false` (también si trae el claim de negocio de un holding), ahora con una sola lectura de `profiles`, y `get_my_holding_business_org_ids()` no devuelve nada. Las dos policies que no pasan por esas funciones exigen `is_active`: la de editar perfiles, que queda unificada como "Users update own or founders update org profiles" igual que en producción (un admin desactivado podía cambiarse tarifa y comisión) y "holding_can_see_businesses". `protect_profile_columns` ignora el rol de un perfil desactivado. Con su JWT sólo lee su propia fila de `profiles`.
+- **App:** el middleware cierra la sesión de un perfil desactivado y lo manda al login con un mensaje; la decisión está en `accionSesion` (pura, con test). `requireOrganizationId()`, `requireAuthContext()`, `requireHoldingProfile()` y el switch de holding lo cortan, porque resuelven la org con el service role. El login traduce el "User is banned" de Auth al mismo mensaje.
+- **Auth:** `deactivateMemberAction` y `updateMemberRoleAction` vencen las invitaciones pendientes del miembro y lo banean al desactivarlo, con la marca `app_metadata.ban_motivo = 'desactivado_por_founder'`. Al reactivarlo lo desbanean sólo si el ban tiene esa marca: un ban del super admin por otro motivo no se levanta desde Equipo. Auth se toca sólo si el perfil es de la org y si `is_active` cambió de verdad. Si algo falla, la tabla de Equipo lo muestra.
+- **Tests:** `lib/auth/__tests__/cuenta-desactivada.test.ts` y `supabase/ci/tests/40_miembro_desactivado.sql`.
+
+**Por qué / finalidad:** cierra `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` (P0, Crítica). Desactivar sólo ponía `is_active = false` y nada lo leía: la persona seguía entrando y viendo o editando todo lo de su rol. En producción había 1 perfil en ese estado (una cuenta vieja de admin, sin uso desde agosto).
+
+**Decisiones de diseño relevantes:** el corte va en la base para que valga también por PostgREST, con el token que la persona ya tenía. Sólo `is_active = false` explícito corta; un usuario sin perfil (bootstrap) sigue igual. Que un perfil no se pueda reactivar a sí mismo ni reactivar a otro sin ser founder ya lo garantiza `protect_profile_columns` (SCRUM-1). El ban es el mismo que usa el panel de super admin (`876000h`).
+
+**Riesgos / deuda técnica pendiente:** los perfiles que ya estaban desactivados antes de este cambio no están baneados en Auth. La base y el middleware igual los cortan, pero se banean al aplicar (1 en producción). El JWT emitido antes de desactivar sigue siendo válido hasta que vence, y con él sólo lee su propia fila de `profiles`. La revisión adversarial encontró la vía de `profiles` y `holding_businesses`, el desbaneo de un ban ajeno, el costo de dos lecturas en la función, el mensaje de login en inglés, el error que no se mostraba y la falta de test del middleware; todo quedó en este cambio.
+
+---
+
 ### 2026-09-29 — El webhook de Calendly rechaza la clave fija y los eventos viejos (SCRUM-489)
 
 **Rama:** `fix/SCRUM-489-calendly-clave-fija`
