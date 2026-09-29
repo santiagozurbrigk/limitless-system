@@ -34,6 +34,24 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-28 — Ninguna vista de public se puede escribir desde la API (SCRUM-9)
+
+**Rama:** `fix/SCRUM-9-vistas-sin-escritura`
+**Commit(s):** este
+**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20260928200000_vistas_sin_escritura.sql`), CI (`supabase/ci/check-migrations.sh`)
+
+**Qué se hizo:** migración que hace `REVOKE ALL` a `anon` y `authenticated` sobre todas las vistas y vistas materializadas de `public` (hoy `organization_claude_status` y `workboard_time_by_member`) y les devuelve `SELECT` sólo a quien ya lo tenía. Así salen la escritura y también MAINTAIN, REFERENCES y TRIGGER; la lectura queda igual. En producción las dos vistas son de `postgres` y los grants los dio `postgres` (verificado el 28-sep), así que el revoke aplica. El script de migraciones del CI suma un paso que falla si alguna vista de `public` queda con escritura para esos roles.
+
+**Por qué / finalidad:** cierra `[DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE]` (P0, Crítica). `organization_claude_status` corre con los permisos de su dueño, es actualizable y tenía DELETE para `authenticated` por los default privileges: cualquier miembro, con su JWT, borraba la fila de `organizations` y en cascada todos los datos de su organización. Verificado en producción el 28-sep (sólo lectura): el grant existía y no había indicios de uso (0 usuarios de Auth sin perfil).
+
+**Decisiones de diseño relevantes:** sólo el revoke, sin `security_invoker`: la vista lee `claude_api_key_encrypted`, que `authenticated` no puede ver, y con `security_invoker` Ajustes → Claude dejaría de mostrar el estado de la clave (ver `20260922110000`). Por eso el advisor de Supabase sigue avisando `security_definer_view` sobre esta vista; es una excepción aceptada. Se revoca sobre todas las vistas en un bucle y no sólo sobre esta, porque los default privileges les dan `GRANT ALL` a todas las que se creen. Probado sobre una base armada desde cero: con el grant anterior un DELETE de un member borraba la organización; con la migración da `permission denied` y la lectura de la propia org sigue funcionando.
+
+La migración comprueba al final que no quedó escritura (tabla o columna) y falla si queda: en Supabase `postgres` no es superusuario, y si no fuera dueño de alguna vista el revoke sólo daría un WARNING. El check del CI también mira grants por columna (`has_any_column_privilege`).
+
+**Riesgos / deuda técnica pendiente:** una vista nueva vuelve a nacer con escritura; el CI lo detecta, pero la migración que la crea tiene que revocarla. SCRUM-9 se cierra recién con la migración aplicada en producción y la consulta de grants en cero. Los logs de PostgREST del plan Free no alcanzan para buscar borrados viejos; el indicio usado fue "0 usuarios de Auth sin perfil", que detecta borrados de orgs con miembros pero no un PATCH sobre `claude_api_key_status`. El borrado masivo dentro de la propia organización por otras tablas (por ejemplo `DELETE` de `clients`) sigue abierto en `[PERMISOS-SERVER-ACTIONS/infra]`.
+
+---
+
 ### 2026-09-23 — Historias de usuario para Jira
 
 **Rama:** `claude/loving-pascal-yui3l1` (PR #78)
