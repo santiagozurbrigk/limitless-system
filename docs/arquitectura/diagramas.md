@@ -252,7 +252,7 @@ flowchart TD
         seguimiento["/sales/closing, pestaña seguimiento<br/>app/sales/lead-actions.ts<br/>estado del hilo derivado, no guardado"]
         fathomRec["Fathom: grabación de la llamada<br/>cron sync + process cada 10 min"]
         fc[("fathom_calls")]:::tabla
-        ca[("call_analyses<br/>sin FK: LLAMADAS-EMBED-ROTO")]:::roto
+        ca[("call_analyses<br/>sin FK: se une en código por fathom_call_id")]:::tabla
     end
 
     cc --> seguimiento

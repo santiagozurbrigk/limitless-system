@@ -382,7 +382,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 
 ---
 
-### 1. Llamadas de venta en `/sales/llamadas` ⚠️
+### 1. Llamadas de venta en `/sales/llamadas`
 
 **Prerrequisitos:** sesión de founder en una org con Fathom conectado y al menos una grabación con `purpose = 'sales'`.
 
@@ -390,8 +390,11 @@ sumá su bloque en la sección de su área con el mismo formato.
 2. En la base: `select count(*) from fathom_calls where organization_id = '<org>' and purpose = 'sales'`.
 3. Revisar logs del servidor de esa request.
 
-**Resultado esperado:** la lista muestra esas llamadas. **Resultado probable hoy:** lista vacía, porque
-el embed `call_analyses(...)` no tiene FK (`[LLAMADAS-EMBED-ROTO]`). Si da vacío con count > 0, confirma el bug.
+**Resultado esperado:** la lista muestra la misma cantidad de llamadas que el count (tope 100), cada una
+con su análisis si hay fila en `call_analyses` con ese `fathom_call_id`, y sin errores
+`[getSalesCallsAction]` en los logs. Corregido el 2026-09-28 (`[LLAMADAS-EMBED-ROTO]`); en prod había
+18 llamadas de venta y ningún análisis atribuible (los 19 análisis tienen `fathom_call_id` null), así que
+hoy se ven sin análisis: eso es `[FATHOM-DEEP-ANALISIS-ALCANCE]`, no esta pantalla.
 
 ---
 

@@ -59,7 +59,7 @@ hace), riesgo, impacto y criterio de aceptación en el backlog.
 
 8. **Los permisos sólo esconden pantallas**: un usuario de sólo lectura puede editar o darse más permisos por
    detrás (`PERMISOS-SERVER-ACTIONS` y su parte de base de datos `PERMISOS-SERVER-ACTIONS/infra`).
-9. **La pantalla de Llamadas de venta no muestra ninguna llamada** (`LLAMADAS-EMBED-ROTO`).
+9. ~~**La pantalla de Llamadas de venta no muestra ninguna llamada** (`LLAMADAS-EMBED-ROTO`).~~ Resuelto el 2026-09-28.
 10. **Closing deja afuera los turnos más recientes cuando una organización pasa de 1.000** (`CLOSING-LIST-1000`).
 11. **La IA falla sin clave global confirmada**: ~3.000 fallas en 7 días (`1A1-CLAVE-ANTHROPIC-ROTA`).
 

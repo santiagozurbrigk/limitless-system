@@ -16,6 +16,11 @@ import {
   finalizeAssociatedCall,
 } from "@/lib/fathom/process-call";
 import { syncFathomMeetingsForOrganization } from "@/lib/fathom/sync";
+import {
+  attachCallAnalyses,
+  type CallAnalysisRow,
+  type SalesCall,
+} from "@/lib/fathom/sales-calls";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   learnSpeakerAliasFromConfirmation,
@@ -307,38 +312,27 @@ export async function updateFathomTaskProposalsAction(
   }
 }
 
-export async function getSalesCallsAction(): Promise<
-  Array<{
-    id: string;
-    title: string;
-    fathom_url: string | null;
-    call_date: string | null;
-    duration_seconds: number | null;
-    ai_situation_summary: string | null;
-    status: string;
-    call_analyses: {
-      id: string;
-      overall_score: number | null;
-      closer_name: string | null;
-      lead_qualified: boolean | null;
-      sold: boolean;
-      booked: boolean;
-      summary: string | null;
-      strengths: string[];
-      improvements: string[];
-      objections: Array<{ text: string; handled: boolean }>;
-    } | null;
-  }>
-> {
+export type SalesCallsResult =
+  | { ok: true; calls: SalesCall[] }
+  | { ok: false; error: string };
+
+/**
+ * Llamadas de venta de la org con su análisis profundo, para Ventas → Llamadas.
+ *
+ * Son dos lecturas unidas en código (`attachCallAnalyses`): `call_analyses` no
+ * tiene FK a `fathom_calls`, así que PostgREST no puede embeberla y la consulta
+ * con embed fallaba siempre. Un error no se traga: se loguea y, si es de la
+ * lectura de llamadas, se devuelve para que la pantalla no diga "sin llamadas".
+ */
+export async function getSalesCallsAction(): Promise<SalesCallsResult> {
   try {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
-    const { data, error } = await supabase
+    const { data: calls, error } = await supabase
       .from("fathom_calls")
       .select(
-        `id, title, fathom_url, call_date, duration_seconds, ai_situation_summary, status,
-         call_analyses(id, overall_score, closer_name, lead_qualified, sold, booked, summary, strengths, improvements, objections)`
+        "id, organization_id, fathom_call_id, title, fathom_url, call_date, duration_seconds, ai_situation_summary, status"
       )
       .eq("organization_id", organizationId)
       // Antes: `call_type = 'consulting'`. Ese campo lo escribía la IA sin
@@ -348,16 +342,36 @@ export async function getSalesCallsAction(): Promise<
       .order("call_date", { ascending: false })
       .limit(100);
 
-    if (error) throw error;
+    if (error) {
+      console.error("[getSalesCallsAction] fathom_calls", error);
+      return { ok: false, error: "No se pudieron cargar las llamadas." };
+    }
 
-    return (data ?? []).map((row) => ({
-      ...row,
-      call_analyses: Array.isArray(row.call_analyses)
-        ? (row.call_analyses[0] ?? null)
-        : (row.call_analyses ?? null),
-    }));
-  } catch {
-    return [];
+    const rows = calls ?? [];
+    const fathomCallIds = rows.map((row) => row.fathom_call_id);
+    let analyses: CallAnalysisRow[] = [];
+
+    if (fathomCallIds.length > 0) {
+      const { data, error: analysesError } = await supabase
+        .from("call_analyses")
+        .select(
+          "id, organization_id, fathom_call_id, overall_score, closer_name, lead_qualified, sold, booked, summary, strengths, improvements, objections"
+        )
+        .eq("organization_id", organizationId)
+        .in("fathom_call_id", fathomCallIds);
+
+      // Sin análisis la lista sigue sirviendo: se muestran las llamadas solas.
+      if (analysesError) {
+        console.error("[getSalesCallsAction] call_analyses", analysesError);
+      } else {
+        analyses = data ?? [];
+      }
+    }
+
+    return { ok: true, calls: attachCallAnalyses(rows, analyses) };
+  } catch (err) {
+    console.error("[getSalesCallsAction]", err);
+    return { ok: false, error: "No se pudieron cargar las llamadas." };
   }
 }
 

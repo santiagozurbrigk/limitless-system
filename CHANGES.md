@@ -34,6 +34,46 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-28 — Ventas → Llamadas vuelve a listar las llamadas de venta `[LLAMADAS-EMBED-ROTO]`
+
+**Rama:** `claude/charming-cray-rjhdqv`
+**Commit(s):** este — `fix(ventas): Llamadas une fathom_calls con call_analyses en código`
+**Módulo(s) afectado(s):** Ventas: `app/fathom/actions.ts` (`getSalesCallsAction`), `lib/fathom/sales-calls.ts`
+(nuevo) + test, `app/(platform)/sales/llamadas/page.tsx`, `components/sales/sales-calls-list.tsx`.
+
+**Qué se hizo:** `getSalesCallsAction` dejó de embeber `call_analyses(...)` desde `fathom_calls` (sin FK entre
+las tablas, PostgREST rechazaba la consulta en cada carga y el `catch` devolvía `[]`). Ahora lee las llamadas
+(`purpose = 'sales'`, últimas 100), después `call_analyses` de la org con `fathom_call_id in (…)`, y las une con
+`attachCallAnalyses` por organización + ID de grabación de Fathom. La action devuelve `{ ok, calls } | { ok: false,
+error }`: si falla la lectura de llamadas se loguea y la página muestra un aviso en vez de "Sin llamadas"; si
+falla la de análisis se loguea y se muestran las llamadas sin análisis. Los tipos de la tarjeta salen de
+`lib/fathom/sales-calls.ts` (se borró la copia en el componente). Las columnas JSONB (`strengths`,
+`improvements`, `objections`) se normalizan para que una forma inesperada no rompa la tarjeta.
+
+**Por qué / finalidad:** la pantalla estaba siempre vacía para todas las orgs, sin log.
+
+**Decisiones de diseño relevantes:** la clave de unión es `fathom_calls.fathom_call_id` (texto, ID de Fathom),
+no `fathom_calls.id`: es lo que escribe `generateDeepCallAnalysis` y lo que usa `/api/integrations/fathom/reanalyze`.
+Se descartó agregar una FK: `call_analyses.fathom_call_id` es único global y `fathom_calls` es único por
+`(organization_id, fathom_call_id)`, así que la FK obligaba a una migración compuesta sin beneficio para la
+pantalla. Se une también por `organization_id` para no cruzar orgs.
+
+**Verificación:** typecheck OK; `pnpm test` 1227 tests (10 nuevos: 5 de la unión en
+`lib/fathom/__tests__/sales-calls.test.ts` y 5 de la action con Supabase simulado en
+`app/fathom/__tests__/get-sales-calls-action.test.ts`, que rechaza cualquier embed de `call_analyses` con el
+PGRST200 real); lint sin errores. Con el `actions.ts` de `main` los 5 tests de la action fallan (reproducen la
+lista vacía). En producción (sólo lectura, 2026-09-28): la consulta vieja con supabase-js responde
+`PGRST200: Could not find a relationship between 'fathom_calls' and 'call_analyses'`; las dos nuevas se aceptan.
+Simulando por SQL (`role authenticated` + claims con `active_business_org_id`, transacción read-only) al único
+founder con acceso a la org con llamadas de venta (entra desde el holding): ve 18 de 18 llamadas y 0 análisis. No
+se vio la pantalla renderizada con una sesión real (bloque en `verificacion-manual.md`).
+
+**Riesgos / deuda técnica pendiente:** las 19 filas de `call_analyses` en prod son de otra org (sin llamadas de
+venta) y tienen `fathom_call_id` null (creadas el 2026-07-05, fuera del flujo actual), así que hoy ninguna llamada muestra análisis; queda anotado en
+`[FATHOM-DEEP-ANALISIS-ALCANCE]`, que es lo que hace que las ventas con lead no se analicen.
+
+---
+
 ### 2026-09-29 — Tests de RLS en el CI (SCRUM-9 y SCRUM-12)
 
 **Rama:** `test/rls-en-el-ci`
