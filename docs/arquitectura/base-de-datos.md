@@ -102,13 +102,13 @@ Excepciones que **sí** son editables por cualquier miembro: `discord_integratio
 | `get_current_week_start()` | Semana de weekly inputs | |
 | `set_updated_at()` | Trigger genérico de `updated_at` | trigger |
 
-Vistas: `organization_claude_status` (estado de la key de Claude, filtrada por org) y `workboard_time_by_member`. Realtime publicado en `business_context_documents`, `reel_variation_jobs` y `sop_generation_jobs`. Extensión: `vector`.
+Vistas: `organization_claude_status` (estado de la key de Claude, filtrada por org) y `workboard_time_by_member`. Ninguna vista de `public` tiene escritura para `anon` ni `authenticated` (`20260928200000_vistas_sin_escritura`): los default privileges del proyecto les dan `GRANT ALL` a las vistas nuevas, así que la migración que crea una vista tiene que revocarles INSERT, UPDATE, DELETE y TRUNCATE. `supabase/ci/check-migrations.sh` falla si alguna queda con escritura. Realtime publicado en `business_context_documents`, `reel_variation_jobs` y `sop_generation_jobs`. Extensión: `vector`.
 
 ## Storage
 
 Buckets creados por migraciones: `avatars`, `agent-documents`, `content-thumbnails` (público, con policy pública de listado), `trial-reels`, `client-wins`, `sop-videos`, `discord-bot-avatars`.
 
-**Buckets que el código usa y ninguna migración crea** (existen sólo en el dashboard; confirmar que son privados): `client-payment-receipts`, `business-context-documents`, `sop-attachments`, `workboard-task-attachments`, `ai-brain-documents` (`[AUD-SEG-9]`). Además existe en producción `import-files` (legacy del importador viejo, 2 archivos al 2026-09-23), con policies que dejan leer y borrar a cualquier usuario autenticado (`[SEG-BUCKET-IMPORT-FILES]`, P0). Tamaño por bucket: [`../auditoria/backups-y-recuperacion.md`](../auditoria/backups-y-recuperacion.md). Las rutas de objeto se validan contra la carpeta de la org en `lib/storage/org-path.ts`.
+**Buckets que el código usa y ninguna migración crea** (existen sólo en el dashboard; confirmar que son privados): `client-payment-receipts`, `business-context-documents`, `sop-attachments`, `workboard-task-attachments`, `ai-brain-documents` (`[AUD-SEG-9]`). El bucket `import-files` (legacy del importador viejo) se borró el 2026-09-28/29: sus policies abiertas salieron en `20260928210000_import_files_sin_policies` y el bucket con sus 2 archivos se borró desde el panel, después de descargarlos. Tamaño por bucket: [`../auditoria/backups-y-recuperacion.md`](../auditoria/backups-y-recuperacion.md). Las rutas de objeto se validan contra la carpeta de la org en `lib/storage/org-path.ts`.
 
 ## Inventario de tablas por área
 

@@ -74,6 +74,56 @@ venta) y tienen `fathom_call_id` null (creadas el 2026-07-05, fuera del flujo ac
 
 ---
 
+### 2026-09-29 — Tests de RLS en el CI (SCRUM-9 y SCRUM-12)
+
+**Rama:** `test/rls-en-el-ci`
+**Commit(s):** este
+**Módulo(s) afectado(s):** CI (`supabase/ci/check-migrations.sh`, `supabase/ci/tests/`), `docs/operacion/testing.md`
+
+**Qué se hizo:** paso 5 nuevo en `check-migrations.sh` que corre los archivos de `supabase/ci/tests/` sobre la base recién armada. `00_ayudas.sql` trae las funciones para actuar como un usuario y afirmar qué se permite. `10_vistas_sin_escritura.sql` (SCRUM-9) prueba que un member no borra su organización ni cambia el estado de la clave por la vista y que sigue leyendo el de su org. `20_storage_import_files.sql` (SCRUM-12) prueba que nadie logueado lista, sube ni borra en `import-files` y que ninguna policy lo nombra.
+
+**Por qué / finalidad:** las pruebas de los arreglos de SCRUM-9 y SCRUM-12 se habían hecho a mano; así quedan como constancia y el CI detecta si alguien vuelve a abrir esos huecos. Hasta ahora ningún test del repo tocaba la base.
+
+**Decisiones de diseño relevantes:** SQL puro con `set local role authenticated` y el JWT en `request.jwt.claims`, sobre los stubs del CI, sin pgTAP ni dependencias nuevas. Cada test en una transacción con `rollback`. Validados al revés: sin la migración de cada arreglo, el test correspondiente falla.
+
+**Riesgos / deuda técnica pendiente:** los stubs no son Supabase real (sin storage-api ni PostgREST): los tests prueban la base, no la API. El test de SCRUM-1 va con su PR (#82).
+
+---
+
+### 2026-09-28 — El bucket import-files deja de estar abierto a todas las organizaciones (SCRUM-12)
+
+**Rama:** `fix/SCRUM-12-import-files-sin-policies`
+**Commit(s):** este
+**Módulo(s) afectado(s):** base de datos, Storage (`supabase/migrations/20260928210000_import_files_sin_policies.sql`), super admin (`lib/super-admin/deletion-plan.ts`)
+
+**Qué se hizo:** migración que borra las tres policies de `storage.objects` sobre el bucket `import-files` (`Users can read/upload/delete import files`) con `drop policy if exists`, porque se crearon a mano y no están en ninguna migración. Al final falla si queda alguna policy de `storage.objects` que nombre al bucket, o alguna para `anon`/`authenticated` que no filtre por `bucket_id` (abriría todos los buckets).
+
+**Por qué / finalidad:** cierra `[SEG-BUCKET-IMPORT-FILES]` (P0, Crítica). La única condición de esas policies era `bucket_id = 'import-files'`: cualquier usuario logueado de cualquier organización listaba, descargaba y borraba los archivos de las otras, y podía subir hasta 50 MB por archivo. Verificado en producción el 28-sep (sólo lectura): las 3 policies activas y 2 archivos xlsx ("Métricas Globales FYF", por el nombre) subidos en julio.
+
+**Decisiones de diseño relevantes:** se borran las policies y no se reescriben por organización, porque el bucket no lo usa ningún código desde que se eliminó el importador (`4ee95c17`). Sin policies, la RLS de `storage.objects` no deja a `anon` ni `authenticated` tocarlo; el service role sí. El bucket y sus archivos no se borran en la migración: el 29-sep se aplicó la migración en producción, se descargaron los 2 archivos y se borraron junto con el bucket desde el panel de Storage. Por eso `import-files` sale de `BUCKETS_FUERA_DE_ALCANCE` en `deletion-plan.ts`: ya no existe. Probado a nivel SQL sobre la base del CI, con las policies y los objetos de producción reproducidos (sin la API de Storage): antes, un usuario cualquiera veía los 2 archivos, subía uno y borraba todos; después no ve nada, la subida es rechazada por RLS y los archivos siguen intactos.
+
+**Riesgos / deuda técnica pendiente:** borrar las policies no invalida un enlace firmado emitido mientras estaban abiertas (Storage los valida por la firma, sin RLS), así que los 2 objetos se descargan y se borran del bucket, o se borra el bucket, el mismo día en que se aplica la migración. SCRUM-12 se cierra con la migración aplicada, los objetos borrados y la verificación con el JWT de un usuario de prueba (`list('imports')` vacío, `download` rechazado). Aplicar después de `20260928200000` (SCRUM-9, PR #80) para respetar el orden del historial.
+
+---
+
+### 2026-09-28 — Ninguna vista de public se puede escribir desde la API (SCRUM-9)
+
+**Rama:** `fix/SCRUM-9-vistas-sin-escritura`
+**Commit(s):** este
+**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20260928200000_vistas_sin_escritura.sql`), CI (`supabase/ci/check-migrations.sh`)
+
+**Qué se hizo:** migración que hace `REVOKE ALL` a `anon` y `authenticated` sobre todas las vistas y vistas materializadas de `public` (hoy `organization_claude_status` y `workboard_time_by_member`) y les devuelve `SELECT` sólo a quien ya lo tenía. Así salen la escritura y también MAINTAIN, REFERENCES y TRIGGER; la lectura queda igual. En producción las dos vistas son de `postgres` y los grants los dio `postgres` (verificado el 28-sep), así que el revoke aplica. El script de migraciones del CI suma un paso que falla si alguna vista de `public` queda con escritura para esos roles.
+
+**Por qué / finalidad:** cierra `[DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE]` (P0, Crítica). `organization_claude_status` corre con los permisos de su dueño, es actualizable y tenía DELETE para `authenticated` por los default privileges: cualquier miembro, con su JWT, borraba la fila de `organizations` y en cascada todos los datos de su organización. Verificado en producción el 28-sep (sólo lectura): el grant existía y no había indicios de uso (0 usuarios de Auth sin perfil).
+
+**Decisiones de diseño relevantes:** sólo el revoke, sin `security_invoker`: la vista lee `claude_api_key_encrypted`, que `authenticated` no puede ver, y con `security_invoker` Ajustes → Claude dejaría de mostrar el estado de la clave (ver `20260922110000`). Por eso el advisor de Supabase sigue avisando `security_definer_view` sobre esta vista; es una excepción aceptada. Se revoca sobre todas las vistas en un bucle y no sólo sobre esta, porque los default privileges les dan `GRANT ALL` a todas las que se creen. Probado sobre una base armada desde cero: con el grant anterior un DELETE de un member borraba la organización; con la migración da `permission denied` y la lectura de la propia org sigue funcionando.
+
+La migración comprueba al final que no quedó escritura (tabla o columna) y falla si queda: en Supabase `postgres` no es superusuario, y si no fuera dueño de alguna vista el revoke sólo daría un WARNING. El check del CI también mira grants por columna (`has_any_column_privilege`).
+
+**Riesgos / deuda técnica pendiente:** una vista nueva vuelve a nacer con escritura; el CI lo detecta, pero la migración que la crea tiene que revocarla. SCRUM-9 se cierra recién con la migración aplicada en producción y la consulta de grants en cero. Los logs de PostgREST del plan Free no alcanzan para buscar borrados viejos; el indicio usado fue "0 usuarios de Auth sin perfil", que detecta borrados de orgs con miembros pero no un PATCH sobre `claude_api_key_status`. El borrado masivo dentro de la propia organización por otras tablas (por ejemplo `DELETE` de `clients`) sigue abierto en `[PERMISOS-SERVER-ACTIONS/infra]`.
+
+---
+
 ### 2026-09-23 — Historias de usuario para Jira
 
 **Rama:** `claude/loving-pascal-yui3l1` (PR #78)
