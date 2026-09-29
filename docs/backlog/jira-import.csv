@@ -186,23 +186,6 @@ Fuente: PENDIENTES.md [OAUTH-ESTADO-SIN-FIRMA] · Doc del área: docs/arquitectu
 *Dónde:* Supabase (plan, backups), {{docs/operacion/}}, {{docs/arquitectura/base-de-datos.md}}, script o workflow de dump nuevo.
 
 Fuente: PENDIENTES.md [DR-BACKUPS-SUPABASE] · Doc del área: docs/arquitectura/vision-general.md",DR-BACKUPS-SUPABASE,"Infraestructura, seguridad y tests (transversal)",P0,Crítica,decisión de negocio
-[SEG-BUCKET-IMPORT-FILES] El bucket import-files deja leer y borrar archivos de cualquier organización,Bug,Highest,infra,p0,sev-critica,seguridad,,,"*Tipo:* seguridad
-
-*Severidad:* Crítica
-
-*Estado verificado:* en prod existe el bucket {{import-files}} (privado, límite 50 MB) con tres policies en {{storage.objects}} para {{authenticated}} — {{Users can read import files}} (SELECT), {{Users can upload import files}} (INSERT) y {{Users can delete import files}} (DELETE) — cuya única condición es {{bucket_id = 'import-files'}}, sin filtro por organización. Ninguna migración crea el bucket ni esas policies (grep en {{supabase/migrations/}} vacío). El sistema de importación que lo usaba se eliminó (commit {{4ee95c17}}); {{lib/super-admin/deletion-plan.ts:35-39}} indica que guarda todo bajo {{imports/}} sin separar por cuenta. No se contó cuántos objetos quedan (no se leen filas).
-
-*Riesgo:* si un usuario logueado de cualquier org lista el bucket con su JWT ({{supabase.storage.from('import-files').list('imports')}}), entonces descarga o borra los Excel/CSV que subieron otras organizaciones. Es trivial para cualquiera con cuenta.
-
-*Impacto:* al 2026-09-23 el bucket tiene 2 archivos, subidos el 2026-07-19 y 2026-07-20 (conteo de {{storage.objects}}, sin abrir contenido): esas importaciones (listas de clientes, ventas y montos) quedan legibles y borrables por cualquier usuario logueado de cualquier organización. El bucket ya no lo usa ninguna pantalla, así que no crece.
-
-*Qué hay que hacer:* confirmar si quedan objetos; si el bucket no se usa, borrar las tres policies (y el bucket tras respaldar/borrar su contenido) en una migración; si se usa, reescribir las policies por prefijo de organización como {{agent-documents}}.
-
-*Criterio de aceptación:* con el JWT de un usuario de la org A, listar, descargar o borrar un objeto de {{import-files}} que no sea de A es rechazado (o el bucket ya no existe); la migración que lo resuelve está en {{supabase/migrations/}} y el historial de prod la tiene.
-
-*Dónde:* Supabase Storage ({{import-files}}), {{pg_policies}} de {{storage.objects}}, migración nueva, {{apps/web/lib/super-admin/deletion-plan.ts}}.
-
-Fuente: PENDIENTES.md [SEG-BUCKET-IMPORT-FILES] · Doc del área: docs/arquitectura/vision-general.md",SEG-BUCKET-IMPORT-FILES,"Infraestructura, seguridad y tests (transversal)",P0,Crítica,seguridad
 [PERMISOS-SERVER-ACTIONS/infra] Los roles no se hacen cumplir en la base ni en las actions (incluye AUD-SEG-1),Bug,Highest,infra,p0,sev-alta,seguridad,permisos-transversal,,"*Tipo:* seguridad
 
 *Severidad:* Alta
@@ -1577,11 +1560,11 @@ Fuente: PENDIENTES.md [SEG-REEL-WORKER-AUTH] · Doc del área: docs/arquitectura
 
 *Severidad:* Media
 
-*Estado verificado:* el código usa {{client-payment-receipts}}, {{business-context-documents}}, {{sop-attachments}}, {{workboard-task-attachments}} y {{ai-brain-documents}}; ninguna migración los crea (las que tocan {{storage.buckets}} crean {{avatars}}, {{agent-documents}}, {{content-thumbnails}}, {{trial-reels}}, {{client-wins}}, {{sop-videos}}, {{discord-bot-avatars}}). {{content-thumbnails}} es público con policy pública de listado ({{20260805200000}}). Catálogo de prod (2026-09-23): los cinco buckets son {{public = false}} y no tienen policies en {{storage.objects}} (acceso sólo por service role). También está fuera de migraciones {{import-files}}, con policies abiertas a cualquier {{authenticated}}: ver {{[SEG-BUCKET-IMPORT-FILES]}}.
+*Estado verificado:* el código usa {{client-payment-receipts}}, {{business-context-documents}}, {{sop-attachments}}, {{workboard-task-attachments}} y {{ai-brain-documents}}; ninguna migración los crea (las que tocan {{storage.buckets}} crean {{avatars}}, {{agent-documents}}, {{content-thumbnails}}, {{trial-reels}}, {{client-wins}}, {{sop-videos}}, {{discord-bot-avatars}}). {{content-thumbnails}} es público con policy pública de listado ({{20260805200000}}). Catálogo de prod (2026-09-23): los cinco buckets son {{public = false}} y no tienen policies en {{storage.objects}} (acceso sólo por service role). También está fuera de migraciones {{import-files}}; sus policies abiertas a cualquier {{authenticated}} se borraron en {{20260928210000_import_files_sin_policies}} y queda borrar el bucket desde el panel.
 
 *Riesgo:* Si se levanta una base nueva (staging, recuperación) desde las migraciones, entonces los cinco buckets no existen o se crean a mano sin policies definidas; en prod, verificado por catálogo hoy, los cinco son {{public = false}} y no tienen policies en {{storage.objects}} (sólo service role).
 
-*Impacto:* Hoy no hay exposición en esos cinco; el problema es de reproducibilidad y de control de cambios. La exposición real está en otro bucket fuera de migraciones que el ítem no nombra ({{import-files}}, ver ítem nuevo propuesto).
+*Impacto:* Hoy no hay exposición en esos cinco; el problema es de reproducibilidad y de control de cambios. La exposición real estaba en otro bucket fuera de migraciones que el ítem no nombra ({{import-files}}, cerrado en {{20260928210000_import_files_sin_policies}}).
 
 *Qué hay que hacer:* confirmar en el dashboard que los cinco son privados; escribir una migración idempotente que los declare con sus policies; decidir si {{content-thumbnails}} necesita listado público.
 
@@ -3053,7 +3036,7 @@ Fuente: PENDIENTES.md [LOGS-DATOS-SENSIBLES] · Doc del área: docs/arquitectura
 
 *Severidad:* Media
 
-*Estado verificado:* comparado el 2026-09-23 el estado final de policies de las 175 migraciones contra {{pg_policies}} de prod. El historial de versiones coincide exactamente y {{public}} coincide salvo lo ya registrado en {{docs/historial/DB_DIFF_PRODUCCION_2026-09-22.md}} y: (1) {{manychat_events}} tiene en prod la policy {{org_members_manychat_events}} (ALL, por org) que no está en ninguna migración; (2) {{storage.objects}} tiene 15 policies en prod y 11 en el repo: sólo en prod {{Users can read/upload/delete import files}} (ver {{[SEG-BUCKET-IMPORT-FILES]}}) y {{Avatar delete/update/upload por org}} + {{Avatar read público}} (usan {{profiles.organization_id}}); sólo en el repo {{Org members insert/update/delete avatars}} (usan {{get_my_organization_id()}}); (3) {{conversations}} está en la publicación {{supabase_realtime}} sin migración que la agregue; (4) {{current_user_is_founder_or_admin()}} sin migración (ya anotado en el diff del 22); (5) {{anon}} tiene EXECUTE sobre {{get_my_organization_id()}}, {{get_my_holding_business_org_ids()}} y {{current_user_is_founder_or_admin()}} aunque el repo revoca {{FROM public}} (advisor {{anon_security_definer_function_executable}}). El diff del 22 no cubrió {{storage.objects}}, {{pg_publication_tables}} ni grants de funciones.
+*Estado verificado:* comparado el 2026-09-23 el estado final de policies de las 175 migraciones contra {{pg_policies}} de prod. El historial de versiones coincide exactamente y {{public}} coincide salvo lo ya registrado en {{docs/historial/DB_DIFF_PRODUCCION_2026-09-22.md}} y: (1) {{manychat_events}} tiene en prod la policy {{org_members_manychat_events}} (ALL, por org) que no está en ninguna migración; (2) {{storage.objects}} tiene 15 policies en prod y 11 en el repo: sólo en prod {{Users can read/upload/delete import files}} (borradas por {{20260928210000_import_files_sin_policies}}) y {{Avatar delete/update/upload por org}} + {{Avatar read público}} (usan {{profiles.organization_id}}); sólo en el repo {{Org members insert/update/delete avatars}} (usan {{get_my_organization_id()}}); (3) {{conversations}} está en la publicación {{supabase_realtime}} sin migración que la agregue; (4) {{current_user_is_founder_or_admin()}} sin migración (ya anotado en el diff del 22); (5) {{anon}} tiene EXECUTE sobre {{get_my_organization_id()}}, {{get_my_holding_business_org_ids()}} y {{current_user_is_founder_or_admin()}} aunque el repo revoca {{FROM public}} (advisor {{anon_security_definer_function_executable}}). El diff del 22 no cubrió {{storage.objects}}, {{pg_publication_tables}} ni grants de funciones.
 
 *Riesgo:* Si alguien cambia reglas a mano en prod (como pasó con {{import-files}}), entonces el agujero no aparece en el código ni en el diff; y una base levantada desde el repo (staging, recuperación) queda con reglas distintas a prod (p. ej. sin {{conversations}} en realtime, con otras policies de avatars).
 

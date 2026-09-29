@@ -34,6 +34,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-28 — El bucket import-files deja de estar abierto a todas las organizaciones (SCRUM-12)
+
+**Rama:** `fix/SCRUM-12-import-files-sin-policies`
+**Commit(s):** este
+**Módulo(s) afectado(s):** base de datos, Storage (`supabase/migrations/20260928210000_import_files_sin_policies.sql`)
+
+**Qué se hizo:** migración que borra las tres policies de `storage.objects` sobre el bucket `import-files` (`Users can read/upload/delete import files`) con `drop policy if exists`, porque se crearon a mano y no están en ninguna migración. Al final falla si queda alguna policy de `storage.objects` que nombre al bucket, o alguna para `anon`/`authenticated` que no filtre por `bucket_id` (abriría todos los buckets).
+
+**Por qué / finalidad:** cierra `[SEG-BUCKET-IMPORT-FILES]` (P0, Crítica). La única condición de esas policies era `bucket_id = 'import-files'`: cualquier usuario logueado de cualquier organización listaba, descargaba y borraba los archivos de las otras, y podía subir hasta 50 MB por archivo. Verificado en producción el 28-sep (sólo lectura): las 3 policies activas y 2 archivos xlsx ("Métricas Globales FYF", por el nombre) subidos en julio.
+
+**Decisiones de diseño relevantes:** se borran las policies y no se reescriben por organización, porque el bucket no lo usa ningún código desde que se eliminó el importador (`4ee95c17`). Sin policies, la RLS de `storage.objects` no deja a `anon` ni `authenticated` tocarlo; el service role sí. El bucket y sus archivos no se borran en la migración: se descargan y después se borra el bucket desde el panel de Storage. Probado a nivel SQL sobre la base del CI, con las policies y los objetos de producción reproducidos (sin la API de Storage): antes, un usuario cualquiera veía los 2 archivos, subía uno y borraba todos; después no ve nada, la subida es rechazada por RLS y los archivos siguen intactos.
+
+**Riesgos / deuda técnica pendiente:** borrar las policies no invalida un enlace firmado emitido mientras estaban abiertas (Storage los valida por la firma, sin RLS), así que los 2 objetos se descargan y se borran del bucket, o se borra el bucket, el mismo día en que se aplica la migración. SCRUM-12 se cierra con la migración aplicada, los objetos borrados y la verificación con el JWT de un usuario de prueba (`list('imports')` vacío, `download` rechazado). Al borrar el bucket, sacar `"import-files"` de `BUCKETS_FUERA_DE_ALCANCE` en `apps/web/lib/super-admin/deletion-plan.ts`. Aplicar después de `20260928200000` (SCRUM-9, PR #80) para respetar el orden del historial.
+
+---
+
 ### 2026-09-23 — Historias de usuario para Jira
 
 **Rama:** `claude/loving-pascal-yui3l1` (PR #78)
