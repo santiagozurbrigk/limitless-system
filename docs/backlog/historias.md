@@ -441,13 +441,13 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Agustín: Decisión: calcular la tendencia o sacar el indicador.
 
 ### [H-VEN-19] Revisar las llamadas de venta grabadas y su análisis
-- **Funcionalidad:** F-VEN-19 · No funciona
+- **Funcionalidad:** F-VEN-19 · Con fallas
 - **Historia:** Como founder, quiero ver en Ventas → Llamadas todas las llamadas de venta grabadas con Fathom y su análisis, para revisar cómo vende el equipo sin ir a buscar cada grabación.
 - **Criterios de aceptación:**
   - Dada una organización con llamadas de venta grabadas, cuando abro Ventas → Llamadas, entonces veo la misma cantidad de llamadas que tiene guardadas el sistema, cada una con su análisis cuando existe.
   - Si la carga falla, el error queda registrado para el equipo técnico en vez de mostrar «no hay llamadas».
   - Una llamada de venta con un lead (sin cliente todavía) también tiene su análisis.
-- **Tareas técnicas:** `[LLAMADAS-EMBED-ROTO]`, `[FATHOM-DEEP-ANALISIS-ALCANCE]`
+- **Tareas técnicas:** `[FATHOM-DEEP-ANALISIS-ALCANCE]`
 - **Para confirmar:** —
 
 ### [H-VEN-21] Conectar mi propia cuenta de Fathom y que mis grabaciones lleguen solas

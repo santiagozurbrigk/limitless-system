@@ -301,18 +301,6 @@ Funcionalidad: F-VEN-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * Martín: no se confirmó que alguna organización pase hoy los 1.000 turnos; si ninguna los pasa, la falla todavía no se ve.
 
 Funcionalidad: F-VEN-17 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-17]",H-VEN-17,Ventas,P0,Alta,CLOSING-LIST-1000,
-[H-VEN-19] Revisar las llamadas de venta grabadas y su análisis,Story,Highest,historia,ventas,p0,sev-alta,,,"*Historia:* Como founder, quiero ver en Ventas → Llamadas todas las llamadas de venta grabadas con Fathom y su análisis, para revisar cómo vende el equipo sin ir a buscar cada grabación.
-
-*Criterios de aceptación:*
-* Dada una organización con llamadas de venta grabadas, cuando abro Ventas → Llamadas, entonces veo la misma cantidad de llamadas que tiene guardadas el sistema, cada una con su análisis cuando existe.
-* Si la carga falla, el error queda registrado para el equipo técnico en vez de mostrar «no hay llamadas».
-* Una llamada de venta con un lead (sin cliente todavía) también tiene su análisis.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [LLAMADAS-EMBED-ROTO] /sales/llamadas no muestra ninguna llamada (P0)
-* [FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas (P1)
-
-Funcionalidad: F-VEN-19 · No funciona · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-19]",H-VEN-19,Ventas,P0,Alta,LLAMADAS-EMBED-ROTO FATHOM-DEEP-ANALISIS-ALCANCE,
 [H-VEN-28] Limitar por rol quién ve Ventas y los montos,Story,Highest,historia,ventas,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que un miembro sin permiso de Ventas no pueda ver ni cambiar turnos, leads, cobros ni llamadas por ningún camino, para que los montos y los datos comerciales queden sólo para quien los necesita.
 
 *Criterios de aceptación:*
@@ -1244,6 +1232,17 @@ Funcionalidad: F-VEN-14 · No funciona · docs/FUNCIONAL.md · Fuente: docs/back
 * Agustín: Decisión: calcular la tendencia o sacar el indicador.
 
 Funcionalidad: F-VEN-18 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-18]",H-VEN-18,Ventas,P1,Alta,FATHOM-DEEP-ANALISIS-ALCANCE RANKING-TREND-FIJO,
+[H-VEN-19] Revisar las llamadas de venta grabadas y su análisis,Story,High,historia,ventas,p1,sev-alta,,,"*Historia:* Como founder, quiero ver en Ventas → Llamadas todas las llamadas de venta grabadas con Fathom y su análisis, para revisar cómo vende el equipo sin ir a buscar cada grabación.
+
+*Criterios de aceptación:*
+* Dada una organización con llamadas de venta grabadas, cuando abro Ventas → Llamadas, entonces veo la misma cantidad de llamadas que tiene guardadas el sistema, cada una con su análisis cuando existe.
+* Si la carga falla, el error queda registrado para el equipo técnico en vez de mostrar «no hay llamadas».
+* Una llamada de venta con un lead (sin cliente todavía) también tiene su análisis.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas (P1)
+
+Funcionalidad: F-VEN-19 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-19]",H-VEN-19,Ventas,P1,Alta,FATHOM-DEEP-ANALISIS-ALCANCE,
 [H-VEN-21] Conectar mi propia cuenta de Fathom y que mis grabaciones lleguen solas,Story,High,historia,ventas,p1,sev-media,para-confirmar,,"*Historia:* Como closer, quiero conectar mi cuenta de Fathom y que cada grabación nueva llegue sola a Limitless, para no depender de apretar «Sincronizar mis llamadas» ni de la cuenta del negocio.
 
 *Criterios de aceptación:*

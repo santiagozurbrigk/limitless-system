@@ -10,30 +10,7 @@ import {
   User,
 } from "lucide-react";
 import { cn } from "@ai-coo/ui";
-
-type CallAnalysis = {
-  id: string;
-  overall_score: number | null;
-  closer_name: string | null;
-  lead_qualified: boolean | null;
-  sold: boolean;
-  booked: boolean;
-  summary: string | null;
-  strengths: string[];
-  improvements: string[];
-  objections: Array<{ text: string; handled: boolean }>;
-} | null;
-
-type SalesCall = {
-  id: string;
-  title: string;
-  fathom_url: string | null;
-  call_date: string | null;
-  duration_seconds: number | null;
-  ai_situation_summary: string | null;
-  status: string;
-  call_analyses: CallAnalysis;
-};
+import type { SalesCall } from "@/lib/fathom/sales-calls";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "—";
