@@ -70,7 +70,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | `[EMBUDOS-WEBHOOK-PERDIDA]` | Embudos y Lanzamientos | Crítica | Webhooks de pagos y GHL que responden 200 sin haber guardado el evento |
 | `[1A1-CLAVE-ANTHROPIC-ROTA]` | Agente de negocio e IA | Alta | Una organización sin clave válida y sin clave global |
 | `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` | Operaciones, Finanzas y Producto | Crítica | Un miembro desactivado sigue entrando y viendo todo [Operaciones y equipo] |
-| `[DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE]` | Infraestructura, seguridad y tests (transversal) | Crítica | Cualquier miembro puede borrar su organización entera a través de la vista `organization_claude_status` |
 | `[OAUTH-ESTADO-SIN-FIRMA]` | Infraestructura, seguridad y tests (transversal) | Crítica | Los callbacks OAuth conectan la integración a la org que diga una cookie sin firmar |
 | `[DR-BACKUPS-SUPABASE]` | Infraestructura, seguridad y tests (transversal) | Crítica | La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración |
 | `[PERMISOS-SERVER-ACTIONS/infra]` | Infraestructura, seguridad y tests (transversal) | Alta | Los roles no se hacen cumplir en la base ni en las actions (incluye AUD-SEG-1) |
@@ -86,7 +85,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 1 | 7 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 4 | 25 | 42 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 3 | 25 | 42 | 13 |
 
 ---
 
@@ -2242,18 +2241,6 @@ Doc del área: [`docs/areas/operaciones.md`](./docs/areas/operaciones.md)
 Doc del área: [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md)
 
 ### Infraestructura, seguridad y tests (transversal) · P0
-
-#### [DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE] Cualquier miembro puede borrar su organización entera a través de la vista `organization_claude_status`
-- **Tipo:** seguridad
-- **Severidad:** Crítica
-- **Estado verificado:** en prod, `public.organization_claude_status` es una vista simple sobre `organizations` sin `security_invoker` (`pg_class.reloptions` null; advisor `security_definer_view`, nivel ERROR), dueña `postgres` (`rolbypassrls = true`; `organizations` sin `FORCE ROW LEVEL SECURITY`). `information_schema.views`: `is_updatable = YES`, `is_insertable_into = YES`; columnas actualizables `id`, `claude_api_key_status`, `claude_api_key_last_validated_at`. `role_table_grants`: `authenticated` tiene `INSERT`, `UPDATE` y `DELETE` sobre la vista (las migraciones sólo hacen `grant select` y `revoke all … from anon`, `20260922110000_rpcs_y_policies_entre_organizaciones.sql:68-69`; el resto sale de los privilegios por defecto de `public`). Filtro de la vista para `authenticated`: `id = get_my_organization_id()`. 138 FKs hacia `organizations` son `ON DELETE CASCADE` (incluye `profiles`, `clients`, `team_roles`); `organizations` no tiene triggers. Deducido del catálogo; no se ejecutó ninguna escritura.
-- **Riesgo:** Si cualquier usuario logueado (cualquier rol, incluido un member de "sólo lectura" o un miembro de holding con un negocio activo en el JWT) manda `DELETE /rest/v1/organization_claude_status?id=eq.<su org>` con la anon key y su JWT, entonces Postgres borra la fila de `organizations` como `postgres` (sin RLS) y en cascada los datos de la org en 138 tablas. Con `PATCH` puede además cambiar `claude_api_key_status`. Es una sola llamada HTTP con datos que el navegador ya tiene; basta un empleado descontento o una sesión robada.
-- **Impacto:** Pérdida total de los datos de una organización (clientes, ventas, llamadas, finanzas, equipo, integraciones), sin papelera y **sin backups** (producción está en plan Free: `[DR-BACKUPS-SUPABASE]`), así que hoy sería irrecuperable. El borrado alcanza sólo a la org del propio usuario (la vista filtra por `get_my_organization_id()`), pero lo puede hacer cualquier miembro, incluso uno de sólo lectura. Expuestas todas las orgs de producción.
-- **Qué hay que hacer:** migración con `revoke insert, update, delete on public.organization_claude_status from authenticated, anon;` y `alter view public.organization_claude_status set (security_invoker = true);` (confirmar que la RLS y los grants por columna de `organizations` dejan leer esas columnas a la org propia y que `app/settings/actions.ts:386` y `lib/super-admin/queries.ts:99,449` siguen funcionando); chequeo en `supabase/ci/` que falle si una vista de `public` es actualizable y tiene INSERT/UPDATE/DELETE para `authenticated`/`anon`; revisar si ya hubo borrados de `organizations` no hechos por el super admin (logs de PostgREST).
-- **Criterio de aceptación:** Con el JWT de un member, `DELETE` y `PATCH` por PostgREST sobre `organization_claude_status` son rechazados (permiso denegado) y la org sigue existiendo; `information_schema.role_table_grants` no muestra INSERT/UPDATE/DELETE de `authenticated` ni `anon` sobre ninguna vista de `public`; el advisor ya no reporta `security_definer_view`; Ajustes → Claude y el panel del super admin siguen mostrando el estado de la clave; la migración está en `supabase/migrations/` y en el historial de prod
-- **Dónde:** vista `public.organization_claude_status`, migración nueva, `supabase/ci/check-migrations.sh`.
-
-Prioridad sugerida P0: pérdida de datos de una org entera con una sola llamada, disponible hoy para cualquier usuario logueado.
 
 #### [OAUTH-ESTADO-SIN-FIRMA] Los callbacks OAuth conectan la integración a la org que diga una cookie sin firmar
 - **Tipo:** seguridad

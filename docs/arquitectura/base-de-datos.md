@@ -102,7 +102,7 @@ Excepciones que **sí** son editables por cualquier miembro: `discord_integratio
 | `get_current_week_start()` | Semana de weekly inputs | |
 | `set_updated_at()` | Trigger genérico de `updated_at` | trigger |
 
-Vistas: `organization_claude_status` (estado de la key de Claude, filtrada por org) y `workboard_time_by_member`. Realtime publicado en `business_context_documents`, `reel_variation_jobs` y `sop_generation_jobs`. Extensión: `vector`.
+Vistas: `organization_claude_status` (estado de la key de Claude, filtrada por org) y `workboard_time_by_member`. Ninguna vista de `public` tiene escritura para `anon` ni `authenticated` (`20260928200000_vistas_sin_escritura`): los default privileges del proyecto les dan `GRANT ALL` a las vistas nuevas, así que la migración que crea una vista tiene que revocarles INSERT, UPDATE, DELETE y TRUNCATE. `supabase/ci/check-migrations.sh` falla si alguna queda con escritura. Realtime publicado en `business_context_documents`, `reel_variation_jobs` y `sop_generation_jobs`. Extensión: `vector`.
 
 ## Storage
 
