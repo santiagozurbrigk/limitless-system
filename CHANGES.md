@@ -34,6 +34,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-29 — Tests de RLS en el CI (SCRUM-9 y SCRUM-12)
+
+**Rama:** `test/rls-en-el-ci`
+**Commit(s):** este
+**Módulo(s) afectado(s):** CI (`supabase/ci/check-migrations.sh`, `supabase/ci/tests/`), `docs/operacion/testing.md`
+
+**Qué se hizo:** paso 5 nuevo en `check-migrations.sh` que corre los archivos de `supabase/ci/tests/` sobre la base recién armada. `00_ayudas.sql` trae las funciones para actuar como un usuario y afirmar qué se permite. `10_vistas_sin_escritura.sql` (SCRUM-9) prueba que un member no borra su organización ni cambia el estado de la clave por la vista y que sigue leyendo el de su org. `20_storage_import_files.sql` (SCRUM-12) prueba que nadie logueado lista, sube ni borra en `import-files` y que ninguna policy lo nombra.
+
+**Por qué / finalidad:** las pruebas de los arreglos de SCRUM-9 y SCRUM-12 se habían hecho a mano; así quedan como constancia y el CI detecta si alguien vuelve a abrir esos huecos. Hasta ahora ningún test del repo tocaba la base.
+
+**Decisiones de diseño relevantes:** SQL puro con `set local role authenticated` y el JWT en `request.jwt.claims`, sobre los stubs del CI, sin pgTAP ni dependencias nuevas. Cada test en una transacción con `rollback`. Validados al revés: sin la migración de cada arreglo, el test correspondiente falla.
+
+**Riesgos / deuda técnica pendiente:** los stubs no son Supabase real (sin storage-api ni PostgREST): los tests prueban la base, no la API. El test de SCRUM-1 va con su PR (#82).
+
+---
+
 ### 2026-09-28 — El bucket import-files deja de estar abierto a todas las organizaciones (SCRUM-12)
 
 **Rama:** `fix/SCRUM-12-import-files-sin-policies`
