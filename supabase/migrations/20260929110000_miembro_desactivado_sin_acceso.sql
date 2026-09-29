@@ -64,11 +64,39 @@ revoke all on function public.get_my_holding_business_org_ids() from public;
 grant execute on function public.get_my_holding_business_org_ids() to authenticated;
 
 -- ─── 3. Policies que no pasan por esas funciones ─────────────────────────────
--- Editar el propio perfil: un admin desactivado podía cambiarse tarifa y
--- comisión (alimentan costos y comisiones de la org).
-alter policy "Users update own profile" on public.profiles
-  using (id = auth.uid() and is_active)
-  with check (id = auth.uid() and is_active);
+-- Editar perfiles: un admin desactivado podía cambiarse tarifa y comisión
+-- (alimentan costos y comisiones de la org).
+--
+-- ⚠️ Deriva: el repo tiene dos policies de UPDATE ("Users update own profile",
+-- 20260606100000, y "Founders update org profiles", 20260616100000) y
+-- producción las tiene unificadas a mano en "Users update own or founders
+-- update org profiles", con `current_user_is_founder_or_admin()` (que no está
+-- en el repo). Se borran las tres variantes y queda una sola, con el nombre de
+-- producción, igual en los dos lados:
+--   - la propia fila, si el perfil está activo;
+--   - cualquier perfil de la org activa, si quien edita es founder o admin
+--     activo (`current_user_has_org_role`, 20260929100000).
+-- Qué columnas puede cambiar cada uno lo sigue decidiendo protect_profile_columns.
+drop policy if exists "Users update own profile" on public.profiles;
+drop policy if exists "Founders update org profiles" on public.profiles;
+drop policy if exists "Users update own or founders update org profiles" on public.profiles;
+create policy "Users update own or founders update org profiles"
+  on public.profiles for update
+  to authenticated
+  using (
+    (id = auth.uid() and is_active)
+    or (
+      organization_id = public.get_my_organization_id()
+      and public.current_user_has_org_role(array['founder', 'admin'])
+    )
+  )
+  with check (
+    (id = auth.uid() and is_active)
+    or (
+      organization_id = public.get_my_organization_id()
+      and public.current_user_has_org_role(array['founder', 'admin'])
+    )
+  );
 
 -- Ver los negocios del holding (con su revenue share y fee).
 alter policy "holding_can_see_businesses" on public.holding_businesses
@@ -143,3 +171,18 @@ begin
   return new;
 end;
 $$;
+
+-- ─── 5. Autoverificación ─────────────────────────────────────────────────────
+-- Si en producción hubiera otra policy de UPDATE sobre profiles (hecha a mano,
+-- con otro nombre), un desactivado podría seguir editando. Falla en ese caso.
+do $$
+begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'profiles'
+      and permissive = 'PERMISSIVE' and cmd in ('UPDATE', 'ALL')
+      and policyname <> 'Users update own or founders update org profiles'
+  ) then
+    raise exception 'Queda otra policy de UPDATE sobre profiles';
+  end if;
+end $$;

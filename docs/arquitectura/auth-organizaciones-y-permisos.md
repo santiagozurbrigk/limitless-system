@@ -63,8 +63,8 @@ distingue **founder / no founder**; lo que diferencia a un no-founder es su `cus
   Desde `20260929100000`, `custom_role_id` e `is_active` sólo los cambia el founder de la org activa
   (`current_user_has_org_role`), y un perfil founder no se puede desactivar desde la API.
 - **Perfil desactivado** (`is_active = false`, SCRUM-8): `get_my_organization_id()` devuelve null,
-  `get_my_holding_business_org_ids()` vacío, y "Users update own profile" y "holding_can_see_businesses"
-  exigen `is_active` (`20260929110000`). Con su JWT sólo lee su propia fila de `profiles`. En la app, el
+  `get_my_holding_business_org_ids()` vacío, y "Users update own or founders update org profiles" (unificada, igual que en
+  producción) y "holding_can_see_businesses" exigen `is_active` (`20260929110000`). Con su JWT sólo lee su propia fila de `profiles`. En la app, el
   middleware cierra la sesión y manda al login con `?error=cuenta_desactivada`, y `requireOrganizationId()`,
   `requireAuthContext()` y `requireHoldingProfile()` cortan. Desactivar banea al usuario en Auth con la marca
   `app_metadata.ban_motivo = 'desactivado_por_founder'`; reactivar sólo levanta un ban con esa marca
