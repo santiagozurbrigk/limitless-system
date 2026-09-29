@@ -54,6 +54,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-29 — El webhook de Calendly rechaza la clave fija y los eventos viejos (SCRUM-489)
+
+**Rama:** `fix/SCRUM-489-calendly-clave-fija`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Ventas / Closing (`app/api/integrations/calendly/webhook/route.ts`, `lib/calendly/webhook-signature.ts`)
+
+**Qué se hizo:** la verificación de la firma sale del receptor a `lib/calendly/webhook-signature.ts`, con tests. `verifyCalendlySignature` nunca acepta `NO_WEBHOOK_SIGNING_KEY` ni una clave vacía, y rechaza un `t` a más de 5 minutos del reloj. `findOrganizationForSignature` busca la organización y saltea las integraciones sin suscripción. La cabecera se lee por nombre de campo (`t`, `v1`) y no por posición. El receptor verifica la firma antes de interpretar el cuerpo, y un error interno responde un mensaje genérico en lugar del detalle.
+
+**Por qué / finalidad:** cuando Calendly no deja crear la suscripción (plan gratuito o fallo), la integración guarda `NO_WEBHOOK_SIGNING_KEY`, una constante pública del repo, y el receptor la usaba como clave: cualquiera, sin cuenta, podía firmar eventos y crear, cancelar o marcar como no-show turnos en Closing, con leads y atribución UTM, en esas organizaciones. En producción, al 2026-09-28, había 1 organización en ese estado ("Onboarding"), con 1 turno en 30 días y sin señales de uso. Cierra también `[CALENDLY-WEBHOOK-REPLAY]`, porque sin la ventana de tiempo un evento firmado se podía reenviar siempre.
+
+**Decisiones de diseño relevantes:** se filtra en el receptor y no en el callback. El filtro cubre también las filas que ya existen con la clave fija, y guardar `null` en el callback rompería el upsert, porque la columna es `not null`. La ventana de 5 minutos es la que pedía `[CALENDLY-WEBHOOK-REPLAY]`.
+
+**Riesgos / deuda técnica pendiente:** si el reloj del servidor se desfasa más de 5 minutos, se rechazan eventos legítimos. El cron `calendly-sync` recupera en la próxima hora los turnos y no-shows de eventos activos, pero no las cancelaciones, porque sólo pide eventos `active` (`[CALENDLY-SYNC-SIN-CANCELADOS]`, nuevo; ya pasaba con cualquier webhook perdido). Queda abierto `[CALENDLY-RECONEXION-SUSCRIPCIONES]` (nuevo): reconectar deja suscripciones viejas en Calendly, y si al reconectar falla la creación se pisa una clave real con la clave fija (el webhook deja de llegar y sólo queda el cron). No abre la puerta que cierra este cambio.
+
+---
+
 ### 2026-09-29 — Una org sin Zernio ya no usa la key global de Zernio `[ZERNIO-KEY-GLOBAL]`
 
 **Rama:** `claude/busy-shannon-h92831`
