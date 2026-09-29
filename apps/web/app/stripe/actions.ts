@@ -12,6 +12,11 @@ import {
 } from "@/lib/stripe/api";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paths } from "@/routes";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 export type StripeIntegrationStatus = {
   connected: boolean;
@@ -109,6 +114,7 @@ export async function disconnectStripeIntegrationAction(): Promise<{
 }> {
   try {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
     const now = new Date().toISOString();
 

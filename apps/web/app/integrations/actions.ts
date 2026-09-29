@@ -37,6 +37,11 @@ import {
   type IntegrationsSummary,
 } from "@/lib/integrations/health";
 import { LISTED_INTEGRATIONS } from "@/lib/integrations/registry";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 const GOOGLE_INTEGRATION_TABLE: Record<
   GoogleIntegrationProvider,
@@ -51,6 +56,7 @@ export async function disconnectGoogleIntegrationAction(
 ): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
     const { error } = await admin
       .from(GOOGLE_INTEGRATION_TABLE[provider])
@@ -71,6 +77,7 @@ export async function disconnectGoogleIntegrationAction(
 export async function disconnectInstagramAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
     const { error } = await admin
       .from("instagram_integrations")
@@ -85,6 +92,7 @@ export async function disconnectInstagramAction(): Promise<MutationResult> {
 export async function disconnectFathomAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
     const { error } = await admin
       .from("fathom_integrations")
@@ -99,6 +107,7 @@ export async function disconnectFathomAction(): Promise<MutationResult> {
 export async function disconnectManyChatAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
     const { error } = await admin
       .from("manychat_integrations")
@@ -113,6 +122,7 @@ export async function disconnectManyChatAction(): Promise<MutationResult> {
 export async function disconnectCalendlyAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
 
     // Cancelar la suscripción webhook en Calendly antes de borrar la fila
@@ -146,6 +156,7 @@ export async function disconnectCalendlyAction(): Promise<MutationResult> {
 export async function disconnectTypeformAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
     const { error } = await admin
       .from("typeform_integrations")
@@ -160,6 +171,7 @@ export async function disconnectTypeformAction(): Promise<MutationResult> {
 export async function disconnectZernioAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
     const { error } = await admin
       .from("zernio_integrations")
@@ -174,6 +186,7 @@ export async function disconnectZernioAction(): Promise<MutationResult> {
 export async function disconnectGHLIntegrationAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
     const { error } = await admin
       .from("ghl_integrations")

@@ -18,6 +18,11 @@ import {
   mercadoPagoTransactionsQuerySchema,
 } from "@/lib/validations";
 import { paths } from "@/routes";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 export type MercadoPagoIntegrationStatus = {
   connected: boolean;
@@ -118,6 +123,7 @@ export async function disconnectMercadoPagoIntegrationAction(): Promise<{
 }> {
   try {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
     const now = new Date().toISOString();
 

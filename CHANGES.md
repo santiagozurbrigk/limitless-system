@@ -34,6 +34,27 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-29 — El rol se hace cumplir en la base para equipo, configuración y borrado de clientes (SCRUM-1, parte A)
+
+**Rama:** `fix/SCRUM-1-parte-a-roles-en-la-base`
+**Commit(s):** este
+**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20260929100000_roles_equipo_y_config_en_la_base.sql`), `lib/auth/require-org-role.ts`, `app/settings/actions.ts`, `app/clients/actions.ts`, los `disconnect*Action` de la org
+
+**Qué se hizo:**
+- Función `current_user_has_org_role(roles text[])` (SECURITY DEFINER): verdadero si el perfil está activo, tiene uno de esos roles y la organización activa es la suya, o uno de los negocios de su holding.
+- Policies nuevas con esa función: escribir `team_roles` y todo `team_invitations` (también leer, por el token), sólo founder; UPDATE de `organizations`, sólo founder; DELETE de `clients`, founder o admin. Leer `team_roles` sigue abierto a la org. La migración falla si queda otra policy permisiva sin el chequeo para esas operaciones.
+- Helper `requireOrgRole(roles, mensaje)`, que llama a la misma función por RPC, aplicado en `saveGeneralOrganizationSettingsAction`, `updateOrganizationWebsiteAction`, `saveClaudeApiKeyAction`, `removeClaudeApiKeyAction`, `deleteClientAction` y los 18 `disconnect*Action` de integraciones de la org (no los del propio miembro: `disconnectMyCalendlyAction`, `disconnectMemberFathomAction`).
+- Las 3 rutas `POST /api/integrations/{stripe,mercadopago,unipile}/disconnect`, que hacían lo mismo que sus actions, piden el mismo rol (403 si no).
+- `protect_profile_columns`: cambiar `custom_role_id` o `is_active` de un perfil pasa a ser sólo del founder de la org activa (antes también del admin, que podía darse todos los módulos o desactivar al founder), y a un perfil founder no se lo puede desactivar desde la API. Tarifas y comisión siguen siendo de founder o admin.
+
+**Por qué / finalidad:** parte A de `[PERMISOS-SERVER-ACTIONS]` (P0). Con su JWT, cualquier miembro podía darse todos los módulos editando `team_roles`, fabricar una invitación con cualquier rol y aceptarla con otro mail, cambiar la configuración de la org o borrar todos los clientes (14 tablas en cascada cada uno).
+
+**Decisiones de diseño relevantes:** reglas decididas con el PO el 29-sep: equipo y configuración, sólo founder, igual que `canManageTeam` en `app/team/actions.ts`; borrar clientes, founder o admin. La app pregunta a la base en lugar de repetir la lógica, así el founder de holding y los perfiles desactivados se tratan igual en los dos lados. El guard en la app hace falta además de la RLS por dos motivos: la clave de Claude y las desconexiones van con el service role, y un UPDATE o DELETE rechazado por RLS afecta 0 filas sin error, así que la action diría "guardado" sin guardar. Probado sobre la base del CI con founder, admin, member, founder desactivado y founder de holding operando un negocio, también para `profiles`; antes de la migración, un member hacía todo lo anterior. La revisión adversarial encontró las 3 rutas de desconexión sin guard y la vía de `profiles`; las dos quedaron en este cambio.
+
+**Riesgos / deuda técnica pendiente:** cambia el comportamiento para quien no es founder: ya no puede guardar Configuración → General, la clave de Claude ni desconectar integraciones, y un member ya no puede borrar clientes. Queda la parte B de `[PERMISOS-SERVER-ACTIONS]`: permiso por módulo, finanzas, comisiones de closers, `connect*` de integraciones y `discord`/`unipile` por PostgREST.
+
+---
+
 ### 2026-09-28 — El bucket import-files deja de estar abierto a todas las organizaciones (SCRUM-12)
 
 **Rama:** `fix/SCRUM-12-import-files-sin-policies`

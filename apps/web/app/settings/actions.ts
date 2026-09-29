@@ -24,6 +24,11 @@ import {
 } from "@/lib/validations";
 import { paths } from "@/routes";
 import type { z } from "zod";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 export type ClaudeApiKeyStatus = {
   hasKey: boolean;
@@ -228,6 +233,7 @@ export async function updateOrganizationWebsiteAction(
 
   return runMutation(async () => {
     const organizationId = auth.organizationId;
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const supabase = await createClient();
     const normalized = parsedWebsiteUrl
       ? normalizeWebsiteUrl(parsedWebsiteUrl)
@@ -267,6 +273,7 @@ export async function saveGeneralOrganizationSettingsAction(input: {
 
   return runMutation(async () => {
     const organizationId = auth.organizationId;
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const supabase = await createClient();
 
     const website_url = websiteUrl ? normalizeWebsiteUrl(websiteUrl) : null;
@@ -458,6 +465,7 @@ export async function saveClaudeApiKeyAction(
     }
 
     const { orgId } = auth.auth;
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     assertClaudeKeyFormat(trimmed);
 
     const validation = await validateClaudeApiKey(trimmed);
@@ -493,6 +501,7 @@ export async function removeClaudeApiKeyAction(): Promise<MutationResult> {
     }
 
     const { orgId } = await requireAuthContext();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
 
     const { error } = await admin

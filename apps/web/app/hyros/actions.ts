@@ -19,6 +19,11 @@ import {
   upsertHyrosIntegration,
 } from "@/lib/hyros/integration";
 import { syncHyrosAdAccountsForOrg } from "@/lib/hyros/sync-ad-accounts";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 /**
  * Server Actions de la unidad I-8 — Hyros.
@@ -206,6 +211,7 @@ export async function getHyrosLeadJourneyAction(
 export async function disconnectHyrosAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     await deleteHyrosIntegration(organizationId);
     revalidatePath(paths.platform.integrations);
   });

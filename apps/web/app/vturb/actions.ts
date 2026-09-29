@@ -12,6 +12,11 @@ import {
   upsertVTurbIntegration,
 } from "@/lib/vturb/integration";
 import { syncVTurbPlayersForOrg } from "@/lib/vturb/sync-players";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 /**
  * Server Actions de la unidad I-6 — VTurb.
@@ -141,6 +146,7 @@ export async function syncVTurbPlayersAction(): Promise<
 export async function disconnectVTurbAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     await deleteVTurbIntegration(organizationId);
     revalidatePath(paths.platform.integrations);
   });

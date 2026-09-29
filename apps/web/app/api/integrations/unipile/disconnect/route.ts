@@ -7,6 +7,11 @@ import { paths } from "@/routes";
 import { disconnectUnipileAccount } from "@/lib/unipile/hosted-auth";
 import { getUnipileIntegrationForOrg } from "@/lib/unipile/integration";
 import { unipileDisconnectBodySchema } from "@/lib/unipile/schemas";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +34,7 @@ export async function POST(req: Request) {
 
   const result = await runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const integration = await getUnipileIntegrationForOrg(
       organizationId,
       parsed.data.provider

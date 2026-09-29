@@ -6,6 +6,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt } from "@/lib/security/encryption";
 import { isPaymentProvider, type PaymentProvider } from "@/lib/payments/types";
 import { paths } from "@/routes/paths";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 export type PaymentIntegrationStatus = {
   provider: PaymentProvider;
@@ -156,6 +161,11 @@ export async function disconnectPaymentProviderAction(
   provider: string
 ): Promise<{ ok: boolean; error?: string }> {
   const organizationId = await requireOrganizationId();
+  try {
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : SIN_PERMISO_CONFIG_ORG };
+  }
   if (!isPaymentProvider(provider)) return { ok: false, error: "Proveedor desconocido" };
 
   const admin = createAdminClient();

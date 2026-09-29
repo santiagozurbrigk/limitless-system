@@ -24,6 +24,11 @@ import {
   uuidSchema,
 } from "@/lib/validations";
 import type { Client } from "@/types/clients";
+import {
+  requireOrgRole,
+  ROLES_BORRAR_CLIENTES,
+  SIN_PERMISO_BORRAR_CLIENTES,
+} from "@/lib/auth/require-org-role";
 
 export type ImportClientsRowError = {
   row: number;
@@ -199,6 +204,7 @@ export async function deleteClientAction(id: string): Promise<void> {
   }
 
   const organizationId = await requireOrganizationId();
+  await requireOrgRole(ROLES_BORRAR_CLIENTES, SIN_PERMISO_BORRAR_CLIENTES);
 
   const idParsed = uuidSchema.safeParse(id);
   if (!idParsed.success) {

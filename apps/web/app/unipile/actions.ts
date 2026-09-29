@@ -9,6 +9,11 @@ import { paths } from "@/routes";
 import type { UnipileProvider } from "@/lib/unipile/config";
 import { disconnectUnipileAccount } from "@/lib/unipile/hosted-auth";
 import { getUnipileIntegrationForOrg } from "@/lib/unipile/integration";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 export type UnipileIntegrationStatus = {
   connected: boolean;
@@ -63,6 +68,7 @@ export async function disconnectUnipileIntegrationAction(
 ): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const integration = await getUnipileIntegrationForOrg(organizationId, provider);
     if (!integration) {
       throw new Error("No hay cuenta Unipile conectada");
