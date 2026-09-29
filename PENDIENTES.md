@@ -65,7 +65,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | `[PERMISOS-SERVER-ACTIONS]` | Plataforma | Alta | Los permisos por módulo no protegen datos, sólo pantallas |
 | `[AUTH-CALLBACK-NEXT]` | Plataforma | Media | Open redirect en `/auth/callback` (nuevo) |
 | `[CLOSING-LIST-1000]` | Ventas | Alta | El calendario y la lista de Closing pierden los turnos más recientes |
-| `[ZERNIO-KEY-GLOBAL]` | Marketing | Crítica | Una org sin Zernio usa la key global de Zernio |
 | `[EMBUDOS-WEBHOOK-PERDIDA]` | Embudos y Lanzamientos | Crítica | Webhooks de pagos y GHL que responden 200 sin haber guardado el evento |
 | `[1A1-CLAVE-ANTHROPIC-ROTA]` | Agente de negocio e IA | Alta | Una organización sin clave válida y sin clave global |
 | `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` | Operaciones, Finanzas y Producto | Crítica | Un miembro desactivado sigue entrando y viendo todo [Operaciones y equipo] |
@@ -80,7 +79,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 2 | 14 | 33 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 15 | 16 | 8 |
-| [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 1 | 8 | 20 | 5 |
+| [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 1 | 7 | 15 | 10 |
@@ -1133,23 +1132,6 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 ## Marketing
 
 Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
-
-### Marketing · P0
-
-#### [ZERNIO-KEY-GLOBAL] Una org sin Zernio usa la key global de Zernio
-- **Tipo:** seguridad
-- **Severidad:** Crítica
-- **Estado verificado:** `getZernioApiKeyForOrganization` (`lib/zernio/integration.ts:113-121`) devuelve `process.env.ZERNIO_API_KEY` cuando la org no tiene fila activa o su fila no tiene `api_key`. Todo `getZernioClientForOrganization` (anuncios, comentarios, inbox, sync) lo hereda. `captureAdMetricsForAllOrganizations` (`lib/marketing/ad-metrics-snapshot.ts:158`) recorre `zernio_integrations` sin filtrar `is_active`, y una fila inactiva cae al fallback → escribiría en `ad_metrics_daily` anuncios de la cuenta global. `.env.example` la trae como `sk_pending`. `ZERNIO_API_KEY` **existe** en Vercel en Production y Preview (tipo sensitive, creada el 2026-07-09). No se pudo ver si el valor es una key real o `sk_pending`. Caen al fallback sin chequear integración:
-- `getMarketingAdsAction` (`app/marketing/content/ad-actions.ts:50-54`);
-- `captureAdMetricsForOrganization` (`lib/marketing/ad-metrics-snapshot.ts:99`, también por `?organizationId=` del cron);
-- `fetchZernioCommentSteps` (`lib/sales/lead-journey.ts:221`).
-
-Las acciones de inbox y comentarios de `app/integrations/zernio/actions.ts` exigen fila activa, que siempre trae key propia. También lo hereda Embudos: `countZernioTriggers` (`lib/funnels/resolve.ts:300-313`) contaría los comentarios de la cuenta global en el paso de disparadores de una org sin Zernio.
-- **Riesgo:** Si ZERNIO_API_KEY está seteada en Production, entonces cualquier org sin Zernio activo (o con la integración desactivada) lee anuncios, comentarios y conteos de otra cuenta sin hacer nada especial: basta con abrir /marketing/anuncios o un embudo con el paso de comentarios. Probabilidad desconocida hasta confirmar la variable en Vercel.
-- **Impacto:** Expone datos de la cuenta dueña de la key global (anuncios, comentarios, inbox) a todas las orgs sin Zernio, y mete esos números en sus embudos y en ad_metrics_daily vía el cron. Hay 30 llamadas a getZernioClientForOrganization que heredan el fallback.
-- **Qué hay que hacer:** confirmar en Vercel si `ZERNIO_API_KEY` existe en Production; quitar el fallback fuera de dev (`NODE_ENV !== "production"`) o borrarlo; filtrar `is_active` en el cron.
-- **Criterio de aceptación:** Quedó anotado si ZERNIO_API_KEY existe en Production de Vercel; con una org sin Zernio conectado (o con la integración inactiva), /marketing/anuncios y /comentarios muestran 'no conectado' y no traen datos de otra cuenta, y el cron capture-ad-metrics no escribe filas en ad_metrics_daily para integraciones inactivas; hay un test que cubre que getZernioApiKeyForOrganization no devuelve la key global en producción
-- **Dónde:** `apps/web/lib/zernio/integration.ts`, `apps/web/lib/marketing/ad-metrics-snapshot.ts`
 
 ### Marketing · P1
 

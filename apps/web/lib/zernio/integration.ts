@@ -110,14 +110,16 @@ export async function getZernioIntegrationForOrg(
   } as ZernioIntegrationRow;
 }
 
+/**
+ * Key de Zernio de la org: sólo la de su integración activa. Sin fallback a una
+ * key global — una org sin Zernio conectado no puede leer datos de otra cuenta.
+ */
 export async function getZernioApiKeyForOrganization(
   organizationId: string
 ): Promise<string | null> {
   const row = await getZernioIntegrationForOrg(organizationId);
-  if (row?.api_key) {
-    return readStoredApiKey(row.api_key);
-  }
-  return process.env.ZERNIO_API_KEY?.trim() ?? null;
+  if (!row?.api_key) return null;
+  return readStoredApiKey(row.api_key);
 }
 
 export async function getZernioClientForOrganization(

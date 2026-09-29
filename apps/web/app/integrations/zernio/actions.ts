@@ -204,7 +204,7 @@ export async function listZernioConversationsAction(): Promise<
 > {
   const organizationId = await requireOrganizationId();
   const integration = await getZernioIntegrationForOrg(organizationId);
-  if (!integration || integration.connected_accounts.length === 0) {
+  if (!integration?.api_key || integration.connected_accounts.length === 0) {
     return [];
   }
 
@@ -275,7 +275,7 @@ export async function sendZernioMessageAction(
 export async function listZernioCommentsAction(): Promise<ZernioCommentWithAccount[]> {
   const organizationId = await requireOrganizationId();
   const integration = await getZernioIntegrationForOrg(organizationId);
-  if (!integration || integration.connected_accounts.length === 0) {
+  if (!integration?.api_key || integration.connected_accounts.length === 0) {
     return [];
   }
 
@@ -308,7 +308,7 @@ export async function getZernioPostCommentsAction(
 ): Promise<ZernioCommentWithAccount[]> {
   const organizationId = await requireOrganizationId();
   const integration = await getZernioIntegrationForOrg(organizationId);
-  if (!integration || integration.connected_accounts.length === 0) {
+  if (!integration?.api_key || integration.connected_accounts.length === 0) {
     return [];
   }
 

@@ -53,7 +53,7 @@ hace), riesgo, impacto y criterio de aceptación en el backlog.
    (`SEG-BUCKET-IMPORT-FILES`; tiene 2 archivos).
 5. **Un miembro desactivado sigue entrando y viendo todo** (`EQUIPO-DESACTIVAR-NO-BLOQUEA`).
 6. **Los avisos de pago de Whop, Commas y GoHighLevel se pueden perder sin que nadie se entere** (`EMBUDOS-WEBHOOK-PERDIDA`).
-7. **Una organización sin Zernio propio usa la cuenta global de Zernio** (`ZERNIO-KEY-GLOBAL`).
+7. ~~**Una organización sin Zernio propio usa la cuenta global de Zernio** (`ZERNIO-KEY-GLOBAL`).~~ Resuelto el 2026-09-29.
 
 **Altos (5):**
 
