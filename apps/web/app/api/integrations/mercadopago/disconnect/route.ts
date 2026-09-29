@@ -1,12 +1,25 @@
 import { NextResponse } from "next/server";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 export const runtime = "nodejs";
 
 export async function POST() {
   try {
     const organizationId = await requireOrganizationId();
+    try {
+      await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : SIN_PERMISO_CONFIG_ORG },
+        { status: 403 }
+      );
+    }
     const admin = createAdminClient();
     const now = new Date().toISOString();
 
