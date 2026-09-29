@@ -108,7 +108,7 @@ Vistas: `organization_claude_status` (estado de la key de Claude, filtrada por o
 
 Buckets creados por migraciones: `avatars`, `agent-documents`, `content-thumbnails` (público, con policy pública de listado), `trial-reels`, `client-wins`, `sop-videos`, `discord-bot-avatars`.
 
-**Buckets que el código usa y ninguna migración crea** (existen sólo en el dashboard; confirmar que son privados): `client-payment-receipts`, `business-context-documents`, `sop-attachments`, `workboard-task-attachments`, `ai-brain-documents` (`[AUD-SEG-9]`). Además existe en producción `import-files` (legacy del importador viejo, 2 archivos al 2026-09-23), con policies que dejan leer y borrar a cualquier usuario autenticado (`[SEG-BUCKET-IMPORT-FILES]`, P0). Tamaño por bucket: [`../auditoria/backups-y-recuperacion.md`](../auditoria/backups-y-recuperacion.md). Las rutas de objeto se validan contra la carpeta de la org en `lib/storage/org-path.ts`.
+**Buckets que el código usa y ninguna migración crea** (existen sólo en el dashboard; confirmar que son privados): `client-payment-receipts`, `business-context-documents`, `sop-attachments`, `workboard-task-attachments`, `ai-brain-documents` (`[AUD-SEG-9]`). El bucket `import-files` (legacy del importador viejo) se borró el 2026-09-28/29: sus policies abiertas salieron en `20260928210000_import_files_sin_policies` y el bucket con sus 2 archivos se borró desde el panel, después de descargarlos. Tamaño por bucket: [`../auditoria/backups-y-recuperacion.md`](../auditoria/backups-y-recuperacion.md). Las rutas de objeto se validan contra la carpeta de la org en `lib/storage/org-path.ts`.
 
 ## Inventario de tablas por área
 

@@ -32,11 +32,9 @@ export const BUCKETS_POR_ORGANIZACION = [
  * Los que **no** van, y por qué.
  *
  * `ai-brain-documents` es la biblioteca del super admin, no de una
- * organización. `import-files` guarda todo bajo `imports/`, sin separar por
- * cuenta. Barrer por prefijo de organización ahí no borraría nada hoy, pero
- * dejaría escrita la idea de que esos archivos son de alguien.
+ * organización.
  */
-export const BUCKETS_FUERA_DE_ALCANCE = ["ai-brain-documents", "import-files"] as const;
+export const BUCKETS_FUERA_DE_ALCANCE = ["ai-brain-documents"] as const;
 
 export type ConteoDeBaja = {
   perfiles: number;
