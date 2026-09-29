@@ -67,7 +67,7 @@ Rotar `ENCRYPTION_MASTER_KEY` invalida todo lo cifrado: no hay re-cifrado autom�
 
 ## Webhooks
 
-Todos los webhooks verifican antes de tocar la base y son **fail-closed** cuando falta su secreto (Zernio, Unipile, Discord y los de pagos responden 401/503). Firmas sobre el **raw body**. Tabla completa por proveedor, con ventanas de replay y dedupe, en `docs/arquitectura/jobs-webhooks-y-colas.md`.
+Todos los webhooks verifican antes de tocar la base y son **fail-closed** cuando falta su secreto (Zernio, Unipile, Discord y los de pagos responden 401/503). En Calendly, hasta el 2026-09-29 una integración sin suscripción guardaba una clave fija pública (`NO_WEBHOOK_SIGNING_KEY`) que servía para firmar eventos falsos; desde entonces esa clave nunca vale y la firma tiene que tener menos de 5 minutos (`lib/calendly/webhook-signature.ts`, SCRUM-489). Firmas sobre el **raw body**. Tabla completa por proveedor, con ventanas de replay y dedupe, en `docs/arquitectura/jobs-webhooks-y-colas.md`.
 
 Atribución a la org: siempre desde un dato firmado o desde un token propio de la URL, nunca desde el query string (`?organizationId=` pierde contra el `locationId` firmado en GHL; el `guild_id` de Discord sale del token de OAuth; Fathom legacy rechaza con 409 si la firma valida para más de una org).
 

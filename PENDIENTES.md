@@ -78,7 +78,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|---|---|
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 2 | 14 | 33 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
-| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 15 | 16 | 8 |
+| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 15 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
@@ -1046,11 +1046,17 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 - **Qué hay que hacer:** cifrar al escribir con `lib/security/encryption` y migrar lo guardado.
 - **Dónde:** `apps/web/lib/calendly/*`, `apps/web/lib/fathom/connect.ts`.
 
-#### [CALENDLY-WEBHOOK-REPLAY] El webhook de Calendly no valida la ventana de tiempo
-- **Tipo:** seguridad
-- **Estado verificado:** auditoría §3 "Seguridad" 4. `parseCalendlySignature` lee `t` pero `verifyCalendlySignature` (`app/api/integrations/calendly/webhook/route.ts:11-35`) no la compara contra el reloj.
-- **Qué hay que hacer:** rechazar `t` con más de 5 min de diferencia.
-- **Dónde:** `apps/web/app/api/integrations/calendly/webhook/route.ts`.
+#### [CALENDLY-RECONEXION-SUSCRIPCIONES] (nuevo) Reconectar Calendly deja suscripciones viejas y puede pisar la clave real
+- **Tipo:** confiabilidad
+- **Estado verificado:** el callback de OAuth (`app/api/integrations/calendly/oauth/callback/route.ts`, creación de la suscripción y upsert) crea una suscripción nueva en cada conexión y pisa `webhook_subscription_uri` y `webhook_signing_key`; la vieja sólo se borra en `disconnectCalendlyAction`, así que reconectar sin desconectar la deja activa en Calendly (sus eventos se rechazan con 401). Si la creación falla al reconectar, la clave real se reemplaza por `NO_WEBHOOK_SIGNING_KEY` y el webhook deja de llegar (queda el cron `calendly-sync`). Desde SCRUM-489 esa clave nunca vale como firma.
+- **Qué hay que hacer:** antes de crear la suscripción, borrar la existente; si la creación falla y ya había una clave real, no pisarla.
+- **Dónde:** `apps/web/app/api/integrations/calendly/oauth/callback/route.ts`.
+
+#### [CALENDLY-SYNC-SIN-CANCELADOS] (nuevo) El cron de Calendly no recupera cancelaciones
+- **Tipo:** confiabilidad
+- **Estado verificado:** `lib/calendly/fetch-scheduled-events.ts` pide sólo eventos con `status: "active"`. Si el webhook `invitee.canceled` de un evento cancelado no llega o se rechaza (fuera de la ventana de 5 minutos de SCRUM-489, caída, 5xx), el turno queda como `scheduled` en Closing y el cron `calendly-sync` no lo corrige.
+- **Qué hay que hacer:** que el cron también pida los eventos cancelados del período y actualice su estado en `closing_calls`.
+- **Dónde:** `apps/web/lib/calendly/fetch-scheduled-events.ts`, `apps/web/lib/calendly/sync-events.ts`.
 
 #### [API-TIMEOUTS] (parte Ventas) Sin timeout en Calendly, Fathom y Zernio
 - **Tipo:** deuda técnica

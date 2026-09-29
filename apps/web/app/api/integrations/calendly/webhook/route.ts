@@ -1,40 +1,12 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRequestIp, rateLimitExceeded, webhookRateLimit } from "@/lib/rate-limit";
 import { syncCalendlyEventsForOrganization } from "@/lib/calendly/sync-events";
+import { findOrganizationForSignature } from "@/lib/calendly/webhook-signature";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { CalendlyWebhookBody, CalendlyWebhookInviteePayload } from "@/types/calendly";
 
 export const runtime = "nodejs";
-
-function parseCalendlySignature(headerValue: string) {
-  const parts = headerValue.split(",");
-  if (parts.length < 2) return null;
-  const t = parts[0]?.split("=")[1];
-  const v1 = parts[1]?.split("=")[1]?.toLowerCase();
-  if (!t || !v1) return null;
-  return { timestamp: t, v1 };
-}
-
-function verifyCalendlySignature(
-  bodyText: string,
-  signatureHeader: string,
-  secret: string
-) {
-  const parsed = parseCalendlySignature(signatureHeader);
-  if (!parsed) return false;
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(`${parsed.timestamp}.${bodyText}`)
-    .digest("hex");
-
-  if (expected.length !== parsed.v1.length) return false;
-  return crypto.timingSafeEqual(
-    Buffer.from(expected.toLowerCase(), "utf8"),
-    Buffer.from(parsed.v1, "utf8")
-  );
-}
 
 function uriFromField(
   field: string | { uri?: string } | undefined
@@ -129,10 +101,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = JSON.parse(bodyText) as CalendlyWebhookBody;
-    const eventType = String(body.event ?? "");
-    const payload: CalendlyWebhookInviteePayload = body.payload ?? {};
-
     const supabase = createAdminClient();
     const { data: integrations } = await supabase
       .from("calendly_integrations")
@@ -143,20 +111,18 @@ export async function POST(req: Request) {
       webhook_signing_key: string;
     }[];
 
-    let matchedOrgId: string | null = null;
-    for (const int of list) {
-      if (
-        int.webhook_signing_key &&
-        verifyCalendlySignature(bodyText, signature, int.webhook_signing_key)
-      ) {
-        matchedOrgId = int.organization_id;
-        break;
-      }
-    }
+    // Nunca acepta la clave de "sin webhook" ni un evento fuera de la ventana
+    // de tiempo ([CALENDLY-WEBHOOK-CLAVE-CENTINELA], SCRUM-489).
+    const matchedOrgId = findOrganizationForSignature(list, bodyText, signature);
 
     if (!matchedOrgId) {
       return NextResponse.json({ error: "Firma de Calendly inválida" }, { status: 401 });
     }
+
+    // El cuerpo se interpreta recién con la firma verificada.
+    const body = JSON.parse(bodyText) as CalendlyWebhookBody;
+    const eventType = String(body.event ?? "");
+    const payload: CalendlyWebhookInviteePayload = body.payload ?? {};
 
     const eventId = extractEventId(payload);
     const startTime = extractStartTime(payload) ?? new Date().toISOString();
@@ -185,8 +151,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (e) {
+    console.error("[calendly/webhook]", e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Error desconocido" },
+      { error: "No se pudo procesar el evento de Calendly" },
       { status: 500 }
     );
   }
