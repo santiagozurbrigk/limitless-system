@@ -18,6 +18,11 @@ import {
   getGHLCredentialsForOrg,
 } from "@/lib/ghl/integration";
 import { syncGHLOrganizationSafe } from "@/lib/ghl/sync-pipeline";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 // ─── Status ───────────────────────────────────────────────────────────────────
 
@@ -191,6 +196,7 @@ export async function syncGHLAppointmentsAction(): Promise<
 export async function disconnectGHLAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const admin = createAdminClient();
     const { error } = await admin
       .from("ghl_integrations")

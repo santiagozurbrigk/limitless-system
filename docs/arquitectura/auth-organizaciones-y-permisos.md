@@ -50,11 +50,18 @@ distingue **founder / no founder**; lo que diferencia a un no-founder es su `cus
 - `get_my_organization_id()` (SECURITY DEFINER, última versión en `20260620100000_holding_jwt_claim_hook.sql`):
   devuelve el claim `active_business_org_id` del JWT si existe, si no `profiles.organization_id`.
 - Patrón estándar: `USING (organization_id = get_my_organization_id()) WITH CHECK (...)`.
-- **Ninguna policy mira el rol.** Un `member` con rol "sólo lectura" puede escribir por PostgREST todo lo
-  que su org puede escribir (ver `[PERMISOS-SERVER-ACTIONS]`).
+- **Casi ninguna policy mira el rol.** Desde `20260929100000_roles_equipo_y_config_en_la_base` (SCRUM-1,
+  parte A) sí lo miran, con `current_user_has_org_role(roles)`: escribir `team_roles`, todo
+  `team_invitations` (también leer, por el token) y el UPDATE de `organizations` exigen founder; el DELETE
+  de `clients`, founder o admin. La función acepta al founder del holding cuando opera uno de sus negocios
+  y deja afuera a un perfil con `is_active = false`. El resto de las tablas sigue sólo por organización: un
+  `member` con rol "sólo lectura" puede escribir por PostgREST lo que su org puede escribir
+  (ver `[PERMISOS-SERVER-ACTIONS]`, parte B).
 - Excepción por rol, a nivel trigger: `protect_profile_columns` (`20260922100000`) impide que un usuario
   cambie `id`, `organization_id`, `role`, `is_holding_admin` y la contraseña temporal de cualquier perfil,
   y que un no founder/admin toque algo más que `full_name`, `email`, `avatar_url` del suyo.
+  Desde `20260929100000`, `custom_role_id` e `is_active` sólo los cambia el founder de la org activa
+  (`current_user_has_org_role`), y un perfil founder no se puede desactivar desde la API.
 - Holding: `get_my_holding_business_org_ids()` + policies de lectura de portfolio sobre `organizations`,
   `clients`, `conversations`, `closing_calls` (`20260630100000_holding_portfolio_rls.sql`). No miran rol.
 - Tablas con secretos (integraciones): sin policy de lectura para `authenticated`; sólo `createAdminClient()`.
@@ -135,6 +142,7 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
 | Guard | Dónde | Qué protege |
 |---|---|---|
 | `requireManagerProfile()` (sólo `founder`) | `app/team/actions.ts` | Invitar, cambiar rol, desactivar, roles custom. Tener `team: full` **no** alcanza |
+| `requireOrgRole(roles, mensaje)` (`lib/auth/require-org-role.ts`) | `app/settings/actions.ts`, `app/clients/actions.ts`, los `disconnect*Action` de la org (`app/integrations/actions.ts`, `stripe`, `mercadopago`, `payments`, `ghl`, `hyros`, `vturb`, `webinarjam`, `youtube`, `unipile`, `discord`) y las rutas `api/integrations/{stripe,mercadopago,unipile}/disconnect` | Configuración de la org y clave de Claude: sólo founder. Borrar un cliente: founder o admin. Pregunta a la base con la misma función de las policies (`current_user_has_org_role`) |
 | `requireFounderRole()` | `app/finance/actions.ts` | 3 acciones de finanzas |
 | `requireFounder()` | `app/clients/custom-field-actions.ts`, `checkpoint-actions.ts`, `plan-duration-actions.ts` | Configuración de clientes |
 | rol founder (chequeo inline) | `app/clients/signals-actions.ts` | Cambiar el aviso de señales |
@@ -172,9 +180,10 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
 
 ## Limitaciones conocidas y deuda
 
-- `[PERMISOS-SERVER-ACTIONS]` Los permisos por módulo no existen en server actions ni en RLS. Un member
-  "sólo lectura" puede, entre otras, `saveClaudeApiKeyAction`, los `disconnect*Action`,
-  `updateCloserCommissionAction` y editar `team_roles.permissions` por PostgREST.
+- `[PERMISOS-SERVER-ACTIONS]` Los permisos por módulo no existen en server actions ni en RLS. Desde la
+  parte A (29-sep) el equipo, la configuración de la org, la clave de Claude, desconectar integraciones y
+  borrar clientes piden rol; un member "sólo lectura" todavía puede, entre otras,
+  `updateCloserCommissionAction`, los `connect*`/`save*` de integraciones y escribir finanzas por PostgREST.
 - `[PERMISOS-LAYOUT-NAV-SUAVE]` (nuevo) El chequeo vive en el **layout** de `(platform)`. En App Router los
   layouts no se vuelven a renderizar en navegaciones del lado del cliente entre páginas del mismo grupo:
   un `<Link>` o la paleta de comandos (`routes/navigation.ts`, sin filtro de permisos) llevarían a un módulo

@@ -44,6 +44,11 @@ import type {
   DiscordPendingLink,
   MonitoredChannel,
 } from "@/types/discord";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 /**
  * La mejor sugerencia para una persona: primero el equipo, después los clientes.
@@ -1288,6 +1293,7 @@ export async function dismissDiscordPendingLinkAction(
 export async function disconnectDiscordIntegrationAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     const supabase = await createClient();
 
     const { error } = await supabase

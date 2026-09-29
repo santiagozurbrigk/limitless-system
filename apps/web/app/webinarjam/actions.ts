@@ -20,6 +20,11 @@ import {
   syncWebinarJamRegistrantsForOrg,
   syncWebinarJamWebinarsForOrg,
 } from "@/lib/webinarjam/sync";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 /**
  * Server Actions de la unidad I-5 — WebinarJam / EverWebinar.
@@ -210,6 +215,7 @@ export async function setWebinarJamPitchSecondAction(
 export async function disconnectWebinarJamAction(): Promise<MutationResult> {
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
     await deleteWebinarJamIntegration(organizationId);
     revalidatePath(paths.platform.integrations);
   });

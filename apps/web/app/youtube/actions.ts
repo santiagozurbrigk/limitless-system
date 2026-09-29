@@ -3,6 +3,11 @@
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncYoutubeChannelAndVideos } from "@/lib/google/sync-youtube";
+import {
+  requireOrgRole,
+  ROLES_CONFIG_ORG,
+  SIN_PERMISO_CONFIG_ORG,
+} from "@/lib/auth/require-org-role";
 
 export type YouTubeApiKeyState = {
   error?: string;
@@ -78,6 +83,11 @@ export async function connectYoutubeApiKeyAction(
 /** Removes the YouTube integration for this org. */
 export async function disconnectYoutubeAction(): Promise<{ success: boolean; error?: string }> {
   const organizationId = await requireOrganizationId();
+  try {
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : SIN_PERMISO_CONFIG_ORG };
+  }
   const admin = createAdminClient();
 
   const { error } = await admin
