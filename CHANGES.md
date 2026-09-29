@@ -49,9 +49,25 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Por qué / finalidad:** parte A de `[PERMISOS-SERVER-ACTIONS]` (P0). Con su JWT, cualquier miembro podía darse todos los módulos editando `team_roles`, fabricar una invitación con cualquier rol y aceptarla con otro mail, cambiar la configuración de la org o borrar todos los clientes (14 tablas en cascada cada uno).
 
-**Decisiones de diseño relevantes:** reglas decididas con el PO el 29-sep: equipo y configuración, sólo founder, igual que `canManageTeam` en `app/team/actions.ts`; borrar clientes, founder o admin. La app pregunta a la base en lugar de repetir la lógica, así el founder de holding y los perfiles desactivados se tratan igual en los dos lados. El guard en la app hace falta además de la RLS por dos motivos: la clave de Claude y las desconexiones van con el service role, y un UPDATE o DELETE rechazado por RLS afecta 0 filas sin error, así que la action diría "guardado" sin guardar. Probado sobre la base del CI con founder, admin, member, founder desactivado y founder de holding operando un negocio, también para `profiles`; antes de la migración, un member hacía todo lo anterior. La revisión adversarial encontró las 3 rutas de desconexión sin guard y la vía de `profiles`; las dos quedaron en este cambio.
+**Decisiones de diseño relevantes:** reglas decididas con el PO el 29-sep: equipo y configuración, sólo founder, igual que `canManageTeam` en `app/team/actions.ts`; borrar clientes, founder o admin. La app pregunta a la base en lugar de repetir la lógica, así el founder de holding y los perfiles desactivados se tratan igual en los dos lados. El guard en la app hace falta además de la RLS por dos motivos: la clave de Claude y las desconexiones van con el service role, y un UPDATE o DELETE rechazado por RLS afecta 0 filas sin error, así que la action diría "guardado" sin guardar. Probado sobre la base del CI con founder, admin, member, founder desactivado y founder de holding operando un negocio, también para `profiles`; antes de la migración, un member hacía todo lo anterior. La revisión adversarial encontró las 3 rutas de desconexión sin guard y la vía de `profiles`; las dos quedaron en este cambio. Esa matriz quedó en el CI como `supabase/ci/tests/30_roles_equipo_y_config.sql`, validada al revés: sin la migración falla con "se permitió que un member cree un rol", y sin la parte de `profiles`, con "se permitió que un admin se asigne el rol con todos los módulos".
 
 **Riesgos / deuda técnica pendiente:** cambia el comportamiento para quien no es founder: ya no puede guardar Configuración → General, la clave de Claude ni desconectar integraciones, y un member ya no puede borrar clientes. Queda la parte B de `[PERMISOS-SERVER-ACTIONS]`: permiso por módulo, finanzas, comisiones de closers, `connect*` de integraciones y `discord`/`unipile` por PostgREST.
+
+---
+
+### 2026-09-29 — Tests de RLS en el CI (SCRUM-9 y SCRUM-12)
+
+**Rama:** `test/rls-en-el-ci`
+**Commit(s):** este
+**Módulo(s) afectado(s):** CI (`supabase/ci/check-migrations.sh`, `supabase/ci/tests/`), `docs/operacion/testing.md`
+
+**Qué se hizo:** paso 5 nuevo en `check-migrations.sh` que corre los archivos de `supabase/ci/tests/` sobre la base recién armada. `00_ayudas.sql` trae las funciones para actuar como un usuario y afirmar qué se permite. `10_vistas_sin_escritura.sql` (SCRUM-9) prueba que un member no borra su organización ni cambia el estado de la clave por la vista y que sigue leyendo el de su org. `20_storage_import_files.sql` (SCRUM-12) prueba que nadie logueado lista, sube ni borra en `import-files` y que ninguna policy lo nombra.
+
+**Por qué / finalidad:** las pruebas de los arreglos de SCRUM-9 y SCRUM-12 se habían hecho a mano; así quedan como constancia y el CI detecta si alguien vuelve a abrir esos huecos. Hasta ahora ningún test del repo tocaba la base.
+
+**Decisiones de diseño relevantes:** SQL puro con `set local role authenticated` y el JWT en `request.jwt.claims`, sobre los stubs del CI, sin pgTAP ni dependencias nuevas. Cada test en una transacción con `rollback`. Validados al revés: sin la migración de cada arreglo, el test correspondiente falla.
+
+**Riesgos / deuda técnica pendiente:** los stubs no son Supabase real (sin storage-api ni PostgREST): los tests prueban la base, no la API. El test de SCRUM-1 va con su PR (#82).
 
 ---
 

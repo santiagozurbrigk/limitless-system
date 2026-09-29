@@ -11,6 +11,7 @@
 | Unitarios | Vitest 3, entorno `node` | `apps/web` (89 archivos) | sí (`pnpm test`) |
 | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
+| RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
 | Build | `next build` | — | **no** (lo hace Vercel en el preview) |
 
 `apps/reel-worker` no declara `typecheck` ni `lint`: el CI no lo compila. `packages/*` no tienen tests.
@@ -50,6 +51,16 @@ PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres supabase/ci/check-migration
 | Fixtures | no importar del código que se testea (ej. `lib/funnels/__tests__/document-fixture.ts`) |
 | Validez | después de escribir un test, romper el código a propósito y confirmar que falla |
 | Hallazgos | si un test encuentra un bug, no arreglarlo en el mismo commit: `it.fails`/`it.skip` con comentario + ítem en `PENDIENTES.md` |
+
+### Tests de RLS (`supabase/ci/tests/`)
+
+Prueban lo que la base deja hacer a cada usuario, que Vitest no puede ver porque ningún test toca Supabase. Los corre `check-migrations.sh` después de aplicar todas las migraciones, en orden de nombre.
+
+- `00_ayudas.sql` crea el schema `ci` con `ci.jwt(sub, extra)` (deja el JWT de un usuario para la transacción), `ci.rechazado(sql, qué)` (tiene que fallar con 42501), `ci.filas(sql)` (filas tocadas: la RLS en UPDATE y DELETE no da error, afecta 0) y `ci.espera(real, esperado, qué)`.
+- Cada archivo arma sus datos dentro de `begin; ... rollback;`, actúa con `select ci.jwt(...); set local role authenticated;` y vuelve con `reset role`.
+- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9).
+- Validez, igual que en Vitest: sacar la migración que arregla el problema y confirmar que el test falla con `FALLA: ...`.
+- Para correrlos a mano: los mismos comandos de "Migraciones" más arriba.
 
 Qué no testear en Vitest: componentes React, actions que sólo hacen `select`, wrappers de SDKs externos, constantes sin lógica.
 

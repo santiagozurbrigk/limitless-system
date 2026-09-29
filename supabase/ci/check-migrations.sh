@@ -13,6 +13,8 @@
 #     `supabase db push`
 #   - alguna vista de public queda con INSERT/UPDATE/DELETE/TRUNCATE para
 #     anon o authenticated
+#   - falla alguno de los tests de RLS de ci/tests/ (qué puede hacer cada
+#     usuario sobre la base recién armada)
 #
 # Existe porque el 2026-09-22 tres migraciones del repo no corrían desde cero y
 # nadie se había enterado: producción se había armado en parte a mano.
@@ -68,3 +70,19 @@ writable_views=$(psql -v ON_ERROR_STOP=1 -At -d "$DB_NAME" -c "
 [ -z "$writable_views" ] || fail "Vistas de public con escritura para anon/authenticated (revocarla en la migración que crea la vista): $writable_views"
 
 echo "OK: ninguna vista de public tiene escritura para anon ni authenticated."
+
+# ─── 5. Tests de RLS ─────────────────────────────────────────────────────────
+# Cada archivo de ci/tests/ actúa como distintos usuarios sobre la base recién
+# armada y afirma qué se permite y qué no (ver ci/tests/00_ayudas.sql). Se
+# corren en orden de nombre; un 'FALLA: ...' corta el CI.
+tests_ok=0
+for test in $(ls ci/tests/*.sql 2>/dev/null | sort); do
+  if ! output=$(psql -v ON_ERROR_STOP=1 -q -d "$DB_NAME" -f "$test" 2>&1); then
+    echo "$output" >&2
+    fail "Falló el test de RLS $(basename "$test")."
+  fi
+  echo "OK: $(basename "$test")"
+  tests_ok=$((tests_ok + 1))
+done
+
+echo "OK: $tests_ok archivos de tests de RLS."
