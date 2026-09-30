@@ -76,7 +76,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|---|---|
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 2 | 14 | 33 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
-| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 15 | 17 | 8 |
+| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 14 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
@@ -882,16 +882,6 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 - **Qué hay que hacer:** una server action única (o RPC) que haga el cierre completo y sea idempotente por `callId`.
 - **Criterio de aceptación:** Marcar un turno como cerrado con pago deja en una sola operación del servidor el turno closed, el cliente creado, el lead vinculado y el pago registrado; si se corta la red a mitad, no queda un estado parcial o reintentar completa lo que faltaba sin duplicar cliente ni pago; hay un test de la idempotencia por callId
 - **Dónde:** `apps/web/providers/platform-data-provider.tsx`, `apps/web/app/closing/actions.ts`.
-
-#### [FATHOM-CLIENTID-SIN-VALIDAR] `associateFathomCallAction` acepta un cliente de otra org
-- **Tipo:** seguridad
-- **Severidad:** Crítica
-- **Estado verificado:** auditoría §3 "Seguridad" 5. `app/fathom/actions.ts:161-200` valida que la llamada sea de la org, pero el `clientId` recibido va directo a `finalizeAssociatedCall` con `createAdminClient()` (bypass RLS): escribe timeline, problemas y `fathom_calls.client_id` apuntando a un cliente ajeno.
-- **Riesgo:** Si un usuario autenticado pasa el UUID de un cliente de otra org (no se expone en la UI, así que hace falta conocerlo), entonces el admin client lee el nombre de ese cliente y escribe en su propia org filas (timeline, problemas, tareas, fathom_calls.client_id) que apuntan a él; difícil de explotar, pero sin ninguna barrera.
-- **Impacto:** Filtración del nombre de un cliente ajeno hacia la org atacante (queda en el análisis y en call_analyses.lead_name) y referencias cruzadas entre orgs que corrompen la integridad; la org víctima no ve esas filas porque su RLS filtra por su org, **salvo** `clients.linked_calls`. Si la llamada tiene transcript y dura 10 minutos o más, `syncClientLinkedCalls` (`lib/fathom/deep-call-analysis.ts:159-196`, sin filtro de org) le agrega al cliente ajeno el título, el resumen y la URL de Fathom de una llamada de la org atacante, visibles en su ficha. Sumar `.eq("organization_id")` ahí y en las lecturas de `clients` de `process-call.ts:369` y `lib/clients/client-tasks.ts:51`.
-- **Qué hay que hacer:** verificar `clients.id = clientId and organization_id = org` antes de finalizar.
-- **Criterio de aceptación:** Llamar a associateFathomCallAction con un clientId de otra organización devuelve error y no escribe timeline, problemas ni fathom_calls.client_id; con un cliente propio sigue asociando; hay un test que cubre los dos casos
-- **Dónde:** `apps/web/app/fathom/actions.ts`.
 
 #### [CLOSING-HOLDING-MEZCLA] En modo holding, Closing mezcla turnos de varios negocios
 - **Tipo:** seguridad

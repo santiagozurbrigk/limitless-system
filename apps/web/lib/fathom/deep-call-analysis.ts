@@ -160,7 +160,11 @@ async function syncClientLinkedCalls(params: {
     .from("clients")
     .select("linked_calls")
     .eq("id", params.clientId)
-    .single();
+    .eq("organization_id", params.organizationId)
+    .maybeSingle();
+
+  // SCRUM-43: nunca sumar la llamada a un cliente de otra organización.
+  if (!client) return;
 
   const currentLinkedCalls = (client?.linked_calls ??
     []) as ClientLinkedCall[];
@@ -193,7 +197,8 @@ async function syncClientLinkedCalls(params: {
   await admin
     .from("clients")
     .update({ linked_calls: updatedLinkedCalls })
-    .eq("id", params.clientId);
+    .eq("id", params.clientId)
+    .eq("organization_id", params.organizationId);
 }
 
 export async function generateDeepCallAnalysis({

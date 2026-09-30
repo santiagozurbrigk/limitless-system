@@ -52,6 +52,7 @@ export async function maybeExtractOneOnOneTasks(params: {
       .from("clients")
       .select("name")
       .eq("id", params.clientId)
+      .eq("organization_id", params.organizationId)
       .maybeSingle();
 
     const { tasks, outcome } = await extractOneOnOneTasks({
