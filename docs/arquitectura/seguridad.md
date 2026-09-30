@@ -73,7 +73,7 @@ Atribución a la org: siempre desde un dato firmado o desde un token propio de l
 
 ## OAuth
 
-Los flujos de OAuth (Calendly org y closer, Discord, Google Forms/Drive, YouTube, Typeform, Instagram, Stripe, Mercado Pago, Unipile hosted auth, Drive del super-admin) generan `state` (PKCE donde el proveedor lo soporta) y guardan `{ organizationId, state, … }` en una cookie httpOnly **como JSON sin firmar**. El callback es una ruta pública: no mira la sesión, sólo compara el `state` de la URL con el de la cookie y toma la org de la cookie. Como quien controla el navegador controla la cookie, alguien que conozca el UUID de otra org puede conectarle su propia cuenta del proveedor (`[OAUTH-ESTADO-SIN-FIRMA]`, P0; detalle en [`../auditoria/aislamiento-entre-organizaciones.md`](../auditoria/aislamiento-entre-organizaciones.md)). Los callbacks sólo redirigen a paths internos (`lib/integrations/oauth-redirect.ts`, `oauth-callback-headers.ts`). `vercel.json` marca los callbacks con `Cache-Control: no-store` para que la CDN no cachee una respuesta con cookies. Las redirect URIs vienen de variables de entorno fijas: **OAuth no se puede probar desde un preview de Vercel** (el proveedor vuelve a producción).
+Los flujos de OAuth (Calendly org y closer, Discord, Google Forms/Drive, YouTube, Typeform, Instagram, Stripe, Mercado Pago, Drive del super-admin) generan `state` (PKCE donde el proveedor lo soporta) y lo guardan en una cookie httpOnly. Desde el 2026-09-30 (SCRUM-10, `[OAUTH-ESTADO-SIN-FIRMA]`), el callback compara el `state` en tiempo constante y **escribe en la organización de la sesión** (`orgDeLaSesionOAuth()`, que es `requireOrganizationId()`), nunca en la de la cookie: sin sesión no escribe nada. En el Calendly de un closer y en el Drive del super admin, además, el usuario de la sesión tiene que ser el mismo que empezó la conexión, y la org del closer sale de su perfil en la base (`lib/integrations/oauth-state.ts`, `oauth-sesion.ts`). Antes, la cookie era un JSON sin firmar y el callback tomaba la org de ahí: con el UUID de otra org se le podía conectar una cuenta propia del proveedor. Los callbacks sólo redirigen a paths internos (`lib/integrations/oauth-redirect.ts`, `oauth-callback-headers.ts`). `vercel.json` marca los callbacks con `Cache-Control: no-store` para que la CDN no cachee una respuesta con cookies. Las redirect URIs vienen de variables de entorno fijas: **OAuth no se puede probar desde un preview de Vercel** (el proveedor vuelve a producción).
 
 ## Entrada del usuario
 
@@ -105,7 +105,7 @@ Contador en Postgres (`consume_rate_limit`), fail-open. Límites y usos en `docs
 - `apps/web/lib/supabase/{middleware,public-paths,admin}.ts`
 - `apps/web/lib/auth/{bootstrap,require-auth,require-super-admin,get-current-permissions}.ts`
 - `apps/web/lib/security/{encryption,safe-equal}.ts`
-- `apps/web/lib/integrations/{cron-auth,oauth-redirect,oauth-callback-headers}.ts`
+- `apps/web/lib/integrations/{cron-auth,oauth-redirect,oauth-callback-headers,oauth-state,oauth-sesion}.ts`
 - `apps/web/lib/queue/verify-queue-request.ts`
 - `apps/web/lib/discord/webhook-auth.ts`
 - `apps/web/lib/storage/org-path.ts`

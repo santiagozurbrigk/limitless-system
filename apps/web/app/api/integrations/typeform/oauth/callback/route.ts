@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { integrationsOAuthRedirect } from "@/lib/integrations/oauth-redirect";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { stateCoincide } from "@/lib/integrations/oauth-state";
+import { orgDeLaSesionOAuth } from "@/lib/integrations/oauth-sesion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,7 +43,13 @@ export async function GET(request: NextRequest) {
       return integrationsOAuthRedirect(origin, "typeform", "error", "typeform_oauth");
     }
 
-    if (cookie.state !== state) {
+    // SCRUM-10: la organización sale de la sesión, nunca de la cookie. La de
+    // la cookie sólo tiene que coincidir (si el usuario cambió de negocio a
+    // mitad del flujo, no se conecta en el equivocado). La de
+  // la cookie sólo tiene que coincidir (si el usuario cambió de negocio a mitad
+  // del flujo, no se conecta en el equivocado).
+    const organizationId = await orgDeLaSesionOAuth();
+    if (!stateCoincide(cookie.state, state) || !organizationId || cookie.organizationId !== organizationId) {
       console.error("[typeform/oauth/callback] State no coincide");
       return integrationsOAuthRedirect(origin, "typeform", "error", "typeform_oauth");
     }
@@ -83,7 +91,7 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient();
     const { error: upsertError } = await admin.from("typeform_integrations").upsert(
       {
-        organization_id: cookie.organizationId,
+        organization_id: organizationId,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token ?? null,
         token_expires_at: tokens.expires_in
@@ -102,7 +110,7 @@ export async function GET(request: NextRequest) {
 
     try {
       const { syncTypeformForOrganization } = await import("@/lib/typeform/sync");
-      await syncTypeformForOrganization(cookie.organizationId);
+      await syncTypeformForOrganization(organizationId);
     } catch (e) {
       console.error("[typeform/oauth/callback] sync inicial falló:", e);
     }

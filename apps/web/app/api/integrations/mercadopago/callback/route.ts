@@ -9,6 +9,8 @@ import {
 } from "@/lib/mercadopago/config";
 import { paths } from "@/routes";
 import { withOAuthNoCache } from "@/lib/integrations/oauth-callback-headers";
+import { stateCoincide } from "@/lib/integrations/oauth-state";
+import { orgDeLaSesionOAuth } from "@/lib/integrations/oauth-sesion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,7 +66,11 @@ export async function GET(req: NextRequest) {
     cookieStore.get("mercadopago_oauth")?.value
   );
 
-  if (!oauth || oauth.state !== state) {
+  // SCRUM-10: la organización sale de la sesión, nunca de la cookie. La de
+  // la cookie sólo tiene que coincidir (si el usuario cambió de negocio a mitad
+  // del flujo, no se conecta en el equivocado).
+  const organizationId = await orgDeLaSesionOAuth();
+  if (!oauth || !stateCoincide(oauth.state, state) || !organizationId || oauth.organizationId !== organizationId) {
     return redirectToIntegrations(origin, { error: "mercadopago_failed" });
   }
 
@@ -111,7 +117,7 @@ export async function GET(req: NextRequest) {
       .from("mercadopago_integrations")
       .upsert(
         {
-          organization_id: oauth.organizationId,
+          organization_id: organizationId,
           mp_user_id: String(tokenData.user_id),
           access_token_encrypted: encrypt(tokenData.access_token),
           refresh_token_encrypted: tokenData.refresh_token

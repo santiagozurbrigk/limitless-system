@@ -5,6 +5,8 @@ import { persistUnifiedGoogleTokens } from "@/lib/google/persist-oauth";
 import { syncYoutubeChannelAndVideos } from "@/lib/google/sync-youtube";
 import { integrationsOAuthRedirect } from "@/lib/integrations/oauth-redirect";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { stateCoincide } from "@/lib/integrations/oauth-state";
+import { orgDeLaSesionOAuth } from "@/lib/integrations/oauth-sesion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,7 +43,13 @@ export async function GET(request: NextRequest) {
       return integrationsOAuthRedirect(origin, "youtube", "error", "youtube_oauth");
     }
 
-    if (cookie.state !== state) {
+    // SCRUM-10: la organización sale de la sesión, nunca de la cookie. La de
+    // la cookie sólo tiene que coincidir (si el usuario cambió de negocio a
+    // mitad del flujo, no se conecta en el equivocado). La de
+  // la cookie sólo tiene que coincidir (si el usuario cambió de negocio a mitad
+  // del flujo, no se conecta en el equivocado).
+    const organizationId = await orgDeLaSesionOAuth();
+    if (!stateCoincide(cookie.state, state) || !organizationId || cookie.organizationId !== organizationId) {
       return integrationsOAuthRedirect(origin, "youtube", "error", "youtube_oauth");
     }
 
@@ -60,7 +68,7 @@ export async function GET(request: NextRequest) {
     });
 
     const { formsError, youtubeError } = await persistUnifiedGoogleTokens(
-      cookie.organizationId,
+      organizationId,
       tokens
     );
 
@@ -71,7 +79,7 @@ export async function GET(request: NextRequest) {
 
     try {
       await syncYoutubeChannelAndVideos(
-        cookie.organizationId,
+        organizationId,
         tokens.access_token
       );
     } catch (e) {

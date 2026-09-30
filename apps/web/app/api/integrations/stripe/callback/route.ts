@@ -5,6 +5,8 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { assertStripeOAuthConfig, STRIPE_TOKEN_URL } from "@/lib/stripe/config";
 import { paths } from "@/routes";
 import { withOAuthNoCache } from "@/lib/integrations/oauth-callback-headers";
+import { stateCoincide } from "@/lib/integrations/oauth-state";
+import { orgDeLaSesionOAuth } from "@/lib/integrations/oauth-sesion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,7 +61,11 @@ export async function GET(req: NextRequest) {
     cookieStore.get("stripe_oauth")?.value
   );
 
-  if (!oauth || oauth.state !== state) {
+  // SCRUM-10: la organización sale de la sesión, nunca de la cookie. La de
+  // la cookie sólo tiene que coincidir (si el usuario cambió de negocio a mitad
+  // del flujo, no se conecta en el equivocado).
+  const organizationId = await orgDeLaSesionOAuth();
+  if (!oauth || !stateCoincide(oauth.state, state) || !organizationId || oauth.organizationId !== organizationId) {
     return redirectToIntegrations(origin, { error: "stripe_failed" });
   }
 
@@ -95,7 +101,7 @@ export async function GET(req: NextRequest) {
     const admin = createAdminClient();
     const { error: upsertError } = await admin.from("stripe_integrations").upsert(
       {
-        organization_id: oauth.organizationId,
+        organization_id: organizationId,
         stripe_account_id: tokenData.stripe_user_id ?? "",
         access_token: tokenData.access_token,
         livemode: Boolean(tokenData.livemode),

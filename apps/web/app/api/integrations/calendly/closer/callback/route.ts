@@ -9,6 +9,8 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { withOAuthNoCache } from "@/lib/integrations/oauth-callback-headers";
 import { cookies } from "next/headers";
 import { paths } from "@/routes";
+import { mismoUsuario, stateCoincide } from "@/lib/integrations/oauth-state";
+import { usuarioDeLaSesionOAuth } from "@/lib/integrations/oauth-sesion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,11 +68,16 @@ export async function GET(req: Request) {
   const cookieValue = cookieStore.get("calendly_closer_oauth")?.value;
   const oauth = safeJsonParse<CloserOAuthCookie>(cookieValue);
 
-  if (!oauth || oauth.state !== state) {
+  // SCRUM-10: la cuenta se guarda a nombre del usuario de la sesión, que tiene
+  // que ser el mismo que empezó la conexión; nada sale de la cookie salvo el
+  // state y el PKCE.
+  const userId = await usuarioDeLaSesionOAuth();
+  if (!oauth || !stateCoincide(oauth.state, state) || !mismoUsuario(oauth.profileId, userId)) {
     return NextResponse.json({ error: "State/PKCE inválido o expirado" }, { status: 401 });
   }
 
-  const { profileId, organizationId, codeVerifier } = oauth;
+  const profileId = oauth.profileId;
+  const { codeVerifier } = oauth;
 
   // Intercambiar code → tokens
   const basicAuth = Buffer.from(`${calendlyClientId}:${calendlyClientSecret}`).toString("base64");
@@ -112,17 +119,18 @@ export async function GET(req: Request) {
   // Guardar en team_member_integrations
   const admin = createAdminClient();
 
-  // Primero verificar que el profile pertenece a la org
+  // La organización sale del perfil en la base, igual que en el inicio
+  // (`profile.organization_id`), no de la cookie.
   const { data: profile, error: profileError } = await admin
     .from("profiles")
-    .select("id, organization_id")
+    .select("id, organization_id, is_active")
     .eq("id", profileId)
-    .eq("organization_id", organizationId)
     .maybeSingle();
 
-  if (profileError || !profile) {
+  if (profileError || !profile?.organization_id || profile.is_active === false) {
     return settingsRedirect(req.url, { calendly_closer: "profile_error" });
   }
+  const organizationId = profile.organization_id as string;
 
   const { error: upsertError } = await admin
     .from("team_member_integrations")

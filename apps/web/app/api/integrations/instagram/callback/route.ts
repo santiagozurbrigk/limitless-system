@@ -10,6 +10,8 @@ import {
 import { syncInstagramForOrganization } from "@/lib/instagram/sync";
 import { paths } from "@/routes";
 import { withOAuthNoCache } from "@/lib/integrations/oauth-callback-headers";
+import { stateCoincide } from "@/lib/integrations/oauth-state";
+import { orgDeLaSesionOAuth } from "@/lib/integrations/oauth-sesion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,7 +66,11 @@ export async function GET(req: NextRequest) {
     cookieStore.get("instagram_oauth")?.value
   );
 
-  if (!oauth || oauth.state !== state) {
+  // SCRUM-10: la organización sale de la sesión, nunca de la cookie. La de
+  // la cookie sólo tiene que coincidir (si el usuario cambió de negocio a mitad
+  // del flujo, no se conecta en el equivocado).
+  const organizationId = await orgDeLaSesionOAuth();
+  if (!oauth || !stateCoincide(oauth.state, state) || !organizationId || oauth.organizationId !== organizationId) {
     return redirectToIntegrations(origin, { error: "instagram_failed" });
   }
 
@@ -84,7 +90,7 @@ export async function GET(req: NextRequest) {
       .from("instagram_integrations")
       .upsert(
         {
-          organization_id: oauth.organizationId,
+          organization_id: organizationId,
           instagram_user_id: account.instagramUserId,
           instagram_username: account.username,
           access_token: accessToken,
@@ -102,7 +108,7 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      await syncInstagramForOrganization(oauth.organizationId);
+      await syncInstagramForOrganization(organizationId);
     } catch (syncErr) {
       console.error("[Instagram:callback] Sync inicial falló:", syncErr);
     }

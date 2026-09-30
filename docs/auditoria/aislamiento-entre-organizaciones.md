@@ -29,7 +29,7 @@
   cuando usan service role), y crons, colas, bot de Discord, búsqueda de la IA y caches respetan la org.
 - **Hueco nuevo grave — conectar integraciones de otra organización**: los 10 callbacks de OAuth toman la org de
   una cookie sin firmar y no miran la sesión. Conociendo el UUID de otra org, cualquiera le conecta su propia
-  cuenta de Stripe, Calendly, Google, etc. (`[OAUTH-ESTADO-SIN-FIRMA]`, P0).
+  cuenta de Stripe, Calendly, Google, etc. (`[OAUTH-ESTADO-SIN-FIRMA]`, P0; resuelto el 2026-09-30, SCRUM-10).
 - **Hueco nuevo grave — archivos de otra organización**: en 7 tablas el usuario puede escribir la ruta de un
   archivo, y 11 lugares del servidor la abren o la borran con service role sin re-validar el prefijo de la org
   (`[STORAGE-RUTA-DESDE-FILA]`, P1).
@@ -478,7 +478,7 @@ excepción son los callbacks OAuth: la cookie de estado no autentica a nadie (H-
 
 ### Hallazgos
 
-#### H-1 · Los callbacks OAuth aceptan una org que manda el navegador — **Crítica** · nuevo `[OAUTH-ESTADO-SIN-FIRMA]`
+#### H-1 · Los callbacks OAuth aceptan una org que manda el navegador — **Crítica** · nuevo `[OAUTH-ESTADO-SIN-FIRMA]` · **Resuelto el 2026-09-30 (SCRUM-10)**
 
 - **Hecho:**
   - Los `*/oauth/start` y `*/connect` guardan `JSON.stringify({ organizationId, state })` en una cookie httpOnly. Ejemplo: `app/api/integrations/stripe/connect/route.ts:28-37`.
