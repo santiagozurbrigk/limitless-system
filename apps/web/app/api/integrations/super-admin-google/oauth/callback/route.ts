@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { exchangeGoogleCode, getGoogleEnv } from "@/lib/google/oauth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paths } from "@/routes";
+import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import { mismoUsuario, stateCoincide } from "@/lib/integrations/oauth-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +45,17 @@ export async function GET(request: NextRequest) {
       return redirectTo(origin, "error");
     }
 
-    if (cookie.state !== state) return redirectTo(origin, "error");
+    // SCRUM-10: el token se guarda a nombre del super admin de la sesión, que
+    // tiene que ser el mismo que empezó la conexión.
+    let superAdminId: string;
+    try {
+      superAdminId = (await requireSuperAdmin()).id;
+    } catch {
+      return redirectTo(origin, "error");
+    }
+    if (!stateCoincide(cookie.state, state) || !mismoUsuario(cookie.userId, superAdminId)) {
+      return redirectTo(origin, "error");
+    }
 
     const env = getGoogleEnv();
     if (!env) return redirectTo(origin, "error");
@@ -63,7 +75,7 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient();
     const { error } = await admin.from("super_admin_google_tokens").upsert(
       {
-        user_id: cookie.userId,
+        user_id: superAdminId,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token ?? null,
         token_expires_at: expiresAt,

@@ -46,19 +46,21 @@ hace), riesgo, impacto y criterio de aceptación en el backlog.
 
 1. **No hay backups.** Producción está en el plan gratuito de Supabase: si se borra algo, no hay de dónde
    recuperarlo (`DR-BACKUPS-SUPABASE`).
-2. **Cualquier miembro, aunque sea de sólo lectura, puede borrar su organización entera** con una llamada
-   (`DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE`).
-3. **Se puede conectar una integración a otra organización** conociendo su identificador (`OAUTH-ESTADO-SIN-FIRMA`).
-4. **Un espacio de archivos viejo deja a cualquier usuario leer y borrar lo que importaron otras organizaciones**
-   (`SEG-BUCKET-IMPORT-FILES`; tiene 2 archivos).
-5. **Un miembro desactivado sigue entrando y viendo todo** (`EQUIPO-DESACTIVAR-NO-BLOQUEA`).
+2. ~~**Cualquier miembro, aunque sea de sólo lectura, puede borrar su organización entera** con una llamada
+   (`DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE`).~~ Resuelto el 2026-09-29.
+3. ~~**Se puede conectar una integración a otra organización** conociendo su identificador (`OAUTH-ESTADO-SIN-FIRMA`).~~ Resuelto el 2026-09-30.
+4. ~~**Un espacio de archivos viejo deja a cualquier usuario leer y borrar lo que importaron otras organizaciones**
+   (`SEG-BUCKET-IMPORT-FILES`; tiene 2 archivos).~~ Resuelto el 2026-09-29 (el bucket se borró).
+5. ~~**Un miembro desactivado sigue entrando y viendo todo** (`EQUIPO-DESACTIVAR-NO-BLOQUEA`).~~ Resuelto el 2026-09-29.
 6. **Los avisos de pago de Whop, Commas y GoHighLevel se pueden perder sin que nadie se entere** (`EMBUDOS-WEBHOOK-PERDIDA`).
 7. ~~**Una organización sin Zernio propio usa la cuenta global de Zernio** (`ZERNIO-KEY-GLOBAL`).~~ Resuelto el 2026-09-29.
 
 **Altos (5):**
 
 8. **Los permisos sólo esconden pantallas**: un usuario de sólo lectura puede editar o darse más permisos por
-   detrás (`PERMISOS-SERVER-ACTIONS` y su parte de base de datos `PERMISOS-SERVER-ACTIONS/infra`).
+   detrás (`PERMISOS-SERVER-ACTIONS` y su parte de base de datos `PERMISOS-SERVER-ACTIONS/infra`). Parte A
+   resuelta el 2026-09-29: equipo, configuración de la org y borrar clientes ya piden rol; queda el permiso
+   por módulo.
 9. ~~**La pantalla de Llamadas de venta no muestra ninguna llamada** (`LLAMADAS-EMBED-ROTO`).~~ Resuelto el 2026-09-28.
 10. **Closing deja afuera los turnos más recientes cuando una organización pasa de 1.000** (`CLOSING-LIST-1000`).
 11. **La IA falla sin clave global confirmada**: ~3.000 fallas en 7 días (`1A1-CLAVE-ANTHROPIC-ROTA`).

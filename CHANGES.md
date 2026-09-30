@@ -34,6 +34,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-30 — Los callbacks OAuth escriben en la organización de la sesión (SCRUM-10)
+
+**Rama:** `fix/SCRUM-10-oauth-org-de-la-sesion`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Integraciones (`app/api/integrations/*/callback`, `*/oauth/callback`, `calendly/closer/callback`, `super-admin-google/oauth/callback`), `lib/integrations/oauth-state.ts`, `lib/integrations/oauth-sesion.ts`
+
+**Qué se hizo:** los 10 callbacks de OAuth dejan de usar la organización guardada en la cookie. Stripe, Mercado Pago, Instagram, Discord, Calendly (org), Typeform, YouTube y Google Forms escriben en la organización de la sesión (`orgDeLaSesionOAuth()`, es decir `requireOrganizationId()`); sin sesión rechazan sin escribir. En el Calendly de un closer, el usuario de la sesión tiene que ser el que empezó la conexión y la organización sale de su perfil en la base (y un perfil desactivado no pasa). En el Drive del super admin, hace falta una sesión de super admin y el mismo usuario. El `state` se compara en tiempo constante (`stateCoincide`). La org de la cookie ya no decide nada, pero tiene que coincidir con la de la sesión: si el usuario cambió de negocio del holding a mitad del flujo, se rechaza en vez de conectar en el equivocado. Tests: `lib/integrations/__tests__/oauth-state.test.ts` (helper) y `app/api/integrations/__tests__/oauth-callbacks.test.ts` (callbacks de Stripe y del closer con sesión, cookie, base y proveedor simulados; con el callback anterior fallan 2).
+
+**Por qué / finalidad:** cierra `[OAUTH-ESTADO-SIN-FIRMA]` (P0, Crítica). La cookie era un JSON sin firmar y el callback, una ruta pública, tomaba de ahí la organización: con el UUID de otra org (circula en URLs de webhooks y en el snippet UTM) cualquiera podía conectarle su propia cuenta de Stripe, Mercado Pago, Calendly, Google, etc., y hacerle entrar datos falsos, sin sesión.
+
+**Decisiones de diseño relevantes:** en los 8 callbacks de org, la org de la sesión decide y la de la cookie sólo se usa como control de coherencia. El closer no compara orgs: su inicio guarda la org del perfil (el holding) mientras `requireOrganizationId()` devuelve el negocio activo, así que resuelve la org igual que su inicio y compara el usuario. No se firma la cookie con HMAC: con la org tomada de la sesión, la cookie ya no decide nada, y firmarla pedía un secreto nuevo en Vercel. Los inicios siguen guardando `organizationId` en la cookie, sólo para ese control.
+
+**Riesgos / deuda técnica pendiente:** cualquier miembro de la org, de cualquier rol, puede iniciar una conexión y reemplazar la integración de su org; queda en `[PERMISOS-SERVER-ACTIONS]` (parte B). Los callbacks de Unipile (servidor a servidor, con secreto) y `calendly/callback` (alias que reenvía al callback real) no usan cookie y no cambian. Se marcaron como resueltos, en `docs/ESTADO_PARA_EQUIPO.md` y `docs/auditoria/`, este hueco y los de SCRUM-9, 12 y 8.
+
+---
+
 ### 2026-09-29 — Un miembro desactivado ya no entra (SCRUM-8)
 
 **Rama:** `fix/SCRUM-8-miembro-desactivado-sin-acceso`

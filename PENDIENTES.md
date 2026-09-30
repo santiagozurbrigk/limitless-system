@@ -67,7 +67,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | `[CLOSING-LIST-1000]` | Ventas | Alta | El calendario y la lista de Closing pierden los turnos más recientes |
 | `[EMBUDOS-WEBHOOK-PERDIDA]` | Embudos y Lanzamientos | Crítica | Webhooks de pagos y GHL que responden 200 sin haber guardado el evento |
 | `[1A1-CLAVE-ANTHROPIC-ROTA]` | Agente de negocio e IA | Alta | Una organización sin clave válida y sin clave global |
-| `[OAUTH-ESTADO-SIN-FIRMA]` | Infraestructura, seguridad y tests (transversal) | Crítica | Los callbacks OAuth conectan la integración a la org que diga una cookie sin firmar |
 | `[DR-BACKUPS-SUPABASE]` | Infraestructura, seguridad y tests (transversal) | Crítica | La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración |
 | `[PERMISOS-SERVER-ACTIONS/infra]` | Infraestructura, seguridad y tests (transversal) | Alta | Los roles no se hacen cumplir en la base ni en las actions (incluye AUD-SEG-1) |
 
@@ -82,7 +81,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 3 | 25 | 42 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 25 | 42 | 13 |
 
 ---
 
@@ -2200,23 +2199,6 @@ Doc del área: [`docs/areas/operaciones.md`](./docs/areas/operaciones.md)
 Doc del área: [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md)
 
 ### Infraestructura, seguridad y tests (transversal) · P0
-
-#### [OAUTH-ESTADO-SIN-FIRMA] Los callbacks OAuth conectan la integración a la org que diga una cookie sin firmar
-- **Tipo:** seguridad
-- **Severidad:** Crítica
-- **Estado verificado:** los `*/oauth/start` y `*/connect` guardan `JSON.stringify({ organizationId, state })` en una cookie httpOnly sin firma (`app/api/integrations/stripe/connect/route.ts:28-37`). El callback sólo compara `cookie.state === ?state` y escribe con `createAdminClient()` en `cookie.organizationId` (`stripe/callback/route.ts:57-106`). Mismo patrón en `calendly/oauth/callback:73-192`, `calendly/closer/callback:65-131` (también `profileId` de la cookie), `discord/callback:41-114`, `instagram/callback:62-105`, `mercadopago/callback:62-114`, `google-forms/oauth/callback:37-111`, `typeform/oauth/callback:30-105` y `youtube/oauth/callback:31-74`. `super-admin-google/oauth/callback:35-66` usa `cookie.userId`. Ningún callback mira la sesión, y todos son rutas públicas (`lib/supabase/public-paths.ts`). `docs/arquitectura/seguridad.md` § OAuth dice lo contrario.
-- **Riesgo:** si alguien conoce el UUID de otra org, completa el OAuth con su propia cuenta del proveedor y manda la cookie `{"organizationId":"<otra org>","state":"x"}` con `?state=x`. Entonces el servidor pisa la integración de esa org con la cuenta del atacante. No hace falta sesión. Los UUID de org circulan en las URLs de webhook de Whop, Commas y GHL, en el snippet UTM de las landings y en el holding. Es fácil: una cuenta gratis en el proveedor y un `curl`.
-- **Impacto:** escritura en otra organización. Pierde su conexión real (Stripe, Mercado Pago, Calendly org o de un closer, Instagram, Google Forms/Drive, YouTube, Typeform, Discord) y le entran datos falsos por la sync: turnos en Closing, cobros en Finanzas, contenido y formularios en Marketing, mensajes de otro servidor de Discord. Con el Drive del super-admin, se reemplaza el token de un super admin, y de ese Drive se importan documentos al contexto de IA de todas las orgs.
-- **Qué hay que hacer:**
-  - En cada callback, exigir sesión y que `requireOrganizationId()` (y `user.id` en closer y super-admin) coincida con la cookie.
-  - Además, firmar la cookie con HMAC de un secreto de servidor, o guardar `state` en una tabla con TTL. Todo en un helper común (`lib/integrations/oauth-state.ts`) con tests.
-  - Corregir `docs/arquitectura/seguridad.md` § OAuth y § Webhooks.
-- **Criterio de aceptación:**
-  - Un GET a cada `/api/integrations/*/callback` o `*/oauth/callback` con una cookie armada a mano (`organizationId` de otra org, `state` coincidente) no escribe nada y redirige con error. Pasa igual sin sesión y con sesión de otra org.
-  - El flujo normal desde `/integrations` sigue conectando cada proveedor.
-  - Hay tests unitarios del helper: cookie alterada, org distinta a la sesión, `state` vencido.
-- **Dónde:** `apps/web/app/api/integrations/*/oauth/{start,callback}/route.ts`, `*/connect/route.ts`, `*/callback/route.ts`, `calendly/closer/{start,callback}`, `super-admin-google/oauth/*`, `lib/integrations/`.
-> Prioridad sugerida P0: escritura en otra organización, explotable hoy sin sesión y con datos semipúblicos.
 
 #### [DR-BACKUPS-SUPABASE] La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración
 - **Tipo:** decisión de negocio

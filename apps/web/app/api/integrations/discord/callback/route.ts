@@ -5,6 +5,8 @@ import { paths } from "@/routes";
 import { withOAuthNoCache } from "@/lib/integrations/oauth-callback-headers";
 import { cookies } from "next/headers";
 import { discordRedirectUri } from "@/lib/discord/oauth";
+import { stateCoincide } from "@/lib/integrations/oauth-state";
+import { orgDeLaSesionOAuth } from "@/lib/integrations/oauth-sesion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,11 +47,14 @@ export async function GET(request: NextRequest) {
     oauth = cookieRaw ? (JSON.parse(cookieRaw) as OAuthCookie) : null;
   } catch { /* ignore */ }
 
-  if (!oauth || !stateParam || oauth.state !== stateParam) {
+  // SCRUM-10: la organización sale de la sesión, nunca de la cookie. La de
+  // la cookie sólo tiene que coincidir (si el usuario cambió de negocio a mitad
+  // del flujo, no se conecta en el equivocado).
+  const organizationId = await orgDeLaSesionOAuth();
+  if (!oauth || !stateParam || !stateCoincide(oauth.state, stateParam) || !organizationId || oauth.organizationId !== organizationId) {
     return integrationsRedirect(origin, { discord: "error" });
   }
 
-  const organizationId = oauth.organizationId;
 
   const clientId = process.env.DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
   const clientSecret = process.env.DISCORD_CLIENT_SECRET;

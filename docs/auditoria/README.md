@@ -91,10 +91,10 @@ capas que rodean a esa barrera y en la identidad de los usuarios.
 
 | Hallazgo | Sev. | Ítem |
 |---|---|---|
-| Cualquier miembro puede borrar su organización entera vía una vista | Crítica | `[DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE]` (P0) |
-| Conectar una integración a otra organización (cookie OAuth sin firmar) | Crítica | `[OAUTH-ESTADO-SIN-FIRMA]` (P0) |
-| Espacio de archivos `import-files` legible y borrable por cualquiera | Crítica | `[SEG-BUCKET-IMPORT-FILES]` (P0) |
-| Un miembro desactivado sigue entrando | Crítica | `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` (P0) |
+| Cualquier miembro puede borrar su organización entera vía una vista **Resuelto el 2026-09-29 (SCRUM-9, `20260928200000`).** | Crítica | `[DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE]` (P0) |
+| Conectar una integración a otra organización (cookie OAuth sin firmar) **Resuelto el 2026-09-30 (SCRUM-10): la org sale de la sesión y la de la cookie sólo tiene que coincidir; sin HMAC.** | Crítica | `[OAUTH-ESTADO-SIN-FIRMA]` (P0) |
+| Espacio de archivos `import-files` legible y borrable por cualquiera **Resuelto el 2026-09-29 (SCRUM-12; el bucket se borró).** | Crítica | `[SEG-BUCKET-IMPORT-FILES]` (P0) |
+| Un miembro desactivado sigue entrando **Resuelto el 2026-09-29 (SCRUM-8, `20260929110000`).** | Crítica | `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` (P0) |
 | Permisos sólo en pantallas; un miembro puede darse más permisos | Alta | `[PERMISOS-SERVER-ACTIONS]` (P0) y sus partes por área |
 | Rutas de archivos escribibles por el usuario que el servidor abre sin validar | Crítica | `[STORAGE-RUTA-DESDE-FILA]` (P1) |
 | Identificadores de cuentas externas escribibles que deciden a qué org va un evento | Crítica | `[SEG-RLS-IDENTIFICADORES-EXTERNOS]` (P1) |

@@ -9,6 +9,8 @@ import {
 } from "@/lib/calendly/oauth-token";
 import { cookies } from "next/headers";
 import { withOAuthNoCache } from "@/lib/integrations/oauth-callback-headers";
+import { stateCoincide } from "@/lib/integrations/oauth-state";
+import { orgDeLaSesionOAuth } from "@/lib/integrations/oauth-sesion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,11 +76,15 @@ export async function GET(req: Request) {
   const cookieValue = cookieStore.get("calendly_oauth")?.value;
   const oauth = safeJsonParse<OAuthCookie>(cookieValue);
 
-  if (!oauth || oauth.state !== state) {
+  // SCRUM-10: la organización sale de la sesión, nunca de la cookie. La de
+  // la cookie sólo tiene que coincidir (si el usuario cambió de negocio a mitad
+  // del flujo, no se conecta en el equivocado).
+  const organizationId = await orgDeLaSesionOAuth();
+  if (!oauth || !stateCoincide(oauth.state, state) || !organizationId || oauth.organizationId !== organizationId) {
     return NextResponse.json({ error: "State/PKCE inválido o expirado" }, { status: 401 });
   }
 
-  const { organizationId, codeVerifier } = oauth;
+  const { codeVerifier } = oauth;
 
   const basicAuth = Buffer.from(`${calendlyClientId}:${calendlyClientSecret}`).toString(
     "base64"

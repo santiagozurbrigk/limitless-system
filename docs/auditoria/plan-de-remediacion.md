@@ -35,8 +35,8 @@ o perder, sin esperar a un sprint.
 |---|---|---|---|---|
 | 0.1 | Hacer **hoy** un dump completo de la base y una copia de Storage, guardados fuera de Supabase. Decidir el plan de Supabase (Pro trae backups diarios) | `[DR-BACKUPS-SUPABASE]`, `[SUPABASE-PLAN-FREE-LIMITES]` | Crítica | Todo lo demás implica migraciones. Sin backup, un error al arreglar es irrecuperable |
 | 0.2 | Confirmar que `ENCRYPTION_MASTER_KEY` tiene una copia fuera de Vercel, con acceso de dos personas | `[SEC-MASTER-KEY-ROTACION]` | Crítica | Si se pierde, dejan de funcionar todas las integraciones cifradas y los cobros de Commas se pierden |
-| 0.3 | Quitarle a `authenticated`/`anon` los permisos de escritura sobre la vista `organization_claude_status` y marcarla `security_invoker` | `[DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE]` | Crítica | Hoy cualquier miembro puede borrar su organización entera con una llamada, y no hay backup |
-| 0.4 | Borrar las policies del bucket `import-files` (y el bucket, después de respaldar sus 2 archivos) | `[SEG-BUCKET-IMPORT-FILES]` | Crítica | Cualquier usuario logueado lee y borra esos archivos |
+| 0.3 | Quitarle a `authenticated`/`anon` los permisos de escritura sobre la vista `organization_claude_status` y marcarla `security_invoker` **Resuelto el 2026-09-29 (SCRUM-9, `20260928200000`).** | `[DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE]` | Crítica | Hoy cualquier miembro puede borrar su organización entera con una llamada, y no hay backup |
+| 0.4 | Borrar las policies del bucket `import-files` (y el bucket, después de respaldar sus 2 archivos) **Resuelto el 2026-09-29 (SCRUM-12; el bucket se borró).** | `[SEG-BUCKET-IMPORT-FILES]` | Crítica | Cualquier usuario logueado lee y borra esos archivos |
 | 0.5 | Rotar `WORKER_AUTH_SECRET` (quedó en URLs y logs) | `[TRIAL-SECRET-EN-URL]` | Crítica | Con el secreto viejo se pueden leer archivos de otras orgs a través del worker |
 | 0.6 | Decidir si `ZERNIO_API_KEY` tiene que estar en Production; si no, sacarla | `[ZERNIO-KEY-GLOBAL]` | Crítica | Las orgs sin Zernio ven datos de la cuenta global |
 | 0.7 | Cargar o confirmar `ANTHROPIC_API_KEY` en Vercel | `[ENV-ANTHROPIC-VERCEL]`, `[1A1-CLAVE-ANTHROPIC-ROTA]` | Alta | ~3.000 fallas de IA en 7 días por clave inválida sin fallback |
@@ -51,8 +51,8 @@ El orden dentro de la fase importa: el helper de permisos es la base de todos lo
 
 | # | Qué | Ítems | Sev. | Depende de |
 |---|---|---|---|---|
-| 1.1 | Firmar el estado de OAuth (HMAC) y exigir que la org de la cookie coincida con la de la sesión, en un helper común para los 10 callbacks | `[OAUTH-ESTADO-SIN-FIRMA]` | Crítica | — |
-| 1.2 | Cortar el acceso de un miembro desactivado (middleware + revocar sesiones) | `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` | Crítica | — |
+| 1.1 | Firmar el estado de OAuth (HMAC) y exigir que la org de la cookie coincida con la de la sesión, en un helper común para los 10 callbacks **Resuelto el 2026-09-30 (SCRUM-10): la org sale de la sesión y la de la cookie sólo tiene que coincidir; sin HMAC.** | `[OAUTH-ESTADO-SIN-FIRMA]` | Crítica | — |
+| 1.2 | Cortar el acceso de un miembro desactivado (middleware + revocar sesiones) **Resuelto el 2026-09-29 (SCRUM-8, `20260929110000`).** | `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` | Crítica | — |
 | 1.3 | Helper `requireModuleAccess` y policies de escritura por rol en `team_roles`, `team_invitations`, `organizations`; aplicarlo primero en plata, equipo, BYOK e integraciones | `[PERMISOS-SERVER-ACTIONS]`, `[PERMISOS-SERVER-ACTIONS/infra]` | Alta | 0.1 (migración) |
 | 1.4 | Extender el helper a cada área | `[PERMISOS-SERVER-ACTIONS/clientes]`, `/ventas`, `/marketing`, `/agente-ia`, `/ops-fin-prod`, `[PERMISOS-LAYOUT-NAV-SUAVE]` | Alta | 1.3 |
 | 1.5 | Holding: exigir el rol en las policies de portfolio y en las acciones con service role; revalidar el claim | `[HOLDING-PORTFOLIO-ROL]`, `[DB-CLAIM-HOLDING-SIN-REVALIDAR]` | Crítica | 0.1 |
