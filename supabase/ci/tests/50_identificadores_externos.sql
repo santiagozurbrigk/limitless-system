@@ -2,7 +2,7 @@
 -- Ningún usuario escribe el identificador de la cuenta externa que decide a
 -- qué organización va cada evento (servidor de Discord, cuenta de Unipile,
 -- location de GHL). Lo que la app sí edita de Discord sigue funcionando, y
--- una misma cuenta conectada no puede estar en dos organizaciones.
+-- una misma cuenta de Unipile conectada no puede estar en dos organizaciones.
 -- Migración: 20260930110000_identificadores_externos.
 
 begin;
@@ -56,19 +56,14 @@ select ci.rechazado(
 
 reset role;
 
--- Aunque escriba el sistema, una misma cuenta conectada no queda en dos orgs.
+-- Aunque escriba el sistema, una misma cuenta de Unipile conectada no queda en
+-- dos orgs. GHL sí puede compartir location entre orgs (caso real en prod).
 do $$
 begin
   begin
     insert into public.unipile_integrations (organization_id, unipile_account_id, provider, status)
     values ('50000000-0000-0000-0000-000000000a00', 'acc-b', 'whatsapp', 'connected');
     raise exception 'FALLA: se permitió la misma cuenta de Unipile conectada en dos organizaciones';
-  exception when unique_violation then null;
-  end;
-  begin
-    insert into public.ghl_integrations (organization_id, api_key_encrypted, location_id)
-    values ('50000000-0000-0000-0000-000000000c00', 'x', 'loc-b');
-    raise exception 'FALLA: se permitió la misma location de GHL en dos organizaciones';
   exception when unique_violation then null;
   end;
 end $$;

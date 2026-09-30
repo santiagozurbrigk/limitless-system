@@ -44,17 +44,15 @@ end $$;
 comment on table public.discord_integrations is
   'Una fila por org y servidor. Los usuarios (authenticated) sólo tienen UPDATE por columna y nunca sobre guild_id ni organization_id (SCRUM-82): cada columna nueva que la app edite con el cliente de usuario necesita su propio grant update (col) to authenticated.';
 
--- ─── 3. Una cuenta externa conectada, en una sola organización ───────────────
--- `guild_id` ya es único global. `unipile_account_id` sólo era único por org, y
--- `location_id` de GHL no tenía índice: dos filas con el mismo valor hacían
--- fallar el `maybeSingle` que elige la org y los eventos se perdían.
+-- ─── 3. Una cuenta de Unipile conectada, en una sola organización ────────────
+-- `guild_id` ya es único global. `unipile_account_id` sólo era único por org:
+-- dos filas conectadas con el mismo valor hacían fallar el `maybeSingle` que
+-- elige la org y los mensajes se perdían.
+-- GHL no lleva índice: en producción dos negocios comparten legítimamente una
+-- misma location (sub-cuenta de GHL), y ambos sincronizan con su propia fila.
 create unique index if not exists unipile_integrations_cuenta_conectada_unica
   on public.unipile_integrations (unipile_account_id)
   where status = 'connected';
-
-create unique index if not exists ghl_integrations_location_unica
-  on public.ghl_integrations (location_id)
-  where location_id is not null;
 
 -- ─── 4. Autoverificación ─────────────────────────────────────────────────────
 do $$

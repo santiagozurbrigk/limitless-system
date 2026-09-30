@@ -122,20 +122,9 @@ export async function upsertGHLIntegration(
     { onConflict: "organization_id" }
   );
 
-  if (error) throw new Error(mensajeErrorGuardadoGHL(error));
+  if (error) throw new Error(error.message);
 }
 
-/**
- * [SEG-RLS-IDENTIFICADORES-EXTERNOS] (SCRUM-82): una location de GHL está en
- * una sola org (índice `ghl_integrations_location_unica`). Ese choque se
- * explica en lugar de mostrar el texto de Postgres.
- */
-export function mensajeErrorGuardadoGHL(error: { code?: string; message: string }): string {
-  if (error.code === "23505" && error.message.includes("ghl_integrations_location_unica")) {
-    return "Esa cuenta de GHL ya está conectada en otra organización.";
-  }
-  return error.message;
-}
 
 /**
  * Obtiene un cliente GHL con las credenciales de la org, listo para hacer fetch.

@@ -43,19 +43,19 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Qué se hizo:**
 - `unipile_integrations` y `ghl_integrations`: `anon` y `authenticated` pierden INSERT y UPDATE. La app escribe esas tablas sólo con el service role.
 - `discord_integrations`: pierden INSERT y el UPDATE de la tabla, y se les devuelve UPDATE columna por columna para todo lo que edita la app (nombre y foto del bot, canales, patrón de monitoreo, `bot_can_speak`, `status`), menos `guild_id`, `organization_id`, `id` y `created_at`. La lista se arma al aplicar, con las columnas que existan.
-- Índices únicos: una cuenta de Unipile `connected` y una `location_id` de GHL sólo pueden estar en una organización.
+- Índice único: una cuenta de Unipile `connected` sólo puede estar en una organización. GHL no lleva índice: en producción dos negocios (North Ecom Consulting y Academia Apple) comparten legítimamente la misma location y los dos sincronizan.
 - La migración falla si queda escritura de usuarios sobre alguno de esos identificadores.
 - Test `supabase/ci/tests/50_identificadores_externos.sql`, que falla sin la migración.
-- GHL (`connectGHLAction`): exige el rol de configuración y vuelve a validar el token contra la location en el servidor antes de guardar, para que nadie ocupe la location de otra org con un token cualquiera. El choque con el índice se muestra como "Esa cuenta de GHL ya está conectada en otra organización".
+- GHL (`connectGHLAction`): exige el rol de configuración y vuelve a validar el token contra la location en el servidor antes de guardar, para que nadie guarde la location de otra org con un token cualquiera. Si GHL rechaza el token se dice que no corresponde a la location; si GHL no responde, se pide reintentar.
 - Unipile (`processUnipileHostedAuthNotify`): si la cuenta ya está conectada en otra org, no se toca nada. Antes se desconectaba la cuenta actual de la org y el alta fallaba después.
 - Discord: la regla de los grants por columna queda en el comentario de la tabla y en `docs/areas/discord.md`, para las columnas que se agreguen.
-- Tests `lib/ghl/__tests__/mensaje-error-guardado.test.ts` y `lib/unipile/__tests__/process-hosted-auth.test.ts`.
+- Test `lib/unipile/__tests__/process-hosted-auth.test.ts`.
 
 **Por qué / finalidad:** cierra `[SEG-RLS-IDENTIFICADORES-EXTERNOS]` (Crítica). Con service role, el sistema elige la organización de cada evento entrante por `guild_id`, `unipile_account_id` + `status` y `location_id`. Las policies de esas tablas eran por organización, así que cualquier miembro, con su JWT, podía escribir el identificador de una cuenta de otra org y desviarle los mensajes de Discord o de Unipile, o hacérselos perder en silencio (dos filas iguales hacían fallar el `maybeSingle`).
 
-**Decisiones de diseño relevantes:** se cierra en la base con grants y no en las actions, porque el ataque es por PostgREST. Discord conserva las columnas que la app edita con el cliente de usuario, para no romper la pantalla de Discord. Los índices son parciales (`status = 'connected'`, `location_id is not null`) para no chocar con integraciones desconectadas o incompletas.
+**Decisiones de diseño relevantes:** se cierra en la base con grants y no en las actions, porque el ataque es por PostgREST. Discord conserva las columnas que la app edita con el cliente de usuario, para no romper la pantalla de Discord. El índice de Unipile es parcial (`status = 'connected'`) para no chocar con integraciones desconectadas.
 
-**Riesgos / deuda técnica pendiente:** los índices únicos fallan si producción ya tiene duplicados; se revisa antes de aplicar (consulta en el PR).
+**Riesgos / deuda técnica pendiente:** el índice de Unipile falla si producción ya tiene duplicados; se revisó antes de aplicar y no hay.
 
 ---
 

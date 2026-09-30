@@ -130,9 +130,9 @@ export async function connectGHLAction(
     await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
 
     // [SEG-RLS-IDENTIFICADORES-EXTERNOS] (SCRUM-82): la location decide a qué
-    // org van los eventos de GHL y es única entre orgs. Se vuelve a validar
-    // acá (no sólo en validateGHLKeyAction) para que nadie guarde una location
-    // ajena sin un token de esa location.
+    // org van los eventos de GHL. Se vuelve a validar acá (no sólo en
+    // validateGHLKeyAction) para que nadie guarde una location ajena sin un
+    // token de esa location.
     try {
       await validateGHLApiKey(apiKey.trim(), locationId.trim());
     } catch (e) {
