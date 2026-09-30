@@ -34,6 +34,27 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-30 — El identificador de la cuenta externa de una integración sólo lo escribe el sistema (SCRUM-82)
+
+**Rama:** `fix/SCRUM-82-identificadores-externos`
+**Commit(s):** este
+**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20260930110000_identificadores_externos.sql`), integraciones de Discord, Unipile y GoHighLevel
+
+**Qué se hizo:**
+- `unipile_integrations` y `ghl_integrations`: `anon` y `authenticated` pierden INSERT y UPDATE. La app escribe esas tablas sólo con el service role.
+- `discord_integrations`: pierden INSERT y el UPDATE de la tabla, y se les devuelve UPDATE columna por columna para todo lo que edita la app (nombre y foto del bot, canales, patrón de monitoreo, `bot_can_speak`, `status`), menos `guild_id`, `organization_id`, `id` y `created_at`. La lista se arma al aplicar, con las columnas que existan.
+- Índices únicos: una cuenta de Unipile `connected` y una `location_id` de GHL sólo pueden estar en una organización.
+- La migración falla si queda escritura de usuarios sobre alguno de esos identificadores.
+- Test `supabase/ci/tests/50_identificadores_externos.sql`, que falla sin la migración.
+
+**Por qué / finalidad:** cierra `[SEG-RLS-IDENTIFICADORES-EXTERNOS]` (Crítica). Con service role, el sistema elige la organización de cada evento entrante por `guild_id`, `unipile_account_id` + `status` y `location_id`. Las policies de esas tablas eran por organización, así que cualquier miembro, con su JWT, podía escribir el identificador de una cuenta de otra org y desviarle los mensajes de Discord o de Unipile, o hacérselos perder en silencio (dos filas iguales hacían fallar el `maybeSingle`).
+
+**Decisiones de diseño relevantes:** se cierra en la base con grants y no en las actions, porque el ataque es por PostgREST. Discord conserva las columnas que la app edita con el cliente de usuario, para no romper la pantalla de Discord. Los índices son parciales (`status = 'connected'`, `location_id is not null`) para no chocar con integraciones desconectadas o incompletas.
+
+**Riesgos / deuda técnica pendiente:** los índices únicos fallan si producción ya tiene duplicados; se revisa antes de aplicar (consulta en el PR).
+
+---
+
 ### 2026-09-30 — Un rol custom sólo se asigna dentro de su organización (SCRUM-75)
 
 **Rama:** `fix/SCRUM-75-rol-de-la-org`
