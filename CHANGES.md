@@ -34,6 +34,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-30 — El límite de login cuenta por IP + email y por IP (SCRUM-24)
+
+**Rama:** `fix/SCRUM-24-limite-login-por-ip`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma (`app/auth/actions.ts`, `lib/auth/limite-login.ts`)
+
+**Qué se hizo:** `limiteDeLogin(flujo, email)` consume dos contadores por intento y bloquea si se agota cualquiera: IP + email (`signin:<ip>:<email>` y `signin-superadmin:<ip>:<email>`, 5 cada 15 min) e IP sola (`login-ip:<ip>`, 30 cada 15 min, compartido entre los dos logins y todos los emails). Reemplaza al `authRateLimit` por email en `signInAction` y en el login del super admin. Las partes puras (IP desde los headers, claves, combinación) tienen tests en `lib/auth/__tests__/limite-login.test.ts`.
+
+**Por qué / finalidad:** parte de `[LOGIN-RATE-LIMIT]` (P1). Con el contador sólo por email, cualquiera que supiera un email bloqueaba a esa persona 15 minutos, repetible, y probar una contraseña común contra muchos emails no tenía límite propio de la app.
+
+**Decisiones de diseño relevantes:** incluir la IP en el contador por email hace que el dueño de la cuenta entre igual desde la suya. 30 por IP deja margen para una oficina que sale a internet con una sola IP. El captcha tras N fallos, que también pedía el ítem, agrega un proveedor externo y un paso nuevo en el login, así que quedó fuera de este cambio (el release no suma funcionalidades) y el ítem sigue abierto sólo por eso. El alta de cuenta (`signup:<email>`) no cambia.
+
+**Riesgos / deuda técnica pendiente:** un atacante que reparte los intentos entre muchas IPs sólo queda frenado por el límite propio de Supabase Auth, hasta que se agregue el captcha (`[LOGIN-RATE-LIMIT]`, pendiente de decisión del PO).
+
+---
+
 ### 2026-09-30 — Los callbacks OAuth escriben en la organización de la sesión (SCRUM-10)
 
 **Rama:** `fix/SCRUM-10-oauth-org-de-la-sesion`

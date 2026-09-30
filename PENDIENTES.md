@@ -225,16 +225,15 @@ Y no hace falta la cookie: `lib/supabase/middleware.ts:61-65` sólo sobrescribe 
 - **Criterio de aceptación:** Agustín decidió si el alta de cuentas founder es pública o sólo por super admin/prueba y la decisión quedó registrada en docs/arquitectura/auth-organizaciones-y-permisos.md; si es cerrada: /login ya no muestra «Crear cuenta», llamar signUpAction falla y el signup está desactivado en Supabase Auth
 - **Dónde:** `apps/web/components/auth/supabase-login-form.tsx`, `apps/web/app/auth/actions.ts`.
 
-#### [LOGIN-RATE-LIMIT] Rate limit de login sólo por email
+#### [LOGIN-RATE-LIMIT] Login sin captcha tras varios fallos
 - **Tipo:** seguridad
-- **Severidad:** Media
-- **Estado verificado:** `authRateLimit(`signin:${email}`)` 5/15 min (`app/auth/actions.ts:119`, `lib/rate-limit.ts`). Sin clave por IP, sin captcha: cualquiera bloquea a otro y el spraying no se limita.
-- **Riesgo:** Si alguien conoce el email de un usuario, entonces con 5 intentos fallidos lo deja sin poder entrar 15 minutos (repetible), y si prueba una contraseña común contra muchos emails no hay límite propio por IP (sólo el de Supabase Auth).
-- **Impacto:** Cualquier usuario de la app puede quedar bloqueado a voluntad de un tercero; el riesgo de adivinar contraseñas queda acotado por el límite por IP de Supabase Auth, no por la app.
-- **Qué hay que hacer:** doble clave IP + email; captcha tras N fallos. Tener en cuenta que `signin` y `signin-superadmin` son contadores separados (10 intentos por email cada 15 min en total). (Absorbe `[AUD-SEG-7]`.)
-- **Criterio de aceptación:** Seis intentos fallidos con el email de otra persona desde una IP no impiden que esa persona entre desde otra IP; muchos intentos desde una misma IP contra emails distintos quedan bloqueados; después de N fallos el login pide captcha
-- **Dónde:** `apps/web/app/auth/actions.ts`, `apps/web/lib/rate-limit.ts`.
-
+- **Severidad:** Baja
+- **Estado verificado:** desde el 2026-09-30 (SCRUM-24) el login cuenta por IP + email (5 cada 15 min) y por IP (30 cada 15 min, entre todos los emails y los dos logins), en `lib/auth/limite-login.ts`: un tercero ya no bloquea a otro desde su IP y probar contra muchos emails desde la misma IP queda frenado. Falta la otra mitad del ítem original: no hay captcha después de N fallos. Agregarlo suma un proveedor externo y un paso nuevo en el login (funcionalidad nueva), así que se separó.
+- **Riesgo:** Si un atacante reparte los intentos entre muchas IPs, entonces el límite por IP no lo frena y sólo queda el límite propio de Supabase Auth.
+- **Impacto:** Adivinar contraseñas desde muchas IPs queda acotado por Supabase Auth, no por la app.
+- **Qué hay que hacer:** decidir con el PO si se agrega captcha (proveedor, desde cuántos fallos) y hacerlo.
+- **Criterio de aceptación:** Después de N fallos desde una IP o contra un email, el login pide captcha y sin resolverlo no deja intentar; un login normal no lo pide.
+- **Dónde:** `apps/web/app/auth/actions.ts`, `apps/web/lib/auth/limite-login.ts`, pantalla de login.
 #### [BAJAS-SIN-PROBAR] La baja del super admin nunca se ejecutó entera
 - **Tipo:** verificación manual
 - **Severidad:** Media

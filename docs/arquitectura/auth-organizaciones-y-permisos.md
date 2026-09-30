@@ -204,7 +204,7 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
 - `[ADDONS-HOLDING]` (nuevo) `getCurrentUserPermissions` lee `enabled_add_ons` de la org del **perfil**;
   `add-ons.ts` lee la org **efectiva**. En un holding mirando un negocio, la UI muestra los add-ons del
   holding y el servidor aplica los del negocio.
-- `[LOGIN-RATE-LIMIT]` Rate limit por email: cualquiera bloquea a otro; sin límite por IP ni captcha.
+- `[LOGIN-RATE-LIMIT]` Desde el 2026-09-30 (SCRUM-24) el login cuenta por IP + email y por IP (`lib/auth/limite-login.ts`); queda pendiente el captcha tras varios fallos.
 - `[AUTH-CALLBACK-NEXT]` (nuevo) `auth/callback` redirige a `` `${origin}${next}` `` sin validar `next`.
   Un `next` que empiece con `@` o `.` produce una URL a otro host. Verificar y restringir a paths internos.
 - `[SIGNUP-PUBLICO]` (nuevo, decisión) Cualquiera puede crearse una cuenta founder desde `/login` y usar la
