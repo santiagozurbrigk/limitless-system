@@ -40,7 +40,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Commit(s):** este
 **Módulo(s) afectado(s):** Plataforma (`app/auth/callback/route.ts`, `lib/auth/redirect-seguro.ts`)
 
-**Qué se hizo:** `destinoSeguro(next, origin, porDefecto)` acepta sólo un path interno: empieza con una sola `/` y, resuelto contra el origen, sigue en el mismo origen. Cualquier otra cosa, incluidos `.evil.com`, `@evil.com`, `//evil.com`, `/\evil.com`, tabulaciones intercaladas y esquemas, cae en el dashboard. `/auth/callback` lo usa en lugar del `next` crudo. Tests en `lib/auth/__tests__/redirect-seguro.test.ts`; sin la validación fallan 2.
+**Qué se hizo:** `destinoSeguro(next, origin, porDefecto)` acepta sólo un path interno: empieza con una sola `/` y, resuelto contra el origen, sigue en el mismo origen. Cualquier otra cosa, incluidos `.evil.com`, `@evil.com`, `//evil.com`, `/\evil.com`, tabulaciones intercaladas y esquemas, cae en el dashboard. `/auth/callback` lo usa en lugar del `next` crudo. Además, si al resolver `..`, `.` o barras invertidas el path queda con `//` adelante (`/..//evil.com`), también cae en el dashboard: pegado al origen no salía del host, pero usado solo sería una URL relativa al protocolo. Tests en `lib/auth/__tests__/redirect-seguro.test.ts`; sin la validación fallan 2, y sin el chequeo de `//`, 1.
 
 **Por qué / finalidad:** cierra `[AUTH-CALLBACK-NEXT]`. El callback redirigía a `${origin}${next}`; con `next=.evil.com` o `next=@evil.com` el destino quedaba en otro host. Hoy es difícil de explotar (la redirección pasa sólo después de canjear un código válido, y el `next` de ese link lo arma la app), pero se cierra antes de que "Olvidé mi contraseña" u otro flujo con `next` lo exponga.
 

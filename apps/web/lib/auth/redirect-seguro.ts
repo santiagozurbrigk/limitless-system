@@ -25,6 +25,10 @@ export function destinoSeguro(
   try {
     const url = new URL(next, origin);
     if (url.origin !== new URL(origin).origin) return porDefecto;
+    // Resolver `..`, `.` y las barras invertidas puede dejar dos barras al principio
+    // (`/..//evil.com` → `//evil.com`): pegado al origen no sale del host, pero
+    // usado solo sería una URL relativa al protocolo.
+    if (url.pathname.startsWith("//")) return porDefecto;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return porDefecto;

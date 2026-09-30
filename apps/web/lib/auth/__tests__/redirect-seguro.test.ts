@@ -32,6 +32,22 @@ describe("destinoSeguro", () => {
     }
   });
 
+  it("⭐ nunca devuelve algo que empiece con // (relativo al protocolo)", () => {
+    for (const next of [
+      "/..//evil.com",
+      "/./..//evil.com",
+      "/%2e%2e//evil.com",
+      "/.%2e//evil.com",
+      "/.\\/evil.com",
+      "/a/../\\evil.com",
+      "/../\\/evil.com",
+      "/..//@evil.com",
+    ]) {
+      const destino = destinoSeguro(next, ORIGIN, DEFECTO);
+      expect(destino.startsWith("//")).toBe(false);
+    }
+  });
+
   it("sin next usa el destino por defecto", () => {
     expect(destinoSeguro(null, ORIGIN, DEFECTO)).toBe(DEFECTO);
     expect(destinoSeguro("", ORIGIN, DEFECTO)).toBe(DEFECTO);
