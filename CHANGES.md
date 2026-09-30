@@ -44,9 +44,9 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Por qué / finalidad:** cierra `[FATHOM-CLIENTID-SIN-VALIDAR]`. `associateFathomCallAction` validaba la llamada pero pasaba el `clientId` recibido a `finalizeAssociatedCall`, que escribe con el service role: con el UUID de un cliente de otra org, su nombre terminaba en el análisis de la org atacante y la llamada (título, resumen y URL de Fathom) se sumaba a `linked_calls` del cliente ajeno, visible en su ficha.
 
-**Decisiones de diseño relevantes:** el chequeo va en `finalizeAssociatedCall` y no sólo en la action, para cubrir cualquier camino que llegue ahí. La subida manual (`manual-upload-actions.ts`) ya validaba el cliente con la sesión antes de escribir; no cambia.
+**Decisiones de diseño relevantes:** el chequeo va en `finalizeAssociatedCall` y no sólo en la action, para cubrir cualquier camino que llegue ahí. La subida manual (`manual-upload-actions.ts`) ya validaba el cliente con la sesión antes de escribir; no cambia. La extracción de tareas de la 1-1 no inserta nada si el cliente no es de la org.
 
-**Riesgos / deuda técnica pendiente:** ninguno.
+**Riesgos / deuda técnica pendiente:** el arreglo corta las escrituras nuevas; si antes alguien cruzó referencias entre orgs, quedarían en `fathom_calls`, `client_timeline_entries`, `client_problems`, `client_tasks` o `clients.linked_calls`. Se revisa con una consulta de detección en producción al aplicar (en el PR).
 
 ---
 
