@@ -229,7 +229,7 @@ Y no hace falta la cookie: `lib/supabase/middleware.ts:61-65` sólo sobrescribe 
 - **Tipo:** seguridad
 - **Severidad:** Baja
 - **Estado verificado:** desde el 2026-09-30 (SCRUM-24) el login cuenta por IP + email (5 cada 15 min) y por IP (30 cada 15 min, entre todos los emails y los dos logins), en `lib/auth/limite-login.ts`: un tercero ya no bloquea a otro desde su IP y probar contra muchos emails desde la misma IP queda frenado. Falta la otra mitad del ítem original: no hay captcha después de N fallos. Agregarlo suma un proveedor externo y un paso nuevo en el login (funcionalidad nueva), así que se separó.
-- **Riesgo:** Si un atacante reparte los intentos entre muchas IPs, entonces el límite por IP no lo frena y sólo queda el límite propio de Supabase Auth.
+- **Riesgo:** Si un atacante reparte los intentos entre muchas IPs, entonces el límite por IP no lo frena y sólo queda el límite propio de Supabase Auth. Además, quien comparte IP con un atacante (NAT, CGNAT) puede quedar bloqueado 15 minutos después de 30 intentos desde esa IP, y los logins exitosos también cuentan; un captcha permitiría bajar la dependencia del límite por IP.
 - **Impacto:** Adivinar contraseñas desde muchas IPs queda acotado por Supabase Auth, no por la app.
 - **Qué hay que hacer:** decidir con el PO si se agrega captcha (proveedor, desde cuántos fallos) y hacerlo.
 - **Criterio de aceptación:** Después de N fallos desde una IP o contra un email, el login pide captcha y sin resolverlo no deja intentar; un login normal no lo pide.

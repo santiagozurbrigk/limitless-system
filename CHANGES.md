@@ -46,7 +46,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Decisiones de diseño relevantes:** incluir la IP en el contador por email hace que el dueño de la cuenta entre igual desde la suya. 30 por IP deja margen para una oficina que sale a internet con una sola IP. El captcha tras N fallos, que también pedía el ítem, agrega un proveedor externo y un paso nuevo en el login, así que quedó fuera de este cambio (el release no suma funcionalidades) y el ítem sigue abierto sólo por eso. El alta de cuenta (`signup:<email>`) no cambia.
 
-**Riesgos / deuda técnica pendiente:** un atacante que reparte los intentos entre muchas IPs sólo queda frenado por el límite propio de Supabase Auth, hasta que se agregue el captcha (`[LOGIN-RATE-LIMIT]`, pendiente de decisión del PO).
+**Riesgos / deuda técnica pendiente:** un atacante que reparte los intentos entre muchas IPs sólo queda frenado por el límite propio de Supabase Auth, hasta que se agregue el captcha (`[LOGIN-RATE-LIMIT]`, pendiente de decisión del PO). Quien comparte IP con un atacante (una oficina con NAT, una universidad, una red móvil con CGNAT) puede quedar bloqueado 15 minutos junto con todos los de esa IP después de 30 intentos. Los dos contadores cuentan también los logins exitosos, igual que el contador anterior por email: alguien que entra y sale 6 veces en 15 minutos desde la misma IP queda bloqueado. Contar sólo los fallidos pide una función nueva en la base; para el uso real (sesiones de días, equipos chicos) no se justificó. En Vercel la IP no la puede falsificar el cliente: la plataforma reemplaza `x-forwarded-for` y `x-real-ip`.
 
 ---
 
