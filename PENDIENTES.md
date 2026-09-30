@@ -63,7 +63,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | ID | Área | Severidad | Qué |
 |---|---|---|---|
 | `[PERMISOS-SERVER-ACTIONS]` | Plataforma | Alta | Los permisos por módulo no protegen datos, sólo pantallas |
-| `[AUTH-CALLBACK-NEXT]` | Plataforma | Media | Open redirect en `/auth/callback` (nuevo) |
 | `[CLOSING-LIST-1000]` | Ventas | Alta | El calendario y la lista de Closing pierden los turnos más recientes |
 | `[EMBUDOS-WEBHOOK-PERDIDA]` | Embudos y Lanzamientos | Crítica | Webhooks de pagos y GHL que responden 200 sin haber guardado el evento |
 | `[1A1-CLAVE-ANTHROPIC-ROTA]` | Agente de negocio e IA | Alta | Una organización sin clave válida y sin clave global |
@@ -74,7 +73,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 2 | 14 | 33 | 17 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 33 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 14 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
@@ -100,16 +99,6 @@ Doc del área: [`docs/areas/plataforma.md`](./docs/areas/plataforma.md)
 - **Qué hay que hacer:** (parte B) helper `requireModuleAccess(moduleId, level)` sobre `requireOrganizationId()` y aplicarlo en plata (finanzas, `updateCloserCommissionAction`), `app/discord/actions.ts` y los `connect*`/`save*` de integraciones, que todavía no piden rol; policies de escritura por rol en finanzas y en las tablas de integraciones editables por el usuario (`discord_integrations`, `unipile_integrations`). Equipo, configuración de la org, clave de Claude, desconectar integraciones y borrar clientes ya quedaron (parte A).
 - **Criterio de aceptación:** Con un member cuyo rol tiene Finanzas, Integraciones y Ajustes en "sin acceso", invocar desde la consola saveClaudeApiKeyAction, un disconnect*Action, updateCloserCommissionAction y una acción de app/discord/actions.ts devuelve error de permiso y no cambia nada en la base; con su JWT, un PATCH a /rest/v1/team_roles sobre su propio rol es rechazado (y lo mismo para escrituras en team_invitations, organizations, finanzas y tablas de integraciones), mientras el founder sigue pudiendo hacerlo; hay un test unitario de requireModuleAccess con los niveles none/view/full
 - **Dónde:** `apps/web/lib/auth/get-current-permissions.ts`, `apps/web/app/**/actions.ts`, `supabase/migrations/`.
-
-#### [AUTH-CALLBACK-NEXT] Open redirect en `/auth/callback` (nuevo)
-- **Tipo:** seguridad
-- **Severidad:** Media
-- **Estado verificado:** `apps/web/app/auth/callback/route.ts` hace `NextResponse.redirect(`${origin}${next}`)` con `next = searchParams.get("next")` sin validar. `next=.evil.com` → `https://app.com.evil.com`; `next=@evil.com` → host `evil.com`. Es la ruta de vuelta de la confirmación de alta (y de recuperación, cuya rama ignora `next`). Hoy ningún link generado por la app lleva `next` al callback y el redirect sólo ocurre tras canjear un `code` PKCE válido, así que no hay un camino práctico de explotación; queda latente para cualquier flujo futuro (magic link, OAuth, plantilla de mail) que propague `next`.
-- **Riesgo:** Si algún flujo llega a /auth/callback con un code válido y un next armado por un atacante, entonces el usuario recién logueado termina en un dominio ajeno que puede imitar el login y pedirle la contraseña. Hoy es difícil: la app no genera ningún link con next hacia el callback y el code (PKCE) sólo se canjea en el navegador que inició el flujo.
-- **Impacto:** Usuarios de la app expuestos a phishing sólo si se agrega un flujo (magic link, OAuth, plantilla de mail de Supabase) que propague next; no expone datos de la base.
-- **Qué hay que hacer:** aceptar sólo paths que empiecen con `/` y no con `//`; si no, `/dashboard`. Test unitario.
-- **Criterio de aceptación:** Un login con next=//evil.com, next=.evil.com o next=@evil.com termina en /dashboard dentro de la app; un next=/clients válido sigue funcionando; hay un test unitario con esos casos
-- **Dónde:** `apps/web/app/auth/callback/route.ts`.
 
 ### Plataforma · P1
 
