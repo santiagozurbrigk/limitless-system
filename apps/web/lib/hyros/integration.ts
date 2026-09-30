@@ -25,12 +25,14 @@ export type HyrosIntegrationRow = {
  * Sin fallback a texto plano: si falta ENCRYPTION_MASTER_KEY, `encrypt` tira y
  * no se guarda nada. Antes se guardaba la clave en claro sin avisar.
  */
-export function encryptHyrosApiKey(plainKey: string): string {
-  return encrypt(plainKey);
+const API_KEY_FIELD = "hyros_integrations.api_key_encrypted";
+
+export function encryptHyrosApiKey(plainKey: string, organizationId: string): string {
+  return encrypt(plainKey, { field: API_KEY_FIELD, organizationId });
 }
 
-export function decryptHyrosApiKey(stored: string): string {
-  return readStoredSecret(stored);
+export function decryptHyrosApiKey(stored: string, organizationId: string): string {
+  return readStoredSecret(stored, { field: API_KEY_FIELD, organizationId });
 }
 
 export async function getHyrosIntegrationForOrg(
@@ -55,7 +57,7 @@ export async function getHyrosCredentialsForOrg(
   if (!row) return null;
 
   return {
-    apiKey: decryptHyrosApiKey(row.api_key_encrypted),
+    apiKey: decryptHyrosApiKey(row.api_key_encrypted, row.organization_id),
     accessibleAccountId: row.accessible_account_id,
     attributionModel: row.attribution_model,
   };
@@ -73,7 +75,7 @@ export async function upsertHyrosIntegration(
   const { error } = await admin.from("hyros_integrations").upsert(
     {
       organization_id: organizationId,
-      api_key_encrypted: encryptHyrosApiKey(apiKey),
+      api_key_encrypted: encryptHyrosApiKey(apiKey, organizationId),
       accessible_account_id: options.accessibleAccountId ?? null,
       ...(options.attributionModel ? { attribution_model: options.attributionModel } : {}),
       last_error: null,

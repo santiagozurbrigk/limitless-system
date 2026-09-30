@@ -51,7 +51,7 @@ export async function syncGHLOrganizationSafe(
 
     if (!calendarIds.length) return empty;
 
-    const apiKey = decryptGHLApiKey(row.api_key_encrypted);
+    const apiKey = decryptGHLApiKey(row.api_key_encrypted, row.organization_id);
     const { startTime, endTime } = buildSyncRange();
 
     // Fetch de todos los calendarios seleccionados en paralelo

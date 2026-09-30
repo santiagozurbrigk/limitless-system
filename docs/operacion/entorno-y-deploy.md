@@ -35,6 +35,7 @@ Relevadas con grep de `process.env.*` en `apps/` y `packages/` (89 nombres, incl
 | `SUPABASE_SERVICE_ROLE_KEY` o `SUPABASE_SECRET_KEY` | sí (una) | sí | la primera | `lib/supabase/env.ts` |
 | `CRON_SECRET` | sí | sí (dice "opcional": **es obligatoria**, los crons lanzan sin ella) | sí | `lib/integrations/cron-auth.ts`, `fathom/process` |
 | `ENCRYPTION_MASTER_KEY` | sí | sí | sí | `lib/security/encryption.ts` (BYOK, Zernio, GHL, Hyros, VTurb, WebinarJam, pagos, MP) |
+| `ENCRYPTION_MASTER_KEY_PREVIOUS` | no (sólo durante una rotación) | no | no | `lib/security/encryption.ts`: clave anterior, sólo para leer. Se carga y se saca siguiendo [`rotacion-master-key.md`](./rotacion-master-key.md). Base64 de 32 bytes, igual que la actual |
 | `ANTHROPIC_API_KEY` | sí salvo que todas las orgs usen BYOK | sí | **no figura** | `lib/ai/anthropic.ts`, `lib/ai/credential-resolver.ts`, `app/agent/actions.ts`, `app/super-admin/actions.ts` — ver `[ENV-ANTHROPIC-VERCEL]` |
 | `OPENAI_API_KEY` | sí para RAG y transcripción | sí | sí | embeddings (`lib/rag`), `/api/agent/transcribe`, `process-sop-video` |
 | `QSTASH_TOKEN` | recomendada | sí | sí | `lib/queue/qstash-client.ts` (sin ella: crons en serie, RAG inline) |

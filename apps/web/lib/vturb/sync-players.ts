@@ -39,7 +39,7 @@ export async function syncVTurbPlayersForOrg(
     const row = await getVTurbIntegrationForOrg(organizationId);
     if (!row) return { ...empty, error: "VTurb no configurado" };
 
-    const apiKey = decryptVTurbApiKey(row.api_key_encrypted);
+    const apiKey = decryptVTurbApiKey(row.api_key_encrypted, row.organization_id);
     const players = await listVTurbPlayers(apiKey);
 
     const now = new Date().toISOString();

@@ -1,23 +1,124 @@
 import crypto from "crypto";
 
-const ALGORITHM = "aes-256-gcm";
+/**
+ * Cifrado de secretos guardados en la base (AES-256-GCM).
+ *
+ * Formatos de lo que se guarda:
+ *   - v2 (actual):  `v2.<iv>.<tag>.<ciphertext>`, con AAD = campo + organización
+ *     (+ usuario para las credenciales por miembro). Un ciphertext copiado a otra
+ *     fila, otra org u otra columna no descifra.
+ *   - v1 (legacy):  `<iv>.<tag>.<ciphertext>`, sin AAD. Se sigue leyendo hasta que
+ *     el script de re-cifrado lo pase a v2 (`scripts/reencrypt-secrets.ts`).
+ *
+ * Claves:
+ *   - `ENCRYPTION_MASTER_KEY`: la actual. Se usa para cifrar y se prueba primero.
+ *   - `ENCRYPTION_MASTER_KEY_PREVIOUS` (opcional): la anterior, sólo para leer
+ *     durante una rotación. Procedimiento en `docs/operacion/rotacion-master-key.md`.
+ *
+ * Las dos tienen que decodificar (base64) a exactamente 32 bytes.
+ */
 
-function getMasterKey(): Buffer {
-  const key = process.env.ENCRYPTION_MASTER_KEY;
-  if (!key) {
+const ALGORITHM = "aes-256-gcm";
+const KEY_BYTES = 32;
+const V2_PREFIX = "v2";
+
+/**
+ * Cada columna de la base que guarda un secreto cifrado. Si se agrega una, va
+ * también en `SECRET_COLUMNS` (`reencrypt.ts`): un test lo exige, para que el
+ * script de re-cifrado no la saltee.
+ */
+export const SECRET_FIELDS = [
+  "organizations.claude_api_key_encrypted",
+  "mercadopago_integrations.access_token_encrypted",
+  "mercadopago_integrations.refresh_token_encrypted",
+  "ghl_integrations.api_key_encrypted",
+  "ghl_integrations.webhook_secret_encrypted",
+  "payment_integrations.api_key_encrypted",
+  "payment_integrations.webhook_secret_encrypted",
+  "vturb_integrations.api_key_encrypted",
+  "webinarjam_integrations.api_key_encrypted",
+  "hyros_integrations.api_key_encrypted",
+  "zernio_integrations.api_key",
+  "team_member_integrations.encrypted_api_key",
+] as const;
+
+export type SecretField = (typeof SECRET_FIELDS)[number];
+
+/** Campos cuyo secreto pertenece a un miembro y no sólo a la org. */
+const PER_USER_FIELDS: ReadonlySet<SecretField> = new Set([
+  "team_member_integrations.encrypted_api_key",
+]);
+
+/** A qué fila pertenece un secreto. Va como AAD: no se guarda, se exige al leer. */
+export type SecretContext = {
+  field: SecretField;
+  organizationId: string;
+  /** Obligatorio para los campos por miembro. */
+  userId?: string;
+};
+
+type KeyName = "current" | "previous";
+
+function parseMasterKey(envName: string, value: string): Buffer {
+  const trimmed = value.trim();
+  const key = Buffer.from(trimmed, "base64");
+  // Buffer.from ignora caracteres inválidos en silencio: se valida la forma
+  // además del largo, para que una clave mal copiada no pase por buena. Se
+  // aceptan también `-` y `_` (base64url) porque Node siempre los decodificó:
+  // rechazarlos podría invalidar una clave que ya está en uso.
+  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(trimmed) || key.length !== KEY_BYTES) {
+    throw new Error(
+      `${envName} inválida: tiene que ser base64 de exactamente ${KEY_BYTES} bytes`
+    );
+  }
+  return key;
+}
+
+function getCurrentKey(): Buffer {
+  const value = process.env.ENCRYPTION_MASTER_KEY;
+  if (!value) {
     throw new Error("ENCRYPTION_MASTER_KEY no está configurada");
   }
-  return Buffer.from(key, "base64");
+  return parseMasterKey("ENCRYPTION_MASTER_KEY", value);
+}
+
+function getDecryptionKeys(): Array<{ name: KeyName; key: Buffer }> {
+  const keys: Array<{ name: KeyName; key: Buffer }> = [
+    { name: "current", key: getCurrentKey() },
+  ];
+  const previous = process.env.ENCRYPTION_MASTER_KEY_PREVIOUS;
+  if (previous) {
+    keys.push({
+      name: "previous",
+      key: parseMasterKey("ENCRYPTION_MASTER_KEY_PREVIOUS", previous),
+    });
+  }
+  return keys;
+}
+
+function buildAad(context: SecretContext): Buffer {
+  if (!context.organizationId) {
+    throw new Error(`Falta organizationId para el secreto de ${context.field}`);
+  }
+  if (PER_USER_FIELDS.has(context.field) && !context.userId) {
+    throw new Error(`Falta userId para el secreto de ${context.field}`);
+  }
+  return Buffer.from(
+    ["limitless-secret", V2_PREFIX, context.field, context.organizationId, context.userId ?? ""].join("|"),
+    "utf8"
+  );
 }
 
 /**
- * Cifra un texto plano. Devuelve un string que incluye
- * iv + authTag + ciphertext, todo codificado, listo para guardar en DB.
+ * Cifra un texto plano con la clave actual, atado a la fila que lo guarda.
+ * Devuelve `v2.<iv>.<tag>.<ciphertext>`, listo para guardar en DB.
  */
-export function encrypt(plaintext: string): string {
-  const key = getMasterKey();
+export function encrypt(plaintext: string, context: SecretContext): string {
+  const key = getCurrentKey();
+  const aad = buildAad(context);
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  cipher.setAAD(aad);
 
   const encrypted = Buffer.concat([
     cipher.update(plaintext, "utf8"),
@@ -26,46 +127,99 @@ export function encrypt(plaintext: string): string {
   const authTag = cipher.getAuthTag();
 
   return [
+    V2_PREFIX,
     iv.toString("base64"),
     authTag.toString("base64"),
     encrypted.toString("base64"),
   ].join(".");
 }
 
-/**
- * Descifra un string generado por encrypt(). Lanza error si
- * el formato es inválido o si la autenticación falla (tampering).
- */
-export function decrypt(ciphertext: string): string {
-  const key = getMasterKey();
+type ParsedCiphertext = {
+  version: 1 | 2;
+  iv: Buffer;
+  authTag: Buffer;
+  encrypted: Buffer;
+};
+
+function parseCiphertext(ciphertext: string): ParsedCiphertext {
   const parts = ciphertext.split(".");
-  if (parts.length !== 3) {
-    throw new Error("Formato de ciphertext inválido");
+  if (parts.length === 4 && parts[0] === V2_PREFIX) {
+    return {
+      version: 2,
+      iv: Buffer.from(parts[1], "base64"),
+      authTag: Buffer.from(parts[2], "base64"),
+      encrypted: Buffer.from(parts[3], "base64"),
+    };
+  }
+  if (parts.length === 3) {
+    return {
+      version: 1,
+      iv: Buffer.from(parts[0], "base64"),
+      authTag: Buffer.from(parts[1], "base64"),
+      encrypted: Buffer.from(parts[2], "base64"),
+    };
+  }
+  throw new Error("Formato de ciphertext inválido");
+}
+
+function tryDecrypt(parsed: ParsedCiphertext, key: Buffer, aad: Buffer | null): string | null {
+  try {
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, parsed.iv);
+    if (aad) decipher.setAAD(aad);
+    decipher.setAuthTag(parsed.authTag);
+    return Buffer.concat([
+      decipher.update(parsed.encrypted),
+      decipher.final(),
+    ]).toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
+export type DecryptResult = {
+  plaintext: string;
+  /** Formato en el que estaba guardado. */
+  version: 1 | 2;
+  /** Con qué clave descifró. */
+  key: KeyName;
+};
+
+/**
+ * Descifra y dice con qué formato y clave se había guardado. Lo usa el script de
+ * re-cifrado para saber qué filas hay que reescribir.
+ */
+export function decryptWithInfo(ciphertext: string, context: SecretContext): DecryptResult {
+  const parsed = parseCiphertext(ciphertext);
+  const aad = parsed.version === 2 ? buildAad(context) : null;
+
+  for (const { name, key } of getDecryptionKeys()) {
+    const plaintext = tryDecrypt(parsed, key, aad);
+    if (plaintext !== null) {
+      return { plaintext, version: parsed.version, key: name };
+    }
   }
 
-  const [ivB64, authTagB64, encryptedB64] = parts;
-  const iv = Buffer.from(ivB64, "base64");
-  const authTag = Buffer.from(authTagB64, "base64");
-  const encrypted = Buffer.from(encryptedB64, "base64");
+  // Mismo mensaje para clave equivocada, dato alterado o fila equivocada: GCM
+  // no distingue, y no hay que dar pistas de cuál fue.
+  throw new Error(
+    `No se pudo descifrar el secreto de ${context.field} (clave distinta o dato alterado)`
+  );
+}
 
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
-
-  const decrypted = Buffer.concat([
-    decipher.update(encrypted),
-    decipher.final(),
-  ]);
-
-  return decrypted.toString("utf8");
+/**
+ * Descifra un string generado por encrypt() (o por la versión v1). Lanza error si
+ * el formato es inválido, si ninguna clave sirve o si el secreto no pertenece a
+ * esta fila (AAD).
+ */
+export function decrypt(ciphertext: string, context: SecretContext): string {
+  return decryptWithInfo(ciphertext, context).plaintext;
 }
 
 const IV_B64_LENGTH = 16; // 12 bytes
 const TAG_B64_LENGTH = 24; // 16 bytes
 const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
-/** ¿Tiene la forma exacta de lo que devuelve `encrypt()`? */
-export function looksEncrypted(value: string): boolean {
-  const parts = value.split(".");
+function looksLikeParts(parts: string[]): boolean {
   return (
     parts.length === 3 &&
     parts[0].length === IV_B64_LENGTH &&
@@ -75,6 +229,15 @@ export function looksEncrypted(value: string): boolean {
   );
 }
 
+/** ¿Tiene la forma exacta de lo que devuelve `encrypt()` (v2) o la versión v1? */
+export function looksEncrypted(value: string): boolean {
+  const parts = value.split(".");
+  if (parts.length === 4 && parts[0] === V2_PREFIX) {
+    return looksLikeParts(parts.slice(1));
+  }
+  return looksLikeParts(parts);
+}
+
 /**
  * Lee un secreto guardado que puede ser ciphertext o texto plano legacy.
  *
@@ -82,8 +245,8 @@ export function looksEncrypted(value: string): boolean {
  * tira. Antes los wrappers devolvían el valor guardado tal cual, y el
  * ciphertext terminaba mandándose al proveedor como si fuera la API key.
  */
-export function readStoredSecret(stored: string): string {
-  return looksEncrypted(stored) ? decrypt(stored) : stored;
+export function readStoredSecret(stored: string, context: SecretContext): string {
+  return looksEncrypted(stored) ? decrypt(stored, context) : stored;
 }
 
 /**

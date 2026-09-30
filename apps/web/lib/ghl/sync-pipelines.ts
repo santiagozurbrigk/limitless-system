@@ -39,7 +39,7 @@ export async function syncGHLPipelinesForOrg(
     const row = await getGHLIntegrationForOrg(organizationId);
     if (!row) return { ...empty, error: "GHL no configurado" };
 
-    const apiKey = decryptGHLApiKey(row.api_key_encrypted);
+    const apiKey = decryptGHLApiKey(row.api_key_encrypted, row.organization_id);
     const pipelines = await listGHLPipelines(apiKey, row.location_id);
 
     const admin = createAdminClient();

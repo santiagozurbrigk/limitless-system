@@ -111,8 +111,16 @@ export async function connectPaymentProviderAction(
   let webhookSecretEncrypted: string;
   let apiKeyEncrypted: string | null = null;
   try {
-    webhookSecretEncrypted = encrypt(webhookSecret);
-    if (apiKey) apiKeyEncrypted = encrypt(apiKey);
+    webhookSecretEncrypted = encrypt(webhookSecret, {
+      field: "payment_integrations.webhook_secret_encrypted",
+      organizationId,
+    });
+    if (apiKey) {
+      apiKeyEncrypted = encrypt(apiKey, {
+        field: "payment_integrations.api_key_encrypted",
+        organizationId,
+      });
+    }
   } catch {
     return {
       ok: false,

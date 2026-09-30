@@ -44,13 +44,22 @@ export async function POST(request: Request) {
 
   const rawBody = await request.text();
 
-  const secret = await getWebhookSecret(organizationId, "fanbasis");
-  if (!secret) {
+  const lookup = await getWebhookSecret(organizationId, "fanbasis");
+  if (lookup.status === "not_connected") {
     return NextResponse.json(
       { ok: false, error: "La organización no tiene Fanbasis conectado" },
       { status: 404 }
     );
   }
+  if (lookup.status === "unavailable") {
+    // 500 y no 404: está conectado pero no se pudo leer el secreto. Así el
+    // proveedor lo registra como falla nuestra (y reintenta, si reintenta).
+    return NextResponse.json(
+      { ok: false, error: "No se pudo verificar el webhook" },
+      { status: 500 }
+    );
+  }
+  const secret = lookup.secret;
 
   const signature = SIGNATURE_HEADERS.map((h) => request.headers.get(h)).find(Boolean) ?? null;
 

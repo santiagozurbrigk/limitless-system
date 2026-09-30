@@ -59,7 +59,8 @@ supabase db dump --db-url "$DB_URL" -f data.sql --use-copy --data-only
 ### B · Un webhook de pagos falla (Whop, Commas, Mercado Pago, GHL)
 1. Vercel → Logs, filtro `/api/webhooks/<proveedor>`. Mirar el código de respuesta:
    - **401 "Firma inválida"**: el secreto de la org en Limitless no coincide con el del proveedor (alguien lo regeneró). La org tiene que reconectar el proveedor con el secreto nuevo.
-   - **404 "no tiene … conectado"**: o la integración está inactiva, **o el secreto no se pudo descifrar** (¿alguien cambió `ENCRYPTION_MASTER_KEY`? ver §F). El log dice `[payments] no se pudo descifrar el secreto`.
+   - **404 "no tiene … conectado"** (Whop/Commas): la org no tiene la integración activa.
+   - **500 "No se pudo verificar el webhook"** (Whop/Commas): está conectada pero el secreto no se pudo leer. Si el log dice `[payments] no se pudo descifrar el secreto`, ¿alguien cambió `ENCRYPTION_MASTER_KEY` sin cargar la anterior? (ver §F y `docs/operacion/rotacion-master-key.md`). Si dice `no se pudo leer la integración`, es la base.
    - **200 con `status: "error"` o `stored: false`**: el evento **no se guardó** y el proveedor no va a reintentar (`[EMBUDOS-WEBHOOK-PERDIDA]`). Anotá el `webhook-id` y el payload del log.
 2. Revisar `payment_webhook_events` de esa org: eventos en `unmapped` o `error` (leer `error_message`).
 3. Recuperar:
@@ -97,7 +98,7 @@ Primero **cuál** y **dónde vive** (tabla de `docs/auditoria/backups-y-recupera
 | Secreto | Qué hacer ya | Cuidado |
 |---|---|---|
 | `SUPABASE_SERVICE_ROLE_KEY` | Regenerar en Supabase → Settings → API keys; actualizar **Vercel, Fly y Railway**; redeploy de los tres | Es acceso total a la base de todas las orgs: tratar como fuga de datos (§G para avisar) |
-| `ENCRYPTION_MASTER_KEY` | **No la cambies** sin un script de re-cifrado: rompe todas las integraciones cifradas y los webhooks de pagos (`[SEC-MASTER-KEY-ROTACION]`). Rotar primero la service role (sin ella el cifrado no sirve) y evaluar | Si ya se cambió por error: volver a cargar el valor anterior |
+| `ENCRYPTION_MASTER_KEY` | Rotar la service role primero (sin ella lo cifrado no se lee). Después rotar la clave con [`rotacion-master-key.md`](./rotacion-master-key.md): nueva como actual, vieja como `ENCRYPTION_MASTER_KEY_PREVIOUS`, script de re-cifrado, sacar la vieja | Nunca cambiarla sin cargar la anterior: rompe todas las integraciones cifradas. Si ya se cambió por error: volver a cargar el valor anterior |
 | `CRON_SECRET` | Nuevo valor en Vercel + redeploy | — |
 | `WORKER_AUTH_SECRET` | Nuevo valor en Vercel y `fly secrets set`; redeploy | Los jobs ya encolados con el valor viejo fallan: re-disparar |
 | `LIMITLESS_WEBHOOK_SECRET` / `OTC_WEBHOOK_SECRET` | Nuevo valor en Vercel y Railway | El bot da 401 hasta que se actualicen los dos |

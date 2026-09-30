@@ -26,6 +26,8 @@ export type PaymentIntegrationRow = {
  * El proveedor no conoce el `organization_id` de Limitless, así que la URL del webhook
  * lo lleva como parámetro. Eso NO es autenticación: el secreto de la firma es lo
  * que prueba que el evento es legítimo.
+ *
+ * Lanza si la consulta falla: un error de base no es "no está conectado".
  */
 export async function getPaymentIntegration(
   organizationId: string,
@@ -40,21 +42,51 @@ export async function getPaymentIntegration(
     .eq("is_active", true)
     .maybeSingle();
 
-  if (error || !data) return null;
-  return data as PaymentIntegrationRow;
+  if (error) throw new Error(error.message);
+  return (data as PaymentIntegrationRow | null) ?? null;
 }
+
+/**
+ * - `not_connected`: la org no tiene el proveedor activo → el webhook responde 404.
+ * - `unavailable`: está conectado pero el secreto no se pudo leer (clave maestra
+ *   cambiada, dato alterado, base caída) → 500. Antes esto también era 404 y
+ *   parecía "no conectado": el cobro se perdía sin que nadie viera el motivo real.
+ */
+export type WebhookSecretLookup =
+  | { status: "ok"; secret: string }
+  | { status: "not_connected" }
+  | { status: "unavailable"; reason: "decrypt_failed" | "db_error" };
 
 export async function getWebhookSecret(
   organizationId: string,
   provider: PaymentProvider
-): Promise<string | null> {
-  const integration = await getPaymentIntegration(organizationId, provider);
-  if (!integration?.webhook_secret_encrypted) return null;
+): Promise<WebhookSecretLookup> {
+  let integration: PaymentIntegrationRow | null;
+  try {
+    integration = await getPaymentIntegration(organizationId, provider);
+  } catch (error) {
+    console.error(
+      `[payments] no se pudo leer la integración de ${provider}:`,
+      error instanceof Error ? error.message : String(error)
+    );
+    return { status: "unavailable", reason: "db_error" };
+  }
+
+  if (!integration?.webhook_secret_encrypted) return { status: "not_connected" };
 
   try {
-    return decrypt(integration.webhook_secret_encrypted);
+    return {
+      status: "ok",
+      secret: decrypt(integration.webhook_secret_encrypted, {
+        field: "payment_integrations.webhook_secret_encrypted",
+        organizationId: integration.organization_id,
+      }),
+    };
   } catch {
-    console.error(`[payments] no se pudo descifrar el secreto de ${provider}`);
-    return null;
+    console.error(
+      `[payments] no se pudo descifrar el secreto de ${provider} (org ${organizationId}). ` +
+        "¿Cambió ENCRYPTION_MASTER_KEY? Ver docs/operacion/rotacion-master-key.md"
+    );
+    return { status: "unavailable", reason: "decrypt_failed" };
   }
 }

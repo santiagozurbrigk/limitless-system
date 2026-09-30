@@ -31,12 +31,15 @@ export type GHLIntegrationRow = {
  * Sin fallback a texto plano: si falta ENCRYPTION_MASTER_KEY, `encrypt` tira y
  * no se guarda nada. Antes se guardaba la clave en claro sin avisar.
  */
-export function encryptGHLApiKey(plainKey: string): string {
-  return encrypt(plainKey);
+const API_KEY_FIELD = "ghl_integrations.api_key_encrypted";
+const WEBHOOK_SECRET_FIELD = "ghl_integrations.webhook_secret_encrypted";
+
+export function encryptGHLApiKey(plainKey: string, organizationId: string): string {
+  return encrypt(plainKey, { field: API_KEY_FIELD, organizationId });
 }
 
-export function decryptGHLApiKey(stored: string): string {
-  return readStoredSecret(stored);
+export function decryptGHLApiKey(stored: string, organizationId: string): string {
+  return readStoredSecret(stored, { field: API_KEY_FIELD, organizationId });
 }
 
 // ─── Lectura ──────────────────────────────────────────────────────────────────
@@ -82,7 +85,7 @@ export async function getGHLCredentialsForOrg(organizationId: string): Promise<{
     throw new Error("No hay calendario GHL seleccionado");
   }
   return {
-    apiKey: decryptGHLApiKey(row.api_key_encrypted),
+    apiKey: decryptGHLApiKey(row.api_key_encrypted, organizationId),
     locationId: row.location_id,
     calendarId: calendarIds[0]!,
     calendarIds,
@@ -112,7 +115,7 @@ export async function upsertGHLIntegration(
   const { error } = await admin.from("ghl_integrations").upsert(
     {
       organization_id: organizationId,
-      api_key_encrypted: encryptGHLApiKey(apiKey),
+      api_key_encrypted: encryptGHLApiKey(apiKey, organizationId),
       location_id: locationId,
       default_calendar_id: defaultCalendarId,
       selected_calendar_ids: finalSelectedIds,
@@ -149,7 +152,7 @@ export async function getGHLClientForOrg(organizationId: string): Promise<{
   if (!calendarIds.length) throw new Error("No hay calendario GHL seleccionado");
 
   return {
-    apiKey: decryptGHLApiKey(row.api_key_encrypted),
+    apiKey: decryptGHLApiKey(row.api_key_encrypted, organizationId),
     locationId: row.location_id,
     calendarId: calendarIds[0]!,
     calendarIds,
@@ -166,7 +169,7 @@ export async function refreshGHLCalendars(
   const row = await getGHLIntegrationForOrg(organizationId);
   if (!row) throw new Error("GHL no configurado");
 
-  const apiKey = decryptGHLApiKey(row.api_key_encrypted);
+  const apiKey = decryptGHLApiKey(row.api_key_encrypted, organizationId);
   const calendars = await listGHLCalendars(apiKey, row.location_id);
 
   const admin = createAdminClient();
@@ -200,7 +203,10 @@ export async function getGHLWebhookSecret(
     .maybeSingle();
 
   if (error || !data?.webhook_secret_encrypted) return null;
-  return decryptGHLApiKey(data.webhook_secret_encrypted as string);
+  return readStoredSecret(data.webhook_secret_encrypted as string, {
+    field: WEBHOOK_SECRET_FIELD,
+    organizationId,
+  });
 }
 
 /** Guarda (o borra, con `null`) el secreto compartido de la vía de Workflow. */
@@ -212,7 +218,9 @@ export async function setGHLWebhookSecret(
   const { error } = await admin
     .from("ghl_integrations")
     .update({
-      webhook_secret_encrypted: secret ? encryptGHLApiKey(secret) : null,
+      webhook_secret_encrypted: secret
+        ? encrypt(secret, { field: WEBHOOK_SECRET_FIELD, organizationId })
+        : null,
       updated_at: new Date().toISOString(),
     })
     .eq("organization_id", organizationId);

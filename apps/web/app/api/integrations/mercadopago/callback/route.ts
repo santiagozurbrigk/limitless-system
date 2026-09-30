@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { encrypt } from "@/lib/security/encryption";
+import { encryptMercadoPagoTokens } from "@/lib/mercadopago/tokens";
 import {
   assertMercadoPagoOAuthConfig,
   MP_OAUTH_TOKEN_URL,
@@ -119,10 +119,11 @@ export async function GET(req: NextRequest) {
         {
           organization_id: organizationId,
           mp_user_id: String(tokenData.user_id),
-          access_token_encrypted: encrypt(tokenData.access_token),
-          refresh_token_encrypted: tokenData.refresh_token
-            ? encrypt(tokenData.refresh_token)
-            : null,
+          ...encryptMercadoPagoTokens(
+            organizationId,
+            tokenData.access_token,
+            tokenData.refresh_token ?? null
+          ),
           token_expires_at: tokenExpiresAt,
           public_key: tokenData.public_key ?? null,
           livemode: Boolean(tokenData.live_mode),

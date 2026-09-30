@@ -1,5 +1,25 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt, encrypt } from "@/lib/security/encryption";
+
+const ACCESS_TOKEN_FIELD = "mercadopago_integrations.access_token_encrypted";
+const REFRESH_TOKEN_FIELD = "mercadopago_integrations.refresh_token_encrypted";
+
+export function encryptMercadoPagoTokens(
+  organizationId: string,
+  accessToken: string,
+  refreshToken: string | null
+): { access_token_encrypted: string; refresh_token_encrypted: string | null } {
+  return {
+    access_token_encrypted: encrypt(accessToken, { field: ACCESS_TOKEN_FIELD, organizationId }),
+    refresh_token_encrypted: refreshToken
+      ? encrypt(refreshToken, { field: REFRESH_TOKEN_FIELD, organizationId })
+      : null,
+  };
+}
+
+function decryptRefreshToken(stored: string, organizationId: string): string {
+  return decrypt(stored, { field: REFRESH_TOKEN_FIELD, organizationId });
+}
 import {
   assertMercadoPagoOAuthConfig,
   MP_OAUTH_TOKEN_URL,
@@ -69,8 +89,7 @@ async function persistRefreshedTokens(
   const { error } = await admin
     .from("mercadopago_integrations")
     .update({
-      access_token_encrypted: encrypt(tokenData.access_token),
-      refresh_token_encrypted: refreshToken ? encrypt(refreshToken) : null,
+      ...encryptMercadoPagoTokens(organizationId, tokenData.access_token, refreshToken),
       token_expires_at: tokenExpiresAt,
       public_key: tokenData.public_key ?? null,
       livemode: Boolean(tokenData.live_mode),
@@ -101,10 +120,13 @@ export async function getActiveMercadoPagoCredentials(
   const row = data as MercadoPagoIntegrationRow;
 
   try {
-    let accessToken = decrypt(row.access_token_encrypted);
+    let accessToken = decrypt(row.access_token_encrypted, {
+      field: ACCESS_TOKEN_FIELD,
+      organizationId: row.organization_id,
+    });
 
     if (isExpiringSoon(row.token_expires_at) && row.refresh_token_encrypted) {
-      const refreshToken = decrypt(row.refresh_token_encrypted);
+      const refreshToken = decryptRefreshToken(row.refresh_token_encrypted, row.organization_id);
       const refreshed = await exchangeRefreshToken(refreshToken);
       await persistRefreshedTokens(organizationId, refreshed, refreshToken);
       accessToken = refreshed.access_token!;
@@ -150,7 +172,10 @@ export async function refreshAllMercadoPagoTokens(): Promise<{
   for (const row of rows ?? []) {
     if (!row.refresh_token_encrypted) continue;
     try {
-      const refreshToken = decrypt(row.refresh_token_encrypted);
+      const refreshToken = decryptRefreshToken(
+        row.refresh_token_encrypted,
+        row.organization_id as string
+      );
       const tokenData = await exchangeRefreshToken(refreshToken);
       await persistRefreshedTokens(
         row.organization_id as string,
