@@ -52,12 +52,16 @@ export async function maybeExtractOneOnOneTasks(params: {
       .from("clients")
       .select("name")
       .eq("id", params.clientId)
+      .eq("organization_id", params.organizationId)
       .maybeSingle();
+
+    // SCRUM-43: un cliente que no es de la organización no recibe tareas.
+    if (!client) return 0;
 
     const { tasks, outcome } = await extractOneOnOneTasks({
       organizationId: params.organizationId,
       transcript: params.transcript,
-      clientName: client?.name ?? null,
+      clientName: client.name ?? null,
       callDate: params.callDate ?? null,
     });
 

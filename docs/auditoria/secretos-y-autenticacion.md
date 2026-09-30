@@ -394,7 +394,7 @@ repiten: se listan al final con su ID.
 
 | ID | Qué se re-verificó |
 |---|---|
-| `[AUTH-CALLBACK-NEXT]` | Sigue igual (`app/auth/callback/route.ts:12,47`) |
+| `[AUTH-CALLBACK-NEXT]` | Resuelto el 2026-09-30 (SCRUM-2, `lib/auth/redirect-seguro.ts`) |
 | `[AUTH-RECUPERAR-PASSWORD]` | Nada llama a `resetPasswordForEmail` (grep) |
 | `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` | El middleware no lee `is_active` (`lib/supabase/middleware.ts:93-99` sólo pide contraseña temporal, rol, org) |
 | `[SIGNUP-PUBLICO]` | Sigue; el rate limit del signup es por email (`app/auth/actions.ts:243`) |
