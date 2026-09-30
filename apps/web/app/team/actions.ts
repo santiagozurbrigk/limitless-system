@@ -24,6 +24,7 @@ import {
   type MutationResult,
 } from "@/lib/server/action-result";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { assertRolDeLaOrg } from "@/lib/team/rol-de-la-org";
 import {
   banParaEstado,
   MOTIVO_BAN_DESACTIVADO,
@@ -305,6 +306,9 @@ export async function inviteTeamMemberAction(data: {
       throw new Error("Este email ya es miembro de la organización");
     }
 
+    // SCRUM-75: el rol tiene que ser de esta organización.
+    await assertRolDeLaOrg(admin, customRoleId, organizationId);
+
     const tempPassword = generateTempPassword();
 
     const { data: authUser, error: createError } =
@@ -381,6 +385,8 @@ export async function updateMemberRoleAction(
     } = {};
 
     if (customRoleId !== undefined) {
+      // SCRUM-75: el rol tiene que ser de esta organización.
+      await assertRolDeLaOrg(supabase, customRoleId, organizationId);
       updates.custom_role_id = customRoleId;
     }
     if (isActive !== undefined) {
@@ -594,6 +600,9 @@ export async function acceptInvitationAction(input: {
 
     const email = invitation.email.toLowerCase();
 
+    // SCRUM-75: el rol de la invitación tiene que ser de su organización.
+    await assertRolDeLaOrg(admin, invitation.custom_role_id, invitation.organization_id);
+
     const { data: created, error: createError } =
       await admin.auth.admin.createUser({
         email,
@@ -700,6 +709,9 @@ export async function completeInvitationForCurrentUserAction(
         "Tu cuenta ya pertenece a otra organización. Contactá al administrador."
       );
     }
+
+    // SCRUM-75: el rol de la invitación tiene que ser de su organización.
+    await assertRolDeLaOrg(admin, invitation.custom_role_id, invitation.organization_id);
 
     const { error: profileError } = await admin.from("profiles").insert({
       id: user.id,

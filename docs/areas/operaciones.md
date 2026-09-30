@@ -179,7 +179,6 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
 - **El SOP desde video no puede tener capturas**: ninguna pantalla las sube contra el job `[OPS-SOP-VIDEO-CAPTURAS]`.
 - **No hay edición ni borrado de SOPs** en la UI: `updateSOPAction` existe pero nadie la llama, y no hay delete;
   por eso el versionado nunca se ejercita `[SOPS-EDITAR]`. `sop_versions` tiene 0 filas con 3 SOPs (producción, al 2026-09-23).
-- **`customRoleId` no se valida contra la org** al invitar ni al cambiar rol `[EQUIPO-CUSTOM-ROLE-ORG]`.
 - **Permisos sólo en el render**: actions y RLS abiertas a cualquier miembro `[PERMISOS-SERVER-ACTIONS]`.
 - **Buckets `sop-attachments` y `workboard-task-attachments` no están en migraciones** `[OPS-STORAGE-BUCKETS]` (auditoría §3.9).
 - **`/invite` y `team_invitations` son legado sin productor** `[EQUIPO-INVITE-LEGADO]`.
