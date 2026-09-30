@@ -102,7 +102,8 @@ Riesgos abiertos: `verifyQStashRequest` no pasa `url` al `Receiver`, así que un
 
 | Limitador | Ventana / máximo | Clave | Dónde |
 |---|---|---|---|
-| `authRateLimit` | 15 min / 5 | `signin:<email>`, `signin-superadmin:<email>` | `app/auth/actions.ts` |
+| `limiteDeLogin` (`lib/auth/limite-login.ts`) | 15 min / 5 y 15 min / 30 | `signin:<ip>:<email>` y `signin-superadmin:<ip>:<email>` (5), `login-ip:<ip>` (30, compartido) | `app/auth/actions.ts` |
+| `authRateLimit` | 15 min / 5 | `signup:<email>` | `app/auth/actions.ts` (alta de cuenta) |
 | `aiRateLimit` | 1 min / 10 | usuario | agente (`app/agent/actions.ts`, `lib/agent/stream-agent-message.ts`) |
 | `transcriptionRateLimit` | 1 min / 30 | usuario | `/api/agent/transcribe` |
 | `sopGenerateRateLimit` | 1 h / 3 | org | generación de SOPs |
@@ -112,7 +113,7 @@ Riesgos abiertos: `verifyQStashRequest` no pasa `url` al `Receiver`, así que un
 | `webhookRateLimit` | 1 min / 100 | IP | Fathom legacy, Calendly, Mercado Pago, ManyChat |
 | `unipileWebhookRateLimit` | 1 min / 40 | | Unipile |
 
-No hay límite para "conectar integración" a propósito (comentario en el archivo). El límite de login va por email: cualquiera puede bloquear a otro y el password spraying no está limitado (`[LOGIN-RATE-LIMIT]`).
+No hay límite para "conectar integración" a propósito (comentario en el archivo). El límite de login va por IP + email y por IP desde el 2026-09-30 (SCRUM-24): un tercero no bloquea a otro desde su IP y probar contra muchos emails desde la misma IP queda frenado; falta el captcha tras varios fallos (`[LOGIN-RATE-LIMIT]`).
 
 ## Instrumentación y Sentry
 

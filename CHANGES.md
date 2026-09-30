@@ -34,6 +34,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-30 — El límite de login cuenta por IP + email y por IP (SCRUM-24)
+
+**Rama:** `fix/SCRUM-24-limite-login-por-ip`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma (`app/auth/actions.ts`, `lib/auth/limite-login.ts`)
+
+**Qué se hizo:** `limiteDeLogin(flujo, email)` consume dos contadores por intento y bloquea si se agota cualquiera: IP + email (`signin:<ip>:<email>` y `signin-superadmin:<ip>:<email>`, 5 cada 15 min) e IP sola (`login-ip:<ip>`, 30 cada 15 min, compartido entre los dos logins y todos los emails). Reemplaza al `authRateLimit` por email en `signInAction` y en el login del super admin. Las partes puras (IP desde los headers, claves, combinación) tienen tests en `lib/auth/__tests__/limite-login.test.ts`.
+
+**Por qué / finalidad:** parte de `[LOGIN-RATE-LIMIT]` (P1). Con el contador sólo por email, cualquiera que supiera un email bloqueaba a esa persona 15 minutos, repetible, y probar una contraseña común contra muchos emails no tenía límite propio de la app.
+
+**Decisiones de diseño relevantes:** incluir la IP en el contador por email hace que el dueño de la cuenta entre igual desde la suya. 30 por IP deja margen para una oficina que sale a internet con una sola IP. El captcha tras N fallos, que también pedía el ítem, agrega un proveedor externo y un paso nuevo en el login, así que quedó fuera de este cambio (el release no suma funcionalidades) y el ítem sigue abierto sólo por eso. El alta de cuenta (`signup:<email>`) no cambia.
+
+**Riesgos / deuda técnica pendiente:** un atacante que reparte los intentos entre muchas IPs sólo queda frenado por el límite propio de Supabase Auth, hasta que se agregue el captcha (`[LOGIN-RATE-LIMIT]`, pendiente de decisión del PO). Quien comparte IP con un atacante (una oficina con NAT, una universidad, una red móvil con CGNAT) puede quedar bloqueado 15 minutos junto con todos los de esa IP después de 30 intentos. Los dos contadores cuentan también los logins exitosos, igual que el contador anterior por email: alguien que entra y sale 6 veces en 15 minutos desde la misma IP queda bloqueado. Contar sólo los fallidos pide una función nueva en la base; para el uso real (sesiones de días, equipos chicos) no se justificó. En Vercel la IP no la puede falsificar el cliente: la plataforma reemplaza `x-forwarded-for` y `x-real-ip`.
+
+---
+
 ### 2026-09-30 — Una llamada de Fathom sólo se asocia a un cliente de la propia organización (SCRUM-43)
 
 **Rama:** `fix/SCRUM-43-fathom-cliente-de-la-org`
