@@ -65,7 +65,7 @@ hace), riesgo, impacto y criterio de aceptación en el backlog.
 10. **Closing deja afuera los turnos más recientes cuando una organización pasa de 1.000** (`CLOSING-LIST-1000`).
 11. **La IA falla sin clave global confirmada**: ~3.000 fallas en 7 días (`1A1-CLAVE-ANTHROPIC-ROTA`).
 
-**Medio (1):** el link de vuelta del login (`AUTH-CALLBACK-NEXT`); la auditoría sugiere bajarle la prioridad.
+**Medio (1):** ~~el link de vuelta del login (`AUTH-CALLBACK-NEXT`)~~. Resuelto el 2026-09-30.
 
 Ninguno está arreglado: la auditoría no toca código. Varios de los críticos se cierran esta misma semana con
 cambios de configuración o migraciones de pocas líneas (fase 0 del plan).
