@@ -125,6 +125,7 @@ export async function upsertGHLIntegration(
   if (error) throw new Error(error.message);
 }
 
+
 /**
  * Obtiene un cliente GHL con las credenciales de la org, listo para hacer fetch.
  */

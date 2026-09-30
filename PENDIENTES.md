@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 25 | 42 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 24 | 42 | 13 |
 
 ---
 
@@ -2219,18 +2219,6 @@ Prioridad sugerida P0: es pérdida irreversible de datos de todos los clientes y
   - Hay tests del helper con rutas de otra org, con `..` y vacías.
 - **Dónde:** archivos citados, `apps/web/lib/storage/org-path.ts`, `apps/reel-worker/src/processor.ts`, migración nueva.
 > Prioridad sugerida P1: es Crítica, pero exige conocer la ruta del archivo ajeno. La mayoría no es adivinable.
-
-#### [SEG-RLS-IDENTIFICADORES-EXTERNOS] Cualquier miembro puede escribir el identificador de la cuenta externa que decide a qué org van los eventos
-- **Tipo:** seguridad
-- **Severidad:** Crítica
-- **Estado verificado:** en prod, `discord_integrations` (policy `org_access`, ALL), `unipile_integrations` (`Users manage own org unipile`, ALL) y `ghl_integrations` (INSERT/UPDATE/DELETE por org) dejan a cualquier miembro, por PostgREST con su JWT, insertar o cambiar `guild_id`, `unipile_account_id`/`status` y `location_id` (grants de columna INSERT/UPDATE a `authenticated` confirmados en `information_schema.column_privileges`). Con service role, el sistema elige la org de cada evento entrante por esos valores: `getOrgByGuildId` (`apps/discord-bot/src/lib/supabase.ts:117-123`), `getUnipileIntegrationByAccountId` (`apps/web/lib/unipile/integration.ts:14-26`, `maybeSingle`) y `resolveOrganizationByLocation` (`apps/web/lib/ghl/ingest-opportunity-event.ts:172-185`, `maybeSingle`, usada en `app/api/webhooks/ghl/route.ts:56` y `:93`). Unicidad: `guild_id` único global; `unipile_account_id` único sólo por org (`unipile_integrations_organization_id_unipile_account_id_key`); `ghl_integrations.location_id` sin índice único. El flujo normal escribe esas columnas con admin client tras un OAuth/hosted auth (`app/api/integrations/discord/callback/route.ts:112`, `lib/unipile/process-hosted-auth.ts`, `lib/ghl/integration.ts:112`), pero la base no obliga a pasar por ahí.
-- **Riesgo:** Si un miembro de la org A escribe el identificador de una cuenta de la org B, entonces: en Unipile, dos filas `connected` con el mismo `unipile_account_id` hacen fallar el `maybeSingle` y los DMs de B dejan de guardarse sin aviso (y si la fila de B no está `connected`, los recibe A); en Discord, A puede ocupar el `guild_id` de un servidor antes de que su dueño lo conecte, la conexión de B falla por la unicidad y los mensajes de ese servidor se guardan en A; en GHL, cuando exista la vía de la app del Marketplace (`[FEAT-GHL-OAUTH]`), los eventos firmados de la sub-cuenta de B irían a A o se rechazarían (la vía de workflow actual trae `organizationId` en la URL y no se ve afectada). Requiere conocer el identificador ajeno: el de Discord lo ve cualquier miembro del servidor; los otros dos son opacos. No se probó con un JWT real.
-- **Impacto:** Mensajes de clientes (DMs de Instagram/LinkedIn vía Unipile, mensajes de la comunidad de Discord) de una org guardados en otra, o perdidos en silencio para su dueña. Afecta a toda org con Unipile o Discord conectado; GHL, a futuro.
-- **Qué hay que hacer:** revocar a `authenticated` INSERT/UPDATE de `guild_id`, `unipile_account_id`, `status` y `location_id` (grants por columna, o dejar a los usuarios sólo SELECT/DELETE en esas tablas) y escribirlas sólo desde los callbacks con service role; índice único global en `unipile_account_id` (parcial por `status = 'connected'`) y en `ghl_integrations.location_id`.
-- **Criterio de aceptación:** Con el JWT de un miembro de la org A, un PATCH/POST por PostgREST que cambie guild_id en discord_integrations, unipile_account_id o status en unipile_integrations, o location_id en ghl_integrations es rechazado; conectar Discord, Unipile y GHL desde la pantalla de Integraciones sigue funcionando; insertar dos filas connected con el mismo unipile_account_id (o dos ghl_integrations con el mismo location_id) falla por índice único; la migración está en supabase/migrations/ y en el historial de prod
-- **Dónde:** `discord_integrations`, `unipile_integrations`, `ghl_integrations`, migración nueva; `apps/discord-bot/src/lib/supabase.ts`, `apps/web/lib/unipile/integration.ts`, `apps/web/lib/ghl/ingest-opportunity-event.ts`.
-
-Prioridad sugerida P1: cruza organizaciones, pero exige conocer un identificador ajeno y, en Discord, llegar antes que el dueño.
 
 #### [INTEGRACIONES-ERROR-SIN-MARCA] Una integración con token vencido sigue figurando como conectada
 - **Tipo:** bug
