@@ -20,9 +20,11 @@ export const runtime = "nodejs";
  * algoritmo HMAC-SHA256 en hex sobre el cuerpo crudo.
  *
  * ⚠️ **La entrega es at-most-once: un envío fallido se registra y NUNCA se
- * reintenta.** Por eso esta ruta responde 200 ante cualquier evento con firma
- * válida, incluso si no se supo interpretar — devolver un error perdería el
- * evento para siempre. El crudo ya quedó guardado y se puede reprocesar.
+ * reintenta.** Por eso un evento con firma válida que no se supo interpretar
+ * responde 200: el crudo quedó guardado y se puede reprocesar. Cuando falla de
+ * nuestro lado responde 500 como los demás (SCRUM-6), pero eso no trae el
+ * evento de vuelta: si no se llegó a guardar, lo que queda es el log
+ * `[ALERTA][fanbasis]` con el payload, para cargarlo a mano.
  */
 const SIGNATURE_HEADERS = [
   "x-webhook-signature",
@@ -51,6 +53,12 @@ export async function POST(request: Request) {
     secret = await getWebhookSecret(organizationId, "fanbasis");
   } catch (error) {
     console.error("[fanbasis] no se pudo obtener el secreto:", error instanceof Error ? error.message : error);
+    // Commas no reintenta: sin esto el evento se pierde sin rastro. La firma no
+    // se pudo verificar, así que el payload queda marcado como tal.
+    console.error(
+      "[ALERTA][fanbasis] evento de pago NO guardado (firma sin verificar: no se pudo leer el secreto); Commas no reintenta.",
+      JSON.stringify({ organizationId, payload: rawBody })
+    );
     return NextResponse.json(
       { ok: false, error: "No se pudo leer la integración" },
       { status: 500 }

@@ -84,7 +84,7 @@ async function leerPendientes(
 /** `unmapped` se reclama acá; `error` y `pending` trabado, con `reclamarEvento`. */
 async function reclamar(admin: AdminClient, tabla: TablaDeEventos, fila: Fila): Promise<boolean> {
   if (fila.status !== "unmapped") {
-    return Boolean(await reclamarEvento(admin, tabla, { id: fila.id }, "id"));
+    return (await reclamarEvento(admin, tabla, { id: fila.id }, "id")).tipo === "reclamado";
   }
   const { data, error } = await admin
     .from(tabla)
@@ -121,7 +121,9 @@ async function reprocesarTabla(
     const resultado =
       tabla === "payment_webhook_events"
         ? await procesarEventoDePago(admin, fila.id, fila.provider!, fila.organization_id, fila.payload)
-        : await procesarEventoGHL(admin, fila.id, fila.organization_id, fila.payload, fila.received_at);
+        : await procesarEventoGHL(admin, fila.id, fila.organization_id, fila.payload, fila.received_at, {
+            esReproceso: true,
+          });
 
     if (resultado.status === "processed") resumen.procesados++;
     else if (resultado.status === "unmapped") resumen.siguenSinInterpretar++;

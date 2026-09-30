@@ -137,10 +137,11 @@ describe("eventos trabados en pending (el proceso se cortó a mitad)", () => {
     expect(eventos("payment_transactions")).toHaveLength(1);
   });
 
-  it("⭐ no pisa un evento que se está procesando ahora mismo", async () => {
+  it("⭐ no pisa un evento que se está procesando ahora mismo, y pide que reintenten (500)", async () => {
     trabado(new Date().toISOString());
     const r = await ingestPaymentWebhook("whop", ORG, whopPago);
-    expect(r.status).toBe("duplicate");
+    expect(r).toMatchObject({ status: "error", detail: "El evento se está procesando" });
+    expect(statusHttpDeIngesta(r)).toBe(500);
     expect(eventos("payment_transactions")).toHaveLength(0);
   });
 
@@ -155,7 +156,24 @@ describe("eventos trabados en pending (el proceso se cortó a mitad)", () => {
     delete base.actual!.fallas["payment_transactions:upsert"];
 
     const segundo = await ingestPaymentWebhook("whop", ORG, whopPago);
-    expect(segundo.status).toBe("duplicate");
+    expect(segundo).toMatchObject({ status: "error", detail: "El evento se está procesando" });
+    expect(eventos("payment_transactions")).toHaveLength(0);
+  });
+});
+
+describe("errores que un reintento no arregla", () => {
+  it("⭐ un dato inválido (clase 22) responde 200 y queda en error para el reproceso", async () => {
+    base.actual!.fallas["payment_transactions:upsert"] = { code: "22008", message: "date/time field value out of range" };
+    const r = await ingestPaymentWebhook("whop", ORG, whopPago);
+    expect(r).toMatchObject({ stored: true, status: "error", reintentable: false });
+    expect(statusHttpDeIngesta(r)).toBe(200);
+    expect(eventos("payment_webhook_events")[0]!.status).toBe("error");
+  });
+
+  it("una falla de conexión sí se reintenta (500)", async () => {
+    base.actual!.fallas["payment_transactions:upsert"] = { code: "08006", message: "connection failure" };
+    const r = await ingestPaymentWebhook("whop", ORG, whopPago);
+    expect(statusHttpDeIngesta(r)).toBe(500);
   });
 });
 
@@ -244,5 +262,53 @@ describe("getWebhookSecret", () => {
   it("⭐ una falla de la base al leer la integración lanza (500)", async () => {
     base.actual!.fallas["payment_integrations:select"] = { message: "connection refused" };
     await expect(getWebhookSecret(ORG, "whop")).rejects.toThrow(/No se pudo leer/);
+  });
+});
+
+describe("GHL: reprocesar no rompe el historial (SCRUM-6, revisión)", () => {
+  const conEtapa = (webhookId: string | undefined, etapa: string) => {
+    const e: Record<string, unknown> = { ...ghlEvento, pipelineStageId: etapa };
+    if (webhookId) e.webhookId = webhookId;
+    else delete e.webhookId;
+    return e;
+  };
+  const oportunidad = () => eventos("ghl_opportunities").find((f) => f.external_id === "opp_1");
+
+  it("⭐ el reintento de un evento viejo no vuelve la oportunidad a una etapa anterior", async () => {
+    // E1 (stage_1) llega y falla al guardar la oportunidad.
+    base.actual!.fallas["ghl_opportunities:upsert"] = { code: "08006", message: "connection failure" };
+    await ingestGHLOpportunityEvent(ORG, conEtapa("wh_1", "stage_1"), "workflow_shared_secret", "2026-09-30T10:00:00.000Z");
+    delete base.actual!.fallas["ghl_opportunities:upsert"];
+
+    // E2 (stage_2), más nuevo, se procesa bien.
+    await ingestGHLOpportunityEvent(ORG, conEtapa("wh_2", "stage_2"), "workflow_shared_secret", "2026-09-30T10:05:00.000Z");
+    expect(oportunidad()!.stage_external_id).toBe("stage_2");
+    const transicionesAntes = eventos("ghl_stage_transitions").length;
+
+    // GHL reintenta E1.
+    const r = await ingestGHLOpportunityEvent(ORG, conEtapa("wh_1", "stage_1"), "workflow_shared_secret");
+    expect(r).toMatchObject({ status: "processed", transitionRecorded: false });
+    expect(r.detail).toMatch(/superseded/);
+    expect(oportunidad()!.stage_external_id).toBe("stage_2");
+    expect(eventos("ghl_stage_transitions")).toHaveLength(transicionesAntes);
+  });
+
+  it("⭐ reprocesar varias veces un evento sin id de GHL deja una sola transición", async () => {
+    base.actual!.fallas["ghl_opportunities:upsert"] = { code: "08006", message: "connection failure" };
+    const primero = await ingestGHLOpportunityEvent(ORG, conEtapa(undefined, "stage_1"), "workflow_shared_secret");
+    // Sin id, un reintento de GHL guardaría una fila nueva y lo duplicaría:
+    // responde 200 y queda para el reproceso.
+    expect(primero).toMatchObject({ status: "error", reintentable: false });
+    expect(statusHttpDeIngesta(primero)).toBe(200);
+
+    // Primer reproceso: sigue fallando.
+    await reprocesarWebhooks(base.actual!.cliente as never, { aplicar: true, limite: 100 });
+    delete base.actual!.fallas["ghl_opportunities:upsert"];
+    // Segundo reproceso: anda.
+    const [, ghl] = await reprocesarWebhooks(base.actual!.cliente as never, { aplicar: true, limite: 100 });
+
+    expect(ghl.procesados).toBe(1);
+    expect(eventos("ghl_stage_transitions")).toHaveLength(1);
+    expect(oportunidad()!.stage_external_id).toBe("stage_1");
   });
 });

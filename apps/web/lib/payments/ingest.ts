@@ -12,12 +12,17 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeWebhook, extractEventId, extractEventType } from "./normalize";
 import type { PaymentProvider } from "./types";
-import { reclamarEvento } from "@/lib/webhooks/reclamar";
+import { ErrorDeBase, esErrorPermanente, reclamarEvento } from "@/lib/webhooks/reclamar";
 
 export type IngestResult = {
   stored: boolean;
   status: "processed" | "unmapped" | "duplicate" | "error";
   detail?: string;
+  /**
+   * Sólo con `status: "error"`. `false` si reintentar no va a cambiar nada (un
+   * error de datos): se responde 200 y el evento queda para el reproceso.
+   */
+  reintentable?: boolean;
 };
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -26,11 +31,15 @@ type AdminClient = ReturnType<typeof createAdminClient>;
  * [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): un evento que terminó en `error` se
  * responde con 500 para que el proveedor lo reintente. Si no se llegó a guardar,
  * el reintento es la única copia; si se guardó pero falló después, el reintento
- * lo reprocesa (ver `lib/webhooks/reclamar.ts`). `unmapped` no se reintenta:
- * volvería a dar lo mismo, y queda guardado para el reproceso.
+ * lo reprocesa (ver `lib/webhooks/reclamar.ts`). `unmapped`, o un `error` que
+ * no es `reintentable`, no se reintenta: volvería a dar lo mismo, y queda
+ * guardado para el reproceso.
  */
-export function statusHttpDeIngesta(result: { status: IngestResult["status"] }): 200 | 500 {
-  return result.status === "error" ? 500 : 200;
+export function statusHttpDeIngesta(result: {
+  status: IngestResult["status"];
+  reintentable?: boolean;
+}): 200 | 500 {
+  return result.status === "error" && result.reintentable !== false ? 500 : 200;
 }
 
 export async function ingestPaymentWebhook(
@@ -61,16 +70,21 @@ export async function ingestPaymentWebhook(
     // quedó en `error` o trabado en `pending`, este reintento es la oportunidad
     // de procesarlo (SCRUM-6, ver `lib/webhooks/reclamar.ts`).
     if (storeError.code === "23505") {
-      const previo = eventId
-        ? await reclamarEvento<{ id: string; payload: Record<string, unknown> }>(
-            admin,
-            "payment_webhook_events",
-            { provider, external_event_id: eventId, organization_id: organizationId },
-            "id, payload"
-          )
-        : null;
-      if (!previo) return { stored: false, status: "duplicate" };
-      return procesarEventoDePago(admin, previo.id, provider, organizationId, previo.payload);
+      if (!eventId) return { stored: false, status: "duplicate" };
+      const reclamo = await reclamarEvento<{ id: string; payload: Record<string, unknown> }>(
+        admin,
+        "payment_webhook_events",
+        { provider, external_event_id: eventId, organization_id: organizationId },
+        "id, payload"
+      );
+      if (reclamo.tipo === "terminado") return { stored: false, status: "duplicate" };
+      // Otro proceso lo tiene en curso: si termina mal, ya nadie escucha su
+      // 500. Que el proveedor vuelva a intentar más tarde.
+      if (reclamo.tipo === "en_curso") {
+        return { stored: false, status: "error", detail: "El evento se está procesando" };
+      }
+      const { fila } = reclamo;
+      return procesarEventoDePago(admin, fila.id, provider, organizationId, fila.payload);
     }
     console.error("[payments] no se pudo guardar el evento", storeError.message);
     return { stored: false, status: "error", detail: storeError.message };
@@ -130,7 +144,7 @@ export async function procesarEventoDePago(
         },
         { onConflict: "organization_id,provider,external_id" }
       );
-      if (error) throw new Error(error.message);
+      if (error) throw new ErrorDeBase(error.message, error.code);
     } else {
       const t = normalized.transaction;
       const { error } = await admin.from("payment_transactions").upsert(
@@ -148,7 +162,7 @@ export async function procesarEventoDePago(
         },
         { onConflict: "organization_id,provider,external_id" }
       );
-      if (error) throw new Error(error.message);
+      if (error) throw new ErrorDeBase(error.message, error.code);
     }
 
     await admin
@@ -162,6 +176,6 @@ export async function procesarEventoDePago(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error desconocido";
     await finish("error", message);
-    return { stored: true, status: "error", detail: message };
+    return { stored: true, status: "error", detail: message, reintentable: !esErrorPermanente(error) };
   }
 }

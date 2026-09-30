@@ -16,6 +16,8 @@ export function crearBaseFalsa() {
   const unicos: Record<string, string[]> = {
     payment_webhook_events: ["provider", "external_event_id"],
     ghl_webhook_events: ["external_event_id"],
+    // Parcial `WHERE external_event_id IS NOT NULL`, como en la migración.
+    ghl_stage_transitions: ["organization_id", "external_event_id"],
   };
   let secuencia = 0;
 
@@ -25,6 +27,7 @@ export function crearBaseFalsa() {
     const filtros: Filtro[] = [];
     let op: "select" | "insert" | "update" | "upsert" = "select";
     let valores: Fila = {};
+    let onConflict: string[] = [];
     let devolver = false;
     let limite = Infinity;
 
@@ -51,7 +54,14 @@ export function crearBaseFalsa() {
         return { data: [fila], error: null };
       }
       if (op === "upsert") {
-        filas(tabla).push({ ...valores });
+        // Como PostgREST: con `onConflict`, pisa la fila que coincide en esas
+        // columnas; las columnas `undefined` no se tocan.
+        const definidos = Object.fromEntries(Object.entries(valores).filter(([, v]) => v !== undefined));
+        const previa = onConflict.length
+          ? filas(tabla).find((f) => onConflict.every((c) => f[c] === valores[c]))
+          : undefined;
+        if (previa) Object.assign(previa, definidos);
+        else filas(tabla).push(definidos);
         return { data: null, error: null };
       }
       const coinciden = filas(tabla).filter((f) => filtros.every((fn) => fn(f))).slice(0, limite);
@@ -62,7 +72,12 @@ export function crearBaseFalsa() {
     const q = {
       insert: (v: Fila) => ((op = "insert"), (valores = v), q),
       update: (v: Fila) => ((op = "update"), (valores = v), q),
-      upsert: (v: Fila) => ((op = "upsert"), (valores = v), q),
+      upsert: (v: Fila, o?: { onConflict?: string }) => (
+        (op = "upsert"),
+        (valores = v),
+        (onConflict = o?.onConflict?.split(",").map((c) => c.trim()) ?? []),
+        q
+      ),
       select: () => ((devolver = true), q),
       eq: (c: string, v: unknown) => (filtros.push((f) => f[c] === v), q),
       is: (c: string, v: unknown) => (filtros.push((f) => (f[c] ?? null) === v), q),
@@ -72,6 +87,9 @@ export function crearBaseFalsa() {
       limit: (n: number) => ((limite = n), q),
       maybeSingle: async () => {
         const r = ejecutar();
+        if (Array.isArray(r.data) && r.data.length > 1) {
+          return { data: null, error: { code: "PGRST116", message: "más de una fila" } };
+        }
         return { data: Array.isArray(r.data) ? (r.data[0] ?? null) : r.data, error: r.error };
       },
       then: (ok: (r: unknown) => unknown, ko?: (e: unknown) => unknown) =>

@@ -46,7 +46,11 @@ al terminar cada bloque de trabajo, aunque sea chico.
 - Commas no reintenta: si el evento no se llegó a guardar, queda un log `[ALERTA][fanbasis]` con el payload completo para cargarlo a mano.
 - Una falla al leer la integración o al descifrar el secreto del webhook ahora responde 500 (el proveedor reintenta) en vez de 404 "no tiene … conectado" (Whop, Commas) o 401 (GHL).
 - `scripts/reprocesar-webhooks.ts` reprocesa los eventos de `payment_webhook_events` y `ghl_webhook_events` en `unmapped`, `error` o trabados en `pending`, con las mismas funciones que el webhook. Sin `--aplicar` sólo cuenta; admite `--org` y `--limite`.
-- Tests en `lib/webhooks/__tests__/webhooks-sin-perdida.test.ts`, con una base en memoria.
+- Un reintento que llega mientras el original todavía se procesa responde 500 ("El evento se está procesando") en vez de `duplicate`, para que el proveedor vuelva a intentar.
+- Un error de datos (SQLSTATE clase 22 o 23) responde 200 con `reintentable: false`: reintentar no lo arreglaría. El evento queda en `error` para el reproceso.
+- GHL: al reprocesar, si ya se aplicó un evento más nuevo de la misma oportunidad, el viejo se marca `processed` ("superseded") sin tocar la oportunidad ni registrar una transición falsa. Una transición de un evento sin id de GHL se deduplica por la fila del evento crudo (`fila:<id>`), así que reprocesar no la suma dos veces. Un evento así que falla responde 200: un reintento de GHL no lo encontraría y lo duplicaría. `dateAdded` inválido pasa a `null` en vez de hacer fallar el evento.
+- Commas: si falla la lectura del secreto, también queda el log `[ALERTA][fanbasis]` con el payload (marcado "firma sin verificar").
+- Tests en `lib/webhooks/__tests__/webhooks-sin-perdida.test.ts`, con una base en memoria que respeta `onConflict`, los índices únicos y el error de `maybeSingle` con varias filas.
 
 **Por qué / finalidad:** cierra `[EMBUDOS-WEBHOOK-PERDIDA]` (Crítica) y la parte de reintentos de `[AUD-CONF-5]` (SCRUM-97). Antes, si Supabase fallaba o estaba en sólo lectura, el webhook respondía 200, el proveedor no reintentaba y el cobro o el movimiento de oportunidad se perdía. Un evento en `error` quedaba así para siempre: el reintento chocaba con el índice único y volvía `duplicate`.
 

@@ -29,10 +29,20 @@ export function limiteDePendienteTrabado(ahora: Date = new Date()): string {
   return new Date(ahora.getTime() - MINUTOS_PENDIENTE_TRABADO * 60_000).toISOString();
 }
 
+export type Reclamo<T> =
+  /** Se tomó: procesarlo. */
+  | { tipo: "reclamado"; fila: T }
+  /** Ya terminó (`processed`/`unmapped`) o no hay fila de esta org: es un duplicado. */
+  | { tipo: "terminado" }
+  /** Lo está procesando otro proceso ahora: que el proveedor reintente más tarde. */
+  | { tipo: "en_curso" };
+
+const ESTADOS_TERMINADOS = ["processed", "unmapped", "duplicate"];
+
 /**
  * Reclama el evento que cumpla `filtros` (columna → valor) y esté en `error` o
- * trabado en `pending`. Devuelve la fila con `columnas`, o `null` si no había
- * nada para reclamar (ya procesado, en curso, o lo tomó otro proceso).
+ * trabado en `pending`. Si no se puede, dice si es porque ya terminó o porque
+ * otro proceso lo tiene en curso.
  */
 export async function reclamarEvento<T>(
   admin: AdminClient,
@@ -40,7 +50,7 @@ export async function reclamarEvento<T>(
   filtros: Record<string, string>,
   columnas: string,
   ahora: Date = new Date()
-): Promise<T | null> {
+): Promise<Reclamo<T>> {
   const limite = limiteDePendienteTrabado(ahora);
   const variantes = [
     { status: "error" },
@@ -64,7 +74,37 @@ export async function reclamarEvento<T>(
 
     const { data, error } = await query.select(columnas).maybeSingle();
     if (error) throw new Error(`No se pudo reclamar el evento en ${tabla}: ${error.message}`);
-    if (data) return data as T;
+    if (data) return { tipo: "reclamado", fila: data as T };
   }
-  return null;
+
+  let actual = admin.from(tabla).select("status");
+  for (const [columna, valor] of Object.entries(filtros)) actual = actual.eq(columna, valor);
+  const { data, error } = await actual.maybeSingle();
+  if (error) throw new Error(`No se pudo leer el evento en ${tabla}: ${error.message}`);
+  if (!data || ESTADOS_TERMINADOS.includes((data as { status: string }).status)) {
+    return { tipo: "terminado" };
+  }
+  return { tipo: "en_curso" };
+}
+
+/** Error de la base que conserva el SQLSTATE, para decidir si reintentar sirve. */
+export class ErrorDeBase extends Error {
+  constructor(
+    message: string,
+    public readonly code?: string
+  ) {
+    super(message);
+    this.name = "ErrorDeBase";
+  }
+}
+
+/**
+ * Un error de datos (clase 22: fecha o número inválido) o de restricción
+ * (clase 23) va a fallar igual en cada reintento. Responder 500 ahí sólo
+ * genera reintentos inútiles: se responde 200, el evento queda en `error` y lo
+ * recupera el reproceso cuando se corrija la causa.
+ */
+export function esErrorPermanente(error: unknown): boolean {
+  const code = error instanceof ErrorDeBase ? error.code : undefined;
+  return typeof code === "string" && (code.startsWith("22") || code.startsWith("23"));
 }
