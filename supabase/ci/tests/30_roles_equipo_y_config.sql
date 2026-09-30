@@ -126,6 +126,12 @@ select ci.espera(ci.filas($$delete from public.clients where id = '30000000-0000
   1, 'el founder borra un cliente');
 select ci.espera(ci.filas($$update public.profiles set custom_role_id = '30000000-0000-0000-0000-0000000000e1' where id = '30000000-0000-0000-0000-00000000000b'$$),
   1, 'el founder asigna un rol a un member');
+select ci.rechazado(
+  $$update public.profiles set custom_role_id = '30000000-0000-0000-0000-0000000000e3' where id = '30000000-0000-0000-0000-00000000000b'$$,
+  'que el founder asigne a un member un rol de otra organización (SCRUM-75)');
+select ci.rechazado(
+  $$insert into public.team_invitations (organization_id, email, custom_role_id) values ('30000000-0000-0000-0000-000000000a00', 'ajeno@test', '30000000-0000-0000-0000-0000000000e3')$$,
+  'que el founder cree una invitación con un rol de otra organización (SCRUM-75)');
 select ci.espera(ci.filas($$update public.profiles set is_active = false where id = '30000000-0000-0000-0000-00000000000b'$$),
   1, 'el founder desactiva a un member');
 select ci.rechazado(
