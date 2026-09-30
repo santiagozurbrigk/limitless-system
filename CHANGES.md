@@ -34,6 +34,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-30 — Una llamada de Fathom sólo se asocia a un cliente de la propia organización (SCRUM-43)
+
+**Rama:** `fix/SCRUM-43-fathom-cliente-de-la-org`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Ventas / Fathom (`lib/fathom/process-call.ts`, `lib/fathom/deep-call-analysis.ts`, `lib/clients/client-tasks.ts`, `lib/fathom/cliente-de-la-org.ts`)
+
+**Qué se hizo:** `finalizeAssociatedCall`, a donde llegan asociar a mano, subir una 1-1 y el proceso automático, empieza con `assertClienteDeLaOrg`, que exige que el cliente sea de la organización antes de cualquier escritura; si no, lanza y no se asocia nada. Además, `syncClientLinkedCalls` y la lectura del cliente en `maybeExtractOneOnOneTasks` filtran por `organization_id`. Tests en `lib/fathom/__tests__/cliente-de-la-org.test.ts`.
+
+**Por qué / finalidad:** cierra `[FATHOM-CLIENTID-SIN-VALIDAR]`. `associateFathomCallAction` validaba la llamada pero pasaba el `clientId` recibido a `finalizeAssociatedCall`, que escribe con el service role: con el UUID de un cliente de otra org, su nombre terminaba en el análisis de la org atacante y la llamada (título, resumen y URL de Fathom) se sumaba a `linked_calls` del cliente ajeno, visible en su ficha.
+
+**Decisiones de diseño relevantes:** el chequeo va en `finalizeAssociatedCall` y no sólo en la action, para cubrir cualquier camino que llegue ahí. La subida manual (`manual-upload-actions.ts`) ya validaba el cliente con la sesión antes de escribir; no cambia. La extracción de tareas de la 1-1 no inserta nada si el cliente no es de la org.
+
+**Riesgos / deuda técnica pendiente:** el arreglo corta las escrituras nuevas; si antes alguien cruzó referencias entre orgs, quedarían en `fathom_calls`, `client_timeline_entries`, `client_problems`, `client_tasks` o `clients.linked_calls`. Se revisa con una consulta de detección en producción al aplicar (en el PR).
+
+---
+
 ### 2026-09-30 — El login sólo redirige a paths internos (SCRUM-2)
 
 **Rama:** `fix/SCRUM-2-redirect-seguro`

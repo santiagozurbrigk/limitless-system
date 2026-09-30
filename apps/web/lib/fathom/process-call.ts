@@ -16,6 +16,7 @@ import {
   publishFathomAnalysisJob,
 } from "@/lib/queue/qstash-client";
 import type { CalendlyFormAnswer } from "@/types/closing";
+import { assertClienteDeLaOrg } from "@/lib/fathom/cliente-de-la-org";
 
 function formAnswersToRecord(
   answers: CalendlyFormAnswer[] | null | undefined
@@ -366,13 +367,11 @@ export async function finalizeAssociatedCall(params: {
 }): Promise<void> {
   const admin = createAdminClient();
 
-  const { data: client } = await admin
-    .from("clients")
-    .select("name")
-    .eq("id", params.clientId)
-    .single();
+  // SCRUM-43: el cliente tiene que ser de esta organización. Va antes de
+  // cualquier escritura; si no, lanza y no se asocia nada.
+  const client = await assertClienteDeLaOrg(admin, params.clientId, params.organizationId);
 
-  const leadName = client?.name ?? "Cliente";
+  const leadName = client.name ?? "Cliente";
 
   const { data: previousCalls } = await admin
     .from("fathom_calls")
