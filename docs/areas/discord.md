@@ -54,7 +54,7 @@ no puede sostener. Es **standalone**: no importa paquetes del workspace (`apps/d
 
 | Tabla | Columnas clave | Notas |
 |---|---|---|
-| `discord_integrations` | `organization_id` (unique), `guild_id` (unique), `monitored_channels jsonb`, `auto_monitor_pattern` (default `cliente-`), `bot_name`, `bot_avatar_url`, `bot_profile_applied_at`, `bot_profile_error`, `bot_can_speak`, `last_event_at` | **Un servidor por org y una org por servidor** |
+| `discord_integrations` | `organization_id` (unique), `guild_id` (unique), `monitored_channels jsonb`, `auto_monitor_pattern` (default `cliente-`), `bot_name`, `bot_avatar_url`, `bot_profile_applied_at`, `bot_profile_error`, `bot_can_speak`, `last_event_at` | **Un servidor por org y una org por servidor**. Los usuarios editan sólo por columna, nunca `guild_id` ni `organization_id` (SCRUM-82): una columna nueva que la app edite con el cliente de usuario necesita su `grant update (col) to authenticated` en la migración |
 | `discord_messages` | `discord_message_id` (unique), `client_id` (null = sin dueño), `attributed_by` (`person`/`channel`/null), `discord_user_id`, `channel_id`, `content`, `is_testimonial`, `ai_sentiment`, `ai_summary`, `requires_attention`, `sent_at` | Se guarda sólo lo de canales monitoreados. Sin retención: para siempre |
 | `discord_client_links` | `(organization_id, discord_user_id)` unique, `client_id`, `link_method` (`email_command`, `name_fuzzy`, `manual`…), `link_confidence` | Persona de Discord → cliente |
 | `discord_team_members` | `(organization_id, discord_user_id)` unique, `profile_id` (null = equipo sin cuenta) | Sus mensajes no se atribuyen ni se clasifican |

@@ -127,6 +127,17 @@ export async function connectGHLAction(
 ): Promise<MutationResult> {
   return runMutation(async () => {
     if (!selectedCalendarIds.length) throw new Error("Seleccioná al menos un calendario.");
+    await requireOrgRole(ROLES_CONFIG_ORG, SIN_PERMISO_CONFIG_ORG);
+
+    // [SEG-RLS-IDENTIFICADORES-EXTERNOS] (SCRUM-82): la location decide a qué
+    // org van los eventos de GHL y es única entre orgs. Se vuelve a validar
+    // acá (no sólo en validateGHLKeyAction) para que nadie guarde una location
+    // ajena sin un token de esa location.
+    try {
+      await validateGHLApiKey(apiKey.trim(), locationId.trim());
+    } catch {
+      throw new Error("El token no corresponde a esa Location ID de GHL.");
+    }
 
     const organizationId = await requireOrganizationId();
     await upsertGHLIntegration(

@@ -38,7 +38,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Rama:** `fix/SCRUM-82-identificadores-externos`
 **Commit(s):** este
-**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20260930110000_identificadores_externos.sql`), integraciones de Discord, Unipile y GoHighLevel
+**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20260930110000_identificadores_externos.sql`), integraciones de Discord, Unipile y GoHighLevel (`app/ghl/actions.ts`, `lib/ghl/integration.ts`, `lib/unipile/process-hosted-auth.ts`)
 
 **Qué se hizo:**
 - `unipile_integrations` y `ghl_integrations`: `anon` y `authenticated` pierden INSERT y UPDATE. La app escribe esas tablas sólo con el service role.
@@ -46,6 +46,10 @@ al terminar cada bloque de trabajo, aunque sea chico.
 - Índices únicos: una cuenta de Unipile `connected` y una `location_id` de GHL sólo pueden estar en una organización.
 - La migración falla si queda escritura de usuarios sobre alguno de esos identificadores.
 - Test `supabase/ci/tests/50_identificadores_externos.sql`, que falla sin la migración.
+- GHL (`connectGHLAction`): exige el rol de configuración y vuelve a validar el token contra la location en el servidor antes de guardar, para que nadie ocupe la location de otra org con un token cualquiera. El choque con el índice se muestra como "Esa cuenta de GHL ya está conectada en otra organización".
+- Unipile (`processUnipileHostedAuthNotify`): si la cuenta ya está conectada en otra org, no se toca nada. Antes se desconectaba la cuenta actual de la org y el alta fallaba después.
+- Discord: la regla de los grants por columna queda en el comentario de la tabla y en `docs/areas/discord.md`, para las columnas que se agreguen.
+- Tests `lib/ghl/__tests__/mensaje-error-guardado.test.ts` y `lib/unipile/__tests__/process-hosted-auth.test.ts`.
 
 **Por qué / finalidad:** cierra `[SEG-RLS-IDENTIFICADORES-EXTERNOS]` (Crítica). Con service role, el sistema elige la organización de cada evento entrante por `guild_id`, `unipile_account_id` + `status` y `location_id`. Las policies de esas tablas eran por organización, así que cualquier miembro, con su JWT, podía escribir el identificador de una cuenta de otra org y desviarle los mensajes de Discord o de Unipile, o hacérselos perder en silencio (dos filas iguales hacían fallar el `maybeSingle`).
 

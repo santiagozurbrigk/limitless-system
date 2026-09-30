@@ -39,6 +39,11 @@ begin
   end loop;
 end $$;
 
+-- Los grants por columna valen para las columnas que existen hoy. Queda la
+-- regla escrita en la tabla para quien agregue una columna después.
+comment on table public.discord_integrations is
+  'Una fila por org y servidor. Los usuarios (authenticated) sólo tienen UPDATE por columna y nunca sobre guild_id ni organization_id (SCRUM-82): cada columna nueva que la app edite con el cliente de usuario necesita su propio grant update (col) to authenticated.';
+
 -- ─── 3. Una cuenta externa conectada, en una sola organización ───────────────
 -- `guild_id` ya es único global. `unipile_account_id` sólo era único por org, y
 -- `location_id` de GHL no tenía índice: dos filas con el mismo valor hacían
