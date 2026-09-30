@@ -135,8 +135,11 @@ export async function connectGHLAction(
     // ajena sin un token de esa location.
     try {
       await validateGHLApiKey(apiKey.trim(), locationId.trim());
-    } catch {
-      throw new Error("El token no corresponde a esa Location ID de GHL.");
+    } catch (e) {
+      if (e instanceof GHLApiError && [401, 403, 404].includes(e.status)) {
+        throw new Error("El token no corresponde a esa Location ID de GHL.");
+      }
+      throw new Error("GHL no respondió al validar el token. Intenta de nuevo en unos minutos.");
     }
 
     const organizationId = await requireOrganizationId();
