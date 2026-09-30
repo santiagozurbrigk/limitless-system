@@ -198,7 +198,7 @@ Preguntas para que el equipo decida:
 
 ### R3 · Límites del plan Free cerca: Storage al ~80 %, base en sólo lectura a los 500 MB — **Alta**
 - **Hecho:** Storage ≈ 797 MB de 1 GB; base 87 MB de 500 MB; límite de subida del Free (50 MB) menor que el que declaran `sop-videos` y `trial-reels`.
-- **Riesgo:** al pasar el cupo de Storage, las subidas fallan (comprobantes, documentos, reels). Si la base llega a sólo lectura, los webhooks de pagos leen bien pero no pueden insertar y responden 200 → cobros perdidos (`[EMBUDOS-WEBHOOK-PERDIDA]`).
+- **Riesgo:** al pasar el cupo de Storage, las subidas fallan (comprobantes, documentos, reels). Si la base llega a sólo lectura, los webhooks de pagos leen bien pero no pueden insertar y responden 200 → cobros perdidos (`[EMBUDOS-WEBHOOK-PERDIDA]`). **Resuelto el 2026-09-30 (SCRUM-6).** Ahora responden 500 y el proveedor reintenta.
 - **Recomendación:** decidir el plan (R1 lo resuelve de paso); mientras tanto, limpiar `trial-reels` y revisar `ai-brain-documents`; confirmar el límite de subida real.
 - **PENDIENTES:** `[SUPABASE-PLAN-FREE-LIMITES]` (nuevo, propuesto P1).
 
@@ -259,7 +259,7 @@ Preguntas para que el equipo decida:
 ### R13 · Webhooks de pagos: dos caminos más a la pérdida de cobros — **Crítica** (ya registrado)
 - **Hecho:** además de lo que ya dice `[EMBUDOS-WEBHOOK-PERDIDA]`: (a) si la base está en **sólo lectura** (cupo del Free) el insert falla y la ruta responde 200; (b) si el secreto no se puede descifrar (master key cambiada) la ruta responde **404 "no tiene Whop conectado"**, un mensaje que confunde el diagnóstico y que Commas no reintenta.
 - **Recomendación:** sumar ambos casos a los tests del ítem; distinguir "no conectado" (404) de "no se pudo descifrar" (500).
-- **PENDIENTES:** `[EMBUDOS-WEBHOOK-PERDIDA]` (existente; ampliación propuesta).
+- **PENDIENTES:** `[EMBUDOS-WEBHOOK-PERDIDA]` (existente; ampliación propuesta). **Resuelto el 2026-09-30 (SCRUM-6).** Las dos cosas: sólo lectura y secreto que no se descifra responden 500.
 
 ## 9. Lo que está bien
 

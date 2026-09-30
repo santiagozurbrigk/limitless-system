@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWebhookSecret } from "@/lib/payments/integration";
-import { ingestPaymentWebhook } from "@/lib/payments/ingest";
+import { ingestPaymentWebhook, statusHttpDeIngesta } from "@/lib/payments/ingest";
 import { verifyHmacWebhook } from "@/lib/payments/verify-signature";
 
 export const runtime = "nodejs";
@@ -44,7 +44,18 @@ export async function POST(request: Request) {
 
   const rawBody = await request.text();
 
-  const secret = await getWebhookSecret(organizationId, "fanbasis");
+  // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): si no se pudo leer o descifrar el
+  // secreto, la falla es nuestra: 500 para que el proveedor reintente.
+  let secret: string | null;
+  try {
+    secret = await getWebhookSecret(organizationId, "fanbasis");
+  } catch (error) {
+    console.error("[fanbasis] no se pudo obtener el secreto:", error instanceof Error ? error.message : error);
+    return NextResponse.json(
+      { ok: false, error: "No se pudo leer la integración" },
+      { status: 500 }
+    );
+  }
   if (!secret) {
     return NextResponse.json(
       { ok: false, error: "La organización no tiene Fanbasis conectado" },
@@ -68,5 +79,17 @@ export async function POST(request: Request) {
   }
 
   const result = await ingestPaymentWebhook("fanbasis", organizationId, body);
-  return NextResponse.json({ ok: true, ...result });
+
+  // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): Commas no reintenta. Si el evento no
+  // se llegó a guardar, el log con el payload es la única copia: queda como
+  // alerta para cargarlo a mano. Si se guardó y falló después, lo recupera
+  // `scripts/reprocesar-webhooks.ts`.
+  if (!result.stored && result.status === "error") {
+    console.error(
+      "[ALERTA][fanbasis] evento de pago NO guardado; Commas no reintenta.",
+      JSON.stringify({ organizationId, detail: result.detail, payload: body })
+    );
+  }
+  const status = statusHttpDeIngesta(result);
+  return NextResponse.json({ ok: status === 200, ...result }, { status });
 }

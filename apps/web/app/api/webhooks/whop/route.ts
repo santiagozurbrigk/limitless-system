@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWebhookSecret } from "@/lib/payments/integration";
-import { ingestPaymentWebhook } from "@/lib/payments/ingest";
+import { ingestPaymentWebhook, statusHttpDeIngesta } from "@/lib/payments/ingest";
 import { verifyStandardWebhook } from "@/lib/payments/verify-signature";
 
 export const runtime = "nodejs";
@@ -38,7 +38,18 @@ export async function POST(request: Request) {
   // El cuerpo crudo, sin parsear: la firma se calcula sobre los bytes exactos.
   const rawBody = await request.text();
 
-  const secret = await getWebhookSecret(organizationId, "whop");
+  // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): si no se pudo leer o descifrar el
+  // secreto, la falla es nuestra: 500 para que el proveedor reintente.
+  let secret: string | null;
+  try {
+    secret = await getWebhookSecret(organizationId, "whop");
+  } catch (error) {
+    console.error("[whop] no se pudo obtener el secreto:", error instanceof Error ? error.message : error);
+    return NextResponse.json(
+      { ok: false, error: "No se pudo leer la integración" },
+      { status: 500 }
+    );
+  }
   if (!secret) {
     return NextResponse.json(
       { ok: false, error: "La organización no tiene Whop conectado" },
@@ -70,7 +81,10 @@ export async function POST(request: Request) {
 
   const result = await ingestPaymentWebhook("whop", organizationId, body);
 
-  // Siempre 200 en un evento verificado, incluso si no se supo interpretar: el
-  // evento quedó guardado y reintentarlo no cambiaría el resultado.
-  return NextResponse.json({ ok: true, ...result });
+  // Un evento que no se supo interpretar (`unmapped`) responde 200: quedó
+  // guardado y reintentarlo no cambiaría el resultado. [EMBUDOS-WEBHOOK-PERDIDA]
+  // (SCRUM-6): si falló de nuestro lado (`error`), 500 para que Whop reintente
+  // (lo hace ~3 días) y el reintento lo reprocese.
+  const status = statusHttpDeIngesta(result);
+  return NextResponse.json({ ok: status === 200, ...result }, { status });
 }

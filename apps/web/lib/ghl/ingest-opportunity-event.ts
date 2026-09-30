@@ -20,6 +20,7 @@ import {
 } from "./opportunity-event";
 import { deriveTransition, type KnownOpportunityState } from "./stage-transition";
 import type { GHLAuthPath } from "./verify-webhook";
+import { reclamarEvento } from "@/lib/webhooks/reclamar";
 
 export type GHLIngestResult = {
   stored: boolean;
@@ -29,6 +30,8 @@ export type GHLIngestResult = {
   detail?: string;
 };
 
+type AdminClient = ReturnType<typeof createAdminClient>;
+
 export async function ingestGHLOpportunityEvent(
   organizationId: string,
   body: Record<string, unknown>,
@@ -37,6 +40,8 @@ export async function ingestGHLOpportunityEvent(
 ): Promise<GHLIngestResult> {
   const admin = createAdminClient();
 
+  const eventId = extractGHLEventId(body);
+
   // 1) Guardar crudo. El índice único sobre external_event_id descarta
   //    reentregas: GHL reintenta y el orden no está garantizado.
   const { data: stored, error: storeError } = await admin
@@ -44,7 +49,7 @@ export async function ingestGHLOpportunityEvent(
     .insert({
       organization_id: organizationId,
       event_type: extractGHLEventType(body),
-      external_event_id: extractGHLEventId(body),
+      external_event_id: eventId,
       auth_path: authPath,
       payload: body,
     })
@@ -52,12 +57,41 @@ export async function ingestGHLOpportunityEvent(
     .maybeSingle();
 
   if (storeError) {
-    if (storeError.code === "23505") return { stored: false, status: "duplicate" };
+    // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): si el evento previo quedó en
+    // `error` o trabado en `pending`, este reintento lo reprocesa en vez de
+    // volver `duplicate` (ver `lib/webhooks/reclamar.ts`).
+    if (storeError.code === "23505") {
+      const previo = eventId
+        ? await reclamarEvento<{ id: string; payload: Record<string, unknown>; received_at: string }>(
+            admin,
+            "ghl_webhook_events",
+            { external_event_id: eventId, organization_id: organizationId },
+            "id, payload, received_at"
+          )
+        : null;
+      if (!previo) return { stored: false, status: "duplicate" };
+      return procesarEventoGHL(admin, previo.id, organizationId, previo.payload, previo.received_at);
+    }
     console.error("[ghl] no se pudo guardar el evento", storeError.message);
     return { stored: false, status: "error", detail: storeError.message };
   }
 
-  const eventRowId = stored?.id as string | undefined;
+  return procesarEventoGHL(admin, stored?.id as string | undefined, organizationId, body, receivedAt);
+}
+
+/**
+ * Interpreta un evento ya guardado y deja su estado final en
+ * `ghl_webhook_events`. La usan el webhook y el reproceso
+ * (`scripts/reprocesar-webhooks.ts`). `receivedAt` es cuándo llegó el evento
+ * la primera vez: de ahí sale la fecha de la transición de etapa.
+ */
+export async function procesarEventoGHL(
+  admin: AdminClient,
+  eventRowId: string | undefined,
+  organizationId: string,
+  body: Record<string, unknown>,
+  receivedAt: string
+): Promise<GHLIngestResult> {
 
   const finish = async (status: string, errorMessage?: string) => {
     if (!eventRowId) return;

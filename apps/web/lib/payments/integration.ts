@@ -40,10 +40,19 @@ export async function getPaymentIntegration(
     .eq("is_active", true)
     .maybeSingle();
 
-  if (error || !data) return null;
+  // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): una falla al leer no es "no está
+  // conectado". Se lanza para que el webhook responda 500 y el proveedor
+  // reintente, en vez de un 404 que da el evento por perdido.
+  if (error) throw new Error(`No se pudo leer la integración de ${provider}: ${error.message}`);
+  if (!data) return null;
   return data as PaymentIntegrationRow;
 }
 
+/**
+ * Secreto del webhook, o `null` si la org no tiene el proveedor conectado.
+ * Lanza si la base falla o el secreto guardado no se puede descifrar: son
+ * fallas nuestras, y el webhook tiene que responder 500.
+ */
 export async function getWebhookSecret(
   organizationId: string,
   provider: PaymentProvider
@@ -55,6 +64,6 @@ export async function getWebhookSecret(
     return decrypt(integration.webhook_secret_encrypted);
   } catch {
     console.error(`[payments] no se pudo descifrar el secreto de ${provider}`);
-    return null;
+    throw new Error(`No se pudo descifrar el secreto de ${provider}`);
   }
 }

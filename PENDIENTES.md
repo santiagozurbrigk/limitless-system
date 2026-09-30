@@ -64,7 +64,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|
 | `[PERMISOS-SERVER-ACTIONS]` | Plataforma | Alta | Los permisos por módulo no protegen datos, sólo pantallas |
 | `[CLOSING-LIST-1000]` | Ventas | Alta | El calendario y la lista de Closing pierden los turnos más recientes |
-| `[EMBUDOS-WEBHOOK-PERDIDA]` | Embudos y Lanzamientos | Crítica | Webhooks de pagos y GHL que responden 200 sin haber guardado el evento |
 | `[1A1-CLAVE-ANTHROPIC-ROTA]` | Agente de negocio e IA | Alta | Una organización sin clave válida y sin clave global |
 | `[DR-BACKUPS-SUPABASE]` | Infraestructura, seguridad y tests (transversal) | Crítica | La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración |
 | `[PERMISOS-SERVER-ACTIONS/infra]` | Infraestructura, seguridad y tests (transversal) | Alta | Los roles no se hacen cumplir en la base ni en las actions (incluye AUD-SEG-1) |
@@ -77,7 +76,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 14 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 24 | 42 | 13 |
@@ -1372,17 +1371,6 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 
 ### Embudos y Lanzamientos · P0
 
-#### [EMBUDOS-WEBHOOK-PERDIDA] Webhooks de pagos y GHL que responden 200 sin haber guardado el evento
-- **Tipo:** bug
-- **Severidad:** Crítica
-- **Estado verificado:** `app/api/webhooks/{whop,fanbasis,ghl}/route.ts` devuelven `200 { ok: true, ...result }` siempre que la firma sea válida, incluso cuando `ingestPaymentWebhook` / `ingestGHLOpportunityEvent` devuelven `stored: false, status: "error"` (falló el insert del crudo). Whop y GHL sólo reintentan ante no-2xx, así que el evento se pierde. Además, un evento que quedó en `status = 'error'` (falló el upsert después de guardar) no se reintenta nunca: el reintento del proveedor choca con el índice único y vuelve `duplicate` (AUDITORIA_BACKEND §3 Confiabilidad 5, sigue abierto). No existe ninguna herramienta de reproceso de `unmapped`/`error` aunque varios comentarios lo prometen.
-- **Riesgo:** Si falla el insert del evento crudo (Supabase caído, timeout, error de schema), entonces Whop/Fanbasis/GHL reciben 200 y no reintentan: el cobro o el movimiento de oportunidad se pierde. Si falla el paso posterior, el evento queda en 'error' y ningún reintento ni herramienta lo recupera. Probabilidad baja por evento, pero sin ninguna red.
-- **Impacto:** Cobros que no quedan registrados en payment_orders/payment_transactions: revenue, CAC, ROAS y LTV de los embudos quedan por debajo de lo real. Alcance actual probablemente bajo: ninguna integración de pagos está verificada con cuenta real (EMBUDOS-CUENTAS-REALES).
-- **Qué hay que hacer:** responder 5xx cuando `stored: false` (salvo Commas, que no reintenta: ahí alertar); en `duplicate`, si la fila previa está en `error`, reprocesarla; construir un reproceso (acción de super-admin o script) para `payment_webhook_events` y `ghl_webhook_events` en `unmapped`/`error`.
-- **Criterio de aceptación:** Si falla el guardado del evento crudo, los webhooks de Whop y GHL responden 5xx (no 200) y el proveedor reintenta; en Commas, que no reintenta, queda una alerta registrada. Un reintento de un evento que quedó en 'error' se reprocesa en vez de volver 'duplicate'; hay tests que cubren los dos casos. Existe un reproceso (acción de super-admin o script) que toma los eventos en 'unmapped'/'error' de payment_webhook_events y ghl_webhook_events y los deja en 'processed' si ahora se pueden interpretar
-- **Relacionado (auditoría de recuperación):** el insert también falla si la base está en sólo lectura (`[SUPABASE-PLAN-FREE-LIMITES]`), y un secreto que no se puede descifrar hoy responde 404 "no tiene … conectado" (`lib/payments/integration.ts:54-59`): conviene que responda 500 y cubrir los dos casos en los tests de este ítem.
-- **Dónde:** `apps/web/app/api/webhooks/{whop,fanbasis,ghl}/route.ts`, `apps/web/lib/payments/ingest.ts`, `apps/web/lib/ghl/ingest-opportunity-event.ts`, `apps/web/lib/payments/integration.ts`.
-
 ### Embudos y Lanzamientos · P1
 
 #### [EMBUDOS-MEDIDAS-POR-EMBUDO] Dinero y anuncios son de la org entera en todos los embudos
@@ -2373,7 +2361,7 @@ Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe su
 #### [AUD-CONF-5] Dedupe de webhooks que descarta reintentos legítimos
 - **Tipo:** bug
 - **Severidad:** Crítica
-- **Estado verificado:** `payment_webhook_events` tiene índice único `(provider, external_event_id)` sin `organization_id` (`20260829200000_payments_whop_fanbasis.sql:115`); un evento que quedó en `error` hace que el reintento del proveedor choque y se descarte. Mismo patrón en `ghl_webhook_events`.
+- **Estado verificado:** **Reintentos resueltos el 2026-09-30 (SCRUM-6):** un reintento de un evento en `error`, o trabado en `pending` hace más de 5 minutos, se reprocesa (`lib/webhooks/reclamar.ts`), y un duplicado de un evento ya procesado se sigue descartando. Lo que sigue abierto es sumar `organization_id` al índice de pagos. Estado anterior: `payment_webhook_events` tiene índice único `(provider, external_event_id)` sin `organization_id` (`20260829200000_payments_whop_fanbasis.sql:115`); un evento que quedó en `error` hace que el reintento del proveedor choque y se descarte. Mismo patrón en `ghl_webhook_events`.
 - **Riesgo:** Si el primer procesamiento de un webhook de pago falla (timeout de DB, bug de mapeo, deploy a mitad), entonces el reintento del proveedor choca con el índice único y se marca `duplicate` (`lib/payments/ingest.ts:46-48`), así que ese cobro nunca se registra. Cualquier error transitorio lo dispara.
 - **Impacto:** Cobros de Whop/Fanbasis/pagos que no aparecen en Finanzas ni en el cliente, en silencio; el crudo queda guardado pero no hay herramienta ni pantalla para reprocesarlo. Mismo efecto en oportunidades de GHL (`ghl_webhook_events`).
 - **Qué hay que hacer:** en conflicto, re-procesar si el estado previo es `error` o si quedó en `pending` hace más de unos minutos (el lambda murió entre el insert del crudo y el `finish()`, `lib/payments/ingest.ts:33-69`; mismo caso en GHL); sumar `organization_id` al índice de pagos.

@@ -6,6 +6,7 @@ import {
 import { getGHLWebhookSecret } from "@/lib/ghl/integration";
 import { extractGHLEventType } from "@/lib/ghl/opportunity-event";
 import { verifyGHLWebhook } from "@/lib/ghl/verify-webhook";
+import { statusHttpDeIngesta } from "@/lib/payments/ingest";
 
 export const runtime = "nodejs";
 
@@ -62,7 +63,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const sharedSecret = await getGHLWebhookSecret(organizationId);
+  // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): si no se pudo leer el secreto, la
+  // falla es nuestra: 500 para que GHL reintente.
+  let sharedSecret: string | null;
+  try {
+    sharedSecret = await getGHLWebhookSecret(organizationId);
+  } catch (error) {
+    console.error("[ghl-webhook] no se pudo obtener el secreto:", error instanceof Error ? error.message : error);
+    return NextResponse.json(
+      { ok: false, error: "No se pudo leer la integración" },
+      { status: 500 }
+    );
+  }
   const providedSecret =
     url.searchParams.get("secret") ?? request.headers.get("x-otc-webhook-secret");
 
@@ -108,7 +120,9 @@ export async function POST(request: Request) {
 
   const result = await ingestGHLOpportunityEvent(organizationId, body, check.authPath);
 
-  // Siempre 200 en un evento autorizado, incluso si no se supo interpretar: ya
-  // quedó guardado y reintentarlo no cambiaría el resultado.
-  return NextResponse.json({ ok: true, ...result });
+  // 200 aunque no se haya sabido interpretar (`unmapped`): quedó guardado y
+  // reintentarlo no cambiaría el resultado. 500 si falló de nuestro lado
+  // (`error`), para que GHL reintente y el reintento lo reprocese (SCRUM-6).
+  const status = statusHttpDeIngesta(result);
+  return NextResponse.json({ ok: status === 200, ...result }, { status });
 }

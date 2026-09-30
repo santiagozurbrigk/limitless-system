@@ -12,12 +12,26 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeWebhook, extractEventId, extractEventType } from "./normalize";
 import type { PaymentProvider } from "./types";
+import { reclamarEvento } from "@/lib/webhooks/reclamar";
 
 export type IngestResult = {
   stored: boolean;
   status: "processed" | "unmapped" | "duplicate" | "error";
   detail?: string;
 };
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+/**
+ * [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): un evento que terminó en `error` se
+ * responde con 500 para que el proveedor lo reintente. Si no se llegó a guardar,
+ * el reintento es la única copia; si se guardó pero falló después, el reintento
+ * lo reprocesa (ver `lib/webhooks/reclamar.ts`). `unmapped` no se reintenta:
+ * volvería a dar lo mismo, y queda guardado para el reproceso.
+ */
+export function statusHttpDeIngesta(result: { status: IngestResult["status"] }): 200 | 500 {
+  return result.status === "error" ? 500 : 200;
+}
 
 export async function ingestPaymentWebhook(
   provider: PaymentProvider,
@@ -43,17 +57,40 @@ export async function ingestPaymentWebhook(
     .maybeSingle();
 
   if (storeError) {
-    // 23505 = unique_violation: el evento ya se había recibido.
+    // 23505 = unique_violation: el evento ya se había recibido. Si aquella vez
+    // quedó en `error` o trabado en `pending`, este reintento es la oportunidad
+    // de procesarlo (SCRUM-6, ver `lib/webhooks/reclamar.ts`).
     if (storeError.code === "23505") {
-      return { stored: false, status: "duplicate" };
+      const previo = eventId
+        ? await reclamarEvento<{ id: string; payload: Record<string, unknown> }>(
+            admin,
+            "payment_webhook_events",
+            { provider, external_event_id: eventId, organization_id: organizationId },
+            "id, payload"
+          )
+        : null;
+      if (!previo) return { stored: false, status: "duplicate" };
+      return procesarEventoDePago(admin, previo.id, provider, organizationId, previo.payload);
     }
     console.error("[payments] no se pudo guardar el evento", storeError.message);
     return { stored: false, status: "error", detail: storeError.message };
   }
 
-  const eventRowId = stored?.id as string | undefined;
+  return procesarEventoDePago(admin, stored?.id as string | undefined, provider, organizationId, body);
+}
 
-  // 2) Recién ahora, interpretar.
+/**
+ * Interpreta un evento ya guardado y deja su estado final en
+ * `payment_webhook_events`. La usan el webhook y el reproceso
+ * (`scripts/reprocesar-webhooks.ts`).
+ */
+export async function procesarEventoDePago(
+  admin: AdminClient,
+  eventRowId: string | undefined,
+  provider: PaymentProvider,
+  organizationId: string,
+  body: Record<string, unknown>
+): Promise<IngestResult> {
   const normalized = normalizeWebhook(provider, body);
 
   const finish = async (status: string, errorMessage?: string) => {

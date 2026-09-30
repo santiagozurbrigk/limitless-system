@@ -34,6 +34,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-30 — Los webhooks de pagos y GHL no dan por recibido un evento que no se guardó (SCRUM-6)
+
+**Rama:** `fix/SCRUM-6-webhooks-sin-perdida`
+**Commit(s):** este
+**Módulo(s) afectado(s):** webhooks de Whop, Commas (`fanbasis`) y GoHighLevel (`app/api/webhooks/{whop,fanbasis,ghl}/route.ts`), `lib/payments/ingest.ts`, `lib/payments/integration.ts`, `lib/ghl/ingest-opportunity-event.ts`, `lib/ghl/integration.ts`, `lib/webhooks/`, `scripts/reprocesar-webhooks.ts`
+
+**Qué se hizo:**
+- Los tres webhooks responden **500** cuando el evento termina en `error`: no se pudo guardar el crudo, o se guardó y falló después. Whop y GHL reintentan ante no-2xx. `unmapped` sigue respondiendo 200, porque reintentar no cambiaría el resultado.
+- Un reintento de un evento que quedó en `error`, o trabado en `pending` más de 5 minutos (el proceso se cortó a mitad), se reprocesa en vez de volver `duplicate`. `lib/webhooks/reclamar.ts` lo toma con un UPDATE condicionado, así que dos reintentos simultáneos no lo procesan dos veces, y sólo si es de la misma organización. Un duplicado de un evento ya procesado se sigue descartando.
+- Commas no reintenta: si el evento no se llegó a guardar, queda un log `[ALERTA][fanbasis]` con el payload completo para cargarlo a mano.
+- Una falla al leer la integración o al descifrar el secreto del webhook ahora responde 500 (el proveedor reintenta) en vez de 404 "no tiene … conectado" (Whop, Commas) o 401 (GHL).
+- `scripts/reprocesar-webhooks.ts` reprocesa los eventos de `payment_webhook_events` y `ghl_webhook_events` en `unmapped`, `error` o trabados en `pending`, con las mismas funciones que el webhook. Sin `--aplicar` sólo cuenta; admite `--org` y `--limite`.
+- Tests en `lib/webhooks/__tests__/webhooks-sin-perdida.test.ts`, con una base en memoria.
+
+**Por qué / finalidad:** cierra `[EMBUDOS-WEBHOOK-PERDIDA]` (Crítica) y la parte de reintentos de `[AUD-CONF-5]` (SCRUM-97). Antes, si Supabase fallaba o estaba en sólo lectura, el webhook respondía 200, el proveedor no reintentaba y el cobro o el movimiento de oportunidad se perdía. Un evento en `error` quedaba así para siempre: el reintento chocaba con el índice único y volvía `duplicate`.
+
+**Decisiones de diseño relevantes:** el reproceso es un script y no una pantalla, para no sumar funcionalidad nueva en un sprint de estabilización. El evento se reclama con `processed_at` como marca, que `finish()` pisa al terminar, así que no hace falta un estado nuevo ni una migración.
+
+**Riesgos / deuda técnica pendiente:** de `[AUD-CONF-5]` sigue abierto sumar `organization_id` al índice único de `payment_webhook_events`; cambia la deduplicación y necesita migración. La alerta de Commas es un log: cuando exista el canal de alertas (`[OBS-SIN-ALERTAS]`, SCRUM-84), hay que conectarla ahí.
+
+---
+
 ### 2026-09-30 — El identificador de la cuenta externa de una integración sólo lo escribe el sistema (SCRUM-82)
 
 **Rama:** `fix/SCRUM-82-identificadores-externos`
