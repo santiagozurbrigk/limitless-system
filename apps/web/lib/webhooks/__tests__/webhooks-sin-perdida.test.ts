@@ -311,4 +311,28 @@ describe("GHL: reprocesar no rompe el historial (SCRUM-6, revisión)", () => {
     expect(eventos("ghl_stage_transitions")).toHaveLength(1);
     expect(oportunidad()!.stage_external_id).toBe("stage_1");
   });
+
+  it("⭐ dos eventos en error de la misma oportunidad, reprocesados juntos: queda la etapa del más nuevo", async () => {
+    base.actual!.fallas["ghl_opportunities:upsert"] = { code: "08006", message: "connection failure" };
+    await ingestGHLOpportunityEvent(ORG, conEtapa("wh_1", "stage_1"), "workflow_shared_secret", "2026-09-30T10:00:00.000Z");
+    await ingestGHLOpportunityEvent(ORG, conEtapa("wh_2", "stage_2"), "workflow_shared_secret", "2026-09-30T10:05:00.000Z");
+    delete base.actual!.fallas["ghl_opportunities:upsert"];
+
+    const [, ghl] = await reprocesarWebhooks(base.actual!.cliente as never, { aplicar: true, limite: 100 });
+    expect(ghl.procesados).toBe(2);
+    expect(oportunidad()!.stage_external_id).toBe("stage_2");
+    expect(eventos("ghl_webhook_events").every((f) => f.error_message === null)).toBe(true);
+  });
+
+  it("⭐ en el orden inverso (llega primero el reintento del más nuevo) también queda el más nuevo", async () => {
+    base.actual!.fallas["ghl_opportunities:upsert"] = { code: "08006", message: "connection failure" };
+    await ingestGHLOpportunityEvent(ORG, conEtapa("wh_1", "stage_1"), "workflow_shared_secret", "2026-09-30T10:00:00.000Z");
+    await ingestGHLOpportunityEvent(ORG, conEtapa("wh_2", "stage_2"), "workflow_shared_secret", "2026-09-30T10:05:00.000Z");
+    delete base.actual!.fallas["ghl_opportunities:upsert"];
+
+    await ingestGHLOpportunityEvent(ORG, conEtapa("wh_2", "stage_2"), "workflow_shared_secret");
+    const viejo = await ingestGHLOpportunityEvent(ORG, conEtapa("wh_1", "stage_1"), "workflow_shared_secret");
+    expect(viejo.detail).toMatch(/superseded/);
+    expect(oportunidad()!.stage_external_id).toBe("stage_2");
+  });
 });

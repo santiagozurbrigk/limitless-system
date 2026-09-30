@@ -121,9 +121,7 @@ async function reprocesarTabla(
     const resultado =
       tabla === "payment_webhook_events"
         ? await procesarEventoDePago(admin, fila.id, fila.provider!, fila.organization_id, fila.payload)
-        : await procesarEventoGHL(admin, fila.id, fila.organization_id, fila.payload, fila.received_at, {
-            esReproceso: true,
-          });
+        : await procesarEventoGHL(admin, fila.id, fila.organization_id, fila.payload, fila.received_at);
 
     if (resultado.status === "processed") resumen.procesados++;
     else if (resultado.status === "unmapped") resumen.siguenSinInterpretar++;

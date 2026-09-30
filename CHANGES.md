@@ -38,7 +38,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Rama:** `fix/SCRUM-6-webhooks-sin-perdida`
 **Commit(s):** este
-**Módulo(s) afectado(s):** webhooks de Whop, Commas (`fanbasis`) y GoHighLevel (`app/api/webhooks/{whop,fanbasis,ghl}/route.ts`), `lib/payments/ingest.ts`, `lib/payments/integration.ts`, `lib/ghl/ingest-opportunity-event.ts`, `lib/ghl/integration.ts`, `lib/webhooks/`, `scripts/reprocesar-webhooks.ts`
+**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20260930120000_ghl_ultimo_evento_recibido.sql`), webhooks de Whop, Commas (`fanbasis`) y GoHighLevel (`app/api/webhooks/{whop,fanbasis,ghl}/route.ts`), `lib/payments/ingest.ts`, `lib/payments/integration.ts`, `lib/ghl/ingest-opportunity-event.ts`, `lib/ghl/integration.ts`, `lib/webhooks/`, `scripts/reprocesar-webhooks.ts`
 
 **Qué se hizo:**
 - Los tres webhooks responden **500** cuando el evento termina en `error`: no se pudo guardar el crudo, o se guardó y falló después. Whop y GHL reintentan ante no-2xx. `unmapped` sigue respondiendo 200, porque reintentar no cambiaría el resultado.
@@ -48,13 +48,13 @@ al terminar cada bloque de trabajo, aunque sea chico.
 - `scripts/reprocesar-webhooks.ts` reprocesa los eventos de `payment_webhook_events` y `ghl_webhook_events` en `unmapped`, `error` o trabados en `pending`, con las mismas funciones que el webhook. Sin `--aplicar` sólo cuenta; admite `--org` y `--limite`.
 - Un reintento que llega mientras el original todavía se procesa responde 500 ("El evento se está procesando") en vez de `duplicate`, para que el proveedor vuelva a intentar.
 - Un error de datos (SQLSTATE clase 22 o 23) responde 200 con `reintentable: false`: reintentar no lo arreglaría. El evento queda en `error` para el reproceso.
-- GHL: al reprocesar, si ya se aplicó un evento más nuevo de la misma oportunidad, el viejo se marca `processed` ("superseded") sin tocar la oportunidad ni registrar una transición falsa. Una transición de un evento sin id de GHL se deduplica por la fila del evento crudo (`fila:<id>`), así que reprocesar no la suma dos veces. Un evento así que falla responde 200: un reintento de GHL no lo encontraría y lo duplicaría. `dateAdded` inválido pasa a `null` en vez de hacer fallar el evento.
+- GHL: migración `20260930120000_ghl_ultimo_evento_recibido` agrega `ghl_opportunities.last_event_received_at` (cuándo llegó el último evento aplicado; las filas existentes toman `updated_at`). Un evento que llegó antes que ése, por un reproceso o por una entrega fuera de orden, se marca `processed` ("superseded") sin tocar la oportunidad ni registrar una transición falsa. El evento crudo guarda como `received_at` la misma hora que usa el primer intento. Una transición de un evento sin id de GHL se deduplica por la fila del evento crudo (`fila:<id>`), así que reprocesar no la suma dos veces. Un evento así que falla responde 200: un reintento de GHL no lo encontraría y lo duplicaría. `dateAdded` inválido pasa a `null` en vez de hacer fallar el evento.
 - Commas: si falla la lectura del secreto, también queda el log `[ALERTA][fanbasis]` con el payload (marcado "firma sin verificar").
 - Tests en `lib/webhooks/__tests__/webhooks-sin-perdida.test.ts`, con una base en memoria que respeta `onConflict`, los índices únicos y el error de `maybeSingle` con varias filas.
 
 **Por qué / finalidad:** cierra `[EMBUDOS-WEBHOOK-PERDIDA]` (Crítica) y la parte de reintentos de `[AUD-CONF-5]` (SCRUM-97). Antes, si Supabase fallaba o estaba en sólo lectura, el webhook respondía 200, el proveedor no reintentaba y el cobro o el movimiento de oportunidad se perdía. Un evento en `error` quedaba así para siempre: el reintento chocaba con el índice único y volvía `duplicate`.
 
-**Decisiones de diseño relevantes:** el reproceso es un script y no una pantalla, para no sumar funcionalidad nueva en un sprint de estabilización. El evento se reclama con `processed_at` como marca, que `finish()` pisa al terminar, así que no hace falta un estado nuevo ni una migración.
+**Decisiones de diseño relevantes:** el reproceso es un script y no una pantalla, para no sumar funcionalidad nueva en un sprint de estabilización. El evento se reclama con `processed_at` como marca, que `finish()` pisa al terminar, así que no hace falta un estado nuevo. Para decidir si un evento de GHL es viejo se compara con la llegada del último evento aplicado y no con `updated_at`, que es la hora de proceso: con `updated_at`, al reprocesar un lote ganaba el primero procesado aunque fuera el más viejo.
 
 **Riesgos / deuda técnica pendiente:** de `[AUD-CONF-5]` sigue abierto sumar `organization_id` al índice único de `payment_webhook_events`; cambia la deduplicación y necesita migración. La alerta de Commas es un log: cuando exista el canal de alertas (`[OBS-SIN-ALERTAS]`, SCRUM-84), hay que conectarla ahí.
 

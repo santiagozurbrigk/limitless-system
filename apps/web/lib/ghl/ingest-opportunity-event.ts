@@ -54,6 +54,9 @@ export async function ingestGHLOpportunityEvent(
       external_event_id: eventId,
       auth_path: authPath,
       payload: body,
+      // La misma hora que usa este intento: un reproceso compara y fecha la
+      // transición con `received_at`, y tiene que dar lo mismo (SCRUM-6).
+      received_at: receivedAt,
     })
     .select("id")
     .maybeSingle();
@@ -79,9 +82,7 @@ export async function ingestGHLOpportunityEvent(
         return { stored: false, status: "error", detail: "El evento se está procesando" };
       }
       const { fila } = reclamo;
-      return procesarEventoGHL(admin, fila.id, organizationId, fila.payload, fila.received_at, {
-        esReproceso: true,
-      });
+      return procesarEventoGHL(admin, fila.id, organizationId, fila.payload, fila.received_at);
     }
     console.error("[ghl] no se pudo guardar el evento", storeError.message);
     return { stored: false, status: "error", detail: storeError.message };
@@ -96,18 +97,16 @@ export async function ingestGHLOpportunityEvent(
  * (`scripts/reprocesar-webhooks.ts`). `receivedAt` es cuándo llegó el evento
  * la primera vez: de ahí sale la fecha de la transición de etapa.
  *
- * `esReproceso`: el evento ya se había intentado antes (reintento o script).
- * Si mientras tanto se aplicó un evento más nuevo de la misma oportunidad, éste
- * no se aplica: volvería la oportunidad a una etapa vieja y registraría una
- * transición que no pasó.
+ * Si ya se aplicó un evento que llegó después que éste (pasa al reprocesar, o
+ * si GHL entrega fuera de orden), éste no se aplica: volvería la oportunidad a
+ * una etapa vieja y registraría una transición que no pasó.
  */
 export async function procesarEventoGHL(
   admin: AdminClient,
   eventRowId: string | undefined,
   organizationId: string,
   body: Record<string, unknown>,
-  receivedAt: string,
-  { esReproceso = false }: { esReproceso?: boolean } = {}
+  receivedAt: string
 ): Promise<GHLIngestResult> {
   const finish = async (status: string, errorMessage?: string) => {
     if (!eventRowId) return;
@@ -135,18 +134,16 @@ export async function procesarEventoGHL(
     //    porque el webhook no trae la etapa anterior.
     const { data: existing, error: existingError } = await admin
       .from("ghl_opportunities")
-      .select("stage_external_id, status, updated_at")
+      .select("stage_external_id, status, last_event_received_at")
       .eq("organization_id", organizationId)
       .eq("external_id", event.opportunityId)
       .maybeSingle();
     if (existingError) throw new ErrorDeBase(existingError.message, existingError.code);
 
-    // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): sólo el webhook escribe
-    // `ghl_opportunities`, así que `updated_at` es cuándo se aplicó el último
-    // evento. Si es posterior a la llegada de éste, éste es viejo.
-    const aplicadoDespues =
-      typeof existing?.updated_at === "string" && existing.updated_at > receivedAt;
-    if (esReproceso && aplicadoDespues) {
+    // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): se compara contra la llegada del
+    // último evento aplicado, no contra cuándo se procesó.
+    const ultimaLlegada = existing?.last_event_received_at as string | null | undefined;
+    if (ultimaLlegada && new Date(ultimaLlegada).getTime() > new Date(receivedAt).getTime()) {
       const detail = "superseded: ya se aplicó un evento más nuevo de esta oportunidad";
       await finish("processed", detail);
       return { stored: true, status: "processed", transitionRecorded: false, detail };
@@ -199,6 +196,7 @@ export async function procesarEventoGHL(
         monetary_value: event.monetaryValue,
         date_added: event.dateAdded,
         last_stage_change_at: transition ? transition.occurredAt : undefined,
+        last_event_received_at: receivedAt,
         raw: body,
         updated_at: new Date().toISOString(),
       },
