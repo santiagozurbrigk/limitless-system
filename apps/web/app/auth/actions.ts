@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { authRateLimit, rateLimitErrorMessage } from "@/lib/rate-limit";
+import { limiteDeLogin } from "@/lib/auth/limite-login";
 import {
   ACTIVE_ORG_COOKIE,
   LEGACY_ACTIVE_ORG_COOKIE,
@@ -120,7 +121,8 @@ export async function signInAction(
     return { error: "Completa email y contraseña." };
   }
 
-  const { allowed, resetAt } = await authRateLimit(`signin:${emailParsed.data}`);
+  // SCRUM-24: por IP + email y por IP; bloquear a alguien exige estar en su IP.
+  const { allowed, resetAt } = await limiteDeLogin("signin", emailParsed.data);
   if (!allowed) {
     return { error: rateLimitErrorMessage(resetAt) };
   }
@@ -176,9 +178,8 @@ export async function signInSuperAdminAction(
     return { error: "Completa email y contraseña." };
   }
 
-  const { allowed, resetAt } = await authRateLimit(
-    `signin-superadmin:${emailParsed.data}`
-  );
+  // SCRUM-24: por IP + email y por IP (compartido con el login normal).
+  const { allowed, resetAt } = await limiteDeLogin("signin-superadmin", emailParsed.data);
   if (!allowed) {
     return { error: rateLimitErrorMessage(resetAt) };
   }

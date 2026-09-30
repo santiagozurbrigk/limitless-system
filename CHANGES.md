@@ -46,6 +46,52 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Decisiones de diseño relevantes:** validación en la app, para dar un error claro antes de crear nada (por ejemplo, antes de crear el usuario en Auth al invitar), y un trigger en la base porque un founder, con su JWT, podía escribir `custom_role_id` por PostgREST sin pasar por las actions. Que el trigger ignore las filas cuyo rol no cambia evita que un dato viejo inconsistente bloquee otras ediciones. La función recibe el cliente para usarse con el de usuario o el de service role, y para testearse sin base. En las invitaciones se valida contra la org de la invitación, antes de crear nada.
 
+---
+
+### 2026-09-30 — El límite de login cuenta por IP + email y por IP (SCRUM-24)
+
+**Rama:** `fix/SCRUM-24-limite-login-por-ip`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma (`app/auth/actions.ts`, `lib/auth/limite-login.ts`)
+
+**Qué se hizo:** `limiteDeLogin(flujo, email)` consume dos contadores por intento y bloquea si se agota cualquiera: IP + email (`signin:<ip>:<email>` y `signin-superadmin:<ip>:<email>`, 5 cada 15 min) e IP sola (`login-ip:<ip>`, 30 cada 15 min, compartido entre los dos logins y todos los emails). Reemplaza al `authRateLimit` por email en `signInAction` y en el login del super admin. Las partes puras (IP desde los headers, claves, combinación) tienen tests en `lib/auth/__tests__/limite-login.test.ts`.
+
+**Por qué / finalidad:** parte de `[LOGIN-RATE-LIMIT]` (P1). Con el contador sólo por email, cualquiera que supiera un email bloqueaba a esa persona 15 minutos, repetible, y probar una contraseña común contra muchos emails no tenía límite propio de la app.
+
+**Decisiones de diseño relevantes:** incluir la IP en el contador por email hace que el dueño de la cuenta entre igual desde la suya. 30 por IP deja margen para una oficina que sale a internet con una sola IP. El captcha tras N fallos, que también pedía el ítem, agrega un proveedor externo y un paso nuevo en el login, así que quedó fuera de este cambio (el release no suma funcionalidades) y el ítem sigue abierto sólo por eso. El alta de cuenta (`signup:<email>`) no cambia.
+
+**Riesgos / deuda técnica pendiente:** un atacante que reparte los intentos entre muchas IPs sólo queda frenado por el límite propio de Supabase Auth, hasta que se agregue el captcha (`[LOGIN-RATE-LIMIT]`, pendiente de decisión del PO). Quien comparte IP con un atacante (una oficina con NAT, una universidad, una red móvil con CGNAT) puede quedar bloqueado 15 minutos junto con todos los de esa IP después de 30 intentos. Los dos contadores cuentan también los logins exitosos, igual que el contador anterior por email: alguien que entra y sale 6 veces en 15 minutos desde la misma IP queda bloqueado. Contar sólo los fallidos pide una función nueva en la base; para el uso real (sesiones de días, equipos chicos) no se justificó. En Vercel la IP no la puede falsificar el cliente: la plataforma reemplaza `x-forwarded-for` y `x-real-ip`.
+
+---
+
+### 2026-09-30 — Una llamada de Fathom sólo se asocia a un cliente de la propia organización (SCRUM-43)
+
+**Rama:** `fix/SCRUM-43-fathom-cliente-de-la-org`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Ventas / Fathom (`lib/fathom/process-call.ts`, `lib/fathom/deep-call-analysis.ts`, `lib/clients/client-tasks.ts`, `lib/fathom/cliente-de-la-org.ts`)
+
+**Qué se hizo:** `finalizeAssociatedCall`, a donde llegan asociar a mano, subir una 1-1 y el proceso automático, empieza con `assertClienteDeLaOrg`, que exige que el cliente sea de la organización antes de cualquier escritura; si no, lanza y no se asocia nada. Además, `syncClientLinkedCalls` y la lectura del cliente en `maybeExtractOneOnOneTasks` filtran por `organization_id`. Tests en `lib/fathom/__tests__/cliente-de-la-org.test.ts`.
+
+**Por qué / finalidad:** cierra `[FATHOM-CLIENTID-SIN-VALIDAR]`. `associateFathomCallAction` validaba la llamada pero pasaba el `clientId` recibido a `finalizeAssociatedCall`, que escribe con el service role: con el UUID de un cliente de otra org, su nombre terminaba en el análisis de la org atacante y la llamada (título, resumen y URL de Fathom) se sumaba a `linked_calls` del cliente ajeno, visible en su ficha.
+
+**Decisiones de diseño relevantes:** el chequeo va en `finalizeAssociatedCall` y no sólo en la action, para cubrir cualquier camino que llegue ahí. La subida manual (`manual-upload-actions.ts`) ya validaba el cliente con la sesión antes de escribir; no cambia. La extracción de tareas de la 1-1 no inserta nada si el cliente no es de la org.
+
+**Riesgos / deuda técnica pendiente:** el arreglo corta las escrituras nuevas; si antes alguien cruzó referencias entre orgs, quedarían en `fathom_calls`, `client_timeline_entries`, `client_problems`, `client_tasks` o `clients.linked_calls`. Se revisa con una consulta de detección en producción al aplicar (en el PR).
+
+---
+
+### 2026-09-30 — El login sólo redirige a paths internos (SCRUM-2)
+
+**Rama:** `fix/SCRUM-2-redirect-seguro`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma (`app/auth/callback/route.ts`, `lib/auth/redirect-seguro.ts`)
+
+**Qué se hizo:** `destinoSeguro(next, origin, porDefecto)` acepta sólo un path interno: empieza con una sola `/` y, resuelto contra el origen, sigue en el mismo origen. Cualquier otra cosa, incluidos `.evil.com`, `@evil.com`, `//evil.com`, `/\evil.com`, tabulaciones intercaladas y esquemas, cae en el dashboard. `/auth/callback` lo usa en lugar del `next` crudo. Además, si al resolver `..`, `.` o barras invertidas el path queda con `//` adelante (`/..//evil.com`), también cae en el dashboard: pegado al origen no salía del host, pero usado solo sería una URL relativa al protocolo. Tests en `lib/auth/__tests__/redirect-seguro.test.ts`; sin la validación fallan 2, y sin el chequeo de `//`, 1.
+
+**Por qué / finalidad:** cierra `[AUTH-CALLBACK-NEXT]`. El callback redirigía a `${origin}${next}`; con `next=.evil.com` o `next=@evil.com` el destino quedaba en otro host. Hoy es difícil de explotar (la redirección pasa sólo después de canjear un código válido, y el `next` de ese link lo arma la app), pero se cierra antes de que "Olvidé mi contraseña" u otro flujo con `next` lo exponga.
+
+**Decisiones de diseño relevantes:** se valida resolviendo con `new URL(next, origin)` y comparando el origen, en lugar de una lista de caracteres prohibidos: cubre también lo que el parser de URL normaliza, como las tabulaciones. El helper queda para reusar en el login cuando honre `next` (`[LOGIN-IGNORA-NEXT]`).
+
 **Riesgos / deuda técnica pendiente:** ninguno.
 
 ---
