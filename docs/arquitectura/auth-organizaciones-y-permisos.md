@@ -205,8 +205,7 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
   `add-ons.ts` lee la org **efectiva**. En un holding mirando un negocio, la UI muestra los add-ons del
   holding y el servidor aplica los del negocio.
 - `[LOGIN-RATE-LIMIT]` Rate limit por email: cualquiera bloquea a otro; sin límite por IP ni captcha.
-- `[AUTH-CALLBACK-NEXT]` (nuevo) `auth/callback` redirige a `` `${origin}${next}` `` sin validar `next`.
-  Un `next` que empiece con `@` o `.` produce una URL a otro host. Verificar y restringir a paths internos.
+- `[AUTH-CALLBACK-NEXT]` resuelto el 2026-09-30 (SCRUM-2): `auth/callback` sólo redirige a un path interno (`lib/auth/redirect-seguro.ts`, `destinoSeguro`).
 - `[SIGNUP-PUBLICO]` (nuevo, decisión) Cualquiera puede crearse una cuenta founder desde `/login` y usar la
   clave global de Anthropic. Confirmar si es buscado o si hay que apagarlo (código o Supabase Auth).
 - `[PERMISOS-LOG]` (nuevo) `getCurrentUserPermissions` hace `console.log` del mapa de permisos en cada
