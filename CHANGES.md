@@ -34,6 +34,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-09-30 — Un rol custom sólo se asigna dentro de su organización (SCRUM-75)
+
+**Rama:** `fix/SCRUM-75-rol-de-la-org`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Equipo (`app/team/actions.ts`, `lib/team/rol-de-la-org.ts`)
+
+**Qué se hizo:** `assertRolDeLaOrg(client, roleId, organizationId)` comprueba que el rol exista en `team_roles` con esa `organization_id` y lanza "El rol elegido no es de esta organización" si no. Se aplica antes de escribir en los cuatro lugares que asignan `custom_role_id`: `inviteTeamMemberAction` (antes de crear el usuario en Auth), `updateMemberRoleAction`, `acceptInvitationAction` (antes de crear la cuenta) y `completeInvitationForCurrentUserAction`. Tests en `lib/team/__tests__/rol-de-la-org.test.ts`.
+
+**Por qué / finalidad:** cierra `[EQUIPO-CUSTOM-ROLE-ORG]`. `profiles.custom_role_id` referencia `team_roles(id)` sin mirar la org, y la app escribía el id tal cual llegaba: con el id de un rol de otra org, el miembro quedaba con un rol que no puede leer por RLS, `hasRoleConfigured` en false y sin bloqueo por módulo.
+
+**Decisiones de diseño relevantes:** validación en la app, como pedía el ítem, y no con un trigger en la base: las cuatro escrituras pasan por estas actions. La función recibe el cliente para usarse con el de usuario o el de service role, y para testearse sin base. En las invitaciones se valida contra la org de la invitación, antes de crear nada.
+
+**Riesgos / deuda técnica pendiente:** ninguno.
+
+---
+
 ### 2026-09-30 — Los callbacks OAuth escriben en la organización de la sesión (SCRUM-10)
 
 **Rama:** `fix/SCRUM-10-oauth-org-de-la-sesion`

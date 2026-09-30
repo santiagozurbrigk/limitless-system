@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
-| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
+| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 25 | 42 | 13 |
 
 ---
@@ -1894,18 +1894,6 @@ Doc del área: [`docs/areas/operaciones.md`](./docs/areas/operaciones.md)
   aplicarlo primero a Finanzas y Equipo; decidir si `view` significa "no puede editar" y ocultar controles.
 - **Criterio de aceptación:** Con un rol que tiene Finanzas o Equipo en "Sin acceso", invocar una Server Action de gastos, compensación, liquidación o equipo desde la consola devuelve error y no escribe nada; con Finanzas en "Ver", intentar editar un gasto falla y los controles de edición no se muestran; hay un test del helper de acceso por módulo con los niveles none, view y full
 - **Dónde:** `apps/web/lib/auth/get-current-permissions.ts`, las actions citadas.
-
-#### [EQUIPO-CUSTOM-ROLE-ORG] `customRoleId` no se valida contra la organización [Operaciones y equipo]
-- **Tipo:** seguridad
-- **Severidad:** Baja
-- **Estado verificado:** `inviteTeamMemberAction` inserta `custom_role_id: customRoleId` con admin client sin
-  comprobar que el rol sea de la org; `updateMemberRoleAction` tampoco (ahí la RLS de `profiles` no mira el FK).
-  Mencionado en `docs/historial/AUDITORIA_BACKEND_2026-09-22.md` §3.5.
-- **Riesgo:** Si el founder (único que puede invitar o cambiar roles, canManageTeam) manda un customRoleId de otra org, entonces el rol no se puede leer por RLS, hasRoleConfigured queda en false y el miembro queda sin bloqueo por módulo. Requiere adivinar o conocer un UUID ajeno y ser founder.
-- **Impacto:** Sólo la propia org: el founder termina dando acceso amplio, lo mismo que ya podía hacer asignando un rol propio. No lee ni cambia nada de la otra org.
-- **Qué hay que hacer:** antes de escribir, `select id from team_roles where id = $1 and organization_id = $org`.
-- **Criterio de aceptación:** Invitar un miembro o cambiarle el rol con un customRoleId de otra organización devuelve error y no crea ni modifica el perfil; con un rol de la propia organización sigue funcionando; hay un test que cubre ambos casos
-- **Dónde:** `apps/web/app/team/actions.ts`.
 
 #### [WORKBOARD-ASIGNACION-AGENTE] El agente, Fathom y "mandar al tablero" no mantienen `assignee_ids` [Operaciones y equipo]
 - **Tipo:** bug
