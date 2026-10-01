@@ -18,6 +18,7 @@ import { createClient } from "@supabase/supabase-js";
 import { VARIANT_SPECS, runFfmpeg } from "./ffmpeg-variants";
 import { generateVariantCaptions } from "./captions";
 import type { ReelVariationJobPayload, ReelVariation } from "./types";
+import { isOrgStoragePath } from "./org-path";
 
 // ─── Supabase admin client ────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ const SIGNED_URL_TTL = 7 * 24 * 3600; // 7 días — suficiente para que el usua
 const LUTS_DIR = path.join(process.cwd(), "luts");
 
 // ─── Helpers de Storage ───────────────────────────────────────────────────────
+
 
 async function downloadFromStorage(
   storagePath: string,
@@ -169,11 +171,22 @@ export async function processReelVariationJob(
   const admin = getSupabaseAdmin();
   const { data: existingJob } = await admin
     .from("reel_variation_jobs")
-    .select("status")
+    .select("status, organization_id")
     .eq("id", jobId)
     .single();
 
-  if (existingJob && existingJob.status !== "pending") {
+  // [STORAGE-RUTA-DESDE-FILA] (SCRUM-81): las rutas se validan contra el
+  // `organizationId` del payload, así que el job tiene que ser de esa org. Si
+  // no, un payload armado a mano leería o escribiría archivos de otra org.
+  if (!existingJob || existingJob.organization_id !== organizationId) {
+    console.error("[Processor] el job no existe o no es de la organización del payload: se descarta", {
+      jobId,
+      organizationId,
+    });
+    return;
+  }
+
+  if (existingJob.status !== "pending") {
     console.log("[Processor] job already in status", existingJob.status, "— skipping", { jobId });
     return;
   }
@@ -215,6 +228,9 @@ export async function processReelVariationJob(
       const bytes = await downloadFromDrive(payload.driveFileId, payload.driveAccessToken, sourcePath);
       console.log("[Processor] Drive download OK", { bytes });
     } else if (payload.sourceStoragePath) {
+      if (!isOrgStoragePath(payload.sourceStoragePath, organizationId)) {
+        throw new Error("Ruta del video fuente fuera de la organización");
+      }
       console.log("[Processor] downloading source video from Storage...");
       await downloadFromStorage(payload.sourceStoragePath, sourcePath);
       console.log("[Processor] Storage download OK", { bytes: fs.statSync(sourcePath).size });
@@ -224,7 +240,12 @@ export async function processReelVariationJob(
 
     // 2. Descargar track de música personalizado de la org (si existe)
     let customMusicPath: string | null = null;
-    if (payload.reelMusicPath) {
+    if (payload.reelMusicPath && !isOrgStoragePath(payload.reelMusicPath, organizationId)) {
+      console.warn("[Processor] música fuera de la organización: se usa la de por defecto", {
+        jobId,
+        reelMusicPath: payload.reelMusicPath,
+      });
+    } else if (payload.reelMusicPath) {
       const musicDest = path.join(workDir, "org-background-music.mp3");
       try {
         await downloadFromStorage(payload.reelMusicPath, musicDest);

@@ -202,7 +202,10 @@ export async function getGHLWebhookSecret(
     .eq("organization_id", organizationId)
     .maybeSingle();
 
-  if (error || !data?.webhook_secret_encrypted) return null;
+  // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): una falla al leer se lanza (el webhook
+  // responde 500 y GHL reintenta) en vez de parecer "sin secreto" y dar 401.
+  if (error) throw new Error(`No se pudo leer la integración de GHL: ${error.message}`);
+  if (!data?.webhook_secret_encrypted) return null;
   return readStoredSecret(data.webhook_secret_encrypted as string, {
     field: WEBHOOK_SECRET_FIELD,
     organizationId,

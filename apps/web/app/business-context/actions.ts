@@ -39,7 +39,7 @@ import {
 } from "@/lib/business-context/types";
 import type { ContextDocument, FathomKnowledgeCall } from "@/types/business-context";
 import { paths } from "@/routes";
-import { assertOrgStoragePath } from "@/lib/storage/org-path";
+import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
 
 const ROW_COLUMNS =
   "id, organization_id, title, category, source, content_text, content_markdown, storage_path, mime_type, status, index_error, external_source_id, uploaded_by, created_at, updated_at";
@@ -605,7 +605,7 @@ export async function getDocumentOriginalFileUrlAction(
 
     const { data, error: signedUrlError } = await admin.storage
       .from(BUSINESS_CONTEXT_BUCKET)
-      .createSignedUrl(row.storage_path as string, 3600);
+      .createSignedUrl(assertOrgStoragePath(row.storage_path, organizationId), 3600);
 
     if (signedUrlError || !data?.signedUrl) {
       throw new Error(
@@ -642,10 +642,9 @@ export async function deleteDocumentAction(
 
     if (!row) throw new Error("Documento no encontrado");
 
-    if (row.storage_path) {
-      await admin.storage
-        .from(BUSINESS_CONTEXT_BUCKET)
-        .remove([row.storage_path as string]);
+    const rutas = soloRutasDeLaOrg([row.storage_path as string | null], organizationId, "business-context");
+    if (rutas.length > 0) {
+      await admin.storage.from(BUSINESS_CONTEXT_BUCKET).remove(rutas);
     }
 
     await removeFromRag(organizationId, id);

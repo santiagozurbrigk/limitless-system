@@ -34,7 +34,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
-### 2026-09-30 — La clave maestra de cifrado se puede rotar sin cortar las integraciones (SCRUM-86)
+### 2026-10-01 — La clave maestra de cifrado se puede rotar sin cortar las integraciones (SCRUM-86)
 
 **Rama:** `claude/great-thompson-n7ts63`
 **Commit(s):** este
@@ -43,12 +43,12 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Qué se hizo:**
 - Formato nuevo `v2.<iv>.<tag>.<ct>` con AAD = `columna | organización | usuario` (usuario sólo en `team_member_integrations`). `encrypt`, `decrypt` y `readStoredSecret` exigen el contexto (`SecretContext`); se actualizaron todos los usos (~30). El formato v1 se sigue leyendo (sin AAD).
 - Lectura con `ENCRYPTION_MASTER_KEY` y, si está, `ENCRYPTION_MASTER_KEY_PREVIOUS`. Las dos se validan: base64 (o base64url, que Node siempre aceptó) de exactamente 32 bytes. Antes una clave corta tiraba un error críptico de Node y una con caracteres inválidos podía pasar porque Node los ignora.
-- `getWebhookSecret` devuelve `ok | not_connected | unavailable`. Whop y Commas responden 404 sólo si no hay integración activa y **500** si el secreto no descifra o la consulta falla (antes las dos cosas daban 404 "no conectado").
+- `getWebhookSecret` devuelve `ok | not_connected | unavailable` (con motivo `decrypt_failed`/`db_error`) en vez de lanzar. Whop y Commas responden 404 sólo si no hay integración activa y **500** si el secreto no descifra o la consulta falla. SCRUM-6 (entrada de abajo) ya había llevado esto a 500 lanzando; al integrar main se unificó con este tipo y se mantuvo su log `[ALERTA][fanbasis]` con el payload.
 - Script `apps/web/scripts/reencrypt-secrets.ts` (simulación por defecto, `--apply` para escribir, UPDATE condicionado al valor leído, sin imprimir secretos, sale con 1 si algo falla). La lista de columnas vive en `SECRET_FIELDS`/`SECRET_COLUMNS` y un test exige que coincidan.
 - 🔴 `connectFathomAction` guardaba la API key del miembro que conecta **en texto plano** en `team_member_integrations.encrypted_api_key`. Las 8 filas de producción estaban así (la doc decía "cifrado"). Ahora se cifra con `lib/fathom/member-key.ts`, igual que en `member-actions.ts`, y antes de conectar.
 - `credential-resolver`: si la clave de Claude de la org no descifra, `console.error` con la org (antes `warn` sin org).
 - Procedimiento nuevo `docs/operacion/rotacion-master-key.md`; actualizados `seguridad.md`, `incidentes.md` (§B y §F), `entorno-y-deploy.md`, `areas/ventas.md`, `areas/embudos.md`, `FUNCIONAL.md` (F-PLA-20) y verificación manual (V-INFRA-11 anotado, V-INFRA-12 nuevo).
-- Tests: `encryption.test.ts` (16: v2, clave anterior, v1, AAD por org/columna/miembro, alteración, validación de clave, base64url), `reencrypt.test.ts` (9: cobertura de columnas, rotación A → B+A → B, texto plano, fallas) y `payments/__tests__/webhook-secret.test.ts` (9: 500 vs 404 en Whop y Commas). Suite completa: 105 archivos, 1321 tests.
+- Tests: `encryption.test.ts` (16: v2, clave anterior, v1, AAD por org/columna/miembro, alteración, validación de clave, base64url), `reencrypt.test.ts` (9: cobertura de columnas, rotación A → B+A → B, texto plano, fallas) y `payments/__tests__/webhook-secret.test.ts` (9: 500 vs 404 en Whop y Commas). Suite completa después de integrar main (SCRUM-6, SCRUM-81): 106 archivos, 1348 tests. Se adaptaron los 3 tests de `getWebhookSecret` de SCRUM-6 al tipo nuevo.
 
 **Por qué / finalidad:** `[SEC-MASTER-KEY-ROTACION]`. Con una sola clave y sin versión, cambiarla (por ejemplo, tras una filtración) tiraba todas las integraciones cifradas de todas las orgs y los cobros de Commas del período.
 
@@ -63,6 +63,50 @@ al terminar cada bloque de trabajo, aunque sea chico.
 - Un rollback a una versión anterior no lee v2: los secretos guardados después del deploy dejarían de andar.
 - `[SEC-MASTER-KEY-ROTACION]` sigue abierto, reducido a: gestor y segunda persona (V-INFRA-11), migración inicial y ensayo (V-INFRA-12), clave propia para Preview (`[ENTORNO-STAGING]`) y dejar de aceptar v1.
 - Nuevo `[BYOK-DESCIFRADO-SILENCIOSO]`: la org sigue pasando a la clave global sin aviso en pantalla.
+### 2026-10-01 — Una ruta de Storage guardada en una fila sólo puede ser de la organización dueña (SCRUM-81)
+
+**Rama:** `fix/SCRUM-81-rutas-storage`
+**Commit(s):** este
+**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20261001100000_rutas_storage_de_la_org.sql`), `lib/storage/org-path.ts`, adjuntos de tareas, comprobantes de pago, contexto del negocio, SOPs, wins, Trial Reels (acciones, colas, cron de limpieza) y `apps/reel-worker`
+
+**Qué se hizo:**
+- **Base:** `es_ruta_de_la_org(ruta, org)` (misma regla que `isOrgStoragePath`: empieza con `<org>/`, cada segmento usa sólo `[A-Za-z0-9._-]` y ninguno es `.` ni `..`) y restricciones CHECK en `workboard_task_attachments`, `client_payments`, `business_context_documents`, `sop_attachments`, `win_attachments` (`storage_path`), `sop_generation_jobs` (`video_path`), `reel_variation_jobs` (cada `storage_path` de `variations`, vía `variaciones_de_la_org`) y `organizations.reel_music_path`. Valen para cualquiera que escriba, usuario o service role.
+- **App:** toda ruta leída de una fila se valida contra la org antes de firmar, descargar o borrar con service role. Donde es un solo archivo que se abre (firmar un comprobante, un adjunto, un documento; transcribir un video de SOP; publicar una variante) la acción falla. Donde son varios o es un borrado (borrar adjuntos, firmar la lista de capturas, el cron de limpieza de reels) la ruta ajena se descarta con un aviso en el log (`soloRutasDeLaOrg`) y el resto sigue.
+- **Worker de reels:** valida `sourceStoragePath` y `reelMusicPath` con el prefijo de la org (una música ajena se ignora y usa la de por defecto) y descarta el job si no es de la `organizationId` del payload.
+- Se sumó `organizations.reel_music_path`, que no estaba en el ticket: el founder la puede escribir y el worker y el borrado de música la usan con service role.
+- **Tests:** `supabase/ci/tests/60_rutas_storage.sql`, que falla sin la migración y exige que el rechazo sea por la restricción de la ruta y no por otra. En `lib/storage/__tests__/org-path.test.ts`, tests de `soloRutasDeLaOrg` y de que el worker aplica la misma regla que la web.
+
+**Por qué / finalidad:** cierra `[STORAGE-RUTA-DESDE-FILA]` (Crítica) y la parte de rutas y org del job de `[SEG-REEL-WORKER-AUTH]`. Antes, un miembro podía escribir por PostgREST en una fila de su org la ruta de un archivo de otra org, y la app la firmaba, transcribía, publicaba o borraba con service role.
+
+**Decisiones de diseño relevantes:** la regla es una lista blanca de caracteres y no sólo rechazar `.`/`..`: una ruta con `%2e%2e` o `\` pasaba como texto, pero al pedir la URL `fetch` la convertía en `..` y `/` y llegaba al archivo de otra org (lo encontró la revisión adversarial). Todas las rutas legítimas usan uuids y `sanitizeFilename`, así que no cambia ninguna. CHECK en vez de sacar permisos de columna, porque casi todas esas tablas se escriben con el cliente del usuario y sacar el permiso rompería las pantallas.
+
+**Riesgos / deuda técnica pendiente:** la migración falla si producción ya tiene alguna ruta fuera de su org; se revisa antes de aplicar. El cambio del worker de reels se despliega aparte, en Fly.
+
+---
+
+### 2026-09-30 — Los webhooks de pagos y GHL no dan por recibido un evento que no se guardó (SCRUM-6)
+
+**Rama:** `fix/SCRUM-6-webhooks-sin-perdida`
+**Commit(s):** este
+**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20260930120000_ghl_ultimo_evento_recibido.sql`), webhooks de Whop, Commas (`fanbasis`) y GoHighLevel (`app/api/webhooks/{whop,fanbasis,ghl}/route.ts`), `lib/payments/ingest.ts`, `lib/payments/integration.ts`, `lib/ghl/ingest-opportunity-event.ts`, `lib/ghl/integration.ts`, `lib/webhooks/`, `scripts/reprocesar-webhooks.ts`
+
+**Qué se hizo:**
+- Los tres webhooks responden **500** cuando el evento termina en `error`: no se pudo guardar el crudo, o se guardó y falló después. Whop y GHL reintentan ante no-2xx. `unmapped` sigue respondiendo 200, porque reintentar no cambiaría el resultado.
+- Un reintento de un evento que quedó en `error`, o trabado en `pending` más de 5 minutos (el proceso se cortó a mitad), se reprocesa en vez de volver `duplicate`. `lib/webhooks/reclamar.ts` lo toma con un UPDATE condicionado, así que dos reintentos simultáneos no lo procesan dos veces, y sólo si es de la misma organización. Un duplicado de un evento ya procesado se sigue descartando.
+- Commas no reintenta: si el evento no se llegó a guardar, queda un log `[ALERTA][fanbasis]` con el payload completo para cargarlo a mano.
+- Una falla al leer la integración o al descifrar el secreto del webhook ahora responde 500 (el proveedor reintenta) en vez de 404 "no tiene … conectado" (Whop, Commas) o 401 (GHL).
+- `scripts/reprocesar-webhooks.ts` reprocesa los eventos de `payment_webhook_events` y `ghl_webhook_events` en `unmapped`, `error` o trabados en `pending`, con las mismas funciones que el webhook. Sin `--aplicar` sólo cuenta; admite `--org` y `--limite`.
+- Un reintento que llega mientras el original todavía se procesa responde 500 ("El evento se está procesando") en vez de `duplicate`, para que el proveedor vuelva a intentar.
+- Un error de datos (SQLSTATE clase 22 o 23) responde 200 con `reintentable: false`: reintentar no lo arreglaría. El evento queda en `error` para el reproceso.
+- GHL: migración `20260930120000_ghl_ultimo_evento_recibido` agrega `ghl_opportunities.last_event_received_at` (cuándo llegó el último evento aplicado; las filas existentes toman `updated_at`). Un evento que llegó antes que ése, por un reproceso o por una entrega fuera de orden, se marca `processed` ("superseded") sin tocar la oportunidad ni registrar una transición falsa. El evento crudo guarda como `received_at` la misma hora que usa el primer intento. Una transición de un evento sin id de GHL se deduplica por la fila del evento crudo (`fila:<id>`), así que reprocesar no la suma dos veces. Un evento así que falla responde 200: un reintento de GHL no lo encontraría y lo duplicaría. `dateAdded` inválido pasa a `null` en vez de hacer fallar el evento.
+- Commas: si falla la lectura del secreto, también queda el log `[ALERTA][fanbasis]` con el payload (marcado "firma sin verificar").
+- Tests en `lib/webhooks/__tests__/webhooks-sin-perdida.test.ts`, con una base en memoria que respeta `onConflict`, los índices únicos y el error de `maybeSingle` con varias filas.
+
+**Por qué / finalidad:** cierra `[EMBUDOS-WEBHOOK-PERDIDA]` (Crítica) y la parte de reintentos de `[AUD-CONF-5]` (SCRUM-97). Antes, si Supabase fallaba o estaba en sólo lectura, el webhook respondía 200, el proveedor no reintentaba y el cobro o el movimiento de oportunidad se perdía. Un evento en `error` quedaba así para siempre: el reintento chocaba con el índice único y volvía `duplicate`.
+
+**Decisiones de diseño relevantes:** el reproceso es un script y no una pantalla, para no sumar funcionalidad nueva en un sprint de estabilización. El evento se reclama con `processed_at` como marca, que `finish()` pisa al terminar, así que no hace falta un estado nuevo. Para decidir si un evento de GHL es viejo se compara con la llegada del último evento aplicado y no con `updated_at`, que es la hora de proceso: con `updated_at`, al reprocesar un lote ganaba el primero procesado aunque fuera el más viejo.
+
+**Riesgos / deuda técnica pendiente:** de `[AUD-CONF-5]` sigue abierto sumar `organization_id` al índice único de `payment_webhook_events`; cambia la deduplicación y necesita migración. La alerta de Commas es un log: cuando exista el canal de alertas (`[OBS-SIN-ALERTAS]`, SCRUM-84), hay que conectarla ahí.
 
 ---
 

@@ -239,9 +239,11 @@ Mapa general de integraciones: `docs/integraciones/README.md` y `lib/integration
   `otcStatus` es `equivalent`, así que Whop/Commas no aparece en la lista de pendientes. El de
   Meta Ads ("live fetch, no persiste") quedó viejo desde `ad_metrics_daily` (tampoco se
   muestra, es `available`) `[EMBUDOS-INSTRUMENTATION-DESACTUALIZADA]`.
-- Webhooks de pagos y GHL responden 200 aunque no se haya podido guardar el evento, y un
-  evento en `error` no se reprocesa (el reintento choca con el dedupe). No existe
-  herramienta de reproceso de `unmapped` `[EMBUDOS-WEBHOOK-PERDIDA]`.
+- (Resuelto el 2026-09-30, SCRUM-6) Los webhooks de Whop, Commas y GHL responden 500 si el
+  evento no quedó guardado y procesado, para que el proveedor reintente; un reintento de un
+  evento en `error` o trabado en `pending` se reprocesa (`lib/webhooks/reclamar.ts`). Commas no
+  reintenta: si no se llegó a guardar, queda un log `[ALERTA][fanbasis]` con el payload. Los
+  eventos en `unmapped`/`error` se reprocesan con `scripts/reprocesar-webhooks.ts`.
 - Sin cron para registrantes de WebinarJam ni catálogos: los números envejecen hasta que
   alguien aprieta "sincronizar" `[EMBUDOS-SYNC-PROGRAMADO]`.
 - Salud (bandas) sin UI `[EMBUDOS-SALUD]`; snapshots sin construir `[EMBUDOS-SNAPSHOTS]`

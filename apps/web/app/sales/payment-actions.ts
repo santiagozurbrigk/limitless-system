@@ -27,6 +27,7 @@ import { moneySchema, uuidSchema } from "@/lib/validations";
 import { paths } from "@/routes";
 import type { Client, ClientInstallment } from "@/types/clients";
 import type { ClientPayment } from "@/types/clients";
+import { assertOrgStoragePath } from "@/lib/storage/org-path";
 
 const prepareReceiptUploadSchema = z.object({
   clientId: uuidSchema.optional(),
@@ -204,9 +205,7 @@ export async function recordClientPaymentAction(
 
     // La guarda sigue valiendo, pero sólo cuando hay archivo: sin comprobante
     // no hay ruta que validar.
-    if (storagePath && !storagePath.startsWith(`${organizationId}/`)) {
-      throw new Error("Ruta de almacenamiento inválida");
-    }
+    if (storagePath) assertOrgStoragePath(storagePath, organizationId);
 
     const { data: clientRow, error: clientError } = await supabase
       .from("clients")
@@ -347,7 +346,7 @@ export async function getClientPaymentReceiptUrlAction(
 
     const { data, error: signedUrlError } = await admin.storage
       .from(CLIENT_PAYMENT_RECEIPTS_BUCKET)
-      .createSignedUrl(row.storage_path as string, 3600);
+      .createSignedUrl(assertOrgStoragePath(row.storage_path, organizationId), 3600);
 
     if (signedUrlError || !data?.signedUrl) {
       throw new Error(

@@ -27,6 +27,7 @@ import { getPublicAppUrl } from "@/lib/queue/qstash-client";
 import type { ReelVariation } from "@/types/reel-variations";
 import type { ZernioClient, ZernioMediaPresignResponse } from "@/lib/zernio/client";
 import { brand } from "@/lib/brand";
+import { assertOrgStoragePath } from "@/lib/storage/org-path";
 
 export const runtime = "nodejs";
 // 60s: descarga de Supabase + upload a Zernio + createPost puede tardar 30-50s
@@ -236,7 +237,8 @@ export async function POST(request: Request) {
     // 6. Crear URL firmada de Supabase Storage (TTL 2h — suficiente para el upload a Zernio)
     const { data: signedData } = await admin.storage
       .from("trial-reels")
-      .createSignedUrl(variation.storage_path, 7200);
+      // SCRUM-81: la ruta sale de la fila; tiene que ser de la org del job.
+      .createSignedUrl(assertOrgStoragePath(variation.storage_path, organizationId), 7200);
 
     if (!signedData?.signedUrl) {
       throw new Error("No se pudo generar URL firmada para el video en Storage");

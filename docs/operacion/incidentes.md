@@ -59,14 +59,16 @@ supabase db dump --db-url "$DB_URL" -f data.sql --use-copy --data-only
 ### B · Un webhook de pagos falla (Whop, Commas, Mercado Pago, GHL)
 1. Vercel → Logs, filtro `/api/webhooks/<proveedor>`. Mirar el código de respuesta:
    - **401 "Firma inválida"**: el secreto de la org en Limitless no coincide con el del proveedor (alguien lo regeneró). La org tiene que reconectar el proveedor con el secreto nuevo.
-   - **404 "no tiene … conectado"** (Whop/Commas): la org no tiene la integración activa.
-   - **500 "No se pudo verificar el webhook"** (Whop/Commas): está conectada pero el secreto no se pudo leer. Si el log dice `[payments] no se pudo descifrar el secreto`, ¿alguien cambió `ENCRYPTION_MASTER_KEY` sin cargar la anterior? (ver §F y `docs/operacion/rotacion-master-key.md`). Si dice `no se pudo leer la integración`, es la base.
-   - **200 con `status: "error"` o `stored: false`**: el evento **no se guardó** y el proveedor no va a reintentar (`[EMBUDOS-WEBHOOK-PERDIDA]`). Anotá el `webhook-id` y el payload del log.
+   - **404 "no tiene … conectado"**: la integración no existe o está inactiva para esa org.
+   - **500 "No se pudo verificar el webhook"** (Whop/Commas) o **500 "No se pudo leer la integración"** (GHL): falló la base al leer la integración, **o el secreto no se pudo descifrar**. Si el log dice `[payments] no se pudo descifrar el secreto`, ¿alguien cambió `ENCRYPTION_MASTER_KEY` sin cargar la anterior? (ver §F y [`rotacion-master-key.md`](./rotacion-master-key.md)). Si dice `no se pudo leer la integración`, es la base. Whop y GHL reintentan solos; Commas no (ver `[ALERTA][fanbasis]` abajo).
+   - **500 con `status: "error"`**: el evento no quedó guardado (`stored: false`) o falló después de guardarlo. Whop y GHL reintentan, y el reintento lo reprocesa. **Commas no reintenta**: si no se guardó, busca en los logs `[ALERTA][fanbasis]`, que trae el payload completo. Ese payload tiene datos personales del comprador (nombre, email): los logs de Vercel se retienen según el plan del equipo y sólo los ve quien tiene acceso al proyecto `otc-plaform`. No los copies a canales abiertos; después de cargar el cobro, alcanza con anotar el id del evento.
+   - **200 con `status: "error"` y `reintentable: false`**: se guardó pero falló por un dato que no se puede grabar (fecha o número inválido). Reintentar no cambiaría nada, así que el proveedor no reintenta; queda en `error` para el reproceso una vez corregida la causa. En GHL también pasa con un evento sin id de GHL (payload de Workflow): el reintento no lo encontraría y lo duplicaría.
+   - **500 "El evento se está procesando"**: llegó un reintento mientras el original seguía en curso. Es normal; el proveedor vuelve a intentar y termina en `duplicate`.
 2. Revisar `payment_webhook_events` de esa org: eventos en `unmapped` o `error` (leer `error_message`).
 3. Recuperar:
    - Whop reintenta ~3 días ante un no-2xx: si se arregla la causa dentro de ese plazo, llegan solos.
    - **Commas no reintenta.** Hay que pedirle al cliente la lista de cobros del período y cargarlos a mano (no existe backfill por API: `[EMBUDOS-PAGOS-BACKFILL]`).
-   - Eventos en `error`: hoy no hay herramienta de reproceso; un reintento del proveedor choca con el dedupe y vuelve `duplicate`.
+   - Eventos guardados en `unmapped`, `error` o trabados en `pending`: `scripts/reprocesar-webhooks.ts` (desde `apps/web`, con `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` de producción). Primero sin `--aplicar` para ver cuántos hay; después con `--aplicar` (opcional `--org <uuid>`).
 4. **Nunca cargues un cobro con monto cero o inventado** porque no se pudo leer el payload: queda sin mapear y se anota.
 
 ### C · Un cron no corre o falla

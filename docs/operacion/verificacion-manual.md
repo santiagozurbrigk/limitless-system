@@ -709,7 +709,7 @@ con una sesión real.
 6. Reembolso → `kind='refund'`, monto positivo; cash collected del embudo = pagos − reembolsos.
 7. 🔒 Sin firma / firma inventada → 401; sin `organizationId` → 400.
 8. ⭐ Commas: evento válido que no se sabe interpretar → 200 (no reintenta nunca).
-9. ⚠️ Simular falla de base (p. ej. secreto correcto con la tabla bloqueada en un branch) → hoy responde 200 y el evento se pierde ([EMBUDOS-WEBHOOK-PERDIDA]).
+9. ⚠️ Simular falla de base (p. ej. secreto correcto con la tabla bloqueada en un branch) → responde 500 (Whop reintenta; en Commas queda el log `[ALERTA][fanbasis]` con el payload).
 10. Desconectar → secretos borrados, `payment_orders`/`payment_transactions` intactos.
 
 ### V4. I-3 Detección de fuente vacía ⭐

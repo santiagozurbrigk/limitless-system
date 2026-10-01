@@ -56,7 +56,7 @@ El orden dentro de la fase importa: el helper de permisos es la base de todos lo
 | 1.3 | Helper `requireModuleAccess` y policies de escritura por rol en `team_roles`, `team_invitations`, `organizations`; aplicarlo primero en plata, equipo, BYOK e integraciones | `[PERMISOS-SERVER-ACTIONS]`, `[PERMISOS-SERVER-ACTIONS/infra]` | Alta | 0.1 (migración) |
 | 1.4 | Extender el helper a cada área | `[PERMISOS-SERVER-ACTIONS/clientes]`, `/ventas`, `/marketing`, `/agente-ia`, `/ops-fin-prod`, `[PERMISOS-LAYOUT-NAV-SUAVE]` | Alta | 1.3 |
 | 1.5 | Holding: exigir el rol en las policies de portfolio y en las acciones con service role; revalidar el claim | `[HOLDING-PORTFOLIO-ROL]`, `[DB-CLAIM-HOLDING-SIN-REVALIDAR]` | Crítica | 0.1 |
-| 1.6 | Que el usuario no pueda escribir identificadores de cuentas externas ni rutas de Storage; re-validar el prefijo de org antes de firmar, bajar o borrar **Resuelto el 2026-09-30 (SCRUM-82, `20260930110000`).** | `[SEG-RLS-IDENTIFICADORES-EXTERNOS]`, `[STORAGE-RUTA-DESDE-FILA]` | Crítica | 0.1 |
+| 1.6 | Que el usuario no pueda escribir identificadores de cuentas externas ni rutas de Storage; re-validar el prefijo de org antes de firmar, bajar o borrar **Resuelto: identificadores el 2026-09-30 (SCRUM-82, `20260930110000`); rutas de Storage el 2026-10-01 (SCRUM-81, `20261001100000`).** | `[SEG-RLS-IDENTIFICADORES-EXTERNOS]`, `[STORAGE-RUTA-DESDE-FILA]` | Crítica | 0.1 |
 | 1.7 | Validar el cliente contra la org al asociar una llamada de Fathom | `[FATHOM-CLIENTID-SIN-VALIDAR]` | Crítica | — |
 | 1.8 | Worker de Fly: secreto en header, cruzar org y ruta del payload contra el job | `[SEG-REEL-WORKER-AUTH]` | Crítica | 0.5 |
 | 1.9 | Arreglos cortos de autenticación | `[AUTH-CALLBACK-NEXT]`, `[AUTH-RECUPERAR-PASSWORD]` | Media | — |
@@ -69,7 +69,7 @@ El orden dentro de la fase importa: el helper de permisos es la base de todos lo
 
 | # | Qué | Ítems | Sev. |
 |---|---|---|---|
-| 2.1 | Ingesta de pagos: responder 5xx si no se guardó, no descartar reintentos legítimos, idempotencia en el registro de pagos | `[EMBUDOS-WEBHOOK-PERDIDA]`, `[AUD-CONF-5]`, `[PAGO-SIN-IDEMPOTENCIA]` | Crítica |
+| 2.1 | Ingesta de pagos: responder 5xx si no se guardó, no descartar reintentos legítimos, idempotencia en el registro de pagos | ~~`[EMBUDOS-WEBHOOK-PERDIDA]`~~ (resuelto 2026-09-30, SCRUM-6), `[AUD-CONF-5]` (reintentos resueltos en SCRUM-6; falta el índice por org), `[PAGO-SIN-IDEMPOTENCIA]` | Crítica |
 | 2.2 | Cierre de venta en una sola transacción en el servidor | `[CLOSING-CIERRE-ATOMICO]` | Crítica |
 | 2.3 | Closing con más de 1.000 turnos (medir primero cuántas orgs lo pasan) | `[CLOSING-LIST-1000]` | Alta |
 | 2.4 | Llamadas y Fathom: pantalla de Llamadas, webhook por miembro, cursor de la sync | ~~`[LLAMADAS-EMBED-ROTO]`~~ (resuelto 2026-09-28), `[FATHOM-WEBHOOK-MIEMBRO-ROTO]`, `[FATHOM-SYNC-CURSOR]` | Alta |

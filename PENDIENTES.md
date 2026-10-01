@@ -64,7 +64,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|
 | `[PERMISOS-SERVER-ACTIONS]` | Plataforma | Alta | Los permisos por módulo no protegen datos, sólo pantallas |
 | `[CLOSING-LIST-1000]` | Ventas | Alta | El calendario y la lista de Closing pierden los turnos más recientes |
-| `[EMBUDOS-WEBHOOK-PERDIDA]` | Embudos y Lanzamientos | Crítica | Webhooks de pagos y GHL que responden 200 sin haber guardado el evento |
 | `[1A1-CLAVE-ANTHROPIC-ROTA]` | Agente de negocio e IA | Alta | Una organización sin clave válida y sin clave global |
 | `[DR-BACKUPS-SUPABASE]` | Infraestructura, seguridad y tests (transversal) | Crítica | La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración |
 | `[PERMISOS-SERVER-ACTIONS/infra]` | Infraestructura, seguridad y tests (transversal) | Alta | Los roles no se hacen cumplir en la base ni en las actions (incluye AUD-SEG-1) |
@@ -77,10 +76,10 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 14 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 1 | 7 | 15 | 7 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 19 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 24 | 42 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 23 | 42 | 13 |
 
 ---
 
@@ -1372,17 +1371,6 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 
 ### Embudos y Lanzamientos · P0
 
-#### [EMBUDOS-WEBHOOK-PERDIDA] Webhooks de pagos y GHL que responden 200 sin haber guardado el evento
-- **Tipo:** bug
-- **Severidad:** Crítica
-- **Estado verificado:** `app/api/webhooks/{whop,fanbasis,ghl}/route.ts` devuelven `200 { ok: true, ...result }` siempre que la firma sea válida, incluso cuando `ingestPaymentWebhook` / `ingestGHLOpportunityEvent` devuelven `stored: false, status: "error"` (falló el insert del crudo). Whop y GHL sólo reintentan ante no-2xx, así que el evento se pierde. Además, un evento que quedó en `status = 'error'` (falló el upsert después de guardar) no se reintenta nunca: el reintento del proveedor choca con el índice único y vuelve `duplicate` (AUDITORIA_BACKEND §3 Confiabilidad 5, sigue abierto). No existe ninguna herramienta de reproceso de `unmapped`/`error` aunque varios comentarios lo prometen.
-- **Riesgo:** Si falla el insert del evento crudo (Supabase caído, timeout, error de schema), entonces Whop/Fanbasis/GHL reciben 200 y no reintentan: el cobro o el movimiento de oportunidad se pierde. Si falla el paso posterior, el evento queda en 'error' y ningún reintento ni herramienta lo recupera. Probabilidad baja por evento, pero sin ninguna red.
-- **Impacto:** Cobros que no quedan registrados en payment_orders/payment_transactions: revenue, CAC, ROAS y LTV de los embudos quedan por debajo de lo real. Alcance actual probablemente bajo: ninguna integración de pagos está verificada con cuenta real (EMBUDOS-CUENTAS-REALES).
-- **Qué hay que hacer:** responder 5xx cuando `stored: false` (salvo Commas, que no reintenta: ahí alertar); en `duplicate`, si la fila previa está en `error`, reprocesarla; construir un reproceso (acción de super-admin o script) para `payment_webhook_events` y `ghl_webhook_events` en `unmapped`/`error`.
-- **Criterio de aceptación:** Si falla el guardado del evento crudo, los webhooks de Whop y GHL responden 5xx (no 200) y el proveedor reintenta; en Commas, que no reintenta, queda una alerta registrada. Un reintento de un evento que quedó en 'error' se reprocesa en vez de volver 'duplicate'; hay tests que cubren los dos casos. Existe un reproceso (acción de super-admin o script) que toma los eventos en 'unmapped'/'error' de payment_webhook_events y ghl_webhook_events y los deja en 'processed' si ahora se pueden interpretar
-- **Relacionado (auditoría de recuperación):** el insert también falla si la base está en sólo lectura (`[SUPABASE-PLAN-FREE-LIMITES]`), y un secreto que no se puede descifrar hoy responde 404 "no tiene … conectado" (`lib/payments/integration.ts:54-59`): conviene que responda 500 y cubrir los dos casos en los tests de este ítem.
-- **Dónde:** `apps/web/app/api/webhooks/{whop,fanbasis,ghl}/route.ts`, `apps/web/lib/payments/ingest.ts`, `apps/web/lib/ghl/ingest-opportunity-event.ts`, `apps/web/lib/payments/integration.ts`.
-
 ### Embudos y Lanzamientos · P1
 
 #### [EMBUDOS-MEDIDAS-POR-EMBUDO] Dinero y anuncios son de la org entera en todos los embudos
@@ -2197,35 +2185,6 @@ Prioridad sugerida P0: es pérdida irreversible de datos de todos los clientes y
 
 ### Infraestructura, seguridad y tests (transversal) · P1
 
-#### [STORAGE-RUTA-DESDE-FILA] Rutas de Storage que el usuario puede escribir en la base se firman, descargan y borran con service role
-- **Tipo:** seguridad
-- **Severidad:** Crítica
-- **Estado verificado:**
-  - En producción, `authenticated` tiene `INSERT`/`UPDATE` de columna, y policy de INSERT que sólo mira `organization_id`, sobre estas columnas: `storage_path` de `workboard_task_attachments`, `client_payments`, `business_context_documents`, `sop_attachments` y `win_attachments`; `video_path` de `sop_generation_jobs`; `variations` de `reel_variation_jobs`. No hay constraint ni trigger sobre la ruta.
-  - `assertOrgStoragePath` sólo se aplica a la ruta que manda el navegador al "finalizar".
-  - La ruta leída de la fila se usa sin re-validar en:
-    - `app/workboard/task-link-actions.ts:327,367`;
-    - `app/sales/payment-actions.ts:348`;
-    - `app/business-context/actions.ts:606,646`;
-    - `app/sops/actions.ts:504`, `app/sops/video-actions.ts:254`;
-    - `app/clients/win-actions.ts:367,503,638`;
-    - `app/marketing/content/reel-variation-actions.ts:504`;
-    - `app/api/queue/process-sop-video/route.ts:84` (descarga y transcribe);
-    - `app/api/queue/publish-reel-variation/route.ts:239` (publica en Zernio);
-    - `app/api/cron/cleanup-trial-reels/route.ts:84` (borra).
-- **Riesgo:** si un miembro de una org escribe por PostgREST, en una fila propia, la ruta de un archivo de otra org, esa ruta se procesa con service role. Con eso obtiene una URL firmada, una transcripción (SOP desde video), una publicación en sus redes o el borrado del archivo ajeno. Hace falta conocer la ruta. La mayoría lleva UUIDs, pero hay rutas determinísticas, como `<org>/music/background.mp3` en el bucket `trial-reels`, que se lee y borra así.
-- **Impacto:** lectura y borrado de archivos de otra organización: comprobantes de pago, documentos del contexto del negocio, videos de SOP, adjuntos de tareas, capturas de wins y videos de Trial Reels.
-- **Qué hay que hacer:**
-  - Validar `isOrgStoragePath(ruta, organizationId)` antes de **toda** firma, descarga o borrado con service role (helper común).
-  - En la base, `CHECK (storage_path LIKE organization_id::text || '/%')`, o sacar `INSERT`/`UPDATE` de esas columnas a `authenticated`.
-  - En el worker de reels, exigir el prefijo de org en `sourceStoragePath` y `reelMusicPath`.
-- **Criterio de aceptación:**
-  - Con el JWT de un member, insertar o actualizar una fila de cada tabla citada con una ruta que no empiece con su org falla (constraint o permiso).
-  - Si igual existiera una fila así, las acciones citadas devuelven error sin firmar, descargar ni borrar.
-  - Hay tests del helper con rutas de otra org, con `..` y vacías.
-- **Dónde:** archivos citados, `apps/web/lib/storage/org-path.ts`, `apps/reel-worker/src/processor.ts`, migración nueva.
-> Prioridad sugerida P1: es Crítica, pero exige conocer la ruta del archivo ajeno. La mayoría no es adivinable.
-
 #### [INTEGRACIONES-ERROR-SIN-MARCA] Una integración con token vencido sigue figurando como conectada
 - **Tipo:** bug
 - **Severidad:** Alta
@@ -2332,7 +2291,7 @@ Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe su
 - **Estado verificado:** `apps/reel-worker/src/index.ts:67-130`: compara `WORKER_AUTH_SECRET` con `===` (no constante); cuando falla loguea los primeros 4 caracteres del secreto esperado; sin secreto ni signing keys acepta requests de `127.0.0.1` o IPs `10.*`/`172.*`, o si `NODE_ENV` no contiene `prod`. La lista de secrets comentada en `fly.toml` no incluye `WORKER_AUTH_SECRET` (el README del worker ya lo lista). Express no tiene `trust proxy`, así que `req.ip` es la IP del proxy de Fly, no la del cliente. La web publica en QStash la URL `...?workerSecret=<secreto>` (`app/marketing/content/reel-variation-actions.ts:142-144`): el secreto queda guardado en QStash y en logs de acceso; el header `x-worker-secret` ya existe como alternativa (`lib/queue/qstash-client.ts:90`).
 - **Riesgo:** Si en Fly no están cargados `WORKER_AUTH_SECRET` ni las signing keys de QStash, entonces el worker acepta a cualquiera cuyo `req.ip` empiece con `10.`/`172.` — y como Express no tiene `trust proxy`, `req.ip` es la IP del proxy de Fly, no la del cliente. Además el secreto viaja como query param (`reel-variation-actions.ts:142-144`), así que queda en la URL de destino guardada en QStash y en logs de acceso.
 - **Impacto:** Con el worker abierto, cualquiera puede mandar jobs con `organizationId`/`sourceStoragePath` arbitrarios: el worker usa service role sobre el bucket `trial-reels` (`processor.ts:35,46,113`) y escribe `reel_variation_jobs`, o sea lectura/escritura de videos de otras orgs y consumo de cómputo. No se confirmó qué secrets tiene cargados hoy.
-- **Qué hay que hacer:** en el worker, verificar que `reel_variation_jobs.organization_id` del `jobId` sea el `organizationId` del payload, y que `sourceStoragePath`/`reelMusicPath` empiecen con `${organizationId}/` (ver `[STORAGE-RUTA-DESDE-FILA]`). Además: comparación en tiempo constante, no loguear el secreto, fail-closed sin credenciales, sumar `WORKER_AUTH_SECRET` a `fly.toml`/README y confirmar con `fly secrets list` que está cargado.
+- **Qué hay que hacer:** (resuelto el 2026-10-01 en SCRUM-81: el worker ya verifica que el job sea de la `organizationId` del payload y que `sourceStoragePath`/`reelMusicPath` empiecen con `${organizationId}/`). Además: comparación en tiempo constante, no loguear el secreto, fail-closed sin credenciales, sumar `WORKER_AUTH_SECRET` a `fly.toml`/README y confirmar con `fly secrets list` que está cargado.
 - **Criterio de aceptación:** Un POST sin credenciales al worker (curl sin header, también desde IP 10.*/172.* o con NODE_ENV no productivo) responde 401; un intento con secreto incorrecto no deja ningún fragmento del secreto en los logs; fly secrets list -a otc-reel-worker muestra WORKER_AUTH_SECRET, figura en fly.toml/README y un reel de prueba llega a preview_ready (V-INFRA-8)
 - **Dónde:** `apps/reel-worker/src/index.ts`, `apps/reel-worker/fly.toml`, `apps/reel-worker/README.md`.
 
@@ -2379,7 +2338,7 @@ Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe su
 #### [AUD-CONF-5] Dedupe de webhooks que descarta reintentos legítimos
 - **Tipo:** bug
 - **Severidad:** Crítica
-- **Estado verificado:** `payment_webhook_events` tiene índice único `(provider, external_event_id)` sin `organization_id` (`20260829200000_payments_whop_fanbasis.sql:115`); un evento que quedó en `error` hace que el reintento del proveedor choque y se descarte. Mismo patrón en `ghl_webhook_events`.
+- **Estado verificado:** **Reintentos resueltos el 2026-09-30 (SCRUM-6):** un reintento de un evento en `error`, o trabado en `pending` hace más de 5 minutos, se reprocesa (`lib/webhooks/reclamar.ts`), y un duplicado de un evento ya procesado se sigue descartando. Lo que sigue abierto es sumar `organization_id` al índice de pagos. Estado anterior: `payment_webhook_events` tiene índice único `(provider, external_event_id)` sin `organization_id` (`20260829200000_payments_whop_fanbasis.sql:115`); un evento que quedó en `error` hace que el reintento del proveedor choque y se descarte. Mismo patrón en `ghl_webhook_events`.
 - **Riesgo:** Si el primer procesamiento de un webhook de pago falla (timeout de DB, bug de mapeo, deploy a mitad), entonces el reintento del proveedor choca con el índice único y se marca `duplicate` (`lib/payments/ingest.ts:46-48`), así que ese cobro nunca se registra. Cualquier error transitorio lo dispara.
 - **Impacto:** Cobros de Whop/Fanbasis/pagos que no aparecen en Finanzas ni en el cliente, en silencio; el crudo queda guardado pero no hay herramienta ni pantalla para reprocesarlo. Mismo efecto en oportunidades de GHL (`ghl_webhook_events`).
 - **Qué hay que hacer:** en conflicto, re-procesar si el estado previo es `error` o si quedó en `pending` hace más de unos minutos (el lambda murió entre el insert del crudo y el `finish()`, `lib/payments/ingest.ts:33-69`; mismo caso en GHL); sumar `organization_id` al índice de pagos.

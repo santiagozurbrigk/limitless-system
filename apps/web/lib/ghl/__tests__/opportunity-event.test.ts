@@ -111,3 +111,16 @@ describe("extractGHLEventId / extractGHLEventType", () => {
     expect(extractGHLEventType({ type: "ContactCreate" })).toBe("ContactCreate");
   });
 });
+
+describe("dateAdded (SCRUM-6)", () => {
+  it("una fecha que no se puede leer queda en null, sin descartar el evento", () => {
+    const r = normalizeOpportunityEvent({ ...PLATFORM_EVENT, dateAdded: "26/11/2021" });
+    expect(r.kind).toBe("event");
+    if (r.kind === "event") expect(r.event.dateAdded).toBeNull();
+  });
+
+  it("una fecha válida se normaliza a ISO", () => {
+    const r = normalizeOpportunityEvent(PLATFORM_EVENT);
+    if (r.kind === "event") expect(r.event.dateAdded).toBe("2021-11-26T12:41:02.193Z");
+  });
+});

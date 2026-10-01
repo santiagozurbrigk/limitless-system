@@ -18,6 +18,7 @@ import { NextResponse } from "next/server";
 import { assertCronAuthorized } from "@/lib/integrations/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ReelVariation } from "@/types/reel-variations";
+import { soloRutasDeLaOrg } from "@/lib/storage/org-path";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -69,9 +70,12 @@ export async function POST(request: Request) {
     const variations = (job.variations ?? []) as ReelVariation[];
 
     // Recopilar storage paths de todas las variantes que tengan uno
-    const storagePaths = variations
-      .map((v) => v.storage_path)
-      .filter((p): p is string => Boolean(p));
+    // SCRUM-81: sólo se borran rutas de la org del job.
+    const storagePaths = soloRutasDeLaOrg(
+      variations.map((v) => v.storage_path),
+      job.organization_id as string,
+      "cleanup-trial-reels"
+    );
 
     if (storagePaths.length === 0) {
       cleanedJobIds.push(job.id);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWebhookSecret } from "@/lib/payments/integration";
-import { ingestPaymentWebhook } from "@/lib/payments/ingest";
+import { ingestPaymentWebhook, statusHttpDeIngesta } from "@/lib/payments/ingest";
 import { verifyStandardWebhook } from "@/lib/payments/verify-signature";
 
 export const runtime = "nodejs";
@@ -46,8 +46,8 @@ export async function POST(request: Request) {
     );
   }
   if (lookup.status === "unavailable") {
-    // 500 y no 404: está conectado pero no se pudo leer el secreto. Así el
-    // proveedor lo registra como falla nuestra (y reintenta, si reintenta).
+    // 500 y no 404: está conectado pero no se pudo leer el secreto
+    // ([EMBUDOS-WEBHOOK-PERDIDA], SCRUM-86). Whop reintenta ~3 días.
     return NextResponse.json(
       { ok: false, error: "No se pudo verificar el webhook" },
       { status: 500 }
@@ -79,7 +79,10 @@ export async function POST(request: Request) {
 
   const result = await ingestPaymentWebhook("whop", organizationId, body);
 
-  // Siempre 200 en un evento verificado, incluso si no se supo interpretar: el
-  // evento quedó guardado y reintentarlo no cambiaría el resultado.
-  return NextResponse.json({ ok: true, ...result });
+  // Un evento que no se supo interpretar (`unmapped`) responde 200: quedó
+  // guardado y reintentarlo no cambiaría el resultado. [EMBUDOS-WEBHOOK-PERDIDA]
+  // (SCRUM-6): si falló de nuestro lado (`error`), 500 para que Whop reintente
+  // (lo hace ~3 días) y el reintento lo reprocese.
+  const status = statusHttpDeIngesta(result);
+  return NextResponse.json({ ok: status === 200, ...result }, { status });
 }
