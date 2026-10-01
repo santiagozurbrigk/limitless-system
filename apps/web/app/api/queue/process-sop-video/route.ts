@@ -29,6 +29,7 @@ import {
 } from "@/lib/sops/video-sop-prompt";
 import { validateAttachmentMarkers } from "@/lib/sops/attachment-markers";
 import { SOP_VIDEOS_BUCKET } from "@/lib/sops/constants";
+import { assertOrgStoragePath } from "@/lib/storage/org-path";
 
 export const runtime = "nodejs";
 /** Un Loom largo puede tardar: el máximo que permite el plan de Vercel. */
@@ -81,7 +82,8 @@ export async function POST(request: Request) {
       const videoPath = join(workDir, "source");
       const { data: file, error: downloadError } = await admin.storage
         .from(SOP_VIDEOS_BUCKET)
-        .download(job.video_path);
+        // SCRUM-81: la ruta sale de la fila; tiene que ser de la org del job.
+        .download(assertOrgStoragePath(job.video_path, job.organization_id));
 
       if (downloadError || !file) {
         throw new Error(`No se pudo leer el video: ${downloadError?.message ?? "vacío"}`);

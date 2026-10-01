@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paths } from "@/routes";
+import { soloRutasDeLaOrg } from "@/lib/storage/org-path";
 
 const STORAGE_BUCKET = "trial-reels";
 const MAX_MUSIC_BYTES = 30 * 1024 * 1024; // 30 MB — más que suficiente para un track de fondo
@@ -101,8 +102,9 @@ export async function deleteReelMusicAction(): Promise<ReelMusicDeleteResult> {
 
     const currentPath = orgRow?.reel_music_path as string | null | undefined;
 
-    if (currentPath) {
-      await admin.storage.from(STORAGE_BUCKET).remove([currentPath]);
+    const rutas = soloRutasDeLaOrg([currentPath], organizationId, "reel-music");
+    if (rutas.length > 0) {
+      await admin.storage.from(STORAGE_BUCKET).remove(rutas);
     }
 
     // Limpiar DB

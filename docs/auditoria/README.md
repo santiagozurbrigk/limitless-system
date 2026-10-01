@@ -96,7 +96,7 @@ capas que rodean a esa barrera y en la identidad de los usuarios.
 | Espacio de archivos `import-files` legible y borrable por cualquiera **Resuelto el 2026-09-29 (SCRUM-12; el bucket se borró).** | Crítica | `[SEG-BUCKET-IMPORT-FILES]` (P0) |
 | Un miembro desactivado sigue entrando **Resuelto el 2026-09-29 (SCRUM-8, `20260929110000`).** | Crítica | `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` (P0) |
 | Permisos sólo en pantallas; un miembro puede darse más permisos | Alta | `[PERMISOS-SERVER-ACTIONS]` (P0) y sus partes por área |
-| Rutas de archivos escribibles por el usuario que el servidor abre sin validar | Crítica | `[STORAGE-RUTA-DESDE-FILA]` (P1) |
+| Rutas de archivos escribibles por el usuario que el servidor abre sin validar **Resuelto el 2026-10-01 (SCRUM-81, `20261001100000`).** | Crítica | `[STORAGE-RUTA-DESDE-FILA]` (P1) |
 | Identificadores de cuentas externas escribibles que deciden a qué org va un evento **Resuelto el 2026-09-30 (SCRUM-82, `20260930110000`).** | Crítica | `[SEG-RLS-IDENTIFICADORES-EXTERNOS]` (P1) |
 | Holding: miembros sin permiso leen y escriben en los negocios | Crítica | `[HOLDING-PORTFOLIO-ROL]` (P1) |
 | Secreto del worker de video en URLs y logs | Crítica | `[TRIAL-SECRET-EN-URL]` (P1) |

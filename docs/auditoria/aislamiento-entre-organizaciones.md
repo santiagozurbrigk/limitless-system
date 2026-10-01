@@ -32,7 +32,7 @@
   cuenta de Stripe, Calendly, Google, etc. (`[OAUTH-ESTADO-SIN-FIRMA]`, P0; resuelto el 2026-09-30, SCRUM-10).
 - **Hueco nuevo grave — archivos de otra organización**: en 7 tablas el usuario puede escribir la ruta de un
   archivo, y 11 lugares del servidor la abren o la borran con service role sin re-validar el prefijo de la org
-  (`[STORAGE-RUTA-DESDE-FILA]`, P1).
+  (`[STORAGE-RUTA-DESDE-FILA]`, P1; resuelto el 2026-10-01 en SCRUM-81).
 - Se confirmaron y ampliaron: Fathom asociado a un cliente ajeno escribe en su ficha (`[FATHOM-CLIENTID-SIN-VALIDAR]`),
   la key global de Zernio está cargada en producción (`[ZERNIO-KEY-GLOBAL]`) y un miembro sin permisos del holding
   también **escribe** en los negocios vía acciones con service role (`[HOLDING-PORTFOLIO-ROL]`).
@@ -508,7 +508,7 @@ excepción son los callbacks OAuth: la cookie de estado no autentica a nadie (H-
   - Un helper común (`lib/integrations/oauth-state.ts`) con tests.
   - Corregir `seguridad.md`.
 
-#### H-2 · Rutas de Storage guardadas en filas que el usuario puede escribir, usadas con service role — **Crítica** · nuevo `[STORAGE-RUTA-DESDE-FILA]`
+#### H-2 · Rutas de Storage guardadas en filas que el usuario puede escribir, usadas con service role — **Crítica** · nuevo `[STORAGE-RUTA-DESDE-FILA]` · **Resuelto el 2026-10-01 (SCRUM-81, `20261001100000`).**
 
 - **Hecho (producción):**
   - `authenticated` tiene `INSERT` y `UPDATE` de columna sobre la columna de ruta de estas tablas:

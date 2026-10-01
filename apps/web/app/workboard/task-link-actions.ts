@@ -25,7 +25,7 @@ import {
 import { firstZodError, uuidSchema } from "@/lib/validations";
 import { paths } from "@/routes/paths";
 import type { WorkboardTask, WorkboardTaskLinkedDocument } from "@/types/workboard";
-import { assertOrgStoragePath } from "@/lib/storage/org-path";
+import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
 
 function revalidateWorkboard() {
   revalidatePath(paths.platform.workboard.root);
@@ -323,10 +323,9 @@ export async function deleteTaskAttachmentAction(
 
     if (!row) throw new Error("Adjunto no encontrado");
 
-    if (row.storage_path) {
-      await admin.storage
-        .from(WORKBOARD_ATTACHMENTS_BUCKET)
-        .remove([row.storage_path as string]);
+    const rutas = soloRutasDeLaOrg([row.storage_path as string | null], organizationId, "workboard");
+    if (rutas.length > 0) {
+      await admin.storage.from(WORKBOARD_ATTACHMENTS_BUCKET).remove(rutas);
     }
 
     const { error } = await supabase
@@ -366,7 +365,7 @@ export async function getTaskAttachmentUrlAction(
 
     const { data, error } = await admin.storage
       .from(WORKBOARD_ATTACHMENTS_BUCKET)
-      .createSignedUrl(row.storage_path as string, 3600);
+      .createSignedUrl(assertOrgStoragePath(row.storage_path, organizationId), 3600);
 
     if (error || !data?.signedUrl) {
       throw new Error(error?.message ?? "No se pudo abrir el archivo");
@@ -568,9 +567,11 @@ export async function deleteTaskAttachmentsForTask(
     .eq("organization_id", organizationId)
     .eq("task_id", taskId);
 
-  const paths = (rows ?? [])
-    .map((row) => row.storage_path as string | null)
-    .filter(Boolean) as string[];
+  const paths = soloRutasDeLaOrg(
+    (rows ?? []).map((row) => row.storage_path as string | null),
+    organizationId,
+    "workboard"
+  );
 
   if (paths.length) {
     await admin.storage.from(WORKBOARD_ATTACHMENTS_BUCKET).remove(paths);

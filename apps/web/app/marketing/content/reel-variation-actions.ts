@@ -10,6 +10,7 @@ import { callClaudeJson } from "@/lib/ai/anthropic";
 import type { ReelVariationJob, ReelVariation, ReelVariationType } from "@/types/reel-variations";
 import type { ContentPiece } from "@/types/content";
 import { paths } from "@/routes";
+import { isOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -110,7 +111,10 @@ export async function createTrialReelsJobAction(
       .select("reel_music_path")
       .eq("id", organizationId)
       .maybeSingle();
-    const reelMusicPath: string | null = (orgRow?.reel_music_path as string | null | undefined) ?? null;
+    // SCRUM-81: sólo una música de la propia org; si no, la del worker por defecto.
+    const reelMusicPath: string | null =
+      soloRutasDeLaOrg([orgRow?.reel_music_path as string | null | undefined], organizationId, "reel-music")[0] ??
+      null;
 
     // 5. Crear el job en DB
     //    El video fuente lo descarga el worker directamente de Drive.
@@ -500,7 +504,7 @@ export async function refreshVariationPreviewUrlsAction(
 
   const updated = await Promise.all(
     variations.map(async (v) => {
-      if (!v.storage_path) return v;
+      if (!v.storage_path || !isOrgStoragePath(v.storage_path, organizationId)) return v;
       const { data } = await admin.storage
         .from(STORAGE_BUCKET)
         .createSignedUrl(v.storage_path, 3600);
