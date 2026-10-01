@@ -179,7 +179,7 @@ export async function processReelVariationJob(
   // `organizationId` del payload, así que el job tiene que ser de esa org. Si
   // no, un payload armado a mano leería o escribiría archivos de otra org.
   if (!existingJob || existingJob.organization_id !== organizationId) {
-    console.error("[Processor] el job no existe o no es de la organización del payload — se descarta", {
+    console.error("[Processor] el job no existe o no es de la organización del payload: se descarta", {
       jobId,
       organizationId,
     });
