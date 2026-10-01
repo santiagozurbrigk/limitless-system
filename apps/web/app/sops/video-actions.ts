@@ -27,7 +27,7 @@ import {
 import { sanitizeFilename } from "@/lib/sops/attachment-types";
 import { enqueueSopVideoJob } from "@/lib/sops/enqueue-video-job";
 import { paths } from "@/routes";
-import { assertOrgStoragePath } from "@/lib/storage/org-path";
+import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
 
 export type SopVideoJob = {
   id: string;
@@ -247,7 +247,10 @@ export async function resolveSopAttachmentUrlsAction(
       .eq("organization_id", organizationId)
       .in("id", ids);
 
-    const rows = (data as { id: string; storage_path: string }[]) ?? [];
+    // SCRUM-81: sólo se firman rutas de la org.
+    const rows = ((data as { id: string; storage_path: string }[]) ?? []).filter(
+      (row) => soloRutasDeLaOrg([row.storage_path], organizationId, "sops").length > 0
+    );
     if (rows.length === 0) return {};
 
     const admin = createAdminClient();

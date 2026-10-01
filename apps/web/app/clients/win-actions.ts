@@ -49,7 +49,7 @@ import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paths } from "@/routes";
-import { assertOrgStoragePath } from "@/lib/storage/org-path";
+import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
 
 const metricSchema = z
   .object({
@@ -143,7 +143,8 @@ export async function listWinsAction(clientId?: string): Promise<ClientWin[]> {
     ]);
 
     const attachments = await withSignedUrls(
-      ((attachmentsResult.data as WinAttachmentRow[]) ?? []).map(rowToWinAttachment)
+      ((attachmentsResult.data as WinAttachmentRow[]) ?? []).map(rowToWinAttachment),
+      organizationId
     );
     const usages = ((usagesResult.data as WinUsageRow[]) ?? []).map(rowToWinUsage);
 
@@ -359,8 +360,10 @@ export async function deleteWinAction(id: string): Promise<MutationResult<void>>
       .eq("win_id", id)
       .eq("organization_id", organizationId);
 
-    const paths_ = ((attachments as { storage_path: string }[]) ?? []).map(
-      (row) => row.storage_path
+    const paths_ = soloRutasDeLaOrg(
+      ((attachments as { storage_path: string }[]) ?? []).map((row) => row.storage_path),
+      organizationId,
+      "wins"
     );
     if (paths_.length > 0) {
       const admin = createAdminClient();
@@ -477,9 +480,10 @@ export async function finalizeWinAttachmentAction(input: DestinoDeCaptura & {
       .single();
 
     if (error) throw new Error(error.message);
-    const [withUrl] = await withSignedUrls([
-      rowToWinAttachment(data as WinAttachmentRow),
-    ]);
+    const [withUrl] = await withSignedUrls(
+      [rowToWinAttachment(data as WinAttachmentRow)],
+      organizationId
+    );
     return withUrl!;
   });
 }
@@ -498,11 +502,14 @@ export async function deleteWinAttachmentAction(
       .eq("organization_id", organizationId)
       .maybeSingle();
 
-    if (data) {
+    const rutas = soloRutasDeLaOrg(
+      [(data as { storage_path: string } | null)?.storage_path],
+      organizationId,
+      "wins"
+    );
+    if (rutas.length > 0) {
       const admin = createAdminClient();
-      await admin.storage
-        .from(CLIENT_WINS_BUCKET)
-        .remove([(data as { storage_path: string }).storage_path]);
+      await admin.storage.from(CLIENT_WINS_BUCKET).remove(rutas);
     }
 
     const { error } = await supabase
@@ -628,19 +635,26 @@ async function validateCustom(raw: Record<string, unknown>) {
   return validation.values;
 }
 
-/** El bucket es privado: cada captura necesita su link firmado para verse. */
+/**
+ * El bucket es privado: cada captura necesita su link firmado para verse. Sólo
+ * se firman rutas de la org (SCRUM-81); una ajena queda sin link.
+ */
 async function withSignedUrls(
-  attachments: WinAttachment[]
+  attachments: WinAttachment[],
+  organizationId: string
 ): Promise<WinAttachment[]> {
   if (attachments.length === 0) return [];
 
+  const rutas = soloRutasDeLaOrg(
+    attachments.map((item) => item.storagePath),
+    organizationId,
+    "wins"
+  );
   const admin = createAdminClient();
-  const { data } = await admin.storage
-    .from(CLIENT_WINS_BUCKET)
-    .createSignedUrls(
-      attachments.map((item) => item.storagePath),
-      WIN_SIGNED_URL_TTL_SECONDS
-    );
+  const { data } =
+    rutas.length > 0
+      ? await admin.storage.from(CLIENT_WINS_BUCKET).createSignedUrls(rutas, WIN_SIGNED_URL_TTL_SECONDS)
+      : { data: [] };
 
   const urlByPath = new Map(
     (data ?? []).map((entry) => [entry.path ?? "", entry.signedUrl])

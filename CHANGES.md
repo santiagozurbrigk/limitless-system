@@ -34,6 +34,27 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-01 — Una ruta de Storage guardada en una fila sólo puede ser de la organización dueña (SCRUM-81)
+
+**Rama:** `fix/SCRUM-81-rutas-storage`
+**Commit(s):** este
+**Módulo(s) afectado(s):** base de datos (`supabase/migrations/20261001100000_rutas_storage_de_la_org.sql`), `lib/storage/org-path.ts`, adjuntos de tareas, comprobantes de pago, contexto del negocio, SOPs, wins, Trial Reels (acciones, colas, cron de limpieza) y `apps/reel-worker`
+
+**Qué se hizo:**
+- **Base:** `es_ruta_de_la_org(ruta, org)` (misma regla que `isOrgStoragePath`: empieza con `<org>/`, sin segmentos vacíos, `.` ni `..`) y restricciones CHECK en `workboard_task_attachments`, `client_payments`, `business_context_documents`, `sop_attachments`, `win_attachments` (`storage_path`), `sop_generation_jobs` (`video_path`), `reel_variation_jobs` (cada `storage_path` de `variations`, vía `variaciones_de_la_org`) y `organizations.reel_music_path`. Valen para cualquiera que escriba, usuario o service role.
+- **App:** toda ruta leída de una fila se valida contra la org antes de firmar, descargar o borrar con service role. Donde es un solo archivo que se abre (firmar un comprobante, un adjunto, un documento; transcribir un video de SOP; publicar una variante) la acción falla. Donde son varios o es un borrado (borrar adjuntos, firmar la lista de capturas, el cron de limpieza de reels) la ruta ajena se descarta con un aviso en el log (`soloRutasDeLaOrg`) y el resto sigue.
+- **Worker de reels:** valida `sourceStoragePath` y `reelMusicPath` con el prefijo de la org (una música ajena se ignora y usa la de por defecto) y descarta el job si no es de la `organizationId` del payload.
+- Se sumó `organizations.reel_music_path`, que no estaba en el ticket: el founder la puede escribir y el worker y el borrado de música la usan con service role.
+- **Tests:** `supabase/ci/tests/60_rutas_storage.sql`, que falla sin la migración y exige que el rechazo sea por la restricción de la ruta y no por otra. En `lib/storage/__tests__/org-path.test.ts`, tests de `soloRutasDeLaOrg` y de que el worker aplica la misma regla que la web.
+
+**Por qué / finalidad:** cierra `[STORAGE-RUTA-DESDE-FILA]` (Crítica) y la parte de rutas y org del job de `[SEG-REEL-WORKER-AUTH]`. Antes, un miembro podía escribir por PostgREST en una fila de su org la ruta de un archivo de otra org, y la app la firmaba, transcribía, publicaba o borraba con service role.
+
+**Decisiones de diseño relevantes:** CHECK en vez de sacar permisos de columna, porque casi todas esas tablas se escriben con el cliente del usuario y sacar el permiso rompería las pantallas.
+
+**Riesgos / deuda técnica pendiente:** la migración falla si producción ya tiene alguna ruta fuera de su org; se revisa antes de aplicar. El cambio del worker de reels se despliega aparte, en Fly.
+
+---
+
 ### 2026-09-30 — Los webhooks de pagos y GHL no dan por recibido un evento que no se guardó (SCRUM-6)
 
 **Rama:** `fix/SCRUM-6-webhooks-sin-perdida`

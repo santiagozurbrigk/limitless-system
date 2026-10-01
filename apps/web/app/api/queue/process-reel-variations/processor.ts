@@ -12,6 +12,7 @@ import * as path from "path";
 import { execSync } from "child_process";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ReelVariation, ReelVariationType } from "@/types/reel-variations";
+import { assertOrgStoragePath } from "@/lib/storage/org-path";
 
 const STORAGE_BUCKET = "trial-reels";
 
@@ -89,7 +90,8 @@ export async function processReelJob(payload: Payload): Promise<void> {
     // Descargar fuente
     const { data: srcData, error: srcErr } = await admin.storage
       .from(STORAGE_BUCKET)
-      .download(sourceStoragePath);
+      // SCRUM-81: el video fuente tiene que ser de la org del job.
+      .download(assertOrgStoragePath(sourceStoragePath, organizationId));
     if (srcErr || !srcData) throw new Error(`Source download: ${srcErr?.message}`);
     fs.writeFileSync(sourcePath, Buffer.from(await srcData.arrayBuffer()));
 

@@ -79,7 +79,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 24 | 42 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 23 | 42 | 13 |
 
 ---
 
@@ -2179,35 +2179,6 @@ Prioridad sugerida P0: es pérdida irreversible de datos de todos los clientes y
 
 ### Infraestructura, seguridad y tests (transversal) · P1
 
-#### [STORAGE-RUTA-DESDE-FILA] Rutas de Storage que el usuario puede escribir en la base se firman, descargan y borran con service role
-- **Tipo:** seguridad
-- **Severidad:** Crítica
-- **Estado verificado:**
-  - En producción, `authenticated` tiene `INSERT`/`UPDATE` de columna, y policy de INSERT que sólo mira `organization_id`, sobre estas columnas: `storage_path` de `workboard_task_attachments`, `client_payments`, `business_context_documents`, `sop_attachments` y `win_attachments`; `video_path` de `sop_generation_jobs`; `variations` de `reel_variation_jobs`. No hay constraint ni trigger sobre la ruta.
-  - `assertOrgStoragePath` sólo se aplica a la ruta que manda el navegador al "finalizar".
-  - La ruta leída de la fila se usa sin re-validar en:
-    - `app/workboard/task-link-actions.ts:327,367`;
-    - `app/sales/payment-actions.ts:348`;
-    - `app/business-context/actions.ts:606,646`;
-    - `app/sops/actions.ts:504`, `app/sops/video-actions.ts:254`;
-    - `app/clients/win-actions.ts:367,503,638`;
-    - `app/marketing/content/reel-variation-actions.ts:504`;
-    - `app/api/queue/process-sop-video/route.ts:84` (descarga y transcribe);
-    - `app/api/queue/publish-reel-variation/route.ts:239` (publica en Zernio);
-    - `app/api/cron/cleanup-trial-reels/route.ts:84` (borra).
-- **Riesgo:** si un miembro de una org escribe por PostgREST, en una fila propia, la ruta de un archivo de otra org, esa ruta se procesa con service role. Con eso obtiene una URL firmada, una transcripción (SOP desde video), una publicación en sus redes o el borrado del archivo ajeno. Hace falta conocer la ruta. La mayoría lleva UUIDs, pero hay rutas determinísticas, como `<org>/music/background.mp3` en el bucket `trial-reels`, que se lee y borra así.
-- **Impacto:** lectura y borrado de archivos de otra organización: comprobantes de pago, documentos del contexto del negocio, videos de SOP, adjuntos de tareas, capturas de wins y videos de Trial Reels.
-- **Qué hay que hacer:**
-  - Validar `isOrgStoragePath(ruta, organizationId)` antes de **toda** firma, descarga o borrado con service role (helper común).
-  - En la base, `CHECK (storage_path LIKE organization_id::text || '/%')`, o sacar `INSERT`/`UPDATE` de esas columnas a `authenticated`.
-  - En el worker de reels, exigir el prefijo de org en `sourceStoragePath` y `reelMusicPath`.
-- **Criterio de aceptación:**
-  - Con el JWT de un member, insertar o actualizar una fila de cada tabla citada con una ruta que no empiece con su org falla (constraint o permiso).
-  - Si igual existiera una fila así, las acciones citadas devuelven error sin firmar, descargar ni borrar.
-  - Hay tests del helper con rutas de otra org, con `..` y vacías.
-- **Dónde:** archivos citados, `apps/web/lib/storage/org-path.ts`, `apps/reel-worker/src/processor.ts`, migración nueva.
-> Prioridad sugerida P1: es Crítica, pero exige conocer la ruta del archivo ajeno. La mayoría no es adivinable.
-
 #### [INTEGRACIONES-ERROR-SIN-MARCA] Una integración con token vencido sigue figurando como conectada
 - **Tipo:** bug
 - **Severidad:** Alta
@@ -2314,7 +2285,7 @@ Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe su
 - **Estado verificado:** `apps/reel-worker/src/index.ts:67-130`: compara `WORKER_AUTH_SECRET` con `===` (no constante); cuando falla loguea los primeros 4 caracteres del secreto esperado; sin secreto ni signing keys acepta requests de `127.0.0.1` o IPs `10.*`/`172.*`, o si `NODE_ENV` no contiene `prod`. La lista de secrets comentada en `fly.toml` no incluye `WORKER_AUTH_SECRET` (el README del worker ya lo lista). Express no tiene `trust proxy`, así que `req.ip` es la IP del proxy de Fly, no la del cliente. La web publica en QStash la URL `...?workerSecret=<secreto>` (`app/marketing/content/reel-variation-actions.ts:142-144`): el secreto queda guardado en QStash y en logs de acceso; el header `x-worker-secret` ya existe como alternativa (`lib/queue/qstash-client.ts:90`).
 - **Riesgo:** Si en Fly no están cargados `WORKER_AUTH_SECRET` ni las signing keys de QStash, entonces el worker acepta a cualquiera cuyo `req.ip` empiece con `10.`/`172.` — y como Express no tiene `trust proxy`, `req.ip` es la IP del proxy de Fly, no la del cliente. Además el secreto viaja como query param (`reel-variation-actions.ts:142-144`), así que queda en la URL de destino guardada en QStash y en logs de acceso.
 - **Impacto:** Con el worker abierto, cualquiera puede mandar jobs con `organizationId`/`sourceStoragePath` arbitrarios: el worker usa service role sobre el bucket `trial-reels` (`processor.ts:35,46,113`) y escribe `reel_variation_jobs`, o sea lectura/escritura de videos de otras orgs y consumo de cómputo. No se confirmó qué secrets tiene cargados hoy.
-- **Qué hay que hacer:** en el worker, verificar que `reel_variation_jobs.organization_id` del `jobId` sea el `organizationId` del payload, y que `sourceStoragePath`/`reelMusicPath` empiecen con `${organizationId}/` (ver `[STORAGE-RUTA-DESDE-FILA]`). Además: comparación en tiempo constante, no loguear el secreto, fail-closed sin credenciales, sumar `WORKER_AUTH_SECRET` a `fly.toml`/README y confirmar con `fly secrets list` que está cargado.
+- **Qué hay que hacer:** (resuelto el 2026-10-01 en SCRUM-81: el worker ya verifica que el job sea de la `organizationId` del payload y que `sourceStoragePath`/`reelMusicPath` empiecen con `${organizationId}/`). Además: comparación en tiempo constante, no loguear el secreto, fail-closed sin credenciales, sumar `WORKER_AUTH_SECRET` a `fly.toml`/README y confirmar con `fly secrets list` que está cargado.
 - **Criterio de aceptación:** Un POST sin credenciales al worker (curl sin header, también desde IP 10.*/172.* o con NODE_ENV no productivo) responde 401; un intento con secreto incorrecto no deja ningún fragmento del secreto en los logs; fly secrets list -a otc-reel-worker muestra WORKER_AUTH_SECRET, figura en fly.toml/README y un reel de prueba llega a preview_ready (V-INFRA-8)
 - **Dónde:** `apps/reel-worker/src/index.ts`, `apps/reel-worker/fly.toml`, `apps/reel-worker/README.md`.
 

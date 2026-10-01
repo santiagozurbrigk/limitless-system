@@ -31,7 +31,7 @@ import {
   uuidSchema,
 } from "@/lib/validations";
 import { paths } from "@/routes/paths";
-import { assertOrgStoragePath } from "@/lib/storage/org-path";
+import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
 
 function revalidateSops() {
   revalidatePath(paths.platform.operations.sops);
@@ -500,8 +500,9 @@ export async function deleteSopAttachmentAction(
 
     if (error) throw new Error(error.message);
 
-    if (row?.storage_path) {
-      await admin.storage.from(SOP_ATTACHMENTS_BUCKET).remove([row.storage_path]);
+    const rutas = soloRutasDeLaOrg([row?.storage_path], organizationId, "sops");
+    if (rutas.length > 0) {
+      await admin.storage.from(SOP_ATTACHMENTS_BUCKET).remove(rutas);
     }
   });
 }
