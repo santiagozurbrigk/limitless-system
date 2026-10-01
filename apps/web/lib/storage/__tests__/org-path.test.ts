@@ -20,6 +20,22 @@ describe("isOrgStoragePath", () => {
     expect(isOrgStoragePath(undefined, ORG)).toBe(false);
   });
 
+  it("⭐ rechaza rutas disfrazadas que la URL convierte en .. o / (SCRUM-81)", () => {
+    for (const disfrazada of [
+      `${ORG}/%2e%2e/${OTRA}/doc.pdf`,
+      `${ORG}/.%2E/${OTRA}/doc.pdf`,
+      `${ORG}/..\\${OTRA}/doc.pdf`,
+      `${ORG}/a\\b.pdf`,
+      `${ORG}/doc.pdf?x=1`,
+      `${ORG}/doc.pdf#x`,
+      `${ORG}/a%2Fb.pdf`,
+      `${ORG}/doc\n.pdf`,
+      `${ORG}/doc con espacio.pdf`,
+    ]) {
+      expect(isOrgStoragePath(disfrazada, ORG), disfrazada).toBe(false);
+    }
+  });
+
   it("assert tira con una ruta ajena", () => {
     expect(() => assertOrgStoragePath(`${OTRA}/doc.pdf`, ORG)).toThrow();
     expect(assertOrgStoragePath(`${ORG}/doc.pdf`, ORG)).toBe(`${ORG}/doc.pdf`);
@@ -50,6 +66,9 @@ describe("el worker de reels usa la misma regla (SCRUM-81)", () => {
       `${ORG}/`,
       `${ORG}x/a.mp4`,
       `${ORG}/./a.mp4`,
+      `${ORG}/%2e%2e/${OTRA}/music/background.mp3`,
+      `${ORG}/..\\${OTRA}/music/background.mp3`,
+      `${ORG}/a.mp4?x=1`,
       "",
       null,
       42,

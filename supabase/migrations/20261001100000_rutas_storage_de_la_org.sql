@@ -8,8 +8,10 @@
 -- ruta antes de usarla (`lib/storage/org-path.ts`); esto la cierra también en
 -- la base, para cualquiera que escriba (usuario o service role).
 --
--- La regla es la misma que `isOrgStoragePath`: empieza con `<org>/` y ningún
--- segmento después es vacío, `.` ni `..`.
+-- La regla es la misma que `isOrgStoragePath`: empieza con `<org>/`, cada
+-- segmento usa sólo `[A-Za-z0-9._-]` (uuids y `sanitizeFilename`) y ninguno es
+-- `.` ni `..`. Hace falta la lista blanca: `%2e%2e` o `\` pasan como texto,
+-- pero al pedir la URL se convierten en `..` y `/` y suben a otra carpeta.
 
 create or replace function public.es_ruta_de_la_org(ruta text, org uuid)
 returns boolean
@@ -20,11 +22,12 @@ as $$
   select ruta is not null
     and org is not null
     and left(ruta, 37) = org::text || '/'
-    and substr(ruta, 38) !~ '(^|/)(\.{1,2})?(/|$)'
+    and substr(ruta, 38) ~ '^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$'
+    and substr(ruta, 38) !~ '(^|/)\.{1,2}(/|$)'
 $$;
 
 comment on function public.es_ruta_de_la_org(text, uuid) is
-  'SCRUM-81: la ruta está dentro de la carpeta de la org (<org>/...) y no tiene segmentos vacíos, . ni ... Misma regla que isOrgStoragePath en apps/web/lib/storage/org-path.ts.';
+  'SCRUM-81: la ruta está dentro de la carpeta de la org (<org>/...), cada segmento usa sólo [A-Za-z0-9._-] y ninguno es . ni ... Misma regla que isOrgStoragePath en apps/web/lib/storage/org-path.ts.';
 
 -- `variations` de Trial Reels: cada variante con archivo tiene que ser de la org.
 -- `storage_path` vacío es el estado inicial de una variante en proceso.
@@ -96,6 +99,9 @@ begin
      or public.es_ruta_de_la_org(org::text || '//a.pdf', org)
      or public.es_ruta_de_la_org(org::text || '/', org)
      or public.es_ruta_de_la_org(org::text || 'x/a.pdf', org)
+     or public.es_ruta_de_la_org(org::text || '/%2e%2e/0000000b-0000-0000-0000-000000000000/a.pdf', org)
+     or public.es_ruta_de_la_org(org::text || '/..\0000000b-0000-0000-0000-000000000000/a.pdf', org)
+     or public.es_ruta_de_la_org(org::text || '/a.pdf?x=1', org)
      or not public.variaciones_de_la_org('[{"storage_path": ""}, {"storage_path": "0000000a-0000-0000-0000-000000000000/v/1.mp4"}]', org)
      or public.variaciones_de_la_org('[{"storage_path": "0000000b-0000-0000-0000-000000000000/v/1.mp4"}]', org)
   then

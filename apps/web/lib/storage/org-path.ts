@@ -12,6 +12,15 @@
  * firmar, descargar o borrar con service role, la ruta se valida contra la org
  * dueña de la fila.
  */
+/**
+ * Lista blanca de caracteres de cada segmento. Todas las rutas que arma la app
+ * usan uuids y `sanitizeFilename` (`[a-zA-Z0-9._-]`). Hace falta lista blanca y
+ * no sólo rechazar `.`/`..`: `%2e%2e` o `\` pasan como texto, pero al pedir la
+ * URL `fetch` los convierte en `..` y `/` y sube a la carpeta de otra org
+ * (SCRUM-81).
+ */
+const SEGMENTO_VALIDO = /^[A-Za-z0-9._-]+$/;
+
 export function isOrgStoragePath(path: unknown, organizationId: string): path is string {
   if (typeof path !== "string" || !organizationId) return false;
   if (!path.startsWith(`${organizationId}/`)) return false;
@@ -19,7 +28,7 @@ export function isOrgStoragePath(path: unknown, organizationId: string): path is
   return path
     .slice(organizationId.length + 1)
     .split("/")
-    .every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+    .every((segment) => SEGMENTO_VALIDO.test(segment) && segment !== "." && segment !== "..");
 }
 
 export function assertOrgStoragePath(path: unknown, organizationId: string): string {

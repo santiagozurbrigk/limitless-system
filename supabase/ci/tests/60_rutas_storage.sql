@@ -44,7 +44,11 @@ insert into rutas values
   ('de otra org', '60000000-0000-0000-0000-000000000b00/archivo.pdf'),
   ('con ..', '60000000-0000-0000-0000-000000000a00/../60000000-0000-0000-0000-000000000b00/archivo.pdf'),
   ('con segmento vacío', '60000000-0000-0000-0000-000000000a00//archivo.pdf'),
-  ('sin carpeta de org', 'archivo.pdf');
+  ('sin carpeta de org', 'archivo.pdf'),
+  -- Disfrazadas: pasan como texto, pero la URL las convierte en `..` y `/`.
+  ('con %2e%2e', '60000000-0000-0000-0000-000000000a00/%2e%2e/60000000-0000-0000-0000-000000000b00/archivo.pdf'),
+  ('con barra invertida', '60000000-0000-0000-0000-000000000a00/..\60000000-0000-0000-0000-000000000b00/archivo.pdf'),
+  ('con ?', '60000000-0000-0000-0000-000000000a00/archivo.pdf?x=1');
 
 do $$
 declare
