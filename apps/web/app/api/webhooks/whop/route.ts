@@ -38,24 +38,22 @@ export async function POST(request: Request) {
   // El cuerpo crudo, sin parsear: la firma se calcula sobre los bytes exactos.
   const rawBody = await request.text();
 
-  // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): si no se pudo leer o descifrar el
-  // secreto, la falla es nuestra: 500 para que el proveedor reintente.
-  let secret: string | null;
-  try {
-    secret = await getWebhookSecret(organizationId, "whop");
-  } catch (error) {
-    console.error("[whop] no se pudo obtener el secreto:", error instanceof Error ? error.message : error);
-    return NextResponse.json(
-      { ok: false, error: "No se pudo leer la integración" },
-      { status: 500 }
-    );
-  }
-  if (!secret) {
+  const lookup = await getWebhookSecret(organizationId, "whop");
+  if (lookup.status === "not_connected") {
     return NextResponse.json(
       { ok: false, error: "La organización no tiene Whop conectado" },
       { status: 404 }
     );
   }
+  if (lookup.status === "unavailable") {
+    // 500 y no 404: está conectado pero no se pudo leer el secreto
+    // ([EMBUDOS-WEBHOOK-PERDIDA], SCRUM-86). Whop reintenta ~3 días.
+    return NextResponse.json(
+      { ok: false, error: "No se pudo verificar el webhook" },
+      { status: 500 }
+    );
+  }
+  const secret = lookup.secret;
 
   const check = verifyStandardWebhook(
     rawBody,

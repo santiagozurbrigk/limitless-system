@@ -62,7 +62,7 @@ export async function syncWebinarJamWebinarsForOrg(
     const integration = await getWebinarJamIntegrationForOrg(organizationId);
     if (!integration) return { ...empty, error: "WebinarJam no configurado" };
 
-    const apiKey = decryptWebinarJamApiKey(integration.api_key_encrypted);
+    const apiKey = decryptWebinarJamApiKey(integration.api_key_encrypted, integration.organization_id);
     const admin = createAdminClient();
     const now = new Date().toISOString();
 
@@ -166,7 +166,7 @@ export async function syncWebinarJamRegistrantsForOrg(
     const integration = await getWebinarJamIntegrationForOrg(organizationId);
     if (!integration) return { ...empty, error: "WebinarJam no configurado" };
 
-    const apiKey = decryptWebinarJamApiKey(integration.api_key_encrypted);
+    const apiKey = decryptWebinarJamApiKey(integration.api_key_encrypted, integration.organization_id);
     const admin = createAdminClient();
     const now = new Date().toISOString();
 

@@ -250,18 +250,26 @@ describe("getWebhookSecret", () => {
 
   it("devuelve el secreto, o null si la org no tiene el proveedor conectado", async () => {
     integracion("enc:ws_123");
-    await expect(getWebhookSecret(ORG, "whop")).resolves.toBe("ws_123");
-    await expect(getWebhookSecret("org-sin-whop", "whop")).resolves.toBeNull();
+    await expect(getWebhookSecret(ORG, "whop")).resolves.toEqual({ status: "ok", secret: "ws_123" });
+    await expect(getWebhookSecret("org-sin-whop", "whop")).resolves.toEqual({
+      status: "not_connected",
+    });
   });
 
-  it("⭐ un secreto que no se puede descifrar lanza (500), no parece 'no conectado' (404)", async () => {
+  it("⭐ un secreto que no se puede descifrar es 'no disponible' (500), no parece 'no conectado' (404)", async () => {
     integracion("roto");
-    await expect(getWebhookSecret(ORG, "whop")).rejects.toThrow(/descifrar/);
+    await expect(getWebhookSecret(ORG, "whop")).resolves.toEqual({
+      status: "unavailable",
+      reason: "decrypt_failed",
+    });
   });
 
-  it("⭐ una falla de la base al leer la integración lanza (500)", async () => {
+  it("⭐ una falla de la base al leer la integración es 'no disponible' (500)", async () => {
     base.actual!.fallas["payment_integrations:select"] = { message: "connection refused" };
-    await expect(getWebhookSecret(ORG, "whop")).rejects.toThrow(/No se pudo leer/);
+    await expect(getWebhookSecret(ORG, "whop")).resolves.toEqual({
+      status: "unavailable",
+      reason: "db_error",
+    });
   });
 });
 

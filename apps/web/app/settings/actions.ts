@@ -417,7 +417,12 @@ export async function getClaudeApiKeyStatusAction(): Promise<ClaudeApiKeyStatus>
     const stored = orgRow?.claude_api_key_encrypted as string | null | undefined;
     if (stored) {
       try {
-        keyPreview = maskSecret(decrypt(stored));
+        keyPreview = maskSecret(
+          decrypt(stored, {
+            field: "organizations.claude_api_key_encrypted",
+            organizationId,
+          })
+        );
       } catch {
         keyPreview = "****";
       }
@@ -474,7 +479,10 @@ export async function saveClaudeApiKeyAction(
     }
 
     const keyStatus = validation.status;
-    const encryptedKey = encrypt(trimmed);
+    const encryptedKey = encrypt(trimmed, {
+      field: "organizations.claude_api_key_encrypted",
+      organizationId: orgId,
+    });
     const admin = createAdminClient();
     const { error } = await admin
       .from("organizations")

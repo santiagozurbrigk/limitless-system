@@ -143,7 +143,7 @@ export async function connectZernioAction(
     const { error } = await admin.from("zernio_integrations").upsert(
       {
         organization_id: organizationId,
-        api_key: encryptZernioApiKey(parsed.data),
+        api_key: encryptZernioApiKey(parsed.data, organizationId),
         zernio_profile_id: profileId,
         account_name: accountName,
         connected_accounts: connectedAccounts,

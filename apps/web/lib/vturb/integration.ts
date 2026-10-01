@@ -23,12 +23,14 @@ export type VTurbIntegrationRow = {
  * Sin fallback a texto plano: si falta ENCRYPTION_MASTER_KEY, `encrypt` tira y
  * no se guarda nada. Antes se guardaba la clave en claro sin avisar.
  */
-export function encryptVTurbApiKey(plainKey: string): string {
-  return encrypt(plainKey);
+const API_KEY_FIELD = "vturb_integrations.api_key_encrypted";
+
+export function encryptVTurbApiKey(plainKey: string, organizationId: string): string {
+  return encrypt(plainKey, { field: API_KEY_FIELD, organizationId });
 }
 
-export function decryptVTurbApiKey(stored: string): string {
-  return readStoredSecret(stored);
+export function decryptVTurbApiKey(stored: string, organizationId: string): string {
+  return readStoredSecret(stored, { field: API_KEY_FIELD, organizationId });
 }
 
 export async function getVTurbIntegrationForOrg(
@@ -52,7 +54,7 @@ export async function getVTurbCredentialsForOrg(
   const row = await getVTurbIntegrationForOrg(organizationId);
   if (!row) return null;
   return {
-    apiKey: decryptVTurbApiKey(row.api_key_encrypted),
+    apiKey: decryptVTurbApiKey(row.api_key_encrypted, row.organization_id),
     timezone: row.timezone,
   };
 }
@@ -66,7 +68,7 @@ export async function upsertVTurbIntegration(
   const { error } = await admin.from("vturb_integrations").upsert(
     {
       organization_id: organizationId,
-      api_key_encrypted: encryptVTurbApiKey(apiKey),
+      api_key_encrypted: encryptVTurbApiKey(apiKey, organizationId),
       ...(timezone ? { timezone } : {}),
       last_error: null,
       updated_at: new Date().toISOString(),

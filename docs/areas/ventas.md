@@ -156,7 +156,9 @@ cron /api/integrations/fathom/process (10 min, espera 30 min por llamada) → pr
 - **Ventana de sync:** desde `last_sync_at`, pero nunca antes de `connected_at` (el historial no se trae)
   (`lib/fathom/sync-window.ts`). Excepción: si no hay ninguna de las dos fechas, trae todo.
 - **Keys por miembro:** `app/fathom/member-actions.ts` valida la key, la cifra
-  (`ENCRYPTION_MASTER_KEY` obligatoria) y crea el webhook por API (`lib/fathom/webhooks.ts`).
+  (`lib/fathom/member-key.ts`, atada a la org y al miembro; `ENCRYPTION_MASTER_KEY` obligatoria) y crea
+  el webhook por API (`lib/fathom/webhooks.ts`). Conectar Fathom para la org (`connectFathomAction`)
+  también registra al que conecta como miembro, con la key cifrada de la misma forma (antes la guardaba en claro).
   `syncMemberFathomAction` (botón "Sincronizar mis llamadas" en Integraciones) trae las reuniones del miembro con la misma
   ventana y el mismo upsert que el cron de la org (`upsertFathomCallFromMeeting`).
 

@@ -46,30 +46,28 @@ export async function POST(request: Request) {
 
   const rawBody = await request.text();
 
-  // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): si no se pudo leer o descifrar el
-  // secreto, la falla es nuestra: 500 para que el proveedor reintente.
-  let secret: string | null;
-  try {
-    secret = await getWebhookSecret(organizationId, "fanbasis");
-  } catch (error) {
-    console.error("[fanbasis] no se pudo obtener el secreto:", error instanceof Error ? error.message : error);
-    // Commas no reintenta: sin esto el evento se pierde sin rastro. La firma no
-    // se pudo verificar, así que el payload queda marcado como tal.
-    console.error(
-      "[ALERTA][fanbasis] evento de pago NO guardado (firma sin verificar: no se pudo leer el secreto); Commas no reintenta.",
-      JSON.stringify({ organizationId, payload: rawBody })
-    );
-    return NextResponse.json(
-      { ok: false, error: "No se pudo leer la integración" },
-      { status: 500 }
-    );
-  }
-  if (!secret) {
+  const lookup = await getWebhookSecret(organizationId, "fanbasis");
+  if (lookup.status === "not_connected") {
     return NextResponse.json(
       { ok: false, error: "La organización no tiene Fanbasis conectado" },
       { status: 404 }
     );
   }
+  if (lookup.status === "unavailable") {
+    // 500 y no 404: está conectado pero no se pudo leer el secreto
+    // ([EMBUDOS-WEBHOOK-PERDIDA], SCRUM-86). Commas no reintenta: sin este log el
+    // evento se pierde sin rastro. La firma no se pudo verificar, así que el
+    // payload queda marcado como tal.
+    console.error(
+      "[ALERTA][fanbasis] evento de pago NO guardado (firma sin verificar: no se pudo leer el secreto); Commas no reintenta.",
+      JSON.stringify({ organizationId, reason: lookup.reason, payload: rawBody })
+    );
+    return NextResponse.json(
+      { ok: false, error: "No se pudo verificar el webhook" },
+      { status: 500 }
+    );
+  }
+  const secret = lookup.secret;
 
   const signature = SIGNATURE_HEADERS.map((h) => request.headers.get(h)).find(Boolean) ?? null;
 

@@ -22,6 +22,7 @@ import {
   type SalesCall,
 } from "@/lib/fathom/sales-calls";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { encryptMemberFathomKey } from "@/lib/fathom/member-key";
 import {
   learnSpeakerAliasFromConfirmation,
   seedOrganizationIdentities,
@@ -53,6 +54,9 @@ export async function connectFathomAction(
   try {
     const { user, orgId } = await requireAuthContext();
 
+    // Se cifra antes de conectar: si no se puede, no se guarda nada.
+    const memberKeyEncrypted = encryptMemberFathomKey(parsed.data, orgId, user.id);
+
     const result = await connectFathomWithApiKey(orgId, parsed.data);
 
     if (!result.ok) {
@@ -66,7 +70,7 @@ export async function connectFathomAction(
         organization_id: orgId,
         user_id: user.id,
         integration_type: "fathom",
-        encrypted_api_key: parsed.data,
+        encrypted_api_key: memberKeyEncrypted,
         connected_at: new Date().toISOString(),
       },
       { onConflict: "organization_id,user_id,integration_type" }

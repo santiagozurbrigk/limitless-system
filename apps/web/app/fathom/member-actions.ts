@@ -16,37 +16,10 @@ import {
 } from "@/lib/fathom/webhooks";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { encrypt, readStoredSecret } from "@/lib/security/encryption";
+import { encryptMemberFathomKey, readMemberFathomKey } from "@/lib/fathom/member-key";
 import { paths } from "@/routes";
 import { apiKeySchema, firstZodError } from "@/lib/validations";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
-
-/**
- * 🔴 Si no se puede cifrar, **no se guarda**.
- *
- * Antes esto caía al `catch` y guardaba la key **en texto plano** sin avisarle a
- * nadie: la persona veía "conectado" y su credencial de Fathom quedaba legible en
- * la base. Fallar la conexión es incómodo; guardar una credencial en claro es un
- * problema de seguridad que nadie descubre hasta que es tarde.
- */
-function storeApiKey(apiKey: string): string {
-  try {
-    return encrypt(apiKey);
-  } catch (error) {
-    console.error(
-      "[fathom member] no se pudo cifrar la key",
-      error instanceof Error ? error.message : String(error)
-    );
-    throw new Error(
-      "No se puede guardar la credencial de forma segura (falta ENCRYPTION_MASTER_KEY). " +
-        "No se guardó nada."
-    );
-  }
-}
-
-function readApiKey(stored: string): string {
-  return readStoredSecret(stored);
-}
 
 export type FathomMemberStatus = {
   userId: string;
@@ -119,10 +92,10 @@ export async function connectMemberFathomAction(
   }
 
   // Se cifra ANTES de tocar nada: si no se puede, no se guarda ni se crea el
-  // webhook. (`storeApiKey` lanza.)
+  // webhook. (`encryptMemberFathomKey` lanza.)
   let encryptedKey: string;
   try {
-    encryptedKey = storeApiKey(parsed.data);
+    encryptedKey = encryptMemberFathomKey(parsed.data, organizationId, user.id);
   } catch (error) {
     return {
       ok: false,
@@ -202,7 +175,7 @@ export async function disconnectMemberFathomAction(): Promise<void> {
   const row = existing as { encrypted_api_key: string | null; webhook_id: string | null } | null;
   if (row?.encrypted_api_key && row.webhook_id) {
     const result = await deleteFathomWebhook(
-      readApiKey(row.encrypted_api_key),
+      readMemberFathomKey(row.encrypted_api_key, organizationId, user.id),
       row.webhook_id
     );
     if (!result.deleted) {
@@ -260,7 +233,11 @@ async function sincronizarLlamadasDelMiembro(): Promise<{
     throw new Error("No tenés Fathom conectado");
   }
 
-  const apiKey = readApiKey(integration.encrypted_api_key as string);
+  const apiKey = readMemberFathomKey(
+    integration.encrypted_api_key as string,
+    organizationId,
+    user.id
+  );
 
   const ventana = resolverVentanaDeSync(
     integration.last_sync_at as string | null,

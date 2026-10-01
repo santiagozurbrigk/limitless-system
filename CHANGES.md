@@ -34,6 +34,35 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-01 — La clave maestra de cifrado se puede rotar sin cortar las integraciones (SCRUM-86)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Infraestructura/seguridad — `lib/security/encryption.ts`, `lib/security/reencrypt.ts` (nuevo), `scripts/reencrypt-secrets.ts` (nuevo), `lib/payments/integration.ts`, webhooks de Whop y Commas, `lib/fathom/member-key.ts` (nuevo), `app/fathom/actions.ts`, y los wrappers de cifrado de GHL, Hyros, VTurb, WebinarJam, Zernio, Mercado Pago, BYOK y pagos.
+
+**Qué se hizo:**
+- Formato nuevo `v2.<iv>.<tag>.<ct>` con AAD = `columna | organización | usuario` (usuario sólo en `team_member_integrations`). `encrypt`, `decrypt` y `readStoredSecret` exigen el contexto (`SecretContext`); se actualizaron todos los usos (~30). El formato v1 se sigue leyendo (sin AAD).
+- Lectura con `ENCRYPTION_MASTER_KEY` y, si está, `ENCRYPTION_MASTER_KEY_PREVIOUS`. Las dos se validan: base64 (o base64url, que Node siempre aceptó) de exactamente 32 bytes. Antes una clave corta tiraba un error críptico de Node y una con caracteres inválidos podía pasar porque Node los ignora.
+- `getWebhookSecret` devuelve `ok | not_connected | unavailable` (con motivo `decrypt_failed`/`db_error`) en vez de lanzar. Whop y Commas responden 404 sólo si no hay integración activa y **500** si el secreto no descifra o la consulta falla. SCRUM-6 (entrada de abajo) ya había llevado esto a 500 lanzando; al integrar main se unificó con este tipo y se mantuvo su log `[ALERTA][fanbasis]` con el payload.
+- Script `apps/web/scripts/reencrypt-secrets.ts` (simulación por defecto, `--apply` para escribir, UPDATE condicionado al valor leído, sin imprimir secretos, sale con 1 si algo falla). La lista de columnas vive en `SECRET_FIELDS`/`SECRET_COLUMNS` y un test exige que coincidan.
+- 🔴 `connectFathomAction` guardaba la API key del miembro que conecta **en texto plano** en `team_member_integrations.encrypted_api_key`. Las 8 filas de producción estaban así (la doc decía "cifrado"). Ahora se cifra con `lib/fathom/member-key.ts`, igual que en `member-actions.ts`, y antes de conectar.
+- `credential-resolver`: si la clave de Claude de la org no descifra, `console.error` con la org (antes `warn` sin org).
+- Procedimiento nuevo `docs/operacion/rotacion-master-key.md`; actualizados `seguridad.md`, `incidentes.md` (§B y §F), `entorno-y-deploy.md`, `areas/ventas.md`, `areas/embudos.md`, `FUNCIONAL.md` (F-PLA-20) y verificación manual (V-INFRA-11 anotado, V-INFRA-12 nuevo).
+- Tests: `encryption.test.ts` (16: v2, clave anterior, v1, AAD por org/columna/miembro, alteración, validación de clave, base64url), `reencrypt.test.ts` (9: cobertura de columnas, rotación A → B+A → B, texto plano, fallas) y `payments/__tests__/webhook-secret.test.ts` (9: 500 vs 404 en Whop y Commas). Suite completa después de integrar main (SCRUM-6, SCRUM-81): 106 archivos, 1348 tests. Se adaptaron los 3 tests de `getWebhookSecret` de SCRUM-6 al tipo nuevo.
+
+**Por qué / finalidad:** `[SEC-MASTER-KEY-ROTACION]`. Con una sola clave y sin versión, cambiarla (por ejemplo, tras una filtración) tiraba todas las integraciones cifradas de todas las orgs y los cobros de Commas del período.
+
+**Decisiones de diseño relevantes:**
+- Sin id de clave en el ciphertext: se prueban la actual y la anterior (GCM autentica, así que la equivocada falla limpio). Nunca hay más de dos claves vivas.
+- AAD con columna + org (+ miembro en Fathom) y no con el id de fila: el id no siempre existe (`ghl_integrations` no tiene `id`) y la org es lo que importa para el aislamiento. En `payment_integrations` el proveedor no va en la AAD: el secreto de Whop copiado a la fila de Commas de la misma org descifraría (y la firma igual fallaría).
+- v1 se sigue aceptando hasta correr el script; dejar de aceptarlo queda en el pendiente.
+- Sin migración de base: las columnas ya son `text`.
+
+**Riesgos / deuda técnica pendiente:**
+- Producción al 2026-09-30: 19 secretos en v1 (3 BYOK, 6 + 1 GHL, 9 Zernio) y 8 claves de Fathom por miembro en texto plano, hasta correr el script (V-INFRA-12). Whop/Commas, Mercado Pago, VTurb, WebinarJam y Hyros: 0 filas.
+- Un rollback a una versión anterior no lee v2: los secretos guardados después del deploy dejarían de andar.
+- `[SEC-MASTER-KEY-ROTACION]` sigue abierto, reducido a: gestor y segunda persona (V-INFRA-11), migración inicial y ensayo (V-INFRA-12), clave propia para Preview (`[ENTORNO-STAGING]`) y dejar de aceptar v1.
+- Nuevo `[BYOK-DESCIFRADO-SILENCIOSO]`: la org sigue pasando a la clave global sin aviso en pantalla.
 ### 2026-10-01 — Una ruta de Storage guardada en una fila sólo puede ser de la organización dueña (SCRUM-81)
 
 **Rama:** `fix/SCRUM-81-rutas-storage`

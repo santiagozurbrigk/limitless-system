@@ -32,12 +32,14 @@ export type ZernioIntegrationRow = {
  * Sin fallback a texto plano: si falta ENCRYPTION_MASTER_KEY, `encrypt` tira y
  * no se guarda nada. Antes se guardaba la clave en claro sin avisar.
  */
-function storeApiKey(apiKey: string): string {
-  return encrypt(apiKey);
+const API_KEY_FIELD = "zernio_integrations.api_key";
+
+function storeApiKey(apiKey: string, organizationId: string): string {
+  return encrypt(apiKey, { field: API_KEY_FIELD, organizationId });
 }
 
-export function readStoredApiKey(stored: string): string {
-  return readStoredSecret(stored);
+export function readStoredApiKey(stored: string, organizationId: string): string {
+  return readStoredSecret(stored, { field: API_KEY_FIELD, organizationId });
 }
 
 export function getZernioChannelStatus(
@@ -119,7 +121,7 @@ export async function getZernioApiKeyForOrganization(
 ): Promise<string | null> {
   const row = await getZernioIntegrationForOrg(organizationId);
   if (!row?.api_key) return null;
-  return readStoredApiKey(row.api_key);
+  return readStoredApiKey(row.api_key, row.organization_id);
 }
 
 export async function getZernioClientForOrganization(

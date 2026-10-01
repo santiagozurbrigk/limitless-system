@@ -19,7 +19,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 11 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | 12 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | 8 |
-| [Infraestructura](#infraestructura) | 11 |
+| [Infraestructura](#infraestructura) | 12 |
 
 ---
 
@@ -1151,5 +1151,17 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 4. Confirmar que `ENCRYPTION_MASTER_KEY` de producción está guardada fuera de Vercel y quién tiene acceso (no copiar el valor en ningún doc).
 5. Confirmar cuántos owners tienen Supabase, Vercel, Fly y Railway.
 
-**Resultado esperado:** 1 → plan pago o, si sigue Free, uso de Storage < 50 % del cupo; 3 → al menos un backup de menos de 24 h (o el dump automático de `[DR-BACKUPS-SUPABASE]`); 4 → existe copia, con acceso de al menos dos personas; 5 → al menos dos owners. ⚠️ Al 2026-09-23: plan `free` (confirmado con la API de Supabase), sin backups, Storage ≈ 797 MB de 1 GB.
+**Resultado esperado:** 1 → plan pago o, si sigue Free, uso de Storage < 50 % del cupo; 3 → al menos un backup de menos de 24 h (o el dump automático de `[DR-BACKUPS-SUPABASE]`); 4 → existe copia, con acceso de al menos dos personas; 5 → al menos dos owners. ⚠️ Al 2026-09-23: plan `free` (confirmado con la API de Supabase), sin backups, Storage ≈ 797 MB de 1 GB. Paso 4 al 2026-09-30: Santiago Zurbrigk confirma que tiene la clave fuera de Vercel; falta anotar en qué gestor y quién es la segunda persona con acceso.
+
+### V-INFRA-12 · Migración inicial y ensayo de rotación de la master key 🔒⭐ — `[SEC-MASTER-KEY-ROTACION]`
+
+**Prerrequisitos:** deploy con SCRUM-86 en producción; la clave actual (V-INFRA-11 paso 4), la service role y acceso a las variables de Vercel. Procedimiento: [`rotacion-master-key.md`](./rotacion-master-key.md).
+
+1. **Migración inicial** (sin rotar): correr `pnpm dlx tsx scripts/reencrypt-secrets.ts` sin `--apply` con la clave actual. Esperado al 2026-09-30: 19 filas "desde v1" (3 Claude propia, 6 + 1 GHL, 9 Zernio), 8 "desde texto plano" (Fathom por miembro), 0 fallidas.
+2. Correr con `--apply` y después de nuevo sin `--apply`: todo en "ya ok", 0 fallidas.
+3. Comprobar que siguen andando: Zernio (bandeja), GHL (sync de citas), Fathom por miembro ("Sincronizar mis llamadas"), clave de Claude propia (Ajustes muestra `****xxxx` y el agente responde con la clave de la org).
+4. **Ensayo de rotación** (idealmente cuando exista `[ENTORNO-STAGING]`; en producción, en una ventana tranquila): pasos 1 a 5 del procedimiento, con clave A = la actual y clave B = una nueva. Después de cargar B + A y redeployar, repetir el paso 3. Después del re-cifrado y de sacar A, repetir el paso 3.
+5. 🔒 Webhook de pagos con secreto que no descifra: sólo en un entorno de prueba, cargar una clave distinta sin la anterior y mandar un webhook a `/api/webhooks/whop?organizationId=<org con Whop>`.
+
+**Resultado esperado:** 1–2 → los conteos de arriba y 0 fallidas; 3 → todo sigue andando; 4 → todo anda con B + A y después sólo con B; 5 → responde **500** (no 404) y el log dice `[payments] no se pudo descifrar el secreto`. Anotar los conteos en `CHANGES.md` (sin valores).
 

@@ -77,7 +77,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 14 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 7 | 15 | 7 |
-| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 18 | 7 |
+| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 19 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 23 | 42 | 13 |
 
@@ -1682,6 +1682,12 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 
 ### Agente de negocio e IA · P2
 
+#### [BYOK-DESCIFRADO-SILENCIOSO] (nuevo) Si la clave de Claude de una org no descifra, pasa a la global sin avisar
+- **Tipo:** bug
+- **Estado verificado:** `decryptApiKeyIfValid` (`apps/web/lib/ai/credential-resolver.ts`) devuelve `null` si `decrypt` falla y la org usa la clave global; `claude_api_key_status` sigue en `valid` y Ajustes muestra `****` como si estuviera bien. Desde SCRUM-86 al menos queda un `console.error` con la org.
+- **Qué hay que hacer:** cuando no descifra, marcar el estado como error (o mostrar en Ajustes "no se pudo leer la clave, volvé a cargarla") y no consumir la global en silencio si la org eligió usar la suya.
+- **Dónde:** `apps/web/lib/ai/credential-resolver.ts`, `apps/web/app/settings/actions.ts` (`getClaudeApiKeyStatusAction`).
+
 #### [RAG-INGESTA-SIN-REINTENTO] (nuevo) La cola de indexado no reintenta cuando falla la ingesta
 - **Tipo:** bug
 - **Estado verificado:** `publishRagIngestionJob` publica con `retries: 3` (`apps/web/lib/queue/qstash-client.ts:169`), pero `processRagIngestion` (`lib/queue/processors/rag-ingestion.ts:104-127`) devuelve `{ chunkCount: 0, error }` cuando falla la ingesta (texto vacío, OpenAI caído, verificación de chunks), porque `indexBusinessContextInRag` (`lib/business-context/rag-indexing.ts:176-192`) atrapa el error. El worker (`app/api/queue/process-rag-ingestion/route.ts:58`) responde 200 y QStash no reintenta; sólo un throw inesperado da 500. Un corte transitorio de OpenAI deja el documento en `error` para siempre.
@@ -2215,17 +2221,17 @@ Prioridad sugerida P1: la falla es silenciosa y ya está ocurriendo en producci�
 
 Prioridad sugerida P1: es la base del runbook; sin detección, todas las demás fallas silenciosas se alargan.
 
-#### [SEC-MASTER-KEY-ROTACION] `ENCRYPTION_MASTER_KEY` no se puede rotar y no hay copia verificada
+#### [SEC-MASTER-KEY-ROTACION] `ENCRYPTION_MASTER_KEY`: falta la copia verificada con dos personas, la migración inicial y el ensayo de rotación
 - **Tipo:** seguridad
 - **Severidad:** Crítica
-- **Estado verificado:** `apps/web/lib/security/encryption.ts` usa una sola clave AES-256-GCM sin versión en el texto cifrado (`iv.tag.ciphertext`); no existe script de re-cifrado. En Vercel la variable es tipo `sensitive` (no se puede releer), target Preview y Production, creada el 2026-06-18 y nunca modificada. Con otra clave: BYOK de Claude cae a la global en silencio (`lib/ai/credential-resolver.ts:136-141`, la UI sigue mostrando la clave como válida); Zernio, GHL, Hyros, VTurb, WebinarJam y Fathom por miembro tiran al leer (`readStoredSecret`); los webhooks de Whop/Commas responden 404 "no tiene … conectado" (`lib/payments/integration.ts:54-59`, `app/api/webhooks/whop/route.ts:42-46`); el refresh de Mercado Pago falla (`lib/mercadopago/tokens.ts:103-110`).
-- **Riesgo:** Si alguien cambia la variable (por ejemplo, rotando secretos tras una filtración) o se pierde sin copia, entonces se caen todas las integraciones cifradas de todas las orgs y los cobros de Commas del período se pierden (Commas no reintenta). Si se filtra junto con la service role, no hay forma de rotarla sin ese corte.
-- **Impacto:** Todas las orgs con integraciones cifradas (BYOK, Zernio, GHL, Hyros, VTurb, WebinarJam, Fathom, pagos, Mercado Pago); cobros de Commas.
-- **Qué hay que hacer:** (1) confirmar que la clave está guardada en un gestor de secretos fuera de Vercel, con acceso de al menos dos personas; (2) versionar el formato (`v2.<iv>.<tag>.<ct>`) y aceptar `ENCRYPTION_MASTER_KEY_PREVIOUS` para leer lo viejo; (3) script de re-cifrado con service role; (4) procedimiento de rotación en `docs/operacion/`; (5) distinguir en los webhooks "no se pudo descifrar" (500) de "no conectado" (404); (6) valor distinto para Preview (ver `[ENTORNO-STAGING]`). Al versionar: (7) usar AAD con `organization_id` + nombre de columna, para que un ciphertext copiado a otra fila no se descifre; (8) validar al leer la clave que decodifique a 32 bytes (`lib/security/encryption.ts:5-11`). (Hallazgos de `docs/auditoria/secretos-y-autenticacion.md`.)
-- **Criterio de aceptación:** Hay constancia (anotada en V-INFRA-11) de que la clave existe fuera de Vercel; en un entorno de prueba con datos cifrados con la clave A, se configura B como actual y A como anterior, todas las integraciones siguen funcionando, el script re-cifra todo y después de sacar A siguen funcionando; un webhook de pagos con secreto indescifrable responde 500 y no 404; hay tests de cifrar/descifrar con clave actual y anterior; el procedimiento está en `docs/operacion/`.
-- **Dónde:** `apps/web/lib/security/encryption.ts`, `apps/web/lib/payments/integration.ts`, script nuevo, Vercel.
+- **Estado verificado:** la parte de código está hecha (SCRUM-86, 2026-09-30, ver `CHANGES.md`): formato `v2` con AAD, `ENCRYPTION_MASTER_KEY_PREVIOUS`, validación de 32 bytes, 500 en los webhooks de Whop/Commas si el secreto no descifra, script `apps/web/scripts/reencrypt-secrets.ts` y procedimiento en `docs/operacion/rotacion-master-key.md`. Queda: en producción siguen 19 secretos en formato v1 (sin AAD) y 8 claves de Fathom por miembro en texto plano hasta que se corra el script; Santiago confirmó el 2026-09-30 tener la clave fuera de Vercel, pero no está anotado el gestor ni una segunda persona con acceso; Preview usa la misma clave que producción.
+- **Riesgo:** Si la única copia de la clave se pierde, entonces se caen todas las integraciones cifradas de todas las orgs y los cobros de Commas del período se pierden. Mientras no se corra el script, un ciphertext v1 copiado a otra fila todavía descifra.
+- **Impacto:** Todas las orgs con integraciones cifradas (BYOK, Zernio, GHL, Hyros, VTurb, WebinarJam, Fathom por miembro, pagos, Mercado Pago); cobros de Commas.
+- **Qué hay que hacer:** (1) anotar en V-INFRA-11 en qué gestor está la clave y quién es la segunda persona con acceso; (2) después del deploy, correr la migración inicial (V-INFRA-12 pasos 1–3); (3) ensayar una rotación (V-INFRA-12 paso 4); (4) valor distinto para Preview cuando exista `[ENTORNO-STAGING]`; (5) cuando no queden filas v1, dejar de aceptar v1 al leer.
+- **Criterio de aceptación:** V-INFRA-11 paso 4 anotado con dos personas; V-INFRA-12 ejecutado con 0 fallidas y todas las integraciones andando antes y después de sacar la clave anterior; Preview con clave propia.
+- **Dónde:** Vercel, gestor de secretos, `apps/web/scripts/reencrypt-secrets.ts`, `apps/web/lib/security/encryption.ts`.
 
-Prioridad sugerida P1: la severidad es Crítica pero requiere un error humano o una filtración; la parte de la copia (1) es una verificación de minutos y conviene hacerla ya.
+Prioridad sugerida P1: la severidad es Crítica pero requiere un error humano o una filtración; (1) y (2) son minutos.
 
 #### [SUPABASE-PLAN-FREE-LIMITES] Storage al ~80 % del cupo del plan Free y la base pasa a sólo lectura a los 500 MB
 - **Tipo:** verificación manual

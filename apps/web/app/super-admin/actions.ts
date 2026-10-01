@@ -825,7 +825,10 @@ async function resolveSuperAdminAnthropicClient(
   }
 
   const { decrypt } = await import("@/lib/security/encryption");
-  const apiKey = await decrypt(org.claude_api_key_encrypted);
+  const apiKey = decrypt(org.claude_api_key_encrypted, {
+    field: "organizations.claude_api_key_encrypted",
+    organizationId: SUPER_ADMIN_CREDENTIAL_ORG_ID,
+  });
   return new Anthropic({ apiKey });
 }
 

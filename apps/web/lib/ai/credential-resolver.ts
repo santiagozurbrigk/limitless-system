@@ -125,7 +125,10 @@ async function loadOrgCredentialRow(
   };
 }
 
-function decryptApiKeyIfValid(row: OrgCredentialRow): string | null {
+function decryptApiKeyIfValid(
+  row: OrgCredentialRow,
+  organizationId: string
+): string | null {
   if (
     !row.claude_api_key_encrypted ||
     (row.claude_api_key_status !== "valid" &&
@@ -135,9 +138,16 @@ function decryptApiKeyIfValid(row: OrgCredentialRow): string | null {
   }
 
   try {
-    return decrypt(row.claude_api_key_encrypted);
+    return decrypt(row.claude_api_key_encrypted, {
+      field: "organizations.claude_api_key_encrypted",
+      organizationId,
+    });
   } catch {
-    console.warn("[credential-resolver] No se pudo descifrar API key para org");
+    // error, no warn: significa que la org cae a la clave global sin que nadie
+    // lo vea en pantalla. Ver [BYOK-DESCIFRADO-SILENCIOSO].
+    console.error("[credential-resolver] No se pudo descifrar la API key de la org", {
+      organizationId,
+    });
     return null;
   }
 }
@@ -146,7 +156,7 @@ export async function loadOrgCredentialState(
   organizationId: string
 ): Promise<OrgCredentialState> {
   const row = await loadOrgCredentialRow(organizationId);
-  const apiKey = row ? decryptApiKeyIfValid(row) : null;
+  const apiKey = row ? decryptApiKeyIfValid(row, organizationId) : null;
   const hasApiKey = Boolean(apiKey);
 
   return {
@@ -165,8 +175,8 @@ type Resolution = {
   mode: ClaudeCredentialMode;
 };
 
-function resolveFromRow(row: OrgCredentialRow): Resolution {
-  const apiKey = decryptApiKeyIfValid(row);
+function resolveFromRow(row: OrgCredentialRow, organizationId: string): Resolution {
+  const apiKey = decryptApiKeyIfValid(row, organizationId);
   const mode = normalizeCredentialMode(row.claude_credential_mode, Boolean(apiKey));
 
   if (apiKey) {
@@ -220,10 +230,10 @@ export async function resolveCredentialForOrg(
     };
   }
 
-  const resolution = resolveFromRow(row);
+  const resolution = resolveFromRow(row, organizationId);
 
   if (resolution.client && resolution.source === "api_key") {
-    const apiKey = decryptApiKeyIfValid(row);
+    const apiKey = decryptApiKeyIfValid(row, organizationId);
     if (apiKey) {
       credentialCache.set(organizationId, {
         apiKey,

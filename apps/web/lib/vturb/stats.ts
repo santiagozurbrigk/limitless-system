@@ -153,7 +153,7 @@ export async function getVTurbPeriodMeasures(
   const credentials = await getVTurbIntegrationForOrg(organizationId).catch(() => null);
   if (!credentials) return emptyResult(playerId, "VTurb no está conectado");
 
-  const apiKey = decryptVTurbApiKey(credentials.api_key_encrypted);
+  const apiKey = decryptVTurbApiKey(credentials.api_key_encrypted, credentials.organization_id);
   const timezone = credentials.timezone;
 
   let stats: VTurbStats | null = null;
