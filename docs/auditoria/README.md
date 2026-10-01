@@ -126,7 +126,7 @@ No se auditó la calidad de los prompts. Detalle en [`../areas/agente-ia.md`](..
 ## 8. Confiabilidad
 
 **Evaluación.** El sistema guarda bien, pero avisa mal. Hay pérdidas silenciosas en tres lugares:
-- webhooks de pago que responden "OK" sin haber guardado (`[EMBUDOS-WEBHOOK-PERDIDA]`);
+- webhooks de pago que responden "OK" sin haber guardado (`[EMBUDOS-WEBHOOK-PERDIDA]`, resuelto el 2026-09-30 en SCRUM-6);
 - reintentos legítimos descartados (`[AUD-CONF-5]`);
 - la sync de Fathom saltea para siempre una llamada que no pudo guardar (`[FATHOM-SYNC-CURSOR]`).
 

@@ -69,7 +69,7 @@ El orden dentro de la fase importa: el helper de permisos es la base de todos lo
 
 | # | Qué | Ítems | Sev. |
 |---|---|---|---|
-| 2.1 | Ingesta de pagos: responder 5xx si no se guardó, no descartar reintentos legítimos, idempotencia en el registro de pagos | `[EMBUDOS-WEBHOOK-PERDIDA]`, `[AUD-CONF-5]`, `[PAGO-SIN-IDEMPOTENCIA]` | Crítica |
+| 2.1 | Ingesta de pagos: responder 5xx si no se guardó, no descartar reintentos legítimos, idempotencia en el registro de pagos | ~~`[EMBUDOS-WEBHOOK-PERDIDA]`~~ (resuelto 2026-09-30, SCRUM-6), `[AUD-CONF-5]` (reintentos resueltos en SCRUM-6; falta el índice por org), `[PAGO-SIN-IDEMPOTENCIA]` | Crítica |
 | 2.2 | Cierre de venta en una sola transacción en el servidor | `[CLOSING-CIERRE-ATOMICO]` | Crítica |
 | 2.3 | Closing con más de 1.000 turnos (medir primero cuántas orgs lo pasan) | `[CLOSING-LIST-1000]` | Alta |
 | 2.4 | Llamadas y Fathom: pantalla de Llamadas, webhook por miembro, cursor de la sync | ~~`[LLAMADAS-EMBED-ROTO]`~~ (resuelto 2026-09-28), `[FATHOM-WEBHOOK-MIEMBRO-ROTO]`, `[FATHOM-SYNC-CURSOR]` | Alta |

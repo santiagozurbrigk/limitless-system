@@ -94,7 +94,7 @@ los grants permitan, un usuario lo puede hacer por fuera de la app.
 | S | Webhook falso | Firma o secreto por proveedor sobre el raw body, fail-closed, tiempo constante (tabla de `jobs-webhooks-y-colas.md`) | Zernio responde 503 en prod (`[ENV-ZERNIO-WEBHOOK-SECRET]`) |
 | S | Atribuir un evento a otra org | La org sale de un dato firmado o de un token propio de la URL; Fathom legacy da 409 si la firma valida para más de una org | — |
 | T | Replay de un webhook firmado viejo | Ventana de 5 min en Whop; dedupe por id de evento | `[AUD-SEG-4]` / `[CALENDLY-WEBHOOK-REPLAY]` / `[FIN-MP-WEBHOOK]` (Calendly, MP y GHL sin ventana) |
-| R | Un cobro que el proveedor mandó y no quedó | `payment_webhook_events` guarda el evento | `[EMBUDOS-WEBHOOK-PERDIDA]` (P0), `[AUD-CONF-5]` (reintento legítimo descartado) |
+| R | Un cobro que el proveedor mandó y no quedó | `payment_webhook_events` guarda el evento | `[EMBUDOS-WEBHOOK-PERDIDA]` (P0, resuelto el 2026-09-30 en SCRUM-6), `[AUD-CONF-5]` (reintento legítimo descartado; los reintentos quedaron en SCRUM-6, falta el índice por org) |
 | I | Respuesta que filtra si la org tiene la integración | — | `[AUD-SEG-8]` |
 | D | Inundación de webhooks | Rate limit en MP, Calendly, Fathom legacy, ManyChat | Resto sin límite (cuesta una verificación de firma por request: aceptable) |
 | I | Secreto en la URL (`?secret=` de Unipile, token de ManyChat y Fathom por miembro) | Tokens largos y por integración | Van a logs de acceso y a Sentry: `[LOGS-DATOS-SENSIBLES]` (nuevo) |

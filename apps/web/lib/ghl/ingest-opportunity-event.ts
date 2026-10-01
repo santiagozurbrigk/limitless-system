@@ -20,6 +20,7 @@ import {
 } from "./opportunity-event";
 import { deriveTransition, type KnownOpportunityState } from "./stage-transition";
 import type { GHLAuthPath } from "./verify-webhook";
+import { ErrorDeBase, esErrorPermanente, reclamarEvento } from "@/lib/webhooks/reclamar";
 
 export type GHLIngestResult = {
   stored: boolean;
@@ -27,7 +28,11 @@ export type GHLIngestResult = {
   /** `true` si el evento generó una fila en `ghl_stage_transitions`. */
   transitionRecorded?: boolean;
   detail?: string;
+  /** Igual que en `IngestResult` de pagos: `false` si reintentar no sirve. */
+  reintentable?: boolean;
 };
+
+type AdminClient = ReturnType<typeof createAdminClient>;
 
 export async function ingestGHLOpportunityEvent(
   organizationId: string,
@@ -37,6 +42,8 @@ export async function ingestGHLOpportunityEvent(
 ): Promise<GHLIngestResult> {
   const admin = createAdminClient();
 
+  const eventId = extractGHLEventId(body);
+
   // 1) Guardar crudo. El índice único sobre external_event_id descarta
   //    reentregas: GHL reintenta y el orden no está garantizado.
   const { data: stored, error: storeError } = await admin
@@ -44,21 +51,63 @@ export async function ingestGHLOpportunityEvent(
     .insert({
       organization_id: organizationId,
       event_type: extractGHLEventType(body),
-      external_event_id: extractGHLEventId(body),
+      external_event_id: eventId,
       auth_path: authPath,
       payload: body,
+      // La misma hora que usa este intento: un reproceso compara y fecha la
+      // transición con `received_at`, y tiene que dar lo mismo (SCRUM-6).
+      received_at: receivedAt,
     })
     .select("id")
     .maybeSingle();
 
   if (storeError) {
-    if (storeError.code === "23505") return { stored: false, status: "duplicate" };
+    // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): si el evento previo quedó en
+    // `error` o trabado en `pending`, este reintento lo reprocesa en vez de
+    // volver `duplicate` (ver `lib/webhooks/reclamar.ts`).
+    if (storeError.code === "23505") {
+      if (!eventId) return { stored: false, status: "duplicate" };
+      const reclamo = await reclamarEvento<{
+        id: string;
+        payload: Record<string, unknown>;
+        received_at: string;
+      }>(
+        admin,
+        "ghl_webhook_events",
+        { external_event_id: eventId, organization_id: organizationId },
+        "id, payload, received_at"
+      );
+      if (reclamo.tipo === "terminado") return { stored: false, status: "duplicate" };
+      if (reclamo.tipo === "en_curso") {
+        return { stored: false, status: "error", detail: "El evento se está procesando" };
+      }
+      const { fila } = reclamo;
+      return procesarEventoGHL(admin, fila.id, organizationId, fila.payload, fila.received_at);
+    }
     console.error("[ghl] no se pudo guardar el evento", storeError.message);
     return { stored: false, status: "error", detail: storeError.message };
   }
 
-  const eventRowId = stored?.id as string | undefined;
+  return procesarEventoGHL(admin, stored?.id as string | undefined, organizationId, body, receivedAt);
+}
 
+/**
+ * Interpreta un evento ya guardado y deja su estado final en
+ * `ghl_webhook_events`. La usan el webhook y el reproceso
+ * (`scripts/reprocesar-webhooks.ts`). `receivedAt` es cuándo llegó el evento
+ * la primera vez: de ahí sale la fecha de la transición de etapa.
+ *
+ * Si ya se aplicó un evento que llegó después que éste (pasa al reprocesar, o
+ * si GHL entrega fuera de orden), éste no se aplica: volvería la oportunidad a
+ * una etapa vieja y registraría una transición que no pasó.
+ */
+export async function procesarEventoGHL(
+  admin: AdminClient,
+  eventRowId: string | undefined,
+  organizationId: string,
+  body: Record<string, unknown>,
+  receivedAt: string
+): Promise<GHLIngestResult> {
   const finish = async (status: string, errorMessage?: string) => {
     if (!eventRowId) return;
     await admin
@@ -83,12 +132,22 @@ export async function ingestGHLOpportunityEvent(
   try {
     // 3) Última etapa conocida — es contra esto que se deriva la transición,
     //    porque el webhook no trae la etapa anterior.
-    const { data: existing } = await admin
+    const { data: existing, error: existingError } = await admin
       .from("ghl_opportunities")
-      .select("stage_external_id, status")
+      .select("stage_external_id, status, last_event_received_at")
       .eq("organization_id", organizationId)
       .eq("external_id", event.opportunityId)
       .maybeSingle();
+    if (existingError) throw new ErrorDeBase(existingError.message, existingError.code);
+
+    // [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): se compara contra la llegada del
+    // último evento aplicado, no contra cuándo se procesó.
+    const ultimaLlegada = existing?.last_event_received_at as string | null | undefined;
+    if (ultimaLlegada && new Date(ultimaLlegada).getTime() > new Date(receivedAt).getTime()) {
+      const detail = "superseded: ya se aplicó un evento más nuevo de esta oportunidad";
+      await finish("processed", detail);
+      return { stored: true, status: "processed", transitionRecorded: false, detail };
+    }
 
     const previous: KnownOpportunityState | null = existing
       ? {
@@ -109,12 +168,15 @@ export async function ingestGHLOpportunityEvent(
         kind: transition.kind,
         status: transition.status,
         occurred_at: transition.occurredAt,
-        external_event_id: transition.eventId,
+        // Sin id de GHL (payload de Workflow armado por el cliente), la clave
+        // de deduplicación es la fila del evento crudo, que no cambia entre
+        // reprocesos. Si no, reprocesar sumaría la misma transición otra vez.
+        external_event_id: transition.eventId ?? (eventRowId ? `fila:${eventRowId}` : null),
       });
 
       // 23505: el mismo evento ya había dejado su transición. No es un error.
       if (transitionError && transitionError.code !== "23505") {
-        throw new Error(transitionError.message);
+        throw new ErrorDeBase(transitionError.message, transitionError.code);
       }
     }
 
@@ -134,12 +196,13 @@ export async function ingestGHLOpportunityEvent(
         monetary_value: event.monetaryValue,
         date_added: event.dateAdded,
         last_stage_change_at: transition ? transition.occurredAt : undefined,
+        last_event_received_at: receivedAt,
         raw: body,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "organization_id,external_id" }
     );
-    if (upsertError) throw new Error(upsertError.message);
+    if (upsertError) throw new ErrorDeBase(upsertError.message, upsertError.code);
 
     // 5) Marcar el borde del período ciego la primera vez.
     //
@@ -157,7 +220,10 @@ export async function ingestGHLOpportunityEvent(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error desconocido";
     await finish("error", message);
-    return { stored: true, status: "error", detail: message };
+    // Sin id de GHL, el reintento no encuentra esta fila: guarda una nueva y
+    // procesa todo otra vez. Ese caso queda en `error` para el reproceso.
+    const reintentable = !esErrorPermanente(error) && extractGHLEventId(body) !== null;
+    return { stored: true, status: "error", detail: message, reintentable };
   }
 }
 

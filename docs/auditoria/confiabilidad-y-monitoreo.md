@@ -24,7 +24,7 @@
 
 - **El sistema guarda bien, pero avisa mal.** Los webhooks de plata (Whop, Commas) y GHL guardan el payload crudo antes
   de interpretarlo y deduplican por id de evento. Lo que falla es el camino de error: si no se pudo guardar, igual
-  responden "OK" y el proveedor no reintenta (ya registrado en `[EMBUDOS-WEBHOOK-PERDIDA]`).
+  responden "OK" y el proveedor no reintenta (ya registrado en `[EMBUDOS-WEBHOOK-PERDIDA]`). **Resuelto el 2026-09-30 (SCRUM-6).**
 - **Nadie se entera de nada.** No hay alertas. Sentry está configurado y tiene DSN en producción, pero sólo recibe lo
   que "explota": casi todos los crons, colas y webhooks atrapan el error y lo escriben en el log de Vercel. No hay
   tabla de corridas de crons. Hoy mismo el agregado de errores de Vercel muestra fallas repetidas durante semanas que
@@ -47,9 +47,9 @@ recibe el proveedor si falla el guardado o el procesamiento (un 2xx hace que el 
 
 | Flujo | Crudo antes | Respuesta ante falla | Dedupe | Reproceso | Cómo nos enteramos | Veredicto | ID |
 |---|---|---|---|---|---|---|---|
-| Whop `/api/webhooks/whop` | sí, `payment_webhook_events` (`lib/payments/ingest.ts:33-43`) | **200** aunque falle el insert del crudo o el upsert (`route.ts:75`) | `(provider, external_event_id)`, índice parcial `WHERE external_event_id IS NOT NULL` | no hay herramienta | `console.error` en Vercel | **Falla** | `[EMBUDOS-WEBHOOK-PERDIDA]`, `[AUD-CONF-5]` |
-| Commas `/api/webhooks/fanbasis` | sí, ídem | **200** (`route.ts:71`); Commas no reintenta nunca | ídem | no | log | **Falla** | ídem |
-| GoHighLevel `/api/webhooks/ghl` | sí, `ghl_webhook_events` (sólo eventos `Opportunity*`) | **200** (`route.ts:113`) | `external_event_id` global (sin org) | no | log | **Falla** | `[EMBUDOS-WEBHOOK-PERDIDA]`, `[EMBUDOS-GHL-WEBHOOK-HARDENING]` |
+| Whop `/api/webhooks/whop` | sí, `payment_webhook_events` (`lib/payments/ingest.ts:33-43`) | **200** aunque falle el insert del crudo o el upsert (`route.ts:75`) | `(provider, external_event_id)`, índice parcial `WHERE external_event_id IS NOT NULL` | no hay herramienta | `console.error` en Vercel | **Falla** **Resuelto el 2026-09-30 (SCRUM-6).** | `[EMBUDOS-WEBHOOK-PERDIDA]`, `[AUD-CONF-5]` |
+| Commas `/api/webhooks/fanbasis` | sí, ídem | **200** (`route.ts:71`); Commas no reintenta nunca | ídem | no | log | **Falla** **Resuelto el 2026-09-30 (SCRUM-6).** | ídem |
+| GoHighLevel `/api/webhooks/ghl` | sí, `ghl_webhook_events` (sólo eventos `Opportunity*`) | **200** (`route.ts:113`) | `external_event_id` global (sin org) | no | log | **Falla** **Resuelto el 2026-09-30 (SCRUM-6).** | `[EMBUDOS-WEBHOOK-PERDIDA]`, `[EMBUDOS-GHL-WEBHOOK-HARDENING]` |
 | Calendly `/api/integrations/calendly/webhook` | **no** | 500 ante excepción (`route.ts:187-191`) → Calendly reintenta (no verificado en doc) | índice único en `closing_calls.calendly_event_id` | el cron `calendly-sync` barre 120 días cada hora | **nada**: el `catch` no loguea, sólo devuelve `e.message` | Revisar | `[CALENDLY-WEBHOOK-REPLAY]`, `[ERRORES-INTERNOS-AL-CLIENTE]`, nuevo `[WEBHOOK-FECHAS-INVENTADAS]` |
 | Mercado Pago `/api/webhooks/mercadopago` | no (no persiste el pago) | 200 | — | — | — | Revisar (sin uso) | `[FIN-MP-WEBHOOK]`, `[FIN-STRIPE-MP-DECIDIR]` |
 | Fathom org (legacy) `/api/integrations/fathom/webhook` | no (upsert directo a `fathom_calls`) | 500 si falla el upsert (lanza, `lib/fathom/process-call.ts:577-586`); 503 si no puede leer integraciones | `(organization_id, fathom_call_id)` — pero la reentrega **resetea** estado y análisis | cron `fathom/sync` cada hora | log | Revisar | nuevo `[WEBHOOK-FECHAS-INVENTADAS]` |

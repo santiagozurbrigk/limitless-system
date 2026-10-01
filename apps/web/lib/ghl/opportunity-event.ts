@@ -121,6 +121,17 @@ export function extractGHLEventType(body: unknown): string | null {
   return pickString(body, ["type", "event", "eventType"]);
 }
 
+/**
+ * [EMBUDOS-WEBHOOK-PERDIDA] (SCRUM-6): `dateAdded` de la vía Workflow lo arma
+ * el cliente y puede venir en cualquier formato. Si no es una fecha, se guarda
+ * `null` en vez de mandar a la base un valor que hace fallar todo el evento.
+ */
+function fechaValida(valor: string | null): string | null {
+  if (!valor) return null;
+  const ms = Date.parse(valor);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
 export function normalizeOpportunityEvent(body: unknown): NormalizeResult {
   if (!isBag(body)) return { kind: "unmapped", reason: "El cuerpo no es un objeto" };
 
@@ -151,7 +162,7 @@ export function normalizeOpportunityEvent(body: unknown): NormalizeResult {
       name: pickString(body, ["name"]),
       source: pickString(body, ["source"]),
       monetaryValue: pickNumber(body, ["monetaryValue", "monetary_value"]),
-      dateAdded: pickString(body, ["dateAdded", "date_added"]),
+      dateAdded: fechaValida(pickString(body, ["dateAdded", "date_added"])),
       isDelete: rawType === "OpportunityDelete",
     },
   };
