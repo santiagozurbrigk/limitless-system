@@ -127,7 +127,7 @@ Prioridad sugerida P1: la severidad es Crítica, pero la toma del super admin ex
 #### [AUTH-RECUPERAR-PASSWORD] (nuevo) "¿Olvidaste tu contraseña?" no hace nada
 - **Tipo:** bug
 - **Severidad:** Media
-- **Estado verificado:** el link de `components/auth/supabase-login-form.tsx` (y `login-screen.tsx`) es `href="#"` con `preventDefault`. `resetPasswordForEmail` no aparece en el código: existen `/auth/recover` y `/auth/update-password`, pero nada manda el mail de recuperación.
+- **Estado verificado:** el link de `components/auth/supabase-login-form.tsx` (y `login-screen.tsx`) es `href="#"` con `preventDefault`. `resetPasswordForEmail` no aparece en el código: existen `/auth/recover` y `/auth/update-password`, pero nada manda el mail de recuperación. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
 - **Riesgo:** Si un usuario olvida su contraseña, entonces no tiene forma de recuperarla solo y queda afuera hasta que alguien le resetee el acceso a mano. Pasa seguro cada vez que alguien la olvida.
 - **Impacto:** Cualquier usuario de cualquier org; hay workaround (el founder o el super admin le asignan una contraseña temporal) pero genera soporte manual y bloquea al founder si es él quien la olvida.
 - **Qué hay que hacer:** pantalla o modal que pida el mail y llame a `supabase.auth.resetPasswordForEmail` con `redirectTo` a `/auth/callback?next=/auth/update-password`; mensaje neutro (no revelar si el mail existe).
@@ -309,7 +309,7 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 
 #### [NOTIFICACIONES-EMAIL-SIN-ENVIO] (nuevo) Las preferencias de notificación no mandan nada
 - **Tipo:** bug
-- **Estado verificado:** Ajustes guarda 9 switches (5 de mail y 4 en la app) en `notification_preferences`, pero sólo `app/settings/actions.ts` lee esa tabla; ningún proceso manda mails según ellos. `sendWelcomeEmail` (Resend) no tiene llamador, aunque `docs/areas/plataforma.md` lista mails de bienvenida.
+- **Estado verificado:** Ajustes guarda 9 switches (5 de mail y 4 en la app) en `notification_preferences`, pero sólo `app/settings/actions.ts` lee esa tabla; ningún proceso manda mails según ellos. `sendWelcomeEmail` (Resend) no tiene llamador, aunque `docs/areas/plataforma.md` lista mails de bienvenida. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
 - **Qué hay que hacer:** decidir qué notificaciones existen; implementarlas o sacar los switches de Ajustes. Llamar o borrar `sendWelcomeEmail`.
 - **Dónde:** `apps/web/app/settings/actions.ts`, `apps/web/components/settings/`, `apps/web/lib/email.ts`.
 
@@ -381,7 +381,7 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 
 #### [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo)
 - **Tipo:** bug
-- **Estado verificado:** `components/navigation/command-palette.tsx` usa `platformNavigation` estático.
+- **Estado verificado:** `components/navigation/command-palette.tsx` usa `platformNavigation` estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos `hidden` del menú (`lib/navigation/build-platform-navigation.ts`); permisos y add-ons siguen sin filtrarse.
 - **Qué hay que hacer:** construirla con `buildPlatformSidebarNav(enabledAddOns)` + `canSeeNavItem`.
 - **Dónde:** `apps/web/components/navigation/command-palette.tsx`, `apps/web/routes/navigation.ts`.
 
@@ -812,7 +812,7 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 #### [CLOSER-AMOUNT-CLOSED] La pestaña Equipo de Closing siempre sale vacía
 - **Tipo:** bug
 - **Severidad:** Media
-- **Estado verificado:** `[AUDITORIA-ABIERTOS]` punto 8 / auditoría §3 "Dinero y datos". `getCloserMetricsAction` (`app/sales/closer-actions.ts:151`) selecciona `closing_calls.amount_closed`, que no existe en ninguna migración ni en producción; el error devuelve `[]`. Lo consume `components/closing/closers-ranking.tsx`.
+- **Estado verificado:** `[AUDITORIA-ABIERTOS]` punto 8 / auditoría §3 "Dinero y datos". `getCloserMetricsAction` (`app/sales/closer-actions.ts:151`) selecciona `closing_calls.amount_closed`, que no existe en ninguna migración ni en producción; el error devuelve `[]`. Lo consume `components/closing/closers-ranking.tsx`. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
 - **Riesgo:** Siempre: la consulta pide closing_calls.amount_closed, que no existe, y la pestaña Equipo de Closing sale vacía en cada carga.
 - **Impacto:** Todas las orgs con closers: no ven ranking, conversión, facturación ni comisión por closer. El error es visible (lista vacía), no un número falso, y la facturación se puede reconstruir desde Cobros o Clientes.
 - **Qué hay que hacer:** decidir de dónde sale la facturación por closer (`outcome.revenue`, `clients.total_amount` vía `clients.closing_call_id`, o `client_payments`) y reescribir la agregación.
@@ -976,7 +976,7 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 
 #### [LEGACY-INBOX-BORRAR] Inbox legacy (ManyChat / Unipile / Instagram DMs) todavía vivo
 - **Tipo:** deuda técnica
-- **Estado verificado:** auditoría §3 "Salud del código" 1. `conversations` 0 filas, `instagram_*` 0, `manychat_events` 0. Sin embargo: ManyChat sigue `listed: true` (`lib/integrations/registry.ts:173`), crons `instagram/poll` (`*/5`) e `instagram/sync` en `vercel.json`, `PlatformDataProvider` carga `listConversationsAction` + canal Realtime en cada pantalla, `listClosingCallsAction` corre `repairClosingConversationLinks` (escribe) en cada lectura. ~7.600 líneas (detalle en `docs/areas/ventas.md` § Legacy). Incluye la race del array `conversations.messages` (auditoría §3 Confiabilidad 7) y "Instagram legacy queda afuera ante un error" (9).
+- **Estado verificado:** auditoría §3 "Salud del código" 1. `conversations` 0 filas, `instagram_*` 0, `manychat_events` 0. Sin embargo: ManyChat sigue `listed: true` (`lib/integrations/registry.ts:173`), crons `instagram/poll` (`*/5`) e `instagram/sync` en `vercel.json`, `PlatformDataProvider` carga `listConversationsAction` + canal Realtime en cada pantalla, `listClosingCallsAction` corre `repairClosingConversationLinks` (escribe) en cada lectura. ~7.600 líneas (detalle en `docs/areas/ventas.md` § Legacy). Incluye la race del array `conversations.messages` (auditoría §3 Confiabilidad 7) y "Instagram legacy queda afuera ante un error" (9). **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
 - **Qué hay que hacer:** decidir el borrado; orden: provider/métricas → deslistar ManyChat → crons → código → migración que suelte `closing_calls.conversation_id` y las tablas.
 - **Dónde:** ver doc de área.
 
@@ -1138,7 +1138,7 @@ Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
 #### [MKT-OVERVIEW-LEGACY] El Overview sale de `content_assets` (legacy)
 - **Tipo:** bug
 - **Severidad:** Alta
-- **Estado verificado:** `getMarketingOverviewContextAction` y `buildOverviewMetricsFromAssets` usan `listContentAssetsAction` (`content_assets`, 6 filas en prod, sólo las escribe Instagram Graph). Las 150 `content_pieces` de Zernio sólo entran en el gráfico de distribución. Además cada carga ejecuta `recomputeContentAssetAttribution` (escrituras) y, sin caché caliente, una llamada a Haiku.
+- **Estado verificado:** `getMarketingOverviewContextAction` y `buildOverviewMetricsFromAssets` usan `listContentAssetsAction` (`content_assets`, 6 filas en prod, sólo las escribe Instagram Graph). Las 150 `content_pieces` de Zernio sólo entran en el gráfico de distribución. Además cada carga ejecuta `recomputeContentAssetAttribution` (escrituras) y, sin caché caliente, una llamada a Haiku. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
 - **Riesgo:** Si una org mira el Overview de Marketing para decidir, entonces ve KPIs, embudo y mapa de calor calculados sobre content_assets (6 filas en prod, sólo Instagram Graph) en vez de su contenido de Zernio. Pasa en cada carga, y cada carga además escribe atribución y puede llamar a Haiku.
 - **Impacto:** Todas las orgs con contenido sólo en Zernio ven números vacíos o de un subconjunto viejo en la pantalla principal del módulo; costo de IA y escrituras innecesarias por cada visita.
 - **Qué hay que hacer:** decidir si el Overview pasa a `content_pieces` (métricas) y cortar el recompute en cada render (moverlo a cron o a la atribución).
@@ -1249,7 +1249,7 @@ Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
 
 #### [MKT-DRIVE-CARPETA] "Nueva carpeta" en Administrar siempre falla
 - **Tipo:** bug
-- **Estado verificado:** `createDriveFolderAction` tira error siempre (scope `drive.readonly`), y `drive-admin-view.tsx` expone el botón.
+- **Estado verificado:** `createDriveFolderAction` tira error siempre (scope `drive.readonly`), y `drive-admin-view.tsx` expone el botón. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
 - **Qué hay que hacer:** ocultar el botón o pedir `drive.file`.
 - **Dónde:** `apps/web/app/marketing/content/drive-actions.ts`, `components/marketing/drive-admin-view.tsx`
 
@@ -1286,7 +1286,7 @@ Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
 
 #### [MKT-LEAD-MAGNETS-CAPTURA] Los lead magnets sólo capturan leads desde el análisis de DMs
 - **Tipo:** feature
-- **Estado verificado:** el único insert en `lead_magnet_leads` es `registerLeadMagnetFromDm`, disparado por `analyzeZernioConversationAction` si un mensaje saliente contiene la URL. Los canales `typeform`, `google_forms`, `landing`, `manychat` no tienen captura. `redirect_url` ("redirección para tracking de clicks") y la tabla `lead_magnet_clicks` no tienen código.
+- **Estado verificado:** el único insert en `lead_magnet_leads` es `registerLeadMagnetFromDm`, disparado por `analyzeZernioConversationAction` si un mensaje saliente contiene la URL. Los canales `typeform`, `google_forms`, `landing`, `manychat` no tienen captura. `redirect_url` ("redirección para tracking de clicks") y la tabla `lead_magnet_clicks` no tienen código. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
 - **Qué hay que hacer:** decidir qué canales se miden y construir la captura (o sacar los canales del form).
 - **Dónde:** `apps/web/lib/marketing/lead-magnets-internal.ts`, `app/marketing/lead-magnets-actions.ts`
 
@@ -1554,7 +1554,7 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 
 #### [LANZAMIENTOS-DORMIDO] Decidir qué hacer con Lanzamientos
 - **Tipo:** decisión de negocio
-- **Estado verificado:** páginas "Próximamente", nav `disabled`, `components/lanzamientos/*` sin importar, acciones vivas sólo para el picker del Workboard. OPERATIONAL_NOTES lo describe como CRUD funcionando.
+- **Estado verificado:** páginas "Próximamente", nav `disabled`, `components/lanzamientos/*` sin importar, acciones vivas sólo para el picker del Workboard. OPERATIONAL_NOTES lo describe como CRUD funcionando. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
 - **Qué hay que hacer:** reactivarlo (montar los componentes existentes en las páginas) o borrar componentes y acciones sin uso, conservando `launches` para el Workboard. Si se reactiva: el prompt del post-mortem mete `name`/`description` sin `wrapUntrustedContent`.
 - **Dónde:** `apps/web/app/(platform)/lanzamientos/*`, `components/lanzamientos/*`, `app/lanzamientos/actions.ts`.
 

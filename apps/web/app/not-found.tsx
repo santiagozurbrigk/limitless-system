@@ -19,9 +19,7 @@ export default function NotFound() {
         <Button asChild>
           <Link href={paths.platform.dashboard}>{es.nav.dashboard}</Link>
         </Button>
-        <Button variant="outline" asChild>
-          <Link href={paths.demo}>{es.demo.title}</Link>
-        </Button>
+        {/* El link al recorrido guiado salió con SCRUM-490: `/demo` está cerrada. */}
       </div>
     </main>
   );

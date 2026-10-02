@@ -22,12 +22,15 @@ export function buildPlatformNavigation(): NavItem[] {
     }
 
     const parent = modulesWithChildren[entry.key as SidebarParentKey];
-    const firstChild = parent.children[0];
+    // ⭐ Lo escondido del menú tampoco aparece en el buscador ⌘K (SCRUM-490).
+    // Antes el ⌘K listaba pantallas que el menú ya no mostraba.
+    const visibles = parent.children.filter((child) => !child.hidden);
+    const firstChild = visibles[0];
     items.push({
       label: parent.label,
       href: firstChild?.href ?? "/",
       icon: parent.icon,
-      children: parent.children.map((child) => ({
+      children: visibles.map((child) => ({
         label: child.label,
         href: child.href,
       })),

@@ -34,6 +34,50 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — Esconder lo roto que no entra en el release de octubre (SCRUM-490)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma, Ventas (Closing), Marketing, Integraciones, navegación.
+`lib/release/escondido.ts` (nuevo), `lib/marketing/lead-magnet-canales.ts` (nuevo),
+`lib/navigation/build-platform-navigation.ts`, `lib/navigation/sidebar-modules.ts`, `lib/integrations/registry.ts`,
+componentes de login, Ajustes, Closing, Marketing y Lead Magnets; `layout.tsx` nuevos en `/demo`, `/design-system`,
+`/redesign-preview`, `/lanzamientos` y `/marketing/sales-connection`.
+
+**Qué se hizo:** una bandera por pieza en `ESCONDIDO` y cada pantalla la consulta:
+- "¿Olvidaste tu contraseña?", la pestaña Notificaciones de Ajustes y la pestaña Equipo de Closing. Los links
+  viejos (`?tab=`, `#equipo`) caen en la pestaña por defecto.
+- El recuadro "Vista previa" de Fathom en el turno.
+- En Marketing:
+  - el Overview sale del menú y `/marketing` lleva a Contenido;
+  - Conexión con Ventas redirige a Contenido;
+  - la sección "Atribución de ventas" del detalle de una pieza no se muestra;
+  - el botón "Nueva carpeta" no se muestra;
+  - Lead Magnets ofrece sólo DM de Instagram y Manual.
+- ManyChat sale del catálogo de Integraciones.
+- `/demo`, `/design-system` y `/redesign-preview` responden 404, y `/lanzamientos` redirige al Panel.
+- El ⌘K filtra los hijos `hidden` del menú y ya no ofrece "Recorrido guiado (demo)". Su acceso rápido "Marketing"
+  lleva a Contenido.
+- Tests: `lib/release/__tests__/escondido.test.ts` (4): ⌘K sin pantallas escondidas, catálogo sin ManyChat y canales
+  de Lead Magnets.
+
+**Por qué / finalidad:** regla de la planificación: lo roto que no entra en el release se esconde. Decisiones del
+2026-10-02:
+- Sí se esconden ManyChat, `/demo` y `/design-system`.
+- No se esconde Fathom por miembro: se arregló en SCRUM-37.
+- No se toca "Crear cuenta" (SCRUM-23).
+
+**Decisiones de diseño relevantes:** banderas en un solo archivo en vez de borrar código. No se tocó lógica, datos
+ni migraciones, así que volver a mostrar algo es un `false`. Los pendientes siguen abiertos con la nota "escondido".
+No se tocaron Métricas de Ventas, el embudo de DMs del Panel, Llamadas ni formularios, que tienen sus propias tareas
+del sprint.
+
+**Riesgos / deuda técnica pendiente:** las 4 orgs con ManyChat conectado no lo pueden desconectar desde la pantalla
+mientras esté escondido (siguen recibiendo igual). Falta recorrerlo con una sesión real
+(`verificacion-manual.md` § Escondido para el release).
+
+---
+
 ### 2026-10-02 — El webhook de Fathom por miembro guarda las grabaciones (SCRUM-37)
 
 **Rama:** `claude/great-thompson-n7ts63`

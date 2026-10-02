@@ -54,12 +54,7 @@ function flattenNav(): PaletteItem[] {
 }
 
 const QUICK_ACTIONS: PaletteItem[] = [
-  {
-    label: "Recorrido guiado (demo)",
-    href: paths.demo,
-    group: "Acciones",
-    keywords: "demo tour guia fase 0",
-  },
+  // "Recorrido guiado (demo)" salió con SCRUM-490: `/demo` está cerrada.
   {
     label: "Enviar input semanal",
     href: paths.platform.operations.weeklyInputs,
@@ -74,7 +69,7 @@ const QUICK_ACTIONS: PaletteItem[] = [
   },
   {
     label: "Marketing",
-    href: paths.platform.marketing.overview,
+    href: paths.platform.marketing.content,
     group: "Acciones",
     keywords: "contenido marketing drive reels",
   },

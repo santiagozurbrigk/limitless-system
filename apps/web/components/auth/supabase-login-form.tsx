@@ -18,6 +18,7 @@ import {
   CUENTA_DESACTIVADA_MESSAGE,
   CUENTA_DESACTIVADA_QUERY,
 } from "@/lib/auth/cuenta-desactivada";
+import { ESCONDIDO } from "@/lib/release/escondido";
 
 const initialState: AuthActionState = {};
 
@@ -143,15 +144,17 @@ export function SupabaseLoginForm() {
         )}
       </p>
 
-      <p className="mt-4 text-center">
-        <Link
-          href="#"
-          className="text-xs text-muted-foreground hover:text-foreground"
-          onClick={(e) => e.preventDefault()}
-        >
-          ¿Olvidaste tu contraseña?
-        </Link>
-      </p>
+      {!ESCONDIDO.olvideContrasena && (
+        <p className="mt-4 text-center">
+          <Link
+            href="#"
+            className="text-xs text-muted-foreground hover:text-foreground"
+            onClick={(e) => e.preventDefault()}
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </p>
+      )}
     </GlassPanel>
   );
 }

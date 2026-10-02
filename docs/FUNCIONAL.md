@@ -57,6 +57,32 @@ Lecturas rápidas:
   (`[CLOSING-LIST-1000]`) y pantallas que leen el inbox viejo, que está vacío.
 - **Producto y Clientes** son las áreas más sanas.
 
+## Escondido para el release de octubre
+
+SCRUM-490 (2026-10-02). La regla de la planificación fue que lo que está roto y no entra en el release se
+esconde, no se borra. No se tocó lógica ni datos, y los pendientes siguen abiertos: esconder no es arreglar.
+Cada ítem es una bandera en `apps/web/lib/release/escondido.ts`; para volver a mostrarlo se pone en `false`.
+
+| Qué se escondió | Por qué | Pendiente / fila | Bandera |
+|---|---|---|---|
+| "¿Olvidaste tu contraseña?" en los dos logins | El link no hace nada | `AUTH-RECUPERAR-PASSWORD` · F-PLA-03 | `olvideContrasena` |
+| Pestaña Notificaciones de Ajustes (`?tab=notificaciones` cae en General) | 9 interruptores que no mandan nada | F-PLA-19 | `ajustesNotificaciones` |
+| Pestaña Equipo de Closing (`#equipo` cae en Calendario) | El ranking sale siempre vacío | `CLOSER-AMOUNT-CLOSED` · F-VEN-14 | `closingEquipo` |
+| Recuadro "Vista previa" de Fathom en el turno (queda "Abrir en Fathom") | Placeholder sin función | — | `vistaPreviaFathomEnTurno` |
+| Overview de Marketing (fuera del menú; `/marketing` lleva a Contenido) | Lee la integración vieja de Instagram | `MKT-OVERVIEW-LEGACY` · F-MKT-17 | `marketingOverview` |
+| Conexión con Ventas (redirige a Contenido) y "Atribución de ventas" del detalle de una pieza | Siempre vacías | F-MKT-19, F-MKT-20 | `marketingConexionVentas` |
+| Botón "Nueva carpeta" en Marketing → Administrar | Siempre da error | `MKT-DRIVE-CARPETA` · F-MKT-06 | `marketingNuevaCarpeta` |
+| Canales Typeform, Google Forms, Landing y ManyChat al crear un Lead Magnet (quedan DM de Instagram y Manual) | No registran leads | `MKT-LEAD-MAGNETS-CAPTURA` · F-MKT-25 | `leadMagnetsCanalesSinCaptura` |
+| ManyChat en el catálogo de Integraciones | Lo que trae va a una bandeja que ninguna pantalla muestra; las 4 orgs conectadas siguen recibiendo | — | `integracionManyChat` |
+| `/redesign-preview`, `/demo` y `/design-system` (responden 404); "Recorrido guiado (demo)" sale del ⌘K y de la página de error | Pantallas internas o maquetas | — | `pantallasInternas` |
+| `/lanzamientos` (redirige al Panel) | "Próximamente", 0 lanzamientos | — | `lanzamientos` |
+
+Además, el buscador ⌘K ya no lista las pantallas que el menú esconde (Administrar, Conexión con Ventas, UTMs,
+Overview de Marketing): se arma desde el mismo config filtrando `hidden`.
+
+No se escondió (decisión del 2026-10-02): Fathom por miembro (se arregló, SCRUM-37), "Crear cuenta" en el login
+(SCRUM-23), Métricas de Ventas, Llamadas, formularios, Discord.
+
 ## Plataforma
 
 Lo que rodea a los módulos de negocio: entrar a la cuenta, quién ve qué (roles y permisos), la vista de holding para quien maneja varios negocios, la puesta en marcha del founder nuevo, el Panel General, Ajustes, el tablero de Integraciones y la navegación. Incluye también el panel interno de Super Admin, que usa sólo el staff de Limitless para dar de alta, seguir y dar de baja a los clientes.
@@ -110,10 +136,10 @@ Doc técnico: [`docs/areas/plataforma.md`](./areas/plataforma.md) · permisos y 
 
 ### Legacy visible
 
-- Link "¿Olvidaste tu contraseña?" en `/login` y en `/superadmin/login` que no hace nada.
-- Pestaña Notificaciones de Ajustes: nueve interruptores (cinco de mail, cuatro en la app) que se guardan y no disparan nada.
-- `/redesign-preview`: pantalla interna de diseño, sin datos, accesible para cualquier usuario logueado y libre de permisos.
-- `/demo` y `/design-system` (tour estático y catálogo de componentes) siguen públicos.
+- Link "¿Olvidaste tu contraseña?" en `/login` y en `/superadmin/login` que no hace nada. **Escondido (SCRUM-490).**
+- Pestaña Notificaciones de Ajustes: nueve interruptores (cinco de mail, cuatro en la app) que se guardan y no disparan nada. **Escondida (SCRUM-490).**
+- `/redesign-preview`: pantalla interna de diseño, sin datos. **Cerrada, responde 404 (SCRUM-490).**
+- `/demo` y `/design-system` (tour estático y catálogo de componentes). **Cerradas, responden 404 (SCRUM-490).**
 - `/api/waitlist` sigue público sin ningún formulario que lo use desde que se borró la landing (`WAITLIST-HUERFANO`); `/super-admin/waitlist` lista lo que entra por ahí.
 - Tarjeta de ManyChat en Integraciones y señal "conversaciones" en la salud de clientes: alimentan / leen el inbox viejo, que quedó vacío desde que la bandeja pasó a Zernio (`CLIENT-HEALTH-LEGACY`).
 - Pestaña "Mi Calendly" en Ajustes que aparece sólo si el nombre del rol contiene "closer" (`SETTINGS-CLOSER-POR-NOMBRE`).
@@ -236,10 +262,10 @@ Doc técnico: [`docs/areas/ventas.md`](./areas/ventas.md)
 
 ### Legacy visible
 
-- **ManyChat** sigue apareciendo en Integraciones como conectable, pero lo que trae va a una tabla que ninguna pantalla muestra.
+- **ManyChat**: lo que trae va a una tabla que ninguna pantalla muestra. **Fuera del catálogo de Integraciones (SCRUM-490).**
 - **Tarjetas de DMs en Métricas** (leads, agendamiento, fantasma, tiempo de respuesta, "Conversaciones", tendencia semanal): leen el inbox viejo y siempre muestran 0.
 - **Tramo de DMs del embudo del Panel General**: mismo origen, siempre vacío.
-- **Recuadro "Vista previa" de Fathom** en el detalle del turno de Closing: placeholder sin función.
+- **Recuadro "Vista previa" de Fathom** en el detalle del turno de Closing: placeholder sin función. **Escondido (SCRUM-490).**
 - **Indicador de tendencia** del ranking del equipo en Métricas: siempre dice "estable".
 - **Etiquetas con emojis** en la bandeja, contra la regla de diseño.
 - Por detrás (no se ve, pero corre): cada pantalla de la plataforma carga y escucha en tiempo real el inbox viejo, y siguen agendados los crons de DMs de Instagram. Detalle y orden de borrado en `docs/areas/ventas.md` § Legacy.
@@ -296,7 +322,7 @@ Doc técnico: [`docs/areas/marketing.md`](./areas/marketing.md)
 
 ### Legacy visible
 
-- **Overview de Marketing**: la pantalla principal del módulo muestra datos de la integración vieja de Instagram; para casi todas las orgs se ve vacía.
+- **Overview de Marketing**: la pantalla principal del módulo muestra datos de la integración vieja de Instagram; para casi todas las orgs se ve vacía. **Escondido: `/marketing` lleva a Contenido (SCRUM-490).**
 - **Conexión con Ventas** (`/marketing/sales-connection`): oculta del menú pero accesible por URL; siempre vacía.
 - **Sección "Atribución de ventas"** en el detalle de cada pieza: siempre vacía.
 - **Botón "Nueva carpeta"** en Administrar: siempre da error.

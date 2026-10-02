@@ -14,6 +14,7 @@ import {
 import { listAutomationFlowsAction } from "@/app/marketing/automations-actions";
 import { useToast } from "@/providers/toast-provider";
 import { brand } from "@/lib/brand";
+import { canalesDeLeadMagnetVisibles } from "@/lib/marketing/lead-magnet-canales";
 
 const TYPES: { value: LeadMagnetType; label: string }[] = [
   { value: "documento", label: "Documento / PDF" },
@@ -23,7 +24,7 @@ const TYPES: { value: LeadMagnetType; label: string }[] = [
   { value: "otro", label: "Otro" },
 ];
 
-const CHANNELS: { value: LeadMagnetChannel; label: string; description: string }[] = [
+const ALL_CHANNELS: { value: LeadMagnetChannel; label: string; description: string }[] = [
   { value: "manychat", label: "ManyChat", description: "El LM se entrega por un flujo de ManyChat" },
   { value: "instagram_dm", label: "DM Instagram", description: `Se envía por DM manualmente (${brand.name} lo detecta automáticamente)` },
   { value: "typeform", label: "Typeform", description: "Se entrega al completar un formulario Typeform" },
@@ -31,6 +32,9 @@ const CHANNELS: { value: LeadMagnetChannel; label: string; description: string }
   { value: "landing", label: "Landing page", description: "El LM es o está en una landing page" },
   { value: "manual", label: "Manual", description: "Otro canal o entrega manual" },
 ];
+
+const CHANNELS = canalesDeLeadMagnetVisibles(ALL_CHANNELS);
+const DEFAULT_CHANNEL: LeadMagnetChannel = CHANNELS[0]?.value ?? "manual";
 
 export function LeadMagnetFormModal({
   open,
@@ -46,7 +50,7 @@ export function LeadMagnetFormModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState<LeadMagnetType>("documento");
-  const [channel, setChannel] = useState<LeadMagnetChannel>("manychat");
+  const [channel, setChannel] = useState<LeadMagnetChannel>(DEFAULT_CHANNEL);
   const [assetUrl, setAssetUrl] = useState("");
   const [manychatFlowId, setManychatFlowId] = useState("");
   const [manychatFlowName, setManychatFlowName] = useState("");
@@ -108,7 +112,7 @@ export function LeadMagnetFormModal({
         setName("");
         setDescription("");
         setType("documento");
-        setChannel("manychat");
+        setChannel(DEFAULT_CHANNEL);
         setAssetUrl("");
         setManychatFlowId("");
         setManychatFlowName("");

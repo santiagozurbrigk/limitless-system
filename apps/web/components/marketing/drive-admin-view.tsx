@@ -19,6 +19,7 @@ import {
   ContentTypeIcon,
   DriveMimeIcon,
 } from "@/components/marketing/marketing-icons";
+import { ESCONDIDO } from "@/lib/release/escondido";
 
 type DriveFile = DriveFileListItem;
 type ViewMode = "grid" | "list";
@@ -214,16 +215,19 @@ export function DriveAdminView() {
           className="h-8 w-40"
         />
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => setShowNewFolderModal(true)}
-        >
-          <Folder className="h-4 w-4 text-yellow-500" aria-hidden />
-          Nueva carpeta
-        </Button>
+        {/* Crear carpeta siempre da error: escondido para el release (SCRUM-490). */}
+        {!ESCONDIDO.marketingNuevaCarpeta && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setShowNewFolderModal(true)}
+          >
+            <Folder className="h-4 w-4 text-yellow-500" aria-hidden />
+            Nueva carpeta
+          </Button>
+        )}
 
         <div className="flex overflow-hidden rounded-md border">
           <button
