@@ -38,7 +38,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Rama:** `claude/great-thompson-n7ts63`
 **Commit(s):** este
-**Módulo(s) afectado(s):** Agente de negocio e IA / Plataforma — `lib/ai/credential-resolver.ts`, `lib/ai/anthropic.ts`, `lib/ai/anthropic-errors.ts`, `lib/ai/anthropic-auth-errors.ts`, `lib/ai/aviso-clave-ia.ts` (nuevo), `lib/ai/platform-credential.ts` (nuevo), `lib/agent/stream-claude-agent.ts`, `app/agent/actions.ts`, `components/platform/aviso-clave-ia.tsx`, `components/settings/claude-api-key-settings.tsx`, super-admin (Infraestructura y Batch del cerebro), `lib/track-token-usage.ts`, `lib/security/{encryption,reencrypt}.ts`; migración `20261002200000_platform_ai_credentials`.
+**Módulo(s) afectado(s):** Agente de negocio e IA / Plataforma — `lib/ai/credential-resolver.ts`, `lib/ai/anthropic.ts`, `lib/ai/anthropic-errors.ts`, `lib/ai/anthropic-auth-errors.ts`, `lib/ai/aviso-clave-ia.ts` (nuevo), `lib/ai/platform-credential.ts` (nuevo), `lib/agent/stream-claude-agent.ts`, `app/agent/actions.ts`, `components/platform/aviso-clave-ia.tsx`, `components/settings/claude-api-key-settings.tsx`, super-admin (Infraestructura y Batch del cerebro), `lib/track-token-usage.ts`, `lib/security/{encryption,reencrypt}.ts`; migración `20261002233654_platform_ai_credentials`.
 
 **Qué se hizo:**
 - **Regla nueva (decisión de Santiago): una organización usa sólo su propia clave de Claude.** `resolveCredentialForOrg` ya no cae a `ANTHROPIC_API_KEY`: sin clave usable devuelve `none`, las funciones devuelven `null` y los crons saltean la org (log `info`, sin error ni reintentos).
