@@ -7,8 +7,9 @@ import crypto from "crypto";
  *   - v2 (actual):  `v2.<iv>.<tag>.<ciphertext>`, con AAD = campo + organización
  *     (+ usuario para las credenciales por miembro). Un ciphertext copiado a otra
  *     fila, otra org u otra columna no descifra.
- *   - v1 (legacy):  `<iv>.<tag>.<ciphertext>`, sin AAD. Se sigue leyendo hasta que
- *     el script de re-cifrado lo pase a v2 (`scripts/reencrypt-secrets.ts`).
+ *   - v1 (`<iv>.<tag>.<ciphertext>`, sin AAD): **ya no se acepta** desde el
+ *     2026-10-02, cuando no quedaba ninguna fila así. Se reconoce la forma sólo
+ *     para tirar un error claro en vez de tratarlo como texto plano.
  *
  * Claves:
  *   - `ENCRYPTION_MASTER_KEY`: la actual. Se usa para cifrar y se prueba primero.
@@ -135,7 +136,6 @@ export function encrypt(plaintext: string, context: SecretContext): string {
 }
 
 type ParsedCiphertext = {
-  version: 1 | 2;
   iv: Buffer;
   authTag: Buffer;
   encrypted: Buffer;
@@ -145,27 +145,25 @@ function parseCiphertext(ciphertext: string): ParsedCiphertext {
   const parts = ciphertext.split(".");
   if (parts.length === 4 && parts[0] === V2_PREFIX) {
     return {
-      version: 2,
       iv: Buffer.from(parts[1], "base64"),
       authTag: Buffer.from(parts[2], "base64"),
       encrypted: Buffer.from(parts[3], "base64"),
     };
   }
   if (parts.length === 3) {
-    return {
-      version: 1,
-      iv: Buffer.from(parts[0], "base64"),
-      authTag: Buffer.from(parts[1], "base64"),
-      encrypted: Buffer.from(parts[2], "base64"),
-    };
+    // v1 no tenía AAD: aceptarlo dejaría que un secreto copiado a otra fila u
+    // otra org descifre. Ya no queda ninguno en la base (SCRUM-86).
+    throw new Error(
+      "Formato de ciphertext v1 (sin AAD): ya no se acepta, hay que volver a cargar el secreto"
+    );
   }
   throw new Error("Formato de ciphertext inválido");
 }
 
-function tryDecrypt(parsed: ParsedCiphertext, key: Buffer, aad: Buffer | null): string | null {
+function tryDecrypt(parsed: ParsedCiphertext, key: Buffer, aad: Buffer): string | null {
   try {
     const decipher = crypto.createDecipheriv(ALGORITHM, key, parsed.iv);
-    if (aad) decipher.setAAD(aad);
+    decipher.setAAD(aad);
     decipher.setAuthTag(parsed.authTag);
     return Buffer.concat([
       decipher.update(parsed.encrypted),
@@ -178,24 +176,22 @@ function tryDecrypt(parsed: ParsedCiphertext, key: Buffer, aad: Buffer | null): 
 
 export type DecryptResult = {
   plaintext: string;
-  /** Formato en el que estaba guardado. */
-  version: 1 | 2;
   /** Con qué clave descifró. */
   key: KeyName;
 };
 
 /**
- * Descifra y dice con qué formato y clave se había guardado. Lo usa el script de
+ * Descifra y dice con qué clave se había guardado. Lo usa el script de
  * re-cifrado para saber qué filas hay que reescribir.
  */
 export function decryptWithInfo(ciphertext: string, context: SecretContext): DecryptResult {
   const parsed = parseCiphertext(ciphertext);
-  const aad = parsed.version === 2 ? buildAad(context) : null;
+  const aad = buildAad(context);
 
   for (const { name, key } of getDecryptionKeys()) {
     const plaintext = tryDecrypt(parsed, key, aad);
     if (plaintext !== null) {
-      return { plaintext, version: parsed.version, key: name };
+      return { plaintext, key: name };
     }
   }
 
@@ -207,8 +203,8 @@ export function decryptWithInfo(ciphertext: string, context: SecretContext): Dec
 }
 
 /**
- * Descifra un string generado por encrypt() (o por la versión v1). Lanza error si
- * el formato es inválido, si ninguna clave sirve o si el secreto no pertenece a
+ * Descifra un string generado por encrypt(). Lanza error si el formato es
+ * inválido o es el v1 viejo, si ninguna clave sirve o si el secreto no pertenece a
  * esta fila (AAD).
  */
 export function decrypt(ciphertext: string, context: SecretContext): string {
@@ -229,7 +225,11 @@ function looksLikeParts(parts: string[]): boolean {
   );
 }
 
-/** ¿Tiene la forma exacta de lo que devuelve `encrypt()` (v2) o la versión v1? */
+/**
+ * ¿Tiene la forma exacta de lo que devuelve `encrypt()` (v2) o la del v1 viejo?
+ * El v1 se sigue reconociendo para que `readStoredSecret` tire en vez de
+ * devolverlo como si fuera texto plano.
+ */
 export function looksEncrypted(value: string): boolean {
   const parts = value.split(".");
   if (parts.length === 4 && parts[0] === V2_PREFIX) {

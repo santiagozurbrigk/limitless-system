@@ -1233,23 +1233,6 @@ Fuente: PENDIENTES.md [OBS-SIN-ALERTAS] · Doc del área: docs/arquitectura/visi
 *Dónde:* {{apps/web/app/api/health/}} (nuevo), {{apps/web/components/super-admin/infrastructure-page.tsx}}, crons en {{apps/web/app/api/cron/}}, Sentry, {{apps/discord-bot}}, {{apps/reel-worker}}.
 
 Fuente: PENDIENTES.md [MONITOREO-Y-ALERTAS] · Doc del área: docs/arquitectura/vision-general.md",MONITOREO-Y-ALERTAS,"Infraestructura, seguridad y tests (transversal)",P1,Alta,deuda técnica
-"[SEC-MASTER-KEY-ROTACION] ENCRYPTION_MASTER_KEY: falta la copia verificada con dos personas, la migración inicial y el ensayo de rotación",Bug,High,infra,p1,sev-critica,seguridad,,,"*Tipo:* seguridad
-
-*Severidad:* Crítica
-
-*Estado verificado:* la parte de código está hecha (SCRUM-86, 2026-09-30, ver {{CHANGES.md}}): formato {{v2}} con AAD, {{ENCRYPTION_MASTER_KEY_PREVIOUS}}, validación de 32 bytes, 500 en los webhooks de Whop/Commas si el secreto no descifra, script {{apps/web/scripts/reencrypt-secrets.ts}} y procedimiento en {{docs/operacion/rotacion-master-key.md}}. Queda: en producción siguen 19 secretos en formato v1 (sin AAD) y 8 claves de Fathom por miembro en texto plano hasta que se corra el script; Santiago confirmó el 2026-09-30 tener la clave fuera de Vercel, pero no está anotado el gestor ni una segunda persona con acceso; Preview usa la misma clave que producción.
-
-*Riesgo:* Si la única copia de la clave se pierde, entonces se caen todas las integraciones cifradas de todas las orgs y los cobros de Commas del período se pierden. Mientras no se corra el script, un ciphertext v1 copiado a otra fila todavía descifra.
-
-*Impacto:* Todas las orgs con integraciones cifradas (BYOK, Zernio, GHL, Hyros, VTurb, WebinarJam, Fathom por miembro, pagos, Mercado Pago); cobros de Commas.
-
-*Qué hay que hacer:* (1) anotar en V-INFRA-11 en qué gestor está la clave y quién es la segunda persona con acceso; (2) después del deploy, correr la migración inicial (V-INFRA-12 pasos 1–3); (3) ensayar una rotación (V-INFRA-12 paso 4); (4) valor distinto para Preview cuando exista {{[ENTORNO-STAGING]}}; (5) cuando no queden filas v1, dejar de aceptar v1 al leer.
-
-*Criterio de aceptación:* V-INFRA-11 paso 4 anotado con dos personas; V-INFRA-12 ejecutado con 0 fallidas y todas las integraciones andando antes y después de sacar la clave anterior; Preview con clave propia.
-
-*Dónde:* Vercel, gestor de secretos, {{apps/web/scripts/reencrypt-secrets.ts}}, {{apps/web/lib/security/encryption.ts}}.
-
-Fuente: PENDIENTES.md [SEC-MASTER-KEY-ROTACION] · Doc del área: docs/arquitectura/vision-general.md",SEC-MASTER-KEY-ROTACION,"Infraestructura, seguridad y tests (transversal)",P1,Crítica,seguridad
 [SUPABASE-PLAN-FREE-LIMITES] Storage al ~80 % del cupo del plan Free y la base pasa a sólo lectura a los 500 MB,Task,High,infra,p1,sev-alta,verificacion-manual,,,"*Tipo:* verificación manual
 
 *Severidad:* Alta
@@ -2867,7 +2850,7 @@ Fuente: PENDIENTES.md [CRONS-CORTE-60S] · Doc del área: docs/arquitectura/visi
 
 *Impacto:* Todas las orgs; frena el ensayo de recuperación.
 
-*Qué hay que hacer:* proyecto de Supabase aparte (o Supabase Branching en plan pago) para Preview, con variables de Preview propias en Vercel y una {{ENCRYPTION_MASTER_KEY}} distinta; datos de prueba sembrados; documentarlo en {{docs/operacion/entorno-y-deploy.md}}.
+*Qué hay que hacer:* proyecto de Supabase aparte (o Supabase Branching en plan pago) para Preview, con variables de Preview propias en Vercel y una {{ENCRYPTION_MASTER_KEY}} distinta; datos de prueba sembrados; documentarlo en {{docs/operacion/entorno-y-deploy.md}}. Con el entorno armado, hacer ahí el ensayo de rotación de la clave maestra y la prueba del webhook con secreto indescifrable (V-INFRA-12), que quedaron pendientes al cerrar SCRUM-86.
 
 *Dónde:* Vercel (variables de Preview), Supabase, {{docs/operacion/entorno-y-deploy.md}}.
 

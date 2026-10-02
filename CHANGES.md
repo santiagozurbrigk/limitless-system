@@ -34,6 +34,31 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — Cierre de SCRUM-86: clave maestra nueva, 19 secretos perdidos desconectados, Fathom cifrado y fin del formato v1
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Infraestructura/seguridad — operación en producción, `lib/security/encryption.ts`, `lib/security/reencrypt.ts`, `scripts/reencrypt-secrets.ts`, `lib/fathom/member-key.ts`; docs `operacion/rotacion-master-key.md`, `operacion/verificacion-manual.md`, `arquitectura/seguridad.md`.
+
+**Qué se hizo (operación, sin valores):**
+- La simulación del script con la copia de `ENCRYPTION_MASTER_KEY` que había en el gestor dio 19 fallidas sobre 19: **la copia no era la de producción**. La variable de Vercel (creada el 2026-06-18, nunca editada) se reemplazó por una clave nueva sin guardar la anterior, así que esos 19 secretos quedaron irrecuperables.
+- La primera clave nueva no era base64 de 32 bytes: producción la rechazó (`ENCRYPTION_MASTER_KEY inválida`) y no pudo cifrar ni descifrar nada (falló el `ghl-sync` de las 14:00 UTC y la conexión de Fathom). Se generó otra válida y se redeployó. No se perdió nada más: con la clave rechazada no se había cifrado nada.
+- Verificación de que la clave de la terminal era la de Vercel: se reconectó la key de Fathom de un miembro de Optimiza tu Control desde la app y esa fila salió "ya ok" en la simulación.
+- Limpieza de las 19 filas que no descifraban, igual que los botones de la app y filtrando por org y por el valor cifrado leído: 3 claves de Claude propia (`claude_api_key_encrypted = null`, estado `none`: Limitless, Optimiza tu Control, familiayformacion), 6 filas de `ghl_integrations` borradas (Academia Apple, BluePrint Financiero, Auletta, Limitless tester, North Ecom Consulting, Optimiza tu Control, que además perdió el secreto de webhook de Workflow) y 9 de `zernio_integrations` (Academia RNS, BluePrint Financiero, Auletta, De Cero a CEO, familiayformacion, North Ecom Consulting, Onboarding, Prueba, Rabbit Hole). Lo importado se conserva. 14 orgs tienen que reconectar.
+- Re-cifrado: `team_member_integrations.encrypted_api_key` 8 filas → simulación 1 "ya ok" + 7 "desde texto plano"; `--apply` 7 reescritas; confirmación 8 "ya ok", 0 fallidas. Resto de columnas: 0 filas. Verificado con SQL: en toda la base quedan 8 secretos, los 8 en v2.
+
+**Qué se hizo (código):**
+- `decrypt` ya no acepta el formato v1 (sin AAD): tira con un mensaje claro. `looksEncrypted` sigue reconociendo la forma para que `readStoredSecret` no lo devuelva como texto plano. `DecryptResult` pierde `version`; el script pierde la columna "desde v1".
+- `encryptMemberFathomKey`: el error dice el motivo real ("falta" o "es inválida" la clave del servidor). Antes decía "falta ENCRYPTION_MASTER_KEY" para cualquier error y despistó en producción.
+- Tests: `encryption.test.ts` (v1 rechazado, también por `readStoredSecret`), `reencrypt.test.ts` (v1 informado como falla) y nuevo `lib/fathom/__tests__/member-key.test.ts` (3).
+- Procedimiento: paso 0 nuevo (comprobar que la copia del gestor es la de producción antes de tocar Vercel), formato de la clave (44 caracteres, termina en `=`), cómo correrlo desde Claude Code en la nube (`NODE_USE_ENV_PROXY=1`, host de Supabase en la red), cómo comprobar que la clave de la terminal es la de Vercel y sección "Si la clave se perdió".
+
+**Por qué / finalidad:** cierra `[SEC-MASTER-KEY-ROTACION]` (SCRUM-86). Lo que no se pudo hacer sin entorno de prueba (clave propia para Preview, ensayo A/B, webhook con secreto indescifrable) pasa a `[ENTORNO-STAGING]` (V-INFRA-12).
+
+**Riesgos / deuda técnica pendiente:**
+- 14 orgs tienen que reconectar GHL/Zernio o volver a cargar su clave de Claude. Optimiza tu Control tiene que regenerar el secreto del webhook de GHL en sus workflows.
+- Probar Fathom de los miembros cuyas keys se reescribieron (V-INFRA-13).
+- Clave nueva en el gestor con acceso de Santiago y Martin (V-INFRA-11, paso 4).
 ### 2026-10-02 — El reporte mensual reporta el mes que terminó (SCRUM-67)
 
 **Rama:** `fix/SCRUM-67-reporte-mensual`

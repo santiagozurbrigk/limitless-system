@@ -19,7 +19,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 11 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | 12 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | 8 |
-| [Infraestructura](#infraestructura) | 12 |
+| [Infraestructura](#infraestructura) | 13 |
 
 ---
 
@@ -1141,7 +1141,7 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 
 **Resultado esperado:** todos con ejecuciones recientes en 2xx; los fallos devuelven 500 (no `ok: true` con ceros); en 2, ⚠️ puede aparecer un error de índice único por las dos corridas simultáneas (`[AUD-CONF-3]`).
 
-### V-INFRA-11 · Plan, cupos y backups de Supabase; copia de la master key ⚠️🔒 — `[DR-BACKUPS-SUPABASE]`, `[SUPABASE-PLAN-FREE-LIMITES]`, `[SEC-MASTER-KEY-ROTACION]`
+### V-INFRA-11 · Plan, cupos y backups de Supabase; copia de la master key ⚠️🔒 — `[DR-BACKUPS-SUPABASE]`, `[SUPABASE-PLAN-FREE-LIMITES]`
 
 **Prerrequisitos:** acceso de owner a la organización de Supabase del proyecto `OTC`; acceso al gestor de secretos del equipo.
 
@@ -1151,17 +1151,22 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 4. Confirmar que `ENCRYPTION_MASTER_KEY` de producción está guardada fuera de Vercel y quién tiene acceso (no copiar el valor en ningún doc).
 5. Confirmar cuántos owners tienen Supabase, Vercel, Fly y Railway.
 
-**Resultado esperado:** 1 → plan pago o, si sigue Free, uso de Storage < 50 % del cupo; 3 → al menos un backup de menos de 24 h (o el dump automático de `[DR-BACKUPS-SUPABASE]`); 4 → existe copia, con acceso de al menos dos personas; 5 → al menos dos owners. ⚠️ Al 2026-09-23: plan `free` (confirmado con la API de Supabase), sin backups, Storage ≈ 797 MB de 1 GB. Paso 4 al 2026-09-30: Santiago Zurbrigk confirma que tiene la clave fuera de Vercel; falta anotar en qué gestor y quién es la segunda persona con acceso.
+**Resultado esperado:** 1 → plan pago o, si sigue Free, uso de Storage < 50 % del cupo; 3 → al menos un backup de menos de 24 h (o el dump automático de `[DR-BACKUPS-SUPABASE]`); 4 → existe copia, con acceso de al menos dos personas; 5 → al menos dos owners. ⚠️ Al 2026-09-23: plan `free` (confirmado con la API de Supabase), sin backups, Storage ≈ 797 MB de 1 GB. Paso 4: la clave original se perdió (la copia que había no era la de producción). El 2026-10-02 se generó una nueva y Santiago Zurbrigk confirma que quedó guardada en el gestor, con acceso también de Martin (dos personas: cumple). Comprobación de que la copia es la buena: paso 0 de [`rotacion-master-key.md`](./rotacion-master-key.md).
 
-### V-INFRA-12 · Migración inicial y ensayo de rotación de la master key 🔒⭐ — `[SEC-MASTER-KEY-ROTACION]`
+### V-INFRA-12 · Ensayo de rotación de la master key 🔒⭐ — `[ENTORNO-STAGING]`
 
-**Prerrequisitos:** deploy con SCRUM-86 en producción; la clave actual (V-INFRA-11 paso 4), la service role y acceso a las variables de Vercel. Procedimiento: [`rotacion-master-key.md`](./rotacion-master-key.md).
+**Prerrequisitos:** el entorno de prueba de `[ENTORNO-STAGING]` (base y clave propias), con una integración cifrada de cada tipo cargada. Procedimiento: [`rotacion-master-key.md`](./rotacion-master-key.md).
 
-1. **Migración inicial** (sin rotar): correr `pnpm dlx tsx scripts/reencrypt-secrets.ts` sin `--apply` con la clave actual. Esperado al 2026-09-30: 19 filas "desde v1" (3 Claude propia, 6 + 1 GHL, 9 Zernio), 8 "desde texto plano" (Fathom por miembro), 0 fallidas.
-2. Correr con `--apply` y después de nuevo sin `--apply`: todo en "ya ok", 0 fallidas.
-3. Comprobar que siguen andando: Zernio (bandeja), GHL (sync de citas), Fathom por miembro ("Sincronizar mis llamadas"), clave de Claude propia (Ajustes muestra `****xxxx` y el agente responde con la clave de la org).
-4. **Ensayo de rotación** (idealmente cuando exista `[ENTORNO-STAGING]`; en producción, en una ventana tranquila): pasos 1 a 5 del procedimiento, con clave A = la actual y clave B = una nueva. Después de cargar B + A y redeployar, repetir el paso 3. Después del re-cifrado y de sacar A, repetir el paso 3.
-5. 🔒 Webhook de pagos con secreto que no descifra: sólo en un entorno de prueba, cargar una clave distinta sin la anterior y mandar un webhook a `/api/webhooks/whop?organizationId=<org con Whop>`.
+1. Pasos 0 a 5 del procedimiento, con clave A = la actual y clave B = una nueva. Después de cargar B + A y redeployar, comprobar Zernio (bandeja), GHL (sync de citas), Fathom por miembro ("Sincronizar mis llamadas") y clave de Claude propia (Ajustes muestra `****xxxx`). Repetir después del re-cifrado y de sacar A.
+2. 🔒 Webhook de pagos con secreto que no descifra: cargar una clave distinta sin la anterior y mandar un webhook a `/api/webhooks/whop?organizationId=<org con Whop>`.
 
-**Resultado esperado:** 1–2 → los conteos de arriba y 0 fallidas; 3 → todo sigue andando; 4 → todo anda con B + A y después sólo con B; 5 → responde **500** (no 404) y el log dice `[payments] no se pudo descifrar el secreto`. Anotar los conteos en `CHANGES.md` (sin valores).
+**Resultado esperado:** 1 → todo anda con B + A y después sólo con B, y el script termina con 0 fallidas; 2 → responde **500** (no 404) y el log dice `[payments] no se pudo descifrar el secreto`. Anotar los conteos en `CHANGES.md` (sin valores).
+
+### V-INFRA-13 · Fathom por miembro después del re-cifrado del 2026-10-02 🔒 — SCRUM-86
+
+**Prerrequisitos:** un miembro con Fathom conectado en alguna de estas orgs: Academia RNS, Auletta, familiayformacion, Limitless (2 miembros), Limitless tester, Onboarding.
+
+1. Integraciones → "Sincronizar mis llamadas" con ese miembro.
+
+**Resultado esperado:** sincroniza sin error. Si dice que no se puede leer la credencial, el miembro reconecta su key (la nueva se guarda cifrada) y se anota acá.
 
