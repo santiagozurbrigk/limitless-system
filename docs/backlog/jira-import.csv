@@ -1369,23 +1369,6 @@ Fuente: PENDIENTES.md [ENV-LIMPIEZA] · Doc del área: docs/arquitectura/vision-
 *Dónde:* {{apps/web/lib/{agent,ai,queue,auth,holding}/__tests__/}}.
 
 Fuente: PENDIENTES.md [AUD-SALUD-4 / T-14 / T-BYOK] · Doc del área: docs/arquitectura/vision-general.md",AUD-SALUD-4 / T-14 / T-BYOK,"Infraestructura, seguridad y tests (transversal)",P1,Media,tests
-[T-1] Tests de derive-finance-summary.ts y derive-monthly-series.ts,Task,High,infra,p1,sev-media,tests,,,"*Tipo:* tests
-
-*Severidad:* Media
-
-*Estado verificado:* {{lib/metrics/__tests__/}} sólo tiene {{build-sales-funnel-stages}} y {{match-closer}}.
-
-*Riesgo:* Si se toca la agregación mensual o el desglose por closer, entonces un corrimiento ART/UTC o un mes vacío mal tratado cambia los números del dashboard sin que nada lo detecte.
-
-*Impacto:* Métricas de Finanzas y comisiones por closer que el negocio usa para decidir; hoy no hay bug conocido, es prevención.
-
-*Qué hay que hacer:* agrupación por mes (ART vs UTC), meses vacíos, {{deriveCloserBreakdown}} con 0/1 closer y sin {{closed_by_name}}, reembolsos y {{null}}.
-
-*Criterio de aceptación:* Hay tests de derive-finance-summary.ts y derive-monthly-series.ts que cubren agrupación por mes en hora de Argentina vs UTC, meses vacíos, deriveCloserBreakdown con 0/1 closer y sin closed_by_name, reembolsos y valores null; pnpm test pasa
-
-*Dónde:* {{apps/web/lib/metrics/}}.
-
-Fuente: PENDIENTES.md [T-1] · Doc del área: docs/arquitectura/vision-general.md",T-1,"Infraestructura, seguridad y tests (transversal)",P1,Media,tests
 [T-3] Tests de parse-client-import.ts y excel-parser.ts,Task,High,infra,p1,sev-media,tests,,,"*Tipo:* tests
 
 *Severidad:* Media
