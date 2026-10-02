@@ -34,6 +34,25 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — Tests de los cálculos de pagos, y dos arreglos que salieron al escribirlos (SCRUM-104)
+
+**Rama:** `test/SCRUM-104-payment-utils`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `lib/clients/payment-utils.ts`, `components/closing/payment-modal.tsx`, `components/sales/client-payments-section.tsx`, `providers/platform-data-provider.tsx`
+
+**Qué se hizo:**
+- Tests de `getPaidAmountFromClosePayload`, `getPaymentDateFromClosePayload` e `installmentNumberForClosePayload`: pago único, cuotas, adelanto más fee y payload incompleto (`lib/clients/__tests__/payment-utils.test.ts`).
+- La fecha de "hoy" de un pago pasa a ser la del día local (`fechaDeHoyLocal`) en vez de la de UTC. Antes, un pago registrado después de las 21:00 en Argentina quedaba con fecha del día siguiente. Aplica al cierre de venta (pago, fecha de alta del cliente y fecha de la llamada) y a los diálogos de registrar una cuota o un pago extra de la ficha.
+- Con montos manuales por cuota, el respaldo del monto pagado usa la primera cuota en vez del promedio, y si la primera es 0 cae al promedio en vez de registrar un pago de 0. La pantalla ya mandaba la primera cuota, así que no cambia nada visible.
+
+**Por qué / finalidad:** cierra `[T-4]`. Los cálculos de pagos no tenían tests y la fecha del pago se corría de día.
+
+**Decisiones de diseño relevantes:** el respaldo que devuelve 0 con un payload incompleto queda como está y documentado en el test: la pantalla no deja cerrar con un monto de 0 o menos. `fechaDeHoyLocal` es para el navegador; en el servidor daría la fecha de UTC.
+
+**Riesgos / deuda técnica pendiente:** ninguno.
+
+---
+
 ### 2026-10-01 — La clave maestra de cifrado se puede rotar sin cortar las integraciones (SCRUM-86)
 
 **Rama:** `claude/great-thompson-n7ts63`

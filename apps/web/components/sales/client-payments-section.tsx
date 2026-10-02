@@ -27,6 +27,7 @@ import { usePlatformData } from "@/providers";
 import { useFinanceData } from "@/providers/finance-data-provider";
 import { useToast } from "@/providers/toast-provider";
 import type { Client, ClientPayment } from "@/types/clients";
+import { fechaDeHoyLocal } from "@/lib/clients/payment-utils";
 
 function formatMoney(amount: number) {
   return `$${amount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
@@ -300,7 +301,7 @@ function AddInstallmentPaymentDialog({
   const { push } = useToast();
   const [amount, setAmount] = useState(String(defaultAmount));
   const [paymentDate, setPaymentDate] = useState(
-    () => new Date().toISOString().slice(0, 10)
+    () => fechaDeHoyLocal()
   );
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -309,7 +310,7 @@ function AddInstallmentPaymentDialog({
   useEffect(() => {
     if (open) {
       setAmount(String(defaultAmount));
-      setPaymentDate(new Date().toISOString().slice(0, 10));
+      setPaymentDate(fechaDeHoyLocal());
       setFile(null);
       setError(null);
     }
@@ -424,7 +425,7 @@ function AddGenericPaymentDialog({
 }) {
   const [amount, setAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState(
-    () => new Date().toISOString().slice(0, 10)
+    () => fechaDeHoyLocal()
   );
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -433,7 +434,7 @@ function AddGenericPaymentDialog({
   useEffect(() => {
     if (open) {
       setAmount("");
-      setPaymentDate(new Date().toISOString().slice(0, 10));
+      setPaymentDate(fechaDeHoyLocal());
       setFile(null);
       setError(null);
     }
