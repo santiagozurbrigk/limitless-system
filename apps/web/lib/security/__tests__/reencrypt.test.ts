@@ -70,29 +70,24 @@ describe("planReencryption", () => {
     expect(planReencryption(encrypt("k", CTX), CTX, true)).toEqual({ action: "keep" });
   });
 
-  it("pasa v1 a v2 con la clave actual", () => {
+  it("informa como falla un secreto en formato v1, sin reescribirlo", () => {
     const plan = planReencryption(encryptV1("k", process.env.ENCRYPTION_MASTER_KEY!), CTX, true);
-    expect(plan).toMatchObject({ action: "rewrite", from: "v1" });
-    expect(decryptWithInfo(rewritten(plan), CTX)).toEqual({ plaintext: "k", version: 2, key: "current" });
+    expect(plan).toMatchObject({ action: "fail", reason: expect.stringMatching(/v1/) });
   });
 
   it("rotación completa: A → (B actual, A anterior) → re-cifrado → sin A sigue andando", () => {
     const keyA = process.env.ENCRYPTION_MASTER_KEY!;
-    const v1 = encryptV1("k-v1", keyA);
     const v2 = encrypt("k-v2", CTX);
 
     process.env.ENCRYPTION_MASTER_KEY = newKey();
     process.env.ENCRYPTION_MASTER_KEY_PREVIOUS = keyA;
 
-    const fromV1 = planReencryption(v1, CTX, true);
     const fromV2 = planReencryption(v2, CTX, true);
-    expect(fromV1).toMatchObject({ action: "rewrite", from: "v1" });
     expect(fromV2).toMatchObject({ action: "rewrite", from: "previous_key" });
 
     delete process.env.ENCRYPTION_MASTER_KEY_PREVIOUS;
 
-    expect(decryptWithInfo(rewritten(fromV1), CTX).plaintext).toBe("k-v1");
-    expect(decryptWithInfo(rewritten(fromV2), CTX).plaintext).toBe("k-v2");
+    expect(decryptWithInfo(rewritten(fromV2), CTX)).toEqual({ plaintext: "k-v2", key: "current" });
     expect(planReencryption(rewritten(fromV2), CTX, true)).toEqual({ action: "keep" });
   });
 

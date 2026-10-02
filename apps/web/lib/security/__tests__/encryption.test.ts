@@ -45,7 +45,6 @@ describe("encrypt / decrypt (v2)", () => {
     expect(looksEncrypted(stored)).toBe(true);
     expect(decryptWithInfo(stored, CTX)).toEqual({
       plaintext: "sk_live_123",
-      version: 2,
       key: "current",
     });
   });
@@ -59,7 +58,6 @@ describe("encrypt / decrypt (v2)", () => {
 
     expect(decryptWithInfo(stored, CTX)).toEqual({
       plaintext: "sk_live_123",
-      version: 2,
       key: "previous",
     });
     // Lo nuevo se cifra con la actual, no con la anterior.
@@ -103,20 +101,13 @@ describe("encrypt / decrypt (v2)", () => {
   });
 });
 
-describe("formato v1 (legacy)", () => {
-  it("sigue leyendo lo cifrado antes de v2, con la clave actual o la anterior", () => {
-    const keyA = process.env.ENCRYPTION_MASTER_KEY!;
-    const stored = encryptV1("sk_live_123", keyA);
+describe("formato v1 (sin AAD)", () => {
+  it("ya no se acepta, ni con la clave correcta: tira en vez de descifrar", () => {
+    const stored = encryptV1("sk_live_123", process.env.ENCRYPTION_MASTER_KEY!);
     expect(looksEncrypted(stored)).toBe(true);
-    expect(decryptWithInfo(stored, CTX)).toEqual({
-      plaintext: "sk_live_123",
-      version: 1,
-      key: "current",
-    });
-
-    process.env.ENCRYPTION_MASTER_KEY = newKey();
-    process.env.ENCRYPTION_MASTER_KEY_PREVIOUS = keyA;
-    expect(decryptWithInfo(stored, CTX).key).toBe("previous");
+    expect(() => decrypt(stored, CTX)).toThrow(/v1/);
+    // Y no se devuelve como si fuera texto plano.
+    expect(() => readStoredSecret(stored, CTX)).toThrow(/v1/);
   });
 });
 

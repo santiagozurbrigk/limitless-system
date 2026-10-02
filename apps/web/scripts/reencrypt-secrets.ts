@@ -1,13 +1,16 @@
 /**
  * Re-cifra todos los secretos guardados con la clave maestra actual y el formato
- * v2 (con AAD). Se usa al rotar `ENCRYPTION_MASTER_KEY` y, la primera vez, para
- * pasar lo que estaba en v1 o en texto plano.
+ * v2 (con AAD). Se usa al rotar `ENCRYPTION_MASTER_KEY` y para cifrar lo que haya
+ * quedado en texto plano legacy.
  *
  * Procedimiento completo (cuándo y cómo correrlo): docs/operacion/rotacion-master-key.md
  *
  * Uso (desde apps/web):
  *   pnpm dlx tsx scripts/reencrypt-secrets.ts            # simulación: no escribe nada
  *   pnpm dlx tsx scripts/reencrypt-secrets.ts --apply    # escribe
+ *
+ * En un entorno de Claude Code en la nube, Node no usa el proxy de salida por su
+ * cuenta: anteponer `NODE_USE_ENV_PROXY=1` a los dos comandos.
  *
  * Variables:
  *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
@@ -38,7 +41,6 @@ type ColumnReport = {
   column: string;
   total: number;
   keep: number;
-  v1: number;
   previous_key: number;
   plaintext: number;
   skipped_concurrent: number;
@@ -57,7 +59,6 @@ async function processColumn(
     column: column.column,
     total: 0,
     keep: 0,
-    v1: 0,
     previous_key: 0,
     plaintext: 0,
     skipped_concurrent: 0,
@@ -167,7 +168,6 @@ async function main() {
       columna: `${r.table}.${r.column}`,
       total: r.total,
       "ya ok": r.keep,
-      "desde v1": r.v1,
       "desde clave anterior": r.previous_key,
       "desde texto plano": r.plaintext,
       "salteadas (cambiaron)": r.skipped_concurrent,
@@ -177,7 +177,7 @@ async function main() {
 
   const failed = reports.reduce((sum, r) => sum + r.failed, 0);
   const pending = reports.reduce(
-    (sum, r) => sum + r.v1 + r.previous_key + r.plaintext,
+    (sum, r) => sum + r.previous_key + r.plaintext,
     0
   );
 

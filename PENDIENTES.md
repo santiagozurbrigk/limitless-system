@@ -79,7 +79,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 19 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 23 | 42 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 22 | 42 | 13 |
 
 ---
 
@@ -2221,18 +2221,6 @@ Prioridad sugerida P1: la falla es silenciosa y ya está ocurriendo en producci�
 
 Prioridad sugerida P1: es la base del runbook; sin detección, todas las demás fallas silenciosas se alargan.
 
-#### [SEC-MASTER-KEY-ROTACION] `ENCRYPTION_MASTER_KEY`: falta la copia verificada con dos personas, la migración inicial y el ensayo de rotación
-- **Tipo:** seguridad
-- **Severidad:** Crítica
-- **Estado verificado:** la parte de código está hecha (SCRUM-86, 2026-09-30, ver `CHANGES.md`): formato `v2` con AAD, `ENCRYPTION_MASTER_KEY_PREVIOUS`, validación de 32 bytes, 500 en los webhooks de Whop/Commas si el secreto no descifra, script `apps/web/scripts/reencrypt-secrets.ts` y procedimiento en `docs/operacion/rotacion-master-key.md`. Queda: en producción siguen 19 secretos en formato v1 (sin AAD) y 8 claves de Fathom por miembro en texto plano hasta que se corra el script; Santiago confirmó el 2026-09-30 tener la clave fuera de Vercel, pero no está anotado el gestor ni una segunda persona con acceso; Preview usa la misma clave que producción.
-- **Riesgo:** Si la única copia de la clave se pierde, entonces se caen todas las integraciones cifradas de todas las orgs y los cobros de Commas del período se pierden. Mientras no se corra el script, un ciphertext v1 copiado a otra fila todavía descifra.
-- **Impacto:** Todas las orgs con integraciones cifradas (BYOK, Zernio, GHL, Hyros, VTurb, WebinarJam, Fathom por miembro, pagos, Mercado Pago); cobros de Commas.
-- **Qué hay que hacer:** (1) anotar en V-INFRA-11 en qué gestor está la clave y quién es la segunda persona con acceso; (2) después del deploy, correr la migración inicial (V-INFRA-12 pasos 1–3); (3) ensayar una rotación (V-INFRA-12 paso 4); (4) valor distinto para Preview cuando exista `[ENTORNO-STAGING]`; (5) cuando no queden filas v1, dejar de aceptar v1 al leer.
-- **Criterio de aceptación:** V-INFRA-11 paso 4 anotado con dos personas; V-INFRA-12 ejecutado con 0 fallidas y todas las integraciones andando antes y después de sacar la clave anterior; Preview con clave propia.
-- **Dónde:** Vercel, gestor de secretos, `apps/web/scripts/reencrypt-secrets.ts`, `apps/web/lib/security/encryption.ts`.
-
-Prioridad sugerida P1: la severidad es Crítica pero requiere un error humano o una filtración; (1) y (2) son minutos.
-
 #### [SUPABASE-PLAN-FREE-LIMITES] Storage al ~80 % del cupo del plan Free y la base pasa a sólo lectura a los 500 MB
 - **Tipo:** verificación manual
 - **Severidad:** Alta
@@ -2473,7 +2461,7 @@ Prioridad sugerida P2: no hay fuga activa aparte de la que ya es P0; es prevenci
 - **Estado verificado:** todas las variables del proyecto `otc-plaform` en Vercel tienen target Preview y Production con el mismo valor, incluidas `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `ENCRYPTION_MASTER_KEY` (listado de tipo/target, sin valores, 2026-09-23). Supabase no tiene branches (`list_branches` vacío). `CHANGES.md` registra pruebas "contra el preview con datos reales". Los previews están protegidos por Vercel SSO (`ssoProtection: all_except_custom_domains`).
 - **Riesgo:** Si una rama con un bug escribe o borra algo, entonces lo hace sobre datos reales de clientes (sin backup, `[DR-BACKUPS-SUPABASE]`). Tampoco hay dónde ensayar una migración con datos ni una restauración.
 - **Impacto:** Todas las orgs; frena el ensayo de recuperación.
-- **Qué hay que hacer:** proyecto de Supabase aparte (o Supabase Branching en plan pago) para Preview, con variables de Preview propias en Vercel y una `ENCRYPTION_MASTER_KEY` distinta; datos de prueba sembrados; documentarlo en `docs/operacion/entorno-y-deploy.md`.
+- **Qué hay que hacer:** proyecto de Supabase aparte (o Supabase Branching en plan pago) para Preview, con variables de Preview propias en Vercel y una `ENCRYPTION_MASTER_KEY` distinta; datos de prueba sembrados; documentarlo en `docs/operacion/entorno-y-deploy.md`. Con el entorno armado, hacer ahí el ensayo de rotación de la clave maestra y la prueba del webhook con secreto indescifrable (V-INFRA-12), que quedaron pendientes al cerrar SCRUM-86.
 - **Dónde:** Vercel (variables de Preview), Supabase, `docs/operacion/entorno-y-deploy.md`.
 
 Prioridad sugerida P2: los previews no son públicos; el daño requiere un bug en una rama, pero el costo de que pase es alto.

@@ -32,9 +32,14 @@ export function encryptMemberFathomKey(
       "[fathom member] no se pudo cifrar la key",
       error instanceof Error ? error.message : String(error)
     );
+    // El motivo real (falta la clave o la clave es inválida) va al mensaje: antes
+    // decía "falta" para cualquier error y despistaba (SCRUM-86, 2026-10-02).
+    const reason =
+      error instanceof Error && error.message.includes("inválida")
+        ? "la clave de cifrado del servidor es inválida"
+        : "falta la clave de cifrado del servidor";
     throw new Error(
-      "No se puede guardar la credencial de forma segura (falta ENCRYPTION_MASTER_KEY). " +
-        "No se guardó nada."
+      `No se puede guardar la credencial de forma segura (${reason}). No se guardó nada.`
     );
   }
 }

@@ -43,7 +43,7 @@ El detalle de sesión, organización efectiva, holding y permisos por módulo es
 
 ## Secretos y cifrado
 
-`lib/security/encryption.ts`: AES-256-GCM, IV aleatorio de 12 bytes, auth tag. Formato actual `v2.<iv>.<tag>.<ciphertext>` en base64, con **AAD** = columna + organización (+ usuario en `team_member_integrations`): un ciphertext copiado a otra fila, org o columna no descifra. Se sigue leyendo el formato `v1` (`iv.tag.ciphertext`, sin AAD) hasta que el script de re-cifrado lo pase a v2. `encrypt`/`decrypt`/`readStoredSecret` exigen ese contexto (`SecretContext`).
+`lib/security/encryption.ts`: AES-256-GCM, IV aleatorio de 12 bytes, auth tag. Formato actual `v2.<iv>.<tag>.<ciphertext>` en base64, con **AAD** = columna + organización (+ usuario en `team_member_integrations`): un ciphertext copiado a otra fila, org o columna no descifra. El formato viejo `v1` (`iv.tag.ciphertext`, sin AAD) **ya no se acepta** desde el 2026-10-02: no quedaba ninguna fila así; si aparece uno, `decrypt` tira (y `readStoredSecret` no lo devuelve como texto plano). `encrypt`/`decrypt`/`readStoredSecret` exigen ese contexto (`SecretContext`).
 
 Claves: `ENCRYPTION_MASTER_KEY` (actual: cifra y se prueba primero) y `ENCRYPTION_MASTER_KEY_PREVIOUS` (opcional, sólo lectura durante una rotación). Las dos tienen que ser base64 de **exactamente 32 bytes** (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`); si no, lanzan con `… inválida`. Sin la actual, `encrypt`/`decrypt` **lanzan**: ningún proveedor guarda en claro por falta de clave ni manda el ciphertext como API key. La lista de columnas cifradas es `SECRET_FIELDS` (y `SECRET_COLUMNS` en `lib/security/reencrypt.ts`, que usa el script).
 
@@ -53,12 +53,12 @@ Qué se guarda cifrado y qué no:
 |---|---|---|
 | Key BYOK de Claude | `organizations.claude_api_key_encrypted` | sí |
 | API keys de Zernio, GHL, Hyros, VTurb, WebinarJam | `*_integrations` | sí (`lib/<proveedor>/integration.ts`) |
-| Key de Fathom por miembro | `team_member_integrations.encrypted_api_key` | sí (`lib/fathom/member-key.ts`). Hasta el 2026-09-30 la conexión desde Integraciones → Fathom la guardaba **en claro** (8 filas en producción); el script de re-cifrado las cifra |
+| Key de Fathom por miembro | `team_member_integrations.encrypted_api_key` | sí (`lib/fathom/member-key.ts`). Hasta el 2026-09-30 la conexión desde Integraciones → Fathom la guardaba **en claro**; las 8 filas de producción se cifraron el 2026-10-02 |
 | Secreto de webhook y API key de Whop/Commas | `payment_integrations.*_encrypted` | sí |
 | Tokens de Mercado Pago | `mercadopago_integrations` | sí (`lib/mercadopago/tokens.ts`) |
 | Tokens OAuth de Calendly, Stripe, Instagram, Typeform, Google/YouTube, Drive de super-admin; `fathom_integrations.api_key`; token de ManyChat | `*_integrations`, `super_admin_google_tokens` | **no** — protegidos sólo por RLS cerrado (`[AUD-SEG-2]`) |
 
-Rotar `ENCRYPTION_MASTER_KEY`: nueva como actual, vieja como `ENCRYPTION_MASTER_KEY_PREVIOUS`, redeploy, `apps/web/scripts/reencrypt-secrets.ts --apply`, sacar la vieja. Procedimiento completo en [`docs/operacion/rotacion-master-key.md`](../operacion/rotacion-master-key.md). Cambiar la clave **sin** cargar la anterior sigue rompiendo todo lo cifrado: la clave de Claude de cada org cae en silencio a la global (`[BYOK-DESCIFRADO-SILENCIOSO]`), las demás integraciones cifradas tiran al leer y los webhooks de Whop/Commas responden **500** (y GHL, con su secreto de Workflow). Pendiente: copia de la clave fuera de Vercel y clave propia para Preview (`[SEC-MASTER-KEY-ROTACION]`).
+Rotar `ENCRYPTION_MASTER_KEY`: nueva como actual, vieja como `ENCRYPTION_MASTER_KEY_PREVIOUS`, redeploy, `apps/web/scripts/reencrypt-secrets.ts --apply`, sacar la vieja. Procedimiento completo en [`docs/operacion/rotacion-master-key.md`](../operacion/rotacion-master-key.md). Cambiar la clave **sin** cargar la anterior sigue rompiendo todo lo cifrado: la clave de Claude de cada org cae en silencio a la global (`[BYOK-DESCIFRADO-SILENCIOSO]`), las demás integraciones cifradas tiran al leer y los webhooks de Whop/Commas responden **500** (y GHL, con su secreto de Workflow). Antes de rotar, comprobar que la copia del gestor es la de producción (paso 0 del procedimiento): el 2026-10-02 la copia no era la buena y se perdieron 19 secretos. Pendiente: clave propia para Preview y ensayo de rotación, con `[ENTORNO-STAGING]`.
 
 ## Crons, colas y bot
 

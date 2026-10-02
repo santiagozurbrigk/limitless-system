@@ -2,8 +2,8 @@
  * Lógica del re-cifrado de secretos (`scripts/reencrypt-secrets.ts`).
  *
  * Pasa cada secreto guardado al formato actual (v2, con AAD) y a la clave actual
- * (`ENCRYPTION_MASTER_KEY`). Se usa al rotar la clave maestra y, la primera vez,
- * para migrar lo que estaba en v1 o en texto plano. Procedimiento completo en
+ * (`ENCRYPTION_MASTER_KEY`). Se usa al rotar la clave maestra y para cifrar lo que
+ * haya quedado en texto plano legacy. Procedimiento completo en
  * `docs/operacion/rotacion-master-key.md`.
  *
  * Nunca devuelve ni loguea el secreto en claro: sólo el valor nuevo cifrado.
@@ -55,8 +55,8 @@ export type ReencryptPlan =
   | { action: "keep" }
   | {
       action: "rewrite";
-      /** De dónde venía: formato v1, clave anterior o texto plano legacy. */
-      from: "v1" | "previous_key" | "plaintext";
+      /** De dónde venía: clave anterior o texto plano legacy. */
+      from: "previous_key" | "plaintext";
       value: string;
     }
   | { action: "fail"; reason: string };
@@ -95,18 +95,21 @@ export function planReencryption(
   let result;
   try {
     result = decryptWithInfo(stored, context);
-  } catch {
+  } catch (error) {
+    const isV1 = error instanceof Error && error.message.includes("v1");
     return {
       action: "fail",
-      reason: "no descifra con la clave actual ni con la anterior",
+      reason: isV1
+        ? "formato v1 sin AAD: ya no se acepta, hay que volver a cargar el secreto"
+        : "no descifra con la clave actual ni con la anterior",
     };
   }
 
-  if (result.version === 2 && result.key === "current") return { action: "keep" };
+  if (result.key === "current") return { action: "keep" };
 
   return {
     action: "rewrite",
-    from: result.version === 1 ? "v1" : "previous_key",
+    from: "previous_key",
     value: encrypt(result.plaintext, context),
   };
 }
