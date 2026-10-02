@@ -243,20 +243,36 @@ export function ClientsList({ clients }: { clients: Client[] }) {
    */
   useEffect(() => {
     startLoad(async () => {
-      const [boardData, activity, senales, sinAsociar] = await Promise.all([
+      const [boardData, activity, senales] = await Promise.all([
         getClientsBoardAction(),
         getClientsDiscordActivityAction(),
         // Sin el add-on devuelve vacío: no hace falta preguntar antes.
         getClientSignalsAction().catch(() => null),
-        // Si falla, el acceso igual aparece, sin número.
-        countPendingFathomCallsAction().catch(() => 0),
       ]);
       setBoard(boardData);
       setDiscordActivity(activity);
       setSignals(senales);
-      setLlamadasSinAsociar(sinAsociar);
     });
   }, [clients]);
+
+  /*
+    SCRUM-31 · El conteo de «Llamadas sin asociar» se pide una sola vez, y
+    sólo a quien ve el botón. No depende de nada de lo que pasa en esta
+    pantalla, así que no se repite en cada refresco del tablero. Si falla, el
+    botón aparece igual, sin número.
+  */
+  useEffect(() => {
+    if (!puedeGestionar) return;
+    let vigente = true;
+    countPendingFathomCallsAction()
+      .then((n) => {
+        if (vigente) setLlamadasSinAsociar(n);
+      })
+      .catch(() => {});
+    return () => {
+      vigente = false;
+    };
+  }, [puedeGestionar]);
 
   const {
     journey,
@@ -743,7 +759,7 @@ export function ClientsList({ clients }: { clients: Client[] }) {
                   ) : null}
 
                   <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
-                    <LastOneOnOneCell entry={lastOneOnOne[client.id]} />
+                    <LastOneOnOneCell entry={lastOneOnOne[client.id]} puedeConfirmar={puedeGestionar} />
                   </td>
 
                   {customColumns.map((field) => (
@@ -1027,7 +1043,14 @@ function FacturacionCell({ summary }: { summary: RevenueSummary | undefined }) {
  * durante semanas; mostrarla sin avisar diría una fecha que puede ser de otra
  * persona.
  */
-function LastOneOnOneCell({ entry }: { entry: LastOneOnOne | undefined }) {
+function LastOneOnOneCell({
+  entry,
+  puedeConfirmar,
+}: {
+  entry: LastOneOnOne | undefined;
+  /** Sólo quien gestiona Clientes confirma grabaciones: para el resto el aviso no es un link. */
+  puedeConfirmar: boolean;
+}) {
   if (!entry) return <span className="text-xs text-muted-foreground">—</span>;
 
   const [year, month, day] = entry.date.split("-");
@@ -1062,17 +1085,23 @@ function LastOneOnOneCell({ entry }: { entry: LastOneOnOne | undefined }) {
     la grabación (un link dentro de otro no es válido y dispara los dos) y
     frena la propagación para no abrir la ficha del cliente de rebote.
   */
-  const aviso = !confirmed ? (
+  const textoAviso =
+    "Se dedujo por el nombre: puede ser de otra persona. Confirmalo en Llamadas sin asociar.";
+  const aviso = confirmed ? null : !puedeConfirmar ? (
+    <span className="text-warning" title={textoAviso}>
+      <HelpCircle className="h-3 w-3" />
+    </span>
+  ) : (
     <Link
       href={paths.platform.clients.pendingCalls}
       className="text-warning hover:opacity-80"
-      title="Se dedujo por el nombre: puede ser de otra persona. Confirmalo en Llamadas sin asociar."
+      title={textoAviso}
       aria-label="Confirmar en Llamadas sin asociar"
       onClick={(event) => event.stopPropagation()}
     >
       <HelpCircle className="h-3 w-3" />
     </Link>
-  ) : null;
+  );
 
   if (!entry.fathomUrl) {
     return (
