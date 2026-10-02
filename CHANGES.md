@@ -34,6 +34,25 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — Tests de los períodos de facturación y de dónde sale cada ingreso (SCRUM-102)
+
+**Rama:** `test/SCRUM-102-revenue-period`
+**Commit(s):** este
+**Módulo(s) afectado(s):** tests de `lib/metrics/revenue-period.ts` y `lib/metrics/revenue-events.ts`; `PENDIENTES.md`
+
+**Qué se hizo:**
+- `lib/metrics/__tests__/revenue-period.test.ts`: día, semana de lunes a domingo (también con ancla en domingo y cruzando de mes), mes (febrero, bisiesto, diciembre), personalizado (invertido, sin una fecha), bordes del período, fechas con hora y prorrateo de gastos. Corre en UTC y en hora de Argentina.
+- `lib/metrics/__tests__/revenue-events.test.ts`: cuotas que cruzan meses, cuotas pagadas sin fecha (la primera cuenta en la fecha de alta y las demás no cuentan), adelanto más fee, pagos registrados y su tipo de ingreso.
+- Nuevo ítem `[FACTURACION-CLIENTES-SIN-PAGOS]`: con el primer pago registrado, la facturación deja de contar a los clientes sin pagos. Lo deja escrito un test marcado "hoy"; la regla la decide Agustín.
+
+**Por qué / finalidad:** cierra `[T-2]`. El cálculo de períodos y de ingresos no tenía tests.
+
+**Decisiones de diseño relevantes:** los tests fijan el comportamiento actual; los casos discutibles van marcados "hoy" con su explicación. Se probó por mutación que detectan los cambios (bordes exclusivos, semana que empieza en domingo, cuota sin fecha contada hoy, fechas en UTC).
+
+**Riesgos / deuda técnica pendiente:** `[FACTURACION-CLIENTES-SIN-PAGOS]` queda abierto hasta la decisión.
+
+---
+
 ### 2026-10-02 — Los textos de herramientas de /funnels dicen lo que hoy existe (SCRUM-60)
 
 **Rama:** `fix/SCRUM-60-textos-embudos`
