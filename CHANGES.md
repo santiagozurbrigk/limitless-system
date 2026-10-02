@@ -34,6 +34,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — Los textos de herramientas de /funnels dicen lo que hoy existe (SCRUM-60)
+
+**Rama:** `fix/SCRUM-60-textos-embudos`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `lib/funnels/instrumentation.ts`, `lib/funnels/sources.ts`
+
+**Qué se hizo:**
+- GHL: la nota visible en /funnels y en configurar ya no dice que no se consumen pipelines ni oportunidades. Ahora explica que se traen pipelines y etapas, que el historial sale del webhook de oportunidades, que cada paso se asocia a una etapa y que lo anterior al webhook no se recupera. Sigue `partial`.
+- Checkout pasa de `equivalent` a `available` vía Whop y Fanbasis (Commas), y aclara que Stripe y Mercado Pago no alimentan los embudos.
+- Meta Ads: las métricas diarias se guardan en `ad_metrics_daily` (antes decía "no persiste").
+- Pulso diario: pasa de `missing` a `partial`; existe el cron `executive-report-daily`, pero no lee los embudos.
+- Comentario de `DEFAULT_DM_BINDINGS`: existe la fuente `zernio_comment_triggers`.
+- `instrumentation.test.ts` fija los estados nuevos y que la nota de GHL no vuelva a decir lo anterior.
+
+**Por qué / finalidad:** cierra `[EMBUDOS-INSTRUMENTATION-DESACTUALIZADA]`. Quien leía la nota de GHL creía que los pipelines no estaban integrados.
+
+**Decisiones de diseño relevantes:** GHL se deja en `partial` y no en `available`, porque falta asociar etapas a mano y no hay historial previo al webhook; además así sigue mostrándose el aviso en /funnels.
+
+**Riesgos / deuda técnica pendiente:** ninguno. No cambia ningún número.
+
+---
+
 ### 2026-10-02 — Tests de los cálculos de pagos, y dos arreglos que salieron al escribirlos (SCRUM-104)
 
 **Rama:** `test/SCRUM-104-payment-utils`

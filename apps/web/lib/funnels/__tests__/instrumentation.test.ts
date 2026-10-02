@@ -45,15 +45,26 @@ describe("track de integraciones bloqueante (§7)", () => {
     ]);
   });
 
-  it("GHL está parcialmente cubierto: Limitless sincroniza calendarios, no pipelines", () => {
+  it("GHL sigue parcial: pipelines y webhook existen, pero hay que asociar etapas y no hay historial previo", () => {
     // El documento le asigna "Stage counts, set/close, follow-up", que es lo que
-    // necesita el embudo DM. La integración de Limitless consume /calendars y
-    // /contacts, pero no /opportunities.
-    expect(getInstrumentationTool("crm_pipeline").otcStatus).toBe("partial");
+    // necesita el embudo DM. Limitless sincroniza pipelines y arma el historial
+    // con el webhook, pero cada paso hay que asociarlo a una etapa a mano y lo
+    // anterior al webhook no se recupera.
+    const ghl = getInstrumentationTool("crm_pipeline");
+    expect(ghl.otcStatus).toBe("partial");
+    // SCRUM-60: la nota no puede volver a decir que no se consumen pipelines.
+    expect(ghl.otcNote).not.toMatch(/NO \/opportunities|no se sincronizan/i);
   });
 
-  it("el checkout está cubierto por un equivalente, así que no bloquea", () => {
-    expect(getInstrumentationTool("checkout").otcStatus).toBe("equivalent");
+  it("el checkout está disponible vía Whop y Fanbasis; Stripe y Mercado Pago no alimentan embudos", () => {
+    const checkout = getInstrumentationTool("checkout");
+    expect(checkout.otcStatus).toBe("available");
+    expect(checkout.otcNote).toMatch(/Whop/);
+    expect(checkout.otcNote).toMatch(/Stripe y Mercado Pago no alimentan/);
+  });
+
+  it("Meta Ads ya persiste sus métricas diarias", () => {
+    expect(getInstrumentationTool("meta_ads").otcNote).toMatch(/ad_metrics_daily/);
   });
 
   it("los tres embudos dependen de alguna herramienta pendiente", () => {
@@ -81,8 +92,8 @@ describe("cadencia de reporte", () => {
     expect(REPORTING_CADENCE.map((c) => c.title)).toEqual(DOC_CADENCE.map((c) => c.title));
   });
 
-  it("el pulso diario todavía no existe en Limitless", () => {
-    expect(REPORTING_CADENCE.find((c) => c.id === "daily")!.otcStatus).toBe("missing");
+  it("el pulso diario existe pero todavía no lee los embudos", () => {
+    expect(REPORTING_CADENCE.find((c) => c.id === "daily")!.otcStatus).toBe("partial");
   });
 
   it("los reportes semanal y mensual ya tienen cron", () => {
