@@ -49,6 +49,7 @@ import {
   CalendarClock,
   Hourglass,
   MoonStar,
+  PhoneMissed,
   Receipt,
   Route,
   Search,
@@ -62,6 +63,8 @@ import { deleteClientAction } from "@/app/clients/actions";
 import { correrMutacion } from "@/lib/client/correr-accion";
 import { toggleClientTaskAction } from "@/app/clients/task-actions";
 import { getClientsDiscordActivityAction } from "@/app/discord/actions";
+import { countPendingFathomCallsAction } from "@/app/fathom/actions";
+import { cantidadPendienteVisible } from "@/lib/clients/llamadas-sin-asociar";
 import type { ClientActivity } from "@/lib/discord/activity";
 import {
   getClientsBoardAction,
@@ -228,6 +231,8 @@ export function ClientsList({ clients }: { clients: Client[] }) {
   const [pending, startTransition] = useTransition();
 
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
+  /** Grabaciones de Fathom sin asociar a un cliente (SCRUM-31). */
+  const [llamadasSinAsociar, setLlamadasSinAsociar] = useState(0);
   /**
    * El tablero se vuelve a pedir cada vez que cambia la lista de clientes.
    *
@@ -238,15 +243,18 @@ export function ClientsList({ clients }: { clients: Client[] }) {
    */
   useEffect(() => {
     startLoad(async () => {
-      const [boardData, activity, senales] = await Promise.all([
+      const [boardData, activity, senales, sinAsociar] = await Promise.all([
         getClientsBoardAction(),
         getClientsDiscordActivityAction(),
         // Sin el add-on devuelve vacío: no hace falta preguntar antes.
         getClientSignalsAction().catch(() => null),
+        // Si falla, el acceso igual aparece, sin número.
+        countPendingFathomCallsAction().catch(() => 0),
       ]);
       setBoard(boardData);
       setDiscordActivity(activity);
       setSignals(senales);
+      setLlamadasSinAsociar(sinAsociar);
     });
   }, [clients]);
 
@@ -469,6 +477,26 @@ export function ClientsList({ clients }: { clients: Client[] }) {
               <Link href={paths.platform.clients.wins}>
                 <Trophy className="h-4 w-4" />
                 Wins
+              </Link>
+            </Button>
+            {/*
+              SCRUM-31 · Única puerta en escritorio a «Llamadas sin asociar»:
+              ahí se confirman las grabaciones que no se pudieron asociar y se
+              cargan las identidades desde el CRM. Antes sólo se llegaba
+              escribiendo la URL o por el badge del menú móvil.
+            */}
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link href={paths.platform.clients.pendingCalls}>
+                <PhoneMissed className="h-4 w-4" />
+                Llamadas sin asociar
+                {cantidadPendienteVisible(llamadasSinAsociar) ? (
+                  <span
+                    className="rounded-full bg-warning/15 px-1.5 text-xs font-medium tabular-nums text-warning"
+                    aria-label={`${llamadasSinAsociar} pendientes`}
+                  >
+                    {cantidadPendienteVisible(llamadasSinAsociar)}
+                  </span>
+                ) : null}
               </Link>
             </Button>
             {/*
@@ -1026,28 +1054,48 @@ function LastOneOnOneCell({ entry }: { entry: LastOneOnOne | undefined }) {
           ·&nbsp;{entry.totalCalls}
         </span>
       ) : null}
-      {!confirmed ? (
-        <span
-          className="text-warning"
-          title="Se dedujo por el nombre: puede ser de otra persona. Confirmalo en Llamadas sin asociar."
-        >
-          <HelpCircle className="h-3 w-3" />
-        </span>
-      ) : null}
     </span>
   );
 
-  if (!entry.fathomUrl) return content;
+  /*
+    SCRUM-31 · El aviso es un link a «Llamadas sin asociar». Va fuera del link a
+    la grabación (un link dentro de otro no es válido y dispara los dos) y
+    frena la propagación para no abrir la ficha del cliente de rebote.
+  */
+  const aviso = !confirmed ? (
+    <Link
+      href={paths.platform.clients.pendingCalls}
+      className="text-warning hover:opacity-80"
+      title="Se dedujo por el nombre: puede ser de otra persona. Confirmalo en Llamadas sin asociar."
+      aria-label="Confirmar en Llamadas sin asociar"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <HelpCircle className="h-3 w-3" />
+    </Link>
+  ) : null;
+
+  if (!entry.fathomUrl) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        {content}
+        {aviso}
+      </span>
+    );
+  }
 
   return (
-    <a
-      href={entry.fathomUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="hover:underline"
-      title={entry.title ?? "Abrir la grabación"}
-    >
-      {content}
-    </a>
+    <span className="inline-flex items-center gap-1.5">
+      <a
+        href={entry.fathomUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="hover:underline"
+        title={entry.title ?? "Abrir la grabación"}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {content}
+      </a>
+      {aviso}
+    </span>
   );
 }
