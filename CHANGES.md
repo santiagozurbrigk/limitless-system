@@ -52,7 +52,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Decisiones de diseño relevantes:** no se regeneran los mensuales pasados; el primero bien hecho sale el 1 de noviembre, con octubre.
 
-**Riesgos / deuda técnica pendiente:** el mensual se puede disparar a mano con `CRON_SECRET` (en Vercel); cada disparo dentro del mes duplica el mismo mes, porque `saveExecutiveReport` hace insert (`[REPORTES-DUPLICADOS]`, ya en el backlog). La verificación en vivo es el 1 de noviembre. Antes del merge se anota en el PR cuántos mensuales había en producción (consulta en `docs/operacion/verificacion-manual.md`).
+**Riesgos / deuda técnica pendiente:** el mensual se puede disparar a mano con `CRON_SECRET` (en Vercel); cada disparo dentro del mes duplica el mismo mes, porque `saveExecutiveReport` hace insert (`[REPORTES-DUPLICADOS]`, ya en el backlog). La verificación en vivo es el 1 de noviembre. En producción, el 2026-10-02 había **0** reportes mensuales (0 organizaciones): el bug hizo que nunca se generara ninguno. No hay datos viejos que corregir.
 
 ---
 
