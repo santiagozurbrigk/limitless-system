@@ -34,6 +34,26 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — El reporte mensual reporta el mes que terminó (SCRUM-67)
+
+**Rama:** `fix/SCRUM-67-reporte-mensual`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `lib/executive-reports/generate-monthly.ts`
+
+**Qué se hizo:**
+- `mesAReportar()`: el cron mensual (`0 13 1 * *`) toma el mes anterior. Antes calculaba el mes en curso, el que empieza ese día: casi nunca había semanales y se salteaba en silencio, y cuando el 1 caía lunes el reporte salía titulado con el mes nuevo y con una sola semana.
+- `monthBounds()` arma las fechas con el día del calendario y no con `toISOString()`, que en una zona al este de UTC las corría al día anterior.
+- Tests en `lib/executive-reports/__tests__/generate-monthly.test.ts` (1 de octubre, 1 de enero, febrero bisiesto) en tres zonas horarias, comprobadas por mutación.
+- F-IA-21 pasa de "No funciona" a "Con fallas": el contenido todavía depende de `[INTELIGENCIA-FUENTES-LEGACY]`.
+
+**Por qué / finalidad:** cierra `[REPORTES-MENSUAL-MES-EQUIVOCADO]`. Las organizaciones con reportes ejecutivos se quedaban sin reporte mensual.
+
+**Decisiones de diseño relevantes:** no se regeneran los mensuales pasados; el primero bien hecho sale el 1 de noviembre, con octubre.
+
+**Riesgos / deuda técnica pendiente:** ninguno. El cron no se puede disparar a mano sin Vercel: se verifica el 1 de noviembre.
+
+---
+
 ### 2026-10-02 — Tests de los períodos de facturación y de dónde sale cada ingreso (SCRUM-102)
 
 **Rama:** `test/SCRUM-102-revenue-period`

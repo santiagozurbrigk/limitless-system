@@ -702,10 +702,9 @@ Funcionalidad: F-IA-20 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlo
 * Dada una organización con leads y piezas de contenido, el reporte incluye datos de DMs/leads y de marketing.
 
 *Tareas técnicas (PENDIENTES.md):*
-* [REPORTES-MENSUAL-MES-EQUIVOCADO] (nuevo) El reporte mensual mira el mes que empieza (P1)
 * [INTELIGENCIA-FUENTES-LEGACY] (nuevo) Inteligencia y reportes leen tablas legacy (P1)
 
-Funcionalidad: F-IA-21 · No funciona · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-21]",H-IA-21,Agente de negocio e IA,P1,Alta,REPORTES-MENSUAL-MES-EQUIVOCADO INTELIGENCIA-FUENTES-LEGACY,
+Funcionalidad: F-IA-21 · No funciona · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-21]",H-IA-21,Agente de negocio e IA,P1,Alta,INTELIGENCIA-FUENTES-LEGACY,
 [H-IA-24] Que el agente escriba con el tono real del founder,Story,High,historia,agente-de-negocio-e-ia,p1,sev-alta,,,"*Historia:* Como founder, quiero que cada lunes el sistema aprenda cómo escribo a partir de todos mis textos reales, para que el agente me responda y redacte con mi tono.
 
 *Criterios de aceptación:*

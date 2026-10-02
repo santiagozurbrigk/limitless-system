@@ -43,12 +43,12 @@ cambio, igual que el doc técnico del área.
 | [Ventas](#ventas) | 28 | 12 | 10 | 3 | 2 | 1 |
 | [Marketing](#marketing) | 27 | 9 | 7 | 4 | 3 | 4 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 24 | 11 | 3 | 1 | 3 | 6 |
-| [Agente de negocio e IA](#agente-de-negocio-e-ia) | 28 | 13 | 10 | 1 | 3 | 1 |
+| [Agente de negocio e IA](#agente-de-negocio-e-ia) | 28 | 13 | 11 | 0 | 3 | 1 |
 | [Operaciones y equipo](#operaciones-y-equipo) | 23 | 16 | 4 | 0 | 2 | 1 |
 | [Finanzas](#finanzas) | 12 | 6 | 4 | 0 | 2 | 0 |
 | [Producto](#producto) | 15 | 13 | 0 | 0 | 2 | 0 |
 | [Discord](#discord) | 13 | 0 | 2 | 0 | 1 | 10 |
-| **Total** | **228** | **111** | **59** | **10** | **22** | **26** |
+| **Total** | **228** | **111** | **60** | **9** | **22** | **26** |
 
 Lecturas rápidas:
 
@@ -388,7 +388,7 @@ Doc técnico: [`docs/areas/agente-ia.md`](./areas/agente-ia.md)
 | F-IA-18 | El sistema genera dos veces por día un informe de inteligencia (insights, recomendaciones, cuellos de botella, oportunidades, memoria) que el founder ve en Inteligencia y en el Área del fundador | Con fallas | `INTELIGENCIA-FUENTES-LEGACY`, `INTELIGENCIA-SIN-REINTENTO`, `REPORTES-DUPLICADOS`, `CRONS-ORGS-INACTIVAS` | [`areas/agente-ia.md` § Inteligencia y reportes ejecutivos (crons)](./areas/agente-ia.md#inteligencia-y-reportes-ejecutivos-crons) · `app/(platform)/intelligence/page.tsx` | |
 | F-IA-19 | El sistema genera cada mañana un pulso diario del negocio | Con fallas | `REPORTES-PULSO-DIARIO`, `INTELIGENCIA-FUENTES-LEGACY`, `REPORTES-VENTANA-FIJA` | [`areas/agente-ia.md` § Inteligencia y reportes ejecutivos (crons)](./areas/agente-ia.md#inteligencia-y-reportes-ejecutivos-crons) · `lib/executive-reports/generate-daily.ts` | |
 | F-IA-20 | El sistema genera cada lunes un reporte ejecutivo semanal | Con fallas | `INTELIGENCIA-FUENTES-LEGACY`, `REPORTES-SEMANA-ETIQUETA`, `REPORTES-DUPLICADOS` | [`areas/agente-ia.md` § Inteligencia y reportes ejecutivos (crons)](./areas/agente-ia.md#inteligencia-y-reportes-ejecutivos-crons) · `lib/executive-reports/generate-weekly.ts` | |
-| F-IA-21 | El sistema genera el día 1 un reporte ejecutivo mensual | No funciona | `REPORTES-MENSUAL-MES-EQUIVOCADO`, `INTELIGENCIA-FUENTES-LEGACY` | [`areas/agente-ia.md` § Limitaciones conocidas y deuda](./areas/agente-ia.md#limitaciones-conocidas-y-deuda) · `lib/executive-reports/generate-monthly.ts` | |
+| F-IA-21 | El sistema genera el día 1 un reporte ejecutivo mensual | Con fallas | `INTELIGENCIA-FUENTES-LEGACY` (el mes equivocado se resolvió en SCRUM-67) | [`areas/agente-ia.md` § Limitaciones conocidas y deuda](./areas/agente-ia.md#limitaciones-conocidas-y-deuda) · `lib/executive-reports/generate-monthly.ts` | |
 | F-IA-22 | El founder puede ver el historial de reportes ejecutivos y abrir el detalle de cada uno desde el panel de la barra superior | Funciona | — | [`areas/agente-ia.md` § Pantallas y rutas](./areas/agente-ia.md#pantallas-y-rutas) · `app/(platform)/executive-reports/history/page.tsx` | |
 | F-IA-23 | El founder puede generar a mano el primer reporte semanal (Operaciones, ejecutivo e inteligencia) cuando todavía no hay ninguno | Funciona | `REPORTES-GENERACION-MANUAL`, `REPORTES-DUPLICADOS` | [`areas/agente-ia.md` § Inteligencia y reportes ejecutivos (crons)](./areas/agente-ia.md#inteligencia-y-reportes-ejecutivos-crons) · `app/executive-reports/report-generation-actions.ts` | |
 | F-IA-24 | El sistema analiza cada lunes cómo escribe el founder y usa ese tono como contexto para el agente | Con fallas | `INTELIGENCIA-SIN-REINTENTO`, `CRONS-ORGS-INACTIVAS`, `INTELIGENCIA-FUENTES-LEGACY` | [`areas/agente-ia.md` § Inteligencia y reportes ejecutivos (crons)](./areas/agente-ia.md#inteligencia-y-reportes-ejecutivos-crons) · `lib/founder-tone/analyze-tone.ts` | |

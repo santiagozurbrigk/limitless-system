@@ -77,7 +77,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 14 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
-| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 19 | 7 |
+| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 7 | 19 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 21 | 42 | 13 |
 
@@ -1599,16 +1599,6 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 - **Qué hay que hacer:** filtrar `AGENT_CHAT_TOOLS` según los módulos del rol antes de mandarlas a Claude (y rechazar en el handler); limitar `getRecentOrgMessages` al usuario actual; exigir founder en `saveClaudeApiKeyAction`/`removeClaudeApiKeyAction`.
 - **Criterio de aceptación:** Un miembro con permiso 'agent' y sin 'finance' ni 'clients' pregunta en /agent por facturación y por clientes: el agente no devuelve esos datos (las tools de esos módulos no se le ofrecen y el handler las rechaza); el mismo miembro no ve en las respuestas fragmentos de conversaciones de otros usuarios de la org; un no-founder que invoca saveClaudeApiKeyAction o removeClaudeApiKeyAction recibe un error y la clave no cambia
 - **Dónde:** `apps/web/lib/agent/stream-agent-message.ts`, `lib/agent/agent-tool-handler.ts`, `app/settings/actions.ts`.
-
-#### [REPORTES-MENSUAL-MES-EQUIVOCADO] (nuevo) El reporte mensual mira el mes que empieza
-- **Tipo:** bug
-- **Severidad:** Media
-- **Estado verificado:** el cron corre `0 13 1 * *`; `monthBounds()` en `lib/executive-reports/generate-monthly.ts:30` usa `new Date()` → mes en curso (el que empieza ese día). Busca semanales con `period_start` en ese mes: el día 1 casi nunca hay ninguno, así que se saltea ("sin reportes semanales en …"). Si hay uno (día 1 lunes), el reporte se titula con el mes nuevo.
-- **Riesgo:** Si el cron corre el día 1 (siempre), entonces busca semanales del mes que empieza, casi nunca encuentra y se saltea en silencio; cuando el 1 cae lunes, genera un reporte titulado con el mes nuevo basado en una sola semana.
-- **Impacto:** Todas las orgs con reportes ejecutivos se quedan sin reporte mensual (o con uno engañoso unas pocas veces al año). Los semanales siguen existiendo y son el workaround; no se pierden datos.
-- **Qué hay que hacer:** usar el mes anterior (`monthBounds(fecha del último día del mes previo)`) y agregar un test. Verificar en prod cuántas filas `period = 'monthly'` hay.
-- **Criterio de aceptación:** Con el cron corriendo el día 1 de un mes, el reporte mensual toma el mes anterior (period_start/period_end y título del mes cerrado) y agrupa los semanales de ese mes; hay un test unitario de monthBounds con ese caso; se anotó cuántas filas period='monthly' había en prod
-- **Dónde:** `apps/web/lib/executive-reports/generate-monthly.ts`.
 
 #### [INTELIGENCIA-FUENTES-LEGACY] (nuevo) Inteligencia y reportes leen tablas legacy
 - **Tipo:** bug
