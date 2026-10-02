@@ -79,7 +79,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 7 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 19 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 23 | 42 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 22 | 42 | 13 |
 
 ---
 
@@ -2404,16 +2404,6 @@ Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe su
 - **Qué hay que hacer:** título fusionado, filas vacías, `pickBestSheet`, `sheetName` explícito, montos con punto decimal; workbooks armados en memoria.
 - **Criterio de aceptación:** Hay tests de parse-client-import.ts y excel-parser.ts con workbooks armados en memoria que cubren título fusionado, filas vacías, pickBestSheet, sheetName explícito y montos con punto decimal; pnpm test pasa (el caso de montos con punto decimal pasa recién cuando se cierre AUD-DIN-1)
 - **Dónde:** `apps/web/lib/clients/`, `apps/web/lib/metrics/excel-parser.ts`.
-
-#### [T-4] Tests de `lib/clients/payment-utils.ts`
-- **Tipo:** tests
-- **Severidad:** Media
-- **Estado verificado:** sin tests.
-- **Riesgo:** Si cambia el formato del payload de cierre o la lógica de cuotas, entonces el monto pagado, el número de cuota o la fecha se leen mal sin que un test lo marque.
-- **Impacto:** Pagos de clientes y cuotas mal registrados en la ficha y en Finanzas; prevención.
-- **Qué hay que hacer:** pago único, cuotas, payload incompleto en `getPaidAmountFromClosePayload`, `installmentNumberForClosePayload`, `getPaymentDateFromClosePayload`.
-- **Criterio de aceptación:** Hay tests de lib/clients/payment-utils.ts que cubren pago único, cuotas y payload incompleto en getPaidAmountFromClosePayload, installmentNumberForClosePayload y getPaymentDateFromClosePayload; pnpm test pasa
-- **Dónde:** `apps/web/lib/clients/payment-utils.ts`.
 
 #### [T-5] Tests de `lib/utm/`
 - **Tipo:** tests
