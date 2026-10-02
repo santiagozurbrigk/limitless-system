@@ -76,7 +76,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 14 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 7 | 15 | 7 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 19 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 22 | 42 | 13 |
@@ -1382,16 +1382,6 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Qué hay que hacer:** decidir cómo se asigna dinero y spend a un embudo (producto de Whop/Commas, campaña/cuenta de Meta, cuenta de Hyros) y agregar esos filtros como config de la instancia; mientras tanto, rotular en la UI que esas cifras son de toda la org.
 - **Criterio de aceptación:** Agustín decidió cómo se asignan cobros y gasto a cada embudo (producto de Whop/Commas, campaña o cuenta de Meta, cuenta de Hyros) y la decisión quedó registrada en docs/areas/embudos.md; mientras no esté implementado, el detalle del embudo rotula el gasto, la facturación y los KPIs de dinero como 'de toda la organización'; una vez implementado, dos embudos de la misma org con filtros distintos muestran gasto y revenue distintos
 - **Dónde:** `apps/web/lib/funnels/resolve.ts`, `apps/web/app/(platform)/funnels/[funnelId]/page.tsx`, `components/funnels/funnel-kpi-panel.tsx`.
-
-#### [EMBUDOS-INSTRUMENTATION-DESACTUALIZADA] Texto visible en /funnels que dice cosas falsas
-- **Tipo:** bug
-- **Severidad:** Baja
-- **Estado verificado:** `INSTRUMENTATION_TOOLS` en `lib/funnels/instrumentation.ts` se muestra en `/funnels` y en `/funnels/[funnelId]/configurar` (`blockingTools()` → `otcNote`). Hay otras dos notas viejas que no se ven en pantalla: `meta_ads` dice "Live fetch, no persiste" (hoy se persiste en `ad_metrics_daily`) y `REPORTING_CADENCE.daily` dice `missing` / "Falta el cron de pulso diario" (existe `executive-report-daily`). La nota de `crm_pipeline` dice que GHL "NO consume /opportunities ni /pipelines" (existen `lib/ghl/sync-pipelines.ts` y el webhook). La de `checkout` dice "Cubierto por Stripe y Mercado Pago" con estado `equivalent`, pero el resolver sólo lee Whop/Commas (`payment_orders`): los datos de Stripe/MP no llegan a ningún embudo. Hoy en pantalla se ve sólo la nota de GHL (`partial`): `blockingTools()` filtra `missing`/`partial`, así que la de checkout (`equivalent`) está mal pero no se muestra (revisado 2026-09-23). También el comentario de `DEFAULT_DM_BINDINGS` dice que no hay fuente de disparadores (existe `zernio_comment_triggers`).
-- **Riesgo:** Si un usuario lee la nota de GHL en /funnels o en configurar, entonces cree que los pipelines de GHL no están integrados y puede no conectarlos. Las otras notas falsas (checkout, meta_ads, pulso diario) no se muestran.
-- **Impacto:** Texto engañoso en una sola nota visible; no cambia ningún número ni dato.
-- **Qué hay que hacer:** corregir `otcStatus`/`otcNote` de GHL y checkout (checkout = `available` vía Whop/Commas, aclarando que Stripe/MP no alimentan embudos), la nota de `meta_ads` y `REPORTING_CADENCE.daily` (el pulso diario de la org existe, aunque no lee embudos), actualizar el comentario, y ajustar `instrumentation.test.ts` si fija esos estados.
-- **Criterio de aceptación:** La lista de herramientas de /funnels ya no dice que GHL 'no consume /opportunities ni /pipelines'; checkout figura como disponible vía Whop/Commas y aclara que Stripe y Mercado Pago no alimentan los embudos; instrumentation.test.ts refleja esos estados y los tests pasan
-- **Dónde:** `apps/web/lib/funnels/instrumentation.ts`, `apps/web/lib/funnels/sources.ts`.
 
 #### [EMBUDOS-CUENTAS-REALES] Conectar las cuentas y correr la verificación 🔴
 - **Tipo:** verificación manual
