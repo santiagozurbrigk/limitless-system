@@ -886,7 +886,7 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 - **Severidad:** Alta
 - **Estado verificado:** `client_identities` tiene **0 filas** en producción (2026-09-23). El botón existe (`components/clients/pending-fathom-calls.tsx` → `seedClientIdentitiesAction`). Sin siembra el resolvedor sólo resuelve por mail de invitado.
 - **Riesgo:** Mientras client_identities siga vacía (0 filas), cada grabación sin mail de invitado reconocible cae al último peldaño y queda pendiente de confirmación manual, sin aviso de que el resolvedor está funcionando a medias.
-- **Impacto:** Todas las orgs con Fathom: 1-1 y ventas que no se asocian solas, fichas con «Última 1-1» desactualizada y clasificación purpose incompleta; se resuelve con un botón, pero está en una pantalla sin link ([CLIENTES-PENDING-CALLS-HUERFANA]).
+- **Impacto:** Todas las orgs con Fathom: 1-1 y ventas que no se asocian solas, fichas con «Última 1-1» desactualizada y clasificación purpose incompleta; se resuelve con un botón de «Llamadas sin asociar», a la que se llega desde la barra de /clients (desde SCRUM-31).
 - **Qué hay que hacer:** apretar "Cargar identidades desde el CRM" en `/clients/pending-calls`, dejar correr el cron y medir `purpose`/`resolution_method`. Medir falsos positivos del peldaño de nombre.
 - **Criterio de aceptación:** Se ejecutó el paso de verificacion-manual.md § Ventas 7 («Cruce grabación ↔ turno y clasificación», siembra de identidades) con la cuenta real: client_identities tiene filas y quedaron anotadas la distribución de purpose/resolution_method y la tasa de falsos positivos por nombre; si falló, se abrió un ítem nuevo
 - **Dónde:** `apps/web/lib/fathom/identities.ts`, `apps/web/lib/fathom/seed-identities.ts`.

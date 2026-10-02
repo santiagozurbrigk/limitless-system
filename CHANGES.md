@@ -43,7 +43,9 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Qué se hizo:**
 - Botón «Llamadas sin asociar» en la barra de `/clients` (escritorio), con la cantidad de grabaciones pendientes (`countPendingFathomCallsAction`, la misma del badge del menú móvil). Sin pendientes no muestra número; con más de 99 dice "99+".
 - El aviso de «Última 1-1» ("Confirmalo en Llamadas sin asociar") pasa a ser un link a esa pantalla. Va fuera del link a la grabación (un link dentro de otro no es válido) y frena la propagación para no abrir la ficha.
-- El link a la grabación de «Última 1-1» también frena la propagación: antes abría la grabación en otra pestaña y, además, la ficha del cliente en la pestaña actual.
+- El link a la grabación de «Última 1-1» también frena la propagación, como defensa adicional: la celda ya lo hacía, así que no cambia el comportamiento.
+- El aviso es un link sólo para quien gestiona Clientes (`puedeGestionar`, igual que el botón); para quien tiene acceso de sólo lectura sigue siendo el ícono con la explicación.
+- El conteo se pide una sola vez al entrar y sólo si se ve el botón, en un efecto aparte: no suma un viaje al servidor en cada refresco del tablero.
 - Test de `cantidadPendienteVisible`.
 
 **Por qué / finalidad:** cierra `[CLIENTES-PENDING-CALLS-HUERFANA]`. A esa pantalla sólo se llegaba escribiendo la URL, así que las grabaciones sin asociar se acumulaban y no se cargaban las identidades desde el CRM.
