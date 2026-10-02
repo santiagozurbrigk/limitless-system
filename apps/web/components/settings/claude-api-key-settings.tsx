@@ -9,16 +9,33 @@ import {
   saveClaudeApiKeyAction,
   type ClaudeApiKeyStatus,
 } from "@/app/settings/actions";
+import {
+  removePlatformClaudeKeyAction,
+  savePlatformClaudeKeyAction,
+} from "@/app/super-admin/platform-ai-actions";
 import { FieldLabel } from "./field-label";
 import { SectionHeader } from "@ai-coo/ui";
 import { useToast } from "@/providers/toast-provider";
 import { brand } from "@/lib/brand";
 
+/**
+ * Cargar, ver y quitar la clave de Claude.
+ *
+ * - `scope="org"` (Ajustes → IA): la clave de la organización. Sin ella, la org
+ *   no tiene IA (SCRUM-7).
+ * - `scope="platform"` (Super-admin → Infraestructura): la clave de la
+ *   plataforma, sólo para el trabajo de super-admin.
+ */
 export function ClaudeApiKeySettings({
   initialStatus,
+  scope = "org",
 }: {
   initialStatus: ClaudeApiKeyStatus;
+  scope?: "org" | "platform";
 }) {
+  const isPlatform = scope === "platform";
+  const saveAction = isPlatform ? savePlatformClaudeKeyAction : saveClaudeApiKeyAction;
+  const removeAction = isPlatform ? removePlatformClaudeKeyAction : removeClaudeApiKeyAction;
   const { push } = useToast();
   const [status, setStatus] = useState(initialStatus);
   const [apiKey, setApiKey] = useState("");
@@ -29,7 +46,7 @@ export function ClaudeApiKeySettings({
   const handleConnect = () => {
     setError(null);
     startConnect(async () => {
-      const result = await saveClaudeApiKeyAction(apiKey);
+      const result = await saveAction(apiKey);
       if (!result.success) {
         setError(result.error);
         push({ title: "No se pudo conectar", description: result.error });
@@ -53,7 +70,9 @@ export function ClaudeApiKeySettings({
       } else {
         push({
           title: "API key conectada",
-          description: "Las llamadas de IA usarán tu cuenta de Claude.",
+          description: isPlatform
+            ? "El trabajo de super-admin usará esta cuenta de Claude."
+            : "Las llamadas de IA usarán tu cuenta de Claude.",
           variant: "success",
         });
       }
@@ -63,7 +82,9 @@ export function ClaudeApiKeySettings({
   const handleRemove = () => {
     if (
       !window.confirm(
-        `¿Eliminar tu API key? ${brand.name} volverá a usar la key global para IA.`
+        isPlatform
+          ? "¿Eliminar la clave de la plataforma? Los resúmenes del cerebro global dejan de generarse."
+          : `¿Eliminar tu API key? Sin clave, las funciones de IA de ${brand.name} quedan desactivadas para tu cuenta.`
       )
     ) {
       return;
@@ -71,7 +92,7 @@ export function ClaudeApiKeySettings({
 
     setError(null);
     startRemove(async () => {
-      const result = await removeClaudeApiKeyAction();
+      const result = await removeAction();
       if (!result.success) {
         setError(result.error);
         push({ title: "No se pudo eliminar", description: result.error });
@@ -86,7 +107,7 @@ export function ClaudeApiKeySettings({
       });
       push({
         title: "API key eliminada",
-        description: `Volviste a usar la key de ${brand.name} para IA.`,
+        description: "Las funciones de IA quedan desactivadas hasta que cargues otra.",
         variant: "success",
       });
     });
@@ -104,7 +125,17 @@ export function ClaudeApiKeySettings({
 
   return (
     <section>
-      <SectionHeader icon={KeyRound} title="Claude API Key" variant="settings" />
+      <SectionHeader
+        icon={KeyRound}
+        title={isPlatform ? "Clave de Claude de la plataforma" : "Claude API Key"}
+        variant="settings"
+      />
+      {isPlatform ? (
+        <p className="mb-2 text-sm text-muted-foreground">
+          La usa sólo el trabajo de super-admin (resúmenes del cerebro global). Las
+          organizaciones nunca la usan: cada una trabaja con su propia clave.
+        </p>
+      ) : null}
       <p className="mb-4 text-sm text-muted-foreground">
         Necesitás una cuenta en{" "}
         <Link
@@ -198,11 +229,12 @@ export function ClaudeApiKeySettings({
         <div className="space-y-4 rounded-xl border border-border/60 bg-card/40 p-4 dark:border-glass dark:bg-glass">
           <div>
             <p className="text-sm font-medium text-foreground">
-              Conectá tu API key de Claude
+              {isPlatform ? "Cargá la API key de la plataforma" : "Conectá tu API key de Claude"}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Las funciones de IA de {brand.name} usan tu cuenta de Anthropic. Creá una
-              key en la consola y pegala acá.
+              {isPlatform
+                ? "Creá una key en la cuenta de Anthropic de la plataforma y pegala acá."
+                : `Las funciones de IA de ${brand.name} usan tu cuenta de Anthropic. Sin una key cargada, quedan desactivadas. Creá una key en la consola y pegala acá.`}
             </p>
             <Link
               href="https://console.anthropic.com/settings/keys"

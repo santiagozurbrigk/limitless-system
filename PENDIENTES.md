@@ -64,7 +64,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|
 | `[PERMISOS-SERVER-ACTIONS]` | Plataforma | Alta | Los permisos por módulo no protegen datos, sólo pantallas |
 | `[CLOSING-LIST-1000]` | Ventas | Alta | El calendario y la lista de Closing pierden los turnos más recientes |
-| `[1A1-CLAVE-ANTHROPIC-ROTA]` | Agente de negocio e IA | Alta | Una organización sin clave válida y sin clave global |
 | `[DR-BACKUPS-SUPABASE]` | Infraestructura, seguridad y tests (transversal) | Crítica | La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración |
 | `[PERMISOS-SERVER-ACTIONS/infra]` | Infraestructura, seguridad y tests (transversal) | Alta | Los roles no se hacen cumplir en la base ni en las actions (incluye AUD-SEG-1) |
 
@@ -77,9 +76,9 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 14 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
-| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 7 | 19 | 7 |
+| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 20 | 42 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 19 | 42 | 13 |
 
 ---
 
@@ -1577,16 +1576,6 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 
 ### Agente de negocio e IA · P0
 
-#### [1A1-CLAVE-ANTHROPIC-ROTA] Una organización sin clave válida y sin clave global
-- **Tipo:** verificación manual
-- **Severidad:** Alta
-- **Estado verificado:** el código ya marca la clave (`marcarClaveDeOrgComoRechazada` en `lib/ai/credential-resolver.ts`) y deja de usarla. Pero si no hay `ANTHROPIC_API_KEY` global, `executeWithCredentialFallback` no tiene a dónde caer: todo el trabajo IA de esa org (análisis de llamadas, reportes, agente) queda sin hacer. No se puede saber desde el código si la global ya se cargó en Vercel. Evidencia en prod (agregado de errores de Vercel, 2026-09-23): ~10 llamadas de Fathom fallaron ~296 veces cada una con `401 authentication_error: API key is invalid` en `/api/integrations/fathom/process` entre 2026-09-02 y 2026-09-21 (qué org y qué clave requiere leer filas); el listado de variables del proyecto `otc-plaform` sigue sin `ANTHROPIC_API_KEY`. El reintento sin tope de esas llamadas está en `[FATHOM-REINTENTOS-SIN-TOPE]`.
-- **Riesgo:** Si ANTHROPIC_API_KEY no está en Vercel producción, entonces cada llamada IA de la org 997e94be-… falla sin reintento posible y los jobs de fondo (análisis de llamadas, reportes) quedan sin hacer sin que nadie lo note. Pasa hoy si la global falta; no requiere ninguna acción de nadie.
-- **Impacto:** Una org (997e94be-…) pierde todo el trabajo de IA: análisis de llamadas, reportes ejecutivos y agente. Lo que no se procesó mientras tanto no se recupera solo; el alcance real depende de si la global está cargada, que no se puede ver desde el código.
-- **Qué hay que hacer:** confirmar si `ANTHROPIC_API_KEY` está en Vercel producción; si no, cargarla o pedirle a la org `997e94be-…` una clave nueva. Confirmar que `claude_api_key_status` de esa org quedó en `invalid` y que la barra roja aparece.
-- **Criterio de aceptación:** Se ejecutó el paso 1 de verificacion-manual.md § Agente de negocio e IA (clave de IA rechazada) con la org 997e94be-… y el resultado quedó anotado: si ANTHROPIC_API_KEY está en Vercel producción, claude_api_key_status de esa org quedó en 'invalid' y el founder ve la barra roja; con la global cargada, el log dice 'Se sigue con la clave global' y las llamadas de esa org se procesan (o la org cargó una clave nueva válida); si falló, se abrió un ítem nuevo
-- **Dónde:** Vercel env; `organizations.claude_api_key_status`; `lib/ai/anthropic.ts`.
-
 ### Agente de negocio e IA · P1
 
 #### [PERMISOS-SERVER-ACTIONS/agente-ia] (parte IA) El agente lee todos los módulos sin mirar permisos
@@ -1610,36 +1599,6 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 - **Criterio de aceptación:** Para una org con leads en sales_leads y piezas en content_pieces, el snapshot de inteligencia y un reporte ejecutivo generados muestran datos de DMs/leads y de marketing (no vacíos); collect-context y memory-chunks ya no leen conversations ni content_assets
 - **Dónde:** `apps/web/lib/intelligence/collect-context.ts`, `lib/intelligence/memory-chunks.ts:34`, `lib/founder-tone/collect-sources.ts:65`.
 
-#### [AGENTE-SIN-FALLBACK-CLAVE] (nuevo) El agente SSE no cae a la clave global
-- **Tipo:** bug
-- **Severidad:** Media
-- **Estado verificado:** `streamClaudeAgent` (`lib/agent/stream-claude-agent.ts:218`) usa `resolveCredentialForOrg` directo y ante un error lanza `mapAnthropicCallError`, sin el reintento con la global ni `marcarClaveDeOrgComoRechazada` que tiene `executeWithCredentialFallback`. Una clave que vence entre validaciones rompe el chat.
-- **Riesgo:** Si la clave propia de una org se revoca o se queda sin crédito mientras sigue marcada 'valid', entonces cada mensaje en /agent falla con error hasta que otro proceso (con fallback) la marque 'invalid'. Requiere que la clave caiga entre validaciones, poco frecuente pero ya pasó (ver 1A1).
-- **Impacto:** Las orgs con clave propia (BYOK) pierden el chat del agente por un rato; el error es visible y se destraba solo cuando algún job de fondo marca la clave, o si la org carga una nueva.
-- **Qué hay que hacer:** extraer el fallback a una función reusable y aplicarla al stream (reintentar sólo si el 401 llega antes de emitir deltas).
-- **Criterio de aceptación:** Con una clave de org marcada 'valid' pero revocada en Anthropic, un mensaje en /agent responde igual usando la clave global y claude_api_key_status de la org pasa a 'invalid'; si el error llega después de haber empezado a mostrar texto, no se reintenta ni se duplica la respuesta; hay un test que cubre el reintento del stream
-- **Dónde:** `apps/web/lib/agent/stream-claude-agent.ts`, `lib/ai/anthropic.ts`.
-
-#### [IA-CLAVES-INVALIDAS] Organizaciones con clave vencida que gastan la global
-- **Tipo:** decisión de negocio
-- **Severidad:** Media
-- **Estado verificado:** el fallback a la global está implementado (`lib/ai/anthropic.ts`); la marca `invalid` se escribe. Queda avisar a las orgs.
-- **Riesgo:** Si una org tiene la clave marcada 'invalid' y nadie le avisa, entonces sigue usando la clave global de Limitless sin límite de tiempo ni de consumo. Ya está pasando para las orgs en 'invalid'.
-- **Impacto:** Costo de Anthropic que absorbe Limitless por cada org con clave vencida; no hay pérdida de datos ni corte de servicio para el cliente. El monto depende de cuántas orgs estén en 'invalid' (no consultado).
-- **Qué hay que hacer:** listar orgs con `claude_api_key_status = 'invalid'` y contactarlas; decidir si una org con clave inválida puede seguir consumiendo la clave de Limitless indefinidamente.
-- **Criterio de aceptación:** Agustín decidió si una org con clave inválida puede seguir usando la clave de Limitless indefinidamente (o hasta cuándo) y la decisión quedó registrada en PENDIENTES.md / docs/areas/agente-ia.md; se listaron las orgs con claude_api_key_status='invalid' y se las contactó
-- **Dónde:** `organizations`, logs `[anthropic] La clave propia …`.
-
-#### [IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN] (nuevo) Super-admin usa la clave de una org cliente
-- **Tipo:** seguridad
-- **Severidad:** Alta
-- **Estado verificado:** `resolveSuperAdminAnthropicClient` (`app/super-admin/actions.ts:806-830`) cae a la clave BYOK de la org `46cce98c-…` ("Optimiza tu Control") si falta la global, para el Batch API del cerebro. Se factura a un cliente trabajo de plataforma. No registra `token_usage`.
-- **Riesgo:** Si falta ANTHROPIC_API_KEY global y un super-admin genera o recoge resúmenes del cerebro global, entonces el sistema descifra y usa la clave privada de la org 46cce98c-… ("Optimiza tu Control") sin su consentimiento. Depende de la misma condición que 1A1 (global ausente), hoy desconocida.
-- **Impacto:** Una org cliente paga trabajo de plataforma y su credencial secreta se usa fuera de su propósito (problema de confianza/contractual); los batches quedan en la cuenta de Anthropic del cliente y el gasto no se registra en token_usage. El monto por batch es chico (Haiku, 200 tokens).
-- **Qué hay que hacer:** usar sólo la global y fallar si no está; registrar el costo en `token_usage` con una org de plataforma o una tabla aparte.
-- **Criterio de aceptación:** Sin ANTHROPIC_API_KEY global, la generación de resúmenes del cerebro global en super-admin falla con un error claro y no usa la clave de ninguna org cliente; con la global cargada, cada batch deja registro de su costo en token_usage (u otra tabla de plataforma), no a nombre de un cliente
-- **Dónde:** `apps/web/app/super-admin/actions.ts`.
-
 #### [AUDITORIA-ABIERTOS §3.6] Prompt injection: huecos restantes del área
 - **Tipo:** seguridad
 - **Severidad:** Alta
@@ -1661,12 +1620,6 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 - **Dónde:** `executive_reports where period='daily'`, `lib/executive-reports/generate-daily.ts`.
 
 ### Agente de negocio e IA · P2
-
-#### [BYOK-DESCIFRADO-SILENCIOSO] (nuevo) Si la clave de Claude de una org no descifra, pasa a la global sin avisar
-- **Tipo:** bug
-- **Estado verificado:** `decryptApiKeyIfValid` (`apps/web/lib/ai/credential-resolver.ts`) devuelve `null` si `decrypt` falla y la org usa la clave global; `claude_api_key_status` sigue en `valid` y Ajustes muestra `****` como si estuviera bien. Desde SCRUM-86 al menos queda un `console.error` con la org.
-- **Qué hay que hacer:** cuando no descifra, marcar el estado como error (o mostrar en Ajustes "no se pudo leer la clave, volvé a cargarla") y no consumir la global en silencio si la org eligió usar la suya.
-- **Dónde:** `apps/web/lib/ai/credential-resolver.ts`, `apps/web/app/settings/actions.ts` (`getClaudeApiKeyStatusAction`).
 
 #### [RAG-INGESTA-SIN-REINTENTO] (nuevo) La cola de indexado no reintenta cuando falla la ingesta
 - **Tipo:** bug
@@ -1704,15 +1657,9 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 - **Qué hay que hacer:** filtrar `status = 'active'` (o equivalente) y unificar la función.
 - **Dónde:** esos dos archivos.
 
-#### [IA-CLAVE-SIN-CREDITOS] (nuevo) Una clave sin créditos no cae a la global
-- **Tipo:** decisión de negocio
-- **Estado verificado:** `decryptApiKeyIfValid` acepta `valid_no_credits`; el 400 `billing_error` no es 401/403, así que no hay fallback: `mapAnthropicCallError` devuelve "tu cuenta de Claude no tiene créditos". Los crons fallan para esa org sin marca visible.
-- **Qué hay que hacer:** decidir si una org sin créditos cae a la global o queda sin IA; en el segundo caso, marcar el estado para que lo vea.
-- **Dónde:** `apps/web/lib/ai/credential-resolver.ts`, `lib/ai/anthropic.ts`, `lib/ai/anthropic-errors.ts`.
-
 #### [IA-COSTOS-INCOMPLETOS] (nuevo) Costos de IA subestimados
 - **Tipo:** deuda técnica
-- **Estado verificado:** `MODEL_PRICING` (`lib/track-token-usage.ts`) pone Haiku 4.5 a 0,80/4 USD por MTok, que es el precio de Haiku 3.5 (Haiku 4.5 lista 1/5 — confirmar en la página de precios). Embeddings de OpenAI y Batch API del cerebro no se registran. El modelo guardado es el lógico `claude-sonnet-4-6` aunque la API recibe 4.5 (mismo precio).
+- **Estado verificado:** `MODEL_PRICING` (`lib/track-token-usage.ts`) pone Haiku 4.5 a 0,80/4 USD por MTok, que es el precio de Haiku 3.5 (Haiku 4.5 lista 1/5 — confirmar en la página de precios). Embeddings de OpenAI no se registran (el Batch API del cerebro sí, desde SCRUM-7). El modelo guardado es el lógico `claude-sonnet-4-6` aunque la API recibe 4.5 (mismo precio).
 - **Qué hay que hacer:** corregir precios, registrar embeddings (`lib/rag/embeddings.ts`) y batch.
 - **Dónde:** `apps/web/lib/track-token-usage.ts`, `lib/rag/embeddings.ts`, `app/super-admin/actions.ts`.
 
@@ -2222,16 +2169,6 @@ Prioridad sugerida P1: es la base del runbook; sin detección, todas las demás 
 - **Dónde:** Supabase (Billing, Storage), `storage.buckets`.
 
 Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe subidas; el modo sólo lectura toca cobros.
-
-#### [ENV-ANTHROPIC-VERCEL] `ANTHROPIC_API_KEY` no figura en las variables del proyecto de Vercel
-- **Tipo:** verificación manual
-- **Severidad:** Alta
-- **Estado verificado:** el listado de env del proyecto `otc-plaform` (Production y Preview) no tiene `ANTHROPIC_API_KEY`; el código la usa como fallback global cuando la org no tiene BYOK (`lib/ai/credential-resolver.ts:35`, `lib/ai/anthropic.ts`). Puede venir de una variable compartida del team (no visible en ese listado). Si no está, toda org sin key propia falla en cualquier función de IA.
-- **Riesgo:** Si la variable no está tampoco como Shared del team, entonces `getGlobalClient()` devuelve null (`credential-resolver.ts:35-37`) y toda org sin key propia, o con la propia vencida, no tiene IA ni fallback. La probabilidad depende de un dato no verificado (las Shared env vars).
-- **Impacto:** Agente, pipelines de IA, análisis de llamadas y reportes quedan inutilizables para las orgs sin BYOK, y el fallback BYOK→global deja de proteger a las que tienen key rechazada (caso `familiayformacion` citado en el propio resolver).
-- **Qué hay que hacer:** confirmar en Vercel → Settings → Environment Variables (incluidas las Shared del team) y en los logs de un pipeline de IA de una org sin BYOK. Si falta y es a propósito (todas BYOK), documentarlo; si no, cargarla.
-- **Criterio de aceptación:** Se ejecutó el paso de verificacion-manual.md (V-INFRA-1, pasos 1 y 5) con cuenta real y el resultado quedó anotado: ANTHROPIC_API_KEY está cargada en Vercel (proyecto o Shared del team) y una función de IA en una org sin BYOK responde, o quedó documentado que todas las orgs usan BYOK; si falló, se abrió un ítem nuevo
-- **Dónde:** Vercel; `apps/web/lib/ai/credential-resolver.ts`.
 
 #### [ENV-ZERNIO-WEBHOOK-SECRET] El webhook de Zernio responde 503 en producción
 - **Tipo:** bug

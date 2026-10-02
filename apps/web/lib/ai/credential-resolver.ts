@@ -10,6 +10,22 @@ import type {
 import { normalizeCredentialMode } from "@/lib/ai/credential-types";
 import { noAiCredentialsError } from "@/lib/ai/anthropic-auth-errors";
 
+/**
+ * Resuelve con qué clave de Claude trabaja cada organización.
+ *
+ * ⭐ Regla (SCRUM-7, 2026-10-02): **sin clave propia, no hay IA.** Una
+ * organización usa sólo la clave que cargó en Ajustes → IA. No hay clave global
+ * de Limitless de respaldo: si la org no tiene clave, o la suya está rota, sin
+ * créditos o no se puede leer, el trabajo de IA de esa org no se hace y la
+ * plataforma se lo avisa (`components/platform/aviso-clave-ia.tsx`). Antes el
+ * código caía a `ANTHROPIC_API_KEY`, que nunca estuvo cargada en producción, y
+ * si alguien la cargaba todas las orgs sin clave iban a gastar IA a cuenta de
+ * Limitless.
+ *
+ * El trabajo de plataforma (super-admin) usa su propia clave, aparte:
+ * `lib/ai/platform-credential.ts`.
+ */
+
 type CachedCredential = {
   apiKey: string;
   mode: ClaudeCredentialMode;
@@ -19,23 +35,6 @@ type CachedCredential = {
 const credentialCache = new Map<string, CachedCredential>();
 // TTL corto para minimizar ventana de credenciales stale en entorno serverless multi-instancia
 const CACHE_TTL_MS = 30 * 1000;
-
-/**
- * El cliente con la clave global de Limitless.
- *
- * Se expone para que, si la clave propia de una organización resulta inválida,
- * el trabajo pueda seguir con la global en vez de fallar. Ver
- * `executeWithCredentialFallback`.
- */
-export function getGlobalAnthropicClient(): Anthropic | null {
-  return getGlobalClient();
-}
-
-function getGlobalClient(): Anthropic | null {
-  const key = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!key) return null;
-  return new Anthropic({ apiKey: key });
-}
 
 export function invalidateOrgCredentialCache(organizationId: string): void {
   credentialCache.delete(organizationId);
@@ -55,35 +54,53 @@ export function invalidateOrgKeyCache(organizationId: string): void {
  * nada: el estado guardado seguía siendo `valid` porque nadie lo actualizaba
  * desde que se validó al cargarla.
  *
- * Marcarla tiene dos efectos, y el segundo es el que corta la sangría:
+ * Marcarla tiene dos efectos:
  *
  * 1. La pantalla de Ajustes y el cartel de la plataforma pasan a avisarlo.
- * 2. `decryptApiKeyIfValid` deja de entregar esa clave, así que el sistema pasa
- *    a la clave global **antes** de pegarle al proveedor, en vez de gastar un
- *    `401` en cada intento.
+ * 2. `decryptApiKeyIfValid` deja de entregar esa clave, así que el sistema deja
+ *    de intentar **antes** de pegarle al proveedor, en vez de gastar un `401`
+ *    en cada intento.
  *
  * No tira nunca: es un aviso, y no puede romper el trabajo que lo disparó.
  */
 export async function marcarClaveDeOrgComoRechazada(
   organizationId: string
 ): Promise<void> {
+  await marcarEstadoDeClave(organizationId, "invalid");
+}
+
+/**
+ * Deja escrito que la cuenta de Anthropic de la organización se quedó sin
+ * créditos (SCRUM-211). La clave sigue siendo válida, así que se sigue usando
+ * —cuando cargue saldo vuelve a andar sola—, pero la plataforma lo avisa.
+ */
+export async function marcarClaveDeOrgSinCreditos(
+  organizationId: string
+): Promise<void> {
+  await marcarEstadoDeClave(organizationId, "valid_no_credits");
+}
+
+async function marcarEstadoDeClave(
+  organizationId: string,
+  estado: "invalid" | "valid_no_credits"
+): Promise<void> {
   try {
     const admin = createAdminClient();
     const { error } = await admin
       .from("organizations")
-      .update({ claude_api_key_status: "invalid" })
+      .update({ claude_api_key_status: estado })
       .eq("id", organizationId)
       // Sin esto, una carrera entre dos lambdas podría pisar una clave que la
-      // organización acaba de corregir y volver a marcarla como rota.
+      // organización acaba de corregir y volver a marcarla.
       .eq("claude_api_key_status", "valid");
 
     if (error) {
-      console.error("[credential-resolver] marcar clave rechazada", error.message);
+      console.error(`[credential-resolver] marcar clave como ${estado}`, error.message);
       return;
     }
     invalidateOrgCredentialCache(organizationId);
   } catch (error) {
-    console.error("[credential-resolver] marcar clave rechazada", error);
+    console.error(`[credential-resolver] marcar clave como ${estado}`, error);
   }
 }
 
@@ -125,15 +142,15 @@ async function loadOrgCredentialRow(
   };
 }
 
+function isUsableStatus(status: string | null): boolean {
+  return status === "valid" || status === "valid_no_credits";
+}
+
 function decryptApiKeyIfValid(
   row: OrgCredentialRow,
   organizationId: string
 ): string | null {
-  if (
-    !row.claude_api_key_encrypted ||
-    (row.claude_api_key_status !== "valid" &&
-      row.claude_api_key_status !== "valid_no_credits")
-  ) {
+  if (!row.claude_api_key_encrypted || !isUsableStatus(row.claude_api_key_status)) {
     return null;
   }
 
@@ -143,8 +160,8 @@ function decryptApiKeyIfValid(
       organizationId,
     });
   } catch {
-    // error, no warn: significa que la org cae a la clave global sin que nadie
-    // lo vea en pantalla. Ver [BYOK-DESCIFRADO-SILENCIOSO].
+    // La org queda sin IA; el cartel de la plataforma lo muestra como clave que
+    // no se puede leer (`keyUnreadable`). Ver [BYOK-DESCIFRADO-SILENCIOSO].
     console.error("[credential-resolver] No se pudo descifrar la API key de la org", {
       organizationId,
     });
@@ -157,15 +174,19 @@ export async function loadOrgCredentialState(
 ): Promise<OrgCredentialState> {
   const row = await loadOrgCredentialRow(organizationId);
   const apiKey = row ? decryptApiKeyIfValid(row, organizationId) : null;
-  const hasApiKey = Boolean(apiKey);
+  const hasStoredKey = Boolean(row?.claude_api_key_encrypted);
 
   return {
     organizationId,
-    mode: normalizeCredentialMode(row?.claude_credential_mode, hasApiKey),
-    hasApiKey: Boolean(row?.claude_api_key_encrypted),
+    mode: normalizeCredentialMode(row?.claude_credential_mode, Boolean(apiKey)),
+    hasApiKey: hasStoredKey,
     apiKeyStatus:
       (row?.claude_api_key_status as OrgCredentialState["apiKeyStatus"]) ??
       "none",
+    // Guardada y marcada como usable, pero no se puede descifrar (clave
+    // maestra cambiada, dato alterado): para el usuario es una clave rota.
+    keyUnreadable:
+      hasStoredKey && isUsableStatus(row?.claude_api_key_status ?? null) && !apiKey,
   };
 }
 
@@ -175,41 +196,17 @@ type Resolution = {
   mode: ClaudeCredentialMode;
 };
 
-function resolveFromRow(row: OrgCredentialRow, organizationId: string): Resolution {
-  const apiKey = decryptApiKeyIfValid(row, organizationId);
-  const mode = normalizeCredentialMode(row.claude_credential_mode, Boolean(apiKey));
-
-  if (apiKey) {
-    return {
-      client: new Anthropic({ apiKey }),
-      source: "api_key",
-      mode,
-    };
-  }
-
-  const globalClient = getGlobalClient();
-  return {
-    client: globalClient,
-    source: globalClient ? "global" : "none",
-    mode: "unconfigured",
-  };
-}
+const SIN_CLAVE: Resolution = { client: null, source: "none", mode: "unconfigured" };
 
 /**
- * Resuelve la credencial activa para una organización.
+ * Resuelve la credencial activa para una organización: su clave propia o nada.
  * Modos OAuth legacy en DB se tratan como api_key_active (usa API key si existe).
  */
 export async function resolveCredentialForOrg(
   organizationId?: string
 ): Promise<Resolution> {
-  if (!organizationId) {
-    const client = getGlobalClient();
-    return {
-      client,
-      source: client ? "global" : "none",
-      mode: client ? "api_key_active" : "unconfigured",
-    };
-  }
+  // Sin organización no hay a quién atribuirle el gasto: no hay IA.
+  if (!organizationId) return SIN_CLAVE;
 
   const cached = credentialCache.get(organizationId);
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
@@ -221,29 +218,19 @@ export async function resolveCredentialForOrg(
   }
 
   const row = await loadOrgCredentialRow(organizationId);
-  if (!row) {
-    const client = getGlobalClient();
-    return {
-      client,
-      source: client ? "global" : "none",
-      mode: client ? "api_key_active" : "unconfigured",
-    };
-  }
+  if (!row) return SIN_CLAVE;
 
-  const resolution = resolveFromRow(row, organizationId);
+  const apiKey = decryptApiKeyIfValid(row, organizationId);
+  if (!apiKey) return SIN_CLAVE;
 
-  if (resolution.client && resolution.source === "api_key") {
-    const apiKey = decryptApiKeyIfValid(row, organizationId);
-    if (apiKey) {
-      credentialCache.set(organizationId, {
-        apiKey,
-        mode: resolution.mode,
-        cachedAt: Date.now(),
-      });
-    }
-  }
+  const mode = normalizeCredentialMode(row.claude_credential_mode, true);
+  credentialCache.set(organizationId, { apiKey, mode, cachedAt: Date.now() });
 
-  return resolution;
+  return {
+    client: new Anthropic({ apiKey }),
+    source: "api_key",
+    mode,
+  };
 }
 
 export async function getClientForOrg(

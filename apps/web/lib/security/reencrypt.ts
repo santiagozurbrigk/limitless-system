@@ -9,6 +9,8 @@
  * Nunca devuelve ni loguea el secreto en claro: sólo el valor nuevo cifrado.
  */
 
+// Relativo y no "@/": este módulo lo usa también el script de re-cifrado.
+import { PLATFORM_SECRET_SCOPE } from "../ai/platform-credential-scope";
 import {
   decryptWithInfo,
   encrypt,
@@ -24,7 +26,12 @@ export type SecretColumn = {
   /** Columna que identifica la fila para el UPDATE. */
   keyColumn: "id" | "organization_id";
   /** Columna con la org dueña del secreto (va en la AAD). */
-  orgColumn: "id" | "organization_id";
+  orgColumn?: "id" | "organization_id";
+  /**
+   * Para secretos que no son de una organización (la clave de Claude de la
+   * plataforma): valor fijo que va en la AAD en lugar de una columna.
+   */
+  fixedOrganizationId?: string;
   /** Columna con el miembro dueño, para los secretos por miembro. */
   userColumn?: "user_id";
   /**
@@ -48,6 +55,7 @@ export const SECRET_COLUMNS: readonly SecretColumn[] = [
   { field: "hyros_integrations.api_key_encrypted", table: "hyros_integrations", column: "api_key_encrypted", keyColumn: "id", orgColumn: "organization_id", allowsPlaintext: true },
   { field: "zernio_integrations.api_key", table: "zernio_integrations", column: "api_key", keyColumn: "id", orgColumn: "organization_id", allowsPlaintext: true },
   { field: "team_member_integrations.encrypted_api_key", table: "team_member_integrations", column: "encrypted_api_key", keyColumn: "id", orgColumn: "organization_id", userColumn: "user_id", allowsPlaintext: true },
+  { field: "platform_ai_credentials.claude_api_key_encrypted", table: "platform_ai_credentials", column: "claude_api_key_encrypted", keyColumn: "id", fixedOrganizationId: PLATFORM_SECRET_SCOPE, allowsPlaintext: false },
 ];
 
 export type ReencryptPlan =
@@ -66,7 +74,7 @@ export function contextForRow(
   column: SecretColumn,
   row: Record<string, unknown>
 ): SecretContext | null {
-  const organizationId = row[column.orgColumn];
+  const organizationId = column.fixedOrganizationId ?? (column.orgColumn ? row[column.orgColumn] : null);
   if (typeof organizationId !== "string" || !organizationId) return null;
   if (column.userColumn) {
     const userId = row[column.userColumn];

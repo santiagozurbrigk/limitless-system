@@ -370,9 +370,8 @@ flowchart TD
 
     subgraph claude["Llamada a Claude"]
         complexity["detectAgentComplexity<br/>Haiku agent_simple o Sonnet agent_complex"]
-        cred["resolveCredentialForOrg<br/>lib/ai/credential-resolver.ts<br/>clave BYOK de la org si valid, si no ANTHROPIC_API_KEY"]
+        cred["resolveCredentialForOrg<br/>lib/ai/credential-resolver.ts<br/>sólo la clave de la org; sin clave, no hay IA"]
         stream["streamClaudeAgent<br/>lib/agent/stream-claude-agent.ts<br/>hasta 4 iteraciones de tools"]
-        nofallback["sin reintento con la clave global ante 401<br/>AGENTE-SIN-FALLBACK-CLAVE"]:::roto
         tools["20 tools: lectura, workboard, contenido,<br/>generate_document, propose_*, web_search<br/>lib/agent/agent-tool-handler.ts"]
         anth["Anthropic Messages API, stream"]
     end
@@ -380,7 +379,6 @@ flowchart TD
     compact --> complexity
     complexity --> stream
     stream --> cred
-    cred -.-> nofallback
     stream -->|"HTTPS stream"| anth
     anth -->|"tool_use"| tools
     tools -->|"cliente del usuario, RLS por org"| datos[("clients, closing_calls, workboard_tasks,<br/>agent_graph_proposals, content_pieces...")]:::tabla

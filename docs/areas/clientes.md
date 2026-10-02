@@ -121,7 +121,7 @@ PlatformDataProvider.listClientsAction()  ← select * de clients (incluye custo
 | Proveedor | Qué se usa acá | Si no está |
 |---|---|---|
 | Fathom | Página compartida (`fathom.video/share/…`) para subir 1-1 sin API key; sync/webhook del área Fathom para «Última 1-1» y llamadas vinculadas | Subir por link funciona igual (no usa credencial). Sin sync, «Última 1-1» sólo muestra las subidas a mano |
-| Anthropic (Claude) | Extracción de tareas de la 1-1; análisis de la llamada; matcher de hitos | Sin clave válida (org o global) la 1-1 se sube pero no salen tareas; `[1A1-CLAVE-ANTHROPIC-ROTA]` |
+| Anthropic (Claude) | Extracción de tareas de la 1-1; análisis de la llamada; matcher de hitos | Sin clave de Claude de la org la 1-1 se sube pero no salen tareas, y la plataforma avisa que la IA está desactivada (SCRUM-7) |
 | Discord | Actividad por cliente en la ficha, candidatos a win, propuestas de hitos | Las tarjetas quedan vacías |
 | Supabase Storage | Bucket privado `client-wins` (capturas de wins) | Ver doc de recorrido |
 

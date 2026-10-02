@@ -1,9 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { mapAnthropicCallError, type ClaudeKeySource } from "@/lib/ai/anthropic-errors";
 import {
-  getGlobalAnthropicClient,
+  esErrorSinCreditos,
+  mapAnthropicCallError,
+  type ClaudeKeySource,
+} from "@/lib/ai/anthropic-errors";
+import { AI_KEY_REJECTED_MESSAGE } from "@/lib/ai/anthropic-auth-errors";
+import {
   invalidateOrgCredentialCache,
   marcarClaveDeOrgComoRechazada,
+  marcarClaveDeOrgSinCreditos,
   resolveCredentialForOrg,
 } from "@/lib/ai/credential-resolver";
 import { trackTokenUsage } from "@/lib/track-token-usage";
@@ -163,81 +168,69 @@ type ClaudeUsage = {
   cache_creation_input_tokens?: number;
 };
 
-export function isAnthropicConfigured(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
-}
-
 export function invalidateOrgKeyCache(organizationId: string): void {
   invalidateOrgCredentialCache(organizationId);
 }
 
-function toKeySource(
-  source: "api_key" | "global" | "none"
-): ClaudeKeySource {
-  if (source === "api_key") return "api_key";
-  return "global";
-}
-
-async function executeWithCredentialFallback<T>(
+/**
+ * Corre una llamada a Claude con la clave propia de la organización.
+ *
+ * ⭐ Sin clave propia, no hay IA (SCRUM-7): si la org no tiene clave usable
+ * devuelve `result: null` sin llamar a nadie, y quien llamó saltea el trabajo.
+ * No hay clave global de respaldo. Si Anthropic rechaza la clave o la cuenta no
+ * tiene créditos, se deja marcado en la org (lo ve en el cartel de la
+ * plataforma y en Ajustes) y se tira un error con un mensaje claro.
+ */
+async function executeWithOrgCredential<T>(
   organizationId: string,
   fn: (client: Anthropic, keySource: ClaudeKeySource) => Promise<T>
 ): Promise<{ result: T | null; keySource: ClaudeKeySource | "none" }> {
   const resolution = await resolveCredentialForOrg(organizationId);
   if (!resolution.client || resolution.source === "none") {
-    console.warn("[anthropic] Sin credencial (org ni ANTHROPIC_API_KEY global)");
+    console.info(
+      `[anthropic] La organización ${organizationId} no tiene clave de IA usable: se saltea.`
+    );
     return { result: null, keySource: "none" };
   }
 
-  const keySource = toKeySource(resolution.source);
+  const keySource: ClaudeKeySource = "api_key";
 
   try {
     const result = await fn(resolution.client, keySource);
     return { result, keySource };
   } catch (error) {
-    /**
-     * ⭐ Acá estaba el "fallback" que no existía.
-     *
-     * La función se llamaba `executeWithCredentialFallback` pero, si la clave
-     * propia de la organización era inválida, no probaba nada más: lanzaba. En
-     * producción eso eran **221 fallas por día en cuatro organizaciones**, con
-     * `401 API key is invalid` repitiéndose cada diez minutos, y el análisis de
-     * llamadas sin correr para nadie.
-     *
-     * Que alguien haya cargado una clave vencida no es motivo para que su
-     * cuenta deje de funcionar en silencio: se reintenta con la clave global y
-     * se deja escrito en el log cuál organización tiene la suya rota.
-     */
-    if (keySource === "api_key" && esClaveRechazada(error)) {
-      const global = getGlobalAnthropicClient();
-      console.warn(
-        `[anthropic] La clave propia de la organización ${organizationId} fue rechazada. ` +
-          (global
-            ? "Se sigue con la clave global; avisale para que la actualice."
-            : "No hay clave global configurada: el trabajo no se puede hacer.")
-      );
-      invalidateOrgKeyCache(organizationId);
+    await registrarFallaDeClave(organizationId, error);
+    if (esClaveRechazada(error)) throw new Error(AI_KEY_REJECTED_MESSAGE);
+    throw mapAnthropicCallError(error);
+  }
+}
 
-      /**
-       * ⭐ Y se deja escrito, no sólo logueado.
-       *
-       * El log lo ve quien abre Vercel; el estado guardado lo ve la
-       * organización en su propia pantalla. Sin esto, una clave vencida en
-       * julio seguía figurando como válida en septiembre y nadie se enteraba
-       * salvo mirando los registros del servidor.
-       */
-      void marcarClaveDeOrgComoRechazada(organizationId);
-
-      if (global) {
-        const result = await fn(global, "global");
-        return { result, keySource: "global" };
-      }
-    }
-    throw mapAnthropicCallError(error, keySource);
+/**
+ * Si el error dice que la clave está rota o sin créditos, lo deja escrito en la
+ * organización. Lo usan las llamadas comunes y el stream del agente.
+ */
+export async function registrarFallaDeClave(
+  organizationId: string,
+  error: unknown
+): Promise<void> {
+  if (esClaveRechazada(error)) {
+    console.warn(
+      `[anthropic] La clave propia de la organización ${organizationId} fue rechazada: queda sin IA hasta que cargue otra.`
+    );
+    invalidateOrgKeyCache(organizationId);
+    await marcarClaveDeOrgComoRechazada(organizationId);
+    return;
+  }
+  if (esErrorSinCreditos(error)) {
+    console.warn(
+      `[anthropic] La cuenta de Anthropic de la organización ${organizationId} no tiene créditos.`
+    );
+    await marcarClaveDeOrgSinCreditos(organizationId);
   }
 }
 
 /** Una clave que el proveedor rechaza — vencida, revocada o mal copiada. */
-function esClaveRechazada(error: unknown): boolean {
+export function esClaveRechazada(error: unknown): boolean {
   const status = (error as { status?: number } | null)?.status;
   return status === 401 || status === 403;
 }
@@ -300,18 +293,17 @@ async function createClaudeMessage(
     ...(system !== undefined && { system }),
   };
 
-  try {
-    if (params.cachedSystemPrompt?.trim()) {
-      return await client.beta.messages.create({
-        ...request,
-        betas: [PROMPT_CACHING_BETA],
-      });
-    }
-
-    return await client.messages.create(request);
-  } catch (error) {
-    throw mapAnthropicCallError(error, keySource);
+  // El error crudo sigue de largo: `executeWithOrgCredential` lo necesita con su
+  // status para marcar la clave (rota o sin créditos) antes de traducirlo.
+  void keySource;
+  if (params.cachedSystemPrompt?.trim()) {
+    return await client.beta.messages.create({
+      ...request,
+      betas: [PROMPT_CACHING_BETA],
+    });
   }
+
+  return await client.messages.create(request);
 }
 
 export async function callClaudeText(
@@ -320,7 +312,7 @@ export async function callClaudeText(
   const logicalModel = resolveLogicalModel(req);
   const apiModel = resolveApiModelId(logicalModel);
 
-  const { result } = await executeWithCredentialFallback(
+  const { result } = await executeWithOrgCredential(
     req.organizationId,
     async (client, keySource) => {
       const response = await createClaudeMessage(client, keySource, {
@@ -399,7 +391,7 @@ export async function callClaudeAgent(
   const maxTokens = req.maxTokens ?? 4096;
   const thinkingBudget = req.thinkingBudget ?? 4000;
 
-  const { result } = await executeWithCredentialFallback(
+  const { result } = await executeWithOrgCredential(
     req.organizationId,
     async (client, keySource) => {
       const systemParam = buildSystemParam(req.cachedSystemPrompt, req.system);
@@ -563,7 +555,7 @@ export async function callClaudeJson<T>(
   const logicalModel = resolveLogicalModel(req);
   const apiModel = resolveApiModelId(logicalModel);
 
-  const { result } = await executeWithCredentialFallback(
+  const { result } = await executeWithOrgCredential(
     req.organizationId,
     async (client, keySource) => {
       const response = await createClaudeMessage(client, keySource, {
@@ -631,7 +623,7 @@ export async function callClaudeVisionJson<T>(req: {
     ),
   ];
 
-  const { result } = await executeWithCredentialFallback(
+  const { result } = await executeWithOrgCredential(
     req.organizationId,
     async (client, keySource) => {
       const response = await createClaudeMessage(client, keySource, {

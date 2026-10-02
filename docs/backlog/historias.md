@@ -175,9 +175,9 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Historia:** Como founder, quiero cargar mi propia clave de Claude, enterarme si deja de funcionar y que nadie de mi equipo sin permiso la pueda cambiar, para que la IA de mi negocio siga trabajando y se cobre en mi cuenta.
 - **Criterios de aceptación:**
   - Dado un miembro con Ajustes en "sin acceso", cuando intenta cambiar o borrar la clave (incluso por fuera de la pantalla), entonces recibe un error de permiso y la clave no cambia.
-  - Dado que mi clave es rechazada por Claude, entonces veo el aviso rojo en la aplicación y el trabajo de IA de mi negocio sigue (con la clave de Limitless) o queda claro que está frenado hasta que cargue una nueva.
+  - Dado que mi clave es rechazada por Claude, entonces veo el aviso rojo en la aplicación y queda claro que el trabajo de IA de mi negocio está frenado hasta que cargue una nueva.
   - Se probó con la organización que hoy tiene la clave rechazada y el resultado quedó anotado.
-- **Tareas técnicas:** `[PERMISOS-SERVER-ACTIONS]`, `[1A1-CLAVE-ANTHROPIC-ROTA]`
+- **Tareas técnicas:** `[PERMISOS-SERVER-ACTIONS]`
 - **Para confirmar:** —
 
 ### [H-PLA-21] Ver y manejar todas mis integraciones en un tablero confiable
@@ -228,13 +228,13 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Tareas técnicas:** `[CLIENT-HEALTH-LEGACY]`
 - **Para confirmar:** Agustín: ¿qué señal reemplaza a "conversaciones" (la bandeja vieja que quedó vacía)?
 
-### [H-PLA-30] Mantener el cerebro de IA general sin usar la clave de un cliente
+### [H-PLA-30] Que los documentos del cerebro de IA general no dependan de un bucket creado a mano
 - **Funcionalidad:** F-PLA-30 · Con fallas
-- **Historia:** Como super admin de Limitless, quiero cargar y resumir los documentos del cerebro de IA general usando sólo la cuenta de Limitless, para no cobrarle a un cliente trabajo de la plataforma ni usar su clave sin permiso.
+- **Historia:** Como super admin de Limitless, quiero que el bucket donde se guardan los documentos del cerebro de IA general esté definido en las migraciones y sea privado, para que un entorno nuevo o una restauración no lo pierdan ni lo dejen público.
 - **Criterios de aceptación:**
-  - Dado que falta la clave de Claude de Limitless, cuando genero resúmenes del cerebro, entonces la pantalla muestra un error claro y no usa la clave de ningún cliente.
-  - Dado que la clave de Limitless está cargada, cuando genero resúmenes, entonces el costo de cada lote queda registrado como gasto de la plataforma, no a nombre de un cliente.
-- **Tareas técnicas:** `[IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN]`
+  - El bucket `ai-brain-documents` se crea desde una migración, es privado y su configuración coincide con la de producción.
+  - (Resuelto el 2026-10-02, SCRUM-7: los resúmenes usan la clave de la plataforma, nunca la de un cliente, y su costo se registra a nombre de la plataforma.)
+- **Tareas técnicas:** `[AUD-SEG-9]`
 - **Para confirmar:** —
 
 ---
@@ -835,7 +835,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Si el problema con la clave aparece cuando la respuesta ya empezó a escribirse, la respuesta no se duplica ni se vuelve a empezar.
   - Dada una conversación muy larga, cuando mando un mensaje nuevo y falla el paso de resumir lo anterior, igual recibo la respuesta (tomando los últimos mensajes) en lugar de un error.
   - Cuando termino el primer intercambio de una conversación nueva, la conversación queda con su título automático en el historial.
-- **Tareas técnicas:** `[AGENTE-SIN-FALLBACK-CLAVE]`, `[AGENTE-COMPACTION-FRAGIL]`
+- **Tareas técnicas:** `[AGENTE-COMPACTION-FRAGIL]`
 - **Para confirmar:** Martín: la fila también nombra el ahorro de costo por reutilizar contexto (AGENTE-CACHE-INEFECTIVO) y la protección contra textos maliciosos (AUDITORIA-ABIERTOS §3.6); los dejé fuera porque no cambian lo que ve el usuario en el chat (el segundo está en H-IA-13 y H-IA-10).
 
 ### [H-IA-03] Que el agente sólo muestre los datos que cada uno puede ver
@@ -943,19 +943,9 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Criterios de aceptación:**
   - Dado un miembro del equipo que no es founder, cuando intenta cambiar o borrar la clave de Claude, entonces recibe un error y la clave no cambia.
   - Dada la organización con la clave rechazada, cuando el founder entra a la plataforma, entonces ve la barra roja; se probó con esa organización y el resultado quedó anotado.
-  - Dada una clave sin créditos, el founder lo ve marcado en Ajustes (o la IA sigue con la clave de Limitless, según lo que se decida).
-- **Tareas técnicas:** `[1A1-CLAVE-ANTHROPIC-ROTA]`, `[PERMISOS-SERVER-ACTIONS/agente-ia]`, `[IA-CLAVE-SIN-CREDITOS]`
-- **Para confirmar:** Agustín: una organización cuya clave se quedó sin créditos, ¿sigue con la clave de Limitless o queda sin IA hasta que cargue créditos?
-
-### [H-IA-26] Seguir con la IA de Limitless si mi clave es rechazada
-- **Funcionalidad:** F-IA-26 · Sin verificar
-- **Historia:** Como founder, quiero que si Anthropic rechaza la clave de mi empresa el sistema siga trabajando con la clave de Limitless, para que el análisis de llamadas, los reportes y el agente no se detengan.
-- **Criterios de aceptación:**
-  - Probado con una cuenta real de Anthropic y el resultado quedó anotado: con la clave de la organización rechazada y la de Limitless cargada, las llamadas de esa organización se procesan y la clave queda marcada como rechazada.
-  - Dada una clave rechazada, cuando mando un mensaje en el agente, entonces recibo respuesta igual.
-  - Quedó decidido y anotado hasta cuándo una organización con clave rechazada puede usar la clave de Limitless, y se avisó a las organizaciones que están en esa situación.
-- **Tareas técnicas:** `[1A1-CLAVE-ANTHROPIC-ROTA]`, `[AGENTE-SIN-FALLBACK-CLAVE]`, `[IA-CLAVES-INVALIDAS]`
-- **Para confirmar:** Martín: hoy no se sabe si la clave de Limitless está cargada en producción; confirmar con quien administra Vercel antes de estimar.
+  - Dada una clave sin créditos, el founder lo ve marcado en Ajustes y en el aviso de la plataforma; la IA vuelve sola cuando carga saldo.
+- **Tareas técnicas:** `[PERMISOS-SERVER-ACTIONS/agente-ia]`
+- **Para confirmar:** —
 
 ### [H-IA-27] Ver el costo real de la IA por organización
 - **Funcionalidad:** F-IA-27 · A medias
@@ -964,16 +954,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - El costo registrado de cada modelo coincide con el precio publicado por Anthropic.
   - Los usos que hoy no se cuentan (indexado de documentos y resúmenes del cerebro global) aparecen en el registro de costos.
   - El trabajo de plataforma (cerebro global) queda registrado a nombre de Limitless, no de una organización cliente.
-- **Tareas técnicas:** `[IA-COSTOS-INCOMPLETOS]`, `[IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN]`
-- **Para confirmar:** —
-
-### [H-IA-28] Cargar el cerebro global sin usar la clave de un cliente
-- **Funcionalidad:** F-IA-28 · Con fallas
-- **Historia:** Como super admin de Limitless, quiero cargar documentos al cerebro global y generar sus resúmenes usando sólo la clave de Limitless, para no usar ni cobrarle a un cliente trabajo que es de la plataforma.
-- **Criterios de aceptación:**
-  - Sin la clave de Limitless cargada, generar resúmenes del cerebro global muestra un error claro y no usa la clave de ninguna organización cliente.
-  - Con la clave de Limitless cargada, cada tanda de resúmenes deja registrado su costo a nombre de la plataforma.
-- **Tareas técnicas:** `[IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN]`
+- **Tareas técnicas:** `[IA-COSTOS-INCOMPLETOS]`
 - **Para confirmar:** —
 
 ---
@@ -1242,8 +1223,8 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Criterios de aceptación:**
   - Probado con una cuenta real de Discord y el resultado quedó anotado: al día siguiente de escribir, los mensajes nuevos de alumnos tienen tono y resumen, y los del equipo no se clasifican.
   - Dado un cliente con mensajes que muestran un avance, entonces aparece una propuesta de hito en su recorrido.
-  - Si la clave de Claude de la organización deja de funcionar, la clasificación sigue con la clave de Limitless o el founder ve el aviso rojo.
-- **Tareas técnicas:** `[DISCORD-SIN-PROBAR]`, `[1A1-CLAVE-ANTHROPIC-ROTA]`
+  - Si la clave de Claude de la organización deja de funcionar, la clasificación se frena y el founder ve el aviso rojo.
+- **Tareas técnicas:** `[DISCORD-SIN-PROBAR]`
 - **Para confirmar:** Martín: la prueba manual de Discord no incluye la propuesta de hitos; sumarla.
 
 ### [H-DIS-12] Ponerle nombre y foto propios al bot en mi servidor

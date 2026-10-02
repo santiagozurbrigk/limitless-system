@@ -52,13 +52,14 @@ Qué se guarda cifrado y qué no:
 | Secreto | Dónde | Cifrado |
 |---|---|---|
 | Key BYOK de Claude | `organizations.claude_api_key_encrypted` | sí |
+| Clave de Claude de la plataforma (super-admin) | `platform_ai_credentials.claude_api_key_encrypted` | sí (`lib/ai/platform-credential.ts`; AAD con alcance fijo `platform`) |
 | API keys de Zernio, GHL, Hyros, VTurb, WebinarJam | `*_integrations` | sí (`lib/<proveedor>/integration.ts`) |
 | Key de Fathom por miembro | `team_member_integrations.encrypted_api_key` | sí (`lib/fathom/member-key.ts`). Hasta el 2026-09-30 la conexión desde Integraciones → Fathom la guardaba **en claro**; las 8 filas de producción se cifraron el 2026-10-02 |
 | Secreto de webhook y API key de Whop/Commas | `payment_integrations.*_encrypted` | sí |
 | Tokens de Mercado Pago | `mercadopago_integrations` | sí (`lib/mercadopago/tokens.ts`) |
 | Tokens OAuth de Calendly, Stripe, Instagram, Typeform, Google/YouTube, Drive de super-admin; `fathom_integrations.api_key`; token de ManyChat | `*_integrations`, `super_admin_google_tokens` | **no** — protegidos sólo por RLS cerrado (`[AUD-SEG-2]`) |
 
-Rotar `ENCRYPTION_MASTER_KEY`: nueva como actual, vieja como `ENCRYPTION_MASTER_KEY_PREVIOUS`, redeploy, `apps/web/scripts/reencrypt-secrets.ts --apply`, sacar la vieja. Procedimiento completo en [`docs/operacion/rotacion-master-key.md`](../operacion/rotacion-master-key.md). Cambiar la clave **sin** cargar la anterior sigue rompiendo todo lo cifrado: la clave de Claude de cada org cae en silencio a la global (`[BYOK-DESCIFRADO-SILENCIOSO]`), las demás integraciones cifradas tiran al leer y los webhooks de Whop/Commas responden **500** (y GHL, con su secreto de Workflow). Antes de rotar, comprobar que la copia del gestor es la de producción (paso 0 del procedimiento): el 2026-10-02 la copia no era la buena y se perdieron 19 secretos. Pendiente: clave propia para Preview y ensayo de rotación, con `[ENTORNO-STAGING]`.
+Rotar `ENCRYPTION_MASTER_KEY`: nueva como actual, vieja como `ENCRYPTION_MASTER_KEY_PREVIOUS`, redeploy, `apps/web/scripts/reencrypt-secrets.ts --apply`, sacar la vieja. Procedimiento completo en [`docs/operacion/rotacion-master-key.md`](../operacion/rotacion-master-key.md). Cambiar la clave **sin** cargar la anterior sigue rompiendo todo lo cifrado: la IA de cada org con clave de Claude se frena con la barra roja (no hay clave de respaldo, SCRUM-7), las demás integraciones cifradas tiran al leer y los webhooks de Whop/Commas responden **500** (y GHL, con su secreto de Workflow). Antes de rotar, comprobar que la copia del gestor es la de producción (paso 0 del procedimiento): el 2026-10-02 la copia no era la buena y se perdieron 19 secretos. Pendiente: clave propia para Preview y ensayo de rotación, con `[ENTORNO-STAGING]`.
 
 ## Crons, colas y bot
 

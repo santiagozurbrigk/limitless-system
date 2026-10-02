@@ -1,12 +1,15 @@
 export type ClaudeCredentialMode = "api_key_active" | "unconfigured";
 
-export type ClaudeCredentialSource = "api_key" | "global";
+/** Sólo la clave propia de la organización: no hay clave global de respaldo (SCRUM-7). */
+export type ClaudeCredentialSource = "api_key";
 
 export type OrgCredentialState = {
   organizationId: string;
   mode: ClaudeCredentialMode;
   hasApiKey: boolean;
   apiKeyStatus: "none" | "valid" | "valid_no_credits" | "invalid" | "error";
+  /** Hay una clave guardada y marcada como usable, pero no se puede descifrar. */
+  keyUnreadable: boolean;
 };
 
 export type ResolvedCredential = {

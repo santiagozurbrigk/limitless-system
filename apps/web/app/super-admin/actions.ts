@@ -1,6 +1,5 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { isAllowedBrainFile } from "@/lib/ai-brain/file-types";
 import { AI_BRAIN_BUCKET, uiContentTypeToDb } from "@/lib/ai-brain/mapper";
@@ -11,6 +10,8 @@ import { tempPasswordProfileFields } from "@/lib/auth/temp-password-expiry";
 import { regenerateUserTempPassword } from "@/lib/auth/regenerate-temp-password";
 import type { TempCredentials } from "@/lib/auth/temp-credentials";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getPlatformAnthropicClient } from "@/lib/ai/platform-credential";
+import { trackTokenUsage } from "@/lib/track-token-usage";
 import {
   actionErrorMessage,
   runMutation,
@@ -800,39 +801,6 @@ export async function regenerateTempPasswordAction(
 // ---------------------------------------------------------------------------
 
 /**
- * Resuelve un cliente Anthropic para uso del super-admin:
- * intenta la clave global y, si no existe, usa la de cualquier org activa.
- */
-// Org "Optimiza tu Control" — fuente de credencial para operaciones super-admin
-const SUPER_ADMIN_CREDENTIAL_ORG_ID = "46cce98c-6d4c-4e4d-94a7-7cc24ae1104d";
-
-async function resolveSuperAdminAnthropicClient(
-  admin: ReturnType<typeof createAdminClient>
-): Promise<Anthropic> {
-  const globalKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (globalKey) return new Anthropic({ apiKey: globalKey });
-
-  const { data: org } = await admin
-    .from("organizations")
-    .select("claude_api_key_encrypted")
-    .eq("id", SUPER_ADMIN_CREDENTIAL_ORG_ID)
-    .maybeSingle();
-
-  if (!org?.claude_api_key_encrypted) {
-    throw new Error(
-      "No hay credencial de Anthropic disponible. Configurá ANTHROPIC_API_KEY en las variables de entorno."
-    );
-  }
-
-  const { decrypt } = await import("@/lib/security/encryption");
-  const apiKey = decrypt(org.claude_api_key_encrypted, {
-    field: "organizations.claude_api_key_encrypted",
-    organizationId: SUPER_ADMIN_CREDENTIAL_ORG_ID,
-  });
-  return new Anthropic({ apiKey });
-}
-
-/**
  * Envía todos los documentos activos con content_text al Anthropic Batch API
  * para generar ai_summary de cada uno. 50% más barato que requests individuales.
  */
@@ -857,7 +825,7 @@ export async function submitBrainSummaryBatchAction(): Promise<
       throw new Error("No hay documentos activos con contenido para resumir");
     }
 
-    const client = await resolveSuperAdminAnthropicClient(admin);
+    const client = await getPlatformAnthropicClient();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const requests: any[] = docs.map((doc) => ({
@@ -902,7 +870,7 @@ export async function syncBrainBatchResultsAction(
     await requireSuperAdmin();
 
     const admin = createAdminClient();
-    const client = await resolveSuperAdminAnthropicClient(admin);
+    const client = await getPlatformAnthropicClient();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const batch = await (client.beta.messages.batches as any).retrieve(batchId);
@@ -926,6 +894,20 @@ export async function syncBrainBatchResultsAction(
         .map((b: { type: string; text: string }) => b.text)
         .join("")
         .trim();
+
+      // El costo va a nombre de la plataforma (organization_id nulo), no de un
+      // cliente; el Batch API cobra la mitad del precio de lista (SCRUM-71).
+      const usage = result.result.message?.usage;
+      if (usage) {
+        await trackTokenUsage({
+          organizationId: null,
+          model: (result.result.message?.model as string | undefined) ?? "claude-haiku-4-5-20251001",
+          inputTokens: usage.input_tokens ?? 0,
+          outputTokens: usage.output_tokens ?? 0,
+          feature: "super_admin_brain_summary_batch",
+          costMultiplier: 0.5,
+        }).catch((error) => console.error("[super-admin] registrar costo del batch", error));
+      }
 
       if (!summaryText) continue;
 

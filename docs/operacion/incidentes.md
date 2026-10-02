@@ -84,9 +84,9 @@ supabase db dump --db-url "$DB_URL" -f data.sql --use-copy --data-only
 
 ### D · Se agotó o rechazan la clave de IA (Anthropic)
 1. Logs: `[anthropic] La clave propia de la organización … fue rechazada` (401/403) o errores de créditos (400 `billing_error`).
-2. **Clave de una org rechazada**: el sistema la marca `invalid`, el founder ve la barra roja y se sigue con la global **si existe** (`ANTHROPIC_API_KEY`; `[ENV-ANTHROPIC-VERCEL]`). Avisar a la org para que cargue una nueva.
-3. **Clave de una org sin créditos**: no cae a la global (`[IA-CLAVE-SIN-CREDITOS]`). Avisar a la org.
-4. **La clave global sin créditos o rechazada**: afecta a todas las orgs sin clave propia. Recargar créditos en la consola de Anthropic o cargar una clave nueva en Vercel y redeployar. El reel-worker usa su propia copia (`fly secrets set ANTHROPIC_API_KEY=…`).
+2. **Clave de una org rechazada**: el sistema la marca `invalid` y la IA de esa org se frena (no hay clave de respaldo, SCRUM-7); el founder ve la barra roja. Avisar a la org para que cargue una nueva.
+3. **Clave de una org sin créditos**: queda marcada `valid_no_credits` y el founder ve el aviso; vuelve sola cuando carga saldo. Avisar a la org.
+4. **La clave de la plataforma** (super-admin, resúmenes del cerebro) sin créditos o rechazada: cargar otra en Super-admin → Infraestructura. El reel-worker usa su propia `ANTHROPIC_API_KEY` (`fly secrets set ANTHROPIC_API_KEY=…`).
 5. Después: re-disparar los crons de IA del día que fallaron (§C.4). El costo por org se ve en `/super-admin/costs`.
 
 ### E · Supabase en sólo lectura o sin cupo de Storage

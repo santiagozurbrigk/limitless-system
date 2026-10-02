@@ -41,6 +41,7 @@ export const SECRET_FIELDS = [
   "hyros_integrations.api_key_encrypted",
   "zernio_integrations.api_key",
   "team_member_integrations.encrypted_api_key",
+  "platform_ai_credentials.claude_api_key_encrypted",
 ] as const;
 
 export type SecretField = (typeof SECRET_FIELDS)[number];

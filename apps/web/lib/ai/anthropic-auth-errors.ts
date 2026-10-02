@@ -74,7 +74,10 @@ export function isAnthropicAuthFailure(error: unknown): boolean {
 }
 
 export const NO_AI_CREDENTIALS_MESSAGE =
-  "Reconectá tus credenciales de IA en Configuración → IA.";
+  "Las funciones de IA están desactivadas: falta la clave de Claude de tu organización. Cargala en Ajustes → IA (o pedíselo a quien administra la cuenta).";
+
+export const AI_KEY_REJECTED_MESSAGE =
+  "La clave de Claude de tu organización dejó de funcionar (Anthropic la rechazó). Cargá una nueva en Ajustes → IA.";
 
 export function noAiCredentialsError(): Error {
   return new Error(NO_AI_CREDENTIALS_MESSAGE);

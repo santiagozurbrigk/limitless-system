@@ -1,10 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
+  esClaveRechazada,
   getModelForTask,
+  registrarFallaDeClave,
   type AITask,
   type ClaudeModel,
 } from "@/lib/ai/anthropic";
 import { mapAnthropicCallError } from "@/lib/ai/anthropic-errors";
+import {
+  AI_KEY_REJECTED_MESSAGE,
+  NO_AI_CREDENTIALS_MESSAGE,
+} from "@/lib/ai/anthropic-auth-errors";
 import { resolveCredentialForOrg } from "@/lib/ai/credential-resolver";
 import { trackTokenUsage } from "@/lib/track-token-usage";
 import {
@@ -216,12 +222,11 @@ export async function streamClaudeAgent(
     req.thinkingBudget ?? resolveAgentThinkingBudget(req.enableThinking);
 
   const resolution = await resolveCredentialForOrg(req.organizationId);
+  // Sin clave propia, no hay IA (SCRUM-7): el usuario ve por qué y qué hacer,
+  // en vez del genérico "No pudimos generar la respuesta".
   if (!resolution.client || resolution.source === "none") {
-    console.warn("[streamClaudeAgent] Sin credencial (org ni ANTHROPIC_API_KEY global)");
-    return null;
+    throw new Error(NO_AI_CREDENTIALS_MESSAGE);
   }
-
-  const keySource = resolution.source === "api_key" ? "api_key" : "global";
 
   try {
     const client = resolution.client;
@@ -380,6 +385,10 @@ export async function streamClaudeAgent(
       thinkingContent,
     };
   } catch (error) {
-    throw mapAnthropicCallError(error, keySource);
+    // Clave rota o sin créditos: queda marcado en la org (cartel y Ajustes), igual
+    // que en las llamadas comunes. No hay clave de respaldo a la que reintentar.
+    await registrarFallaDeClave(req.organizationId, error);
+    if (esClaveRechazada(error)) throw new Error(AI_KEY_REJECTED_MESSAGE);
+    throw mapAnthropicCallError(error);
   }
 }

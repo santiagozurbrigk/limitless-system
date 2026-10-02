@@ -65,6 +65,17 @@ describe("contextForRow", () => {
   });
 });
 
+describe("clave de Claude de la plataforma", () => {
+  it("va en la AAD con el alcance fijo 'platform', sin columna de organización", () => {
+    const platform = SECRET_COLUMNS.find((c) => c.table === "platform_ai_credentials")!;
+    expect(contextForRow(platform, { id: 1 })).toEqual({
+      field: "platform_ai_credentials.claude_api_key_encrypted",
+      organizationId: "platform",
+    });
+    expect(platform.allowsPlaintext).toBe(false);
+  });
+});
+
 describe("planReencryption", () => {
   it("no toca lo que ya está en v2 con la clave actual", () => {
     expect(planReencryption(encrypt("k", CTX), CTX, true)).toEqual({ action: "keep" });

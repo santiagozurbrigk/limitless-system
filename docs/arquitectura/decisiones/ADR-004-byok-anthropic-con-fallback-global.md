@@ -1,6 +1,6 @@
 # ADR-004 — BYOK de Anthropic por organización, cifrada, con fallback a la clave global
 
-- **Estado:** Aceptada con deuda
+- **Estado:** **Revisada el 2026-10-02 (SCRUM-7): ya no hay fallback a la clave global.** Ver "Revisión 2026-10-02" al final; el resto describe la decisión original.
 - **Fecha:** 2026-06-13 — commit `f0f4b4de` "implement BYOK Claude API key with validation, routing and cache"
   (UI previa en `d8a22125`, 2026-06-11; cifrado real en `d64d5543`, 2026-06-17). Anterior a `CHANGES.md`;
   documentado en `docs/archivo/OPERATIONAL_NOTES.md` § "BYOK — API key propia de Claude". El fallback real ante
@@ -67,3 +67,27 @@ Limitless.
   `apps/web/components/platform/aviso-clave-ia.tsx`.
 - `docs/archivo/OPERATIONAL_NOTES.md` § BYOK y § Cifrado; `docs/areas/agente-ia.md` § "BYOK y fallback de clave".
 - `CHANGES.md` 2026-09-21 "Una clave de IA vencida ahora se ve dentro del producto".
+
+## Revisión 2026-10-02 — sin clave propia, no hay IA (SCRUM-7)
+
+**Decisión nueva (Santiago):** una organización usa **sólo su propia clave**. No hay clave global de Limitless de
+respaldo para ninguna organización.
+
+- **Por qué:** `ANTHROPIC_API_KEY` nunca estuvo cargada en producción (el fallback era teórico) y, si alguien la
+  cargaba, todas las orgs sin clave iban a gastar IA a cuenta de Limitless sin límite.
+- **Resolución:** clave de la org si su estado es `valid`/`valid_no_credits` y se puede descifrar → si no, "sin
+  credencial": no se llama a nadie, las funciones devuelven `null` y los procesos automáticos saltean esa org
+  (`lib/ai/credential-resolver.ts`, `executeWithOrgCredential` en `lib/ai/anthropic.ts`).
+- **Clave rechazada (401/403):** se marca `invalid` y se tira `AI_KEY_REJECTED_MESSAGE`; no se reintenta con otra
+  clave. **Sin créditos:** se marca `valid_no_credits` (se sigue usando: cuando carga saldo vuelve sola). Lo mismo
+  en el agente SSE (`registrarFallaDeClave`).
+- **Aviso en toda la plataforma** (`components/platform/aviso-clave-ia.tsx`, textos en `lib/ai/aviso-clave-ia.ts`):
+  sin clave → "las funciones de IA están desactivadas"; rota o ilegible → barra roja; sin créditos → aviso. El link
+  a Ajustes → IA sólo lo ve el founder.
+- **Trabajo de plataforma (super-admin):** usa su propia clave, cargada en Super-admin → Infraestructura y guardada
+  cifrada en `platform_ai_credentials` (`lib/ai/platform-credential.ts`). Nunca usa la clave de una organización,
+  y su costo se registra en `token_usage` con `organization_id` nulo.
+- `ANTHROPIC_API_KEY` deja de usarse en `apps/web`. Sigue en `apps/reel-worker` (captions con Haiku).
+
+Cierra `[1A1-CLAVE-ANTHROPIC-ROTA]`, `[IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN]`, `[IA-CLAVES-INVALIDAS]`,
+`[AGENTE-SIN-FALLBACK-CLAVE]`, `[IA-CLAVE-SIN-CREDITOS]`, `[BYOK-DESCIFRADO-SILENCIOSO]` y `[ENV-ANTHROPIC-VERCEL]`.

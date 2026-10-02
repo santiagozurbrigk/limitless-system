@@ -34,6 +34,30 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — Sin clave propia no hay IA, y super-admin con su propia clave (SCRUM-7)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Agente de negocio e IA / Plataforma — `lib/ai/credential-resolver.ts`, `lib/ai/anthropic.ts`, `lib/ai/anthropic-errors.ts`, `lib/ai/anthropic-auth-errors.ts`, `lib/ai/aviso-clave-ia.ts` (nuevo), `lib/ai/platform-credential.ts` (nuevo), `lib/agent/stream-claude-agent.ts`, `app/agent/actions.ts`, `components/platform/aviso-clave-ia.tsx`, `components/settings/claude-api-key-settings.tsx`, super-admin (Infraestructura y Batch del cerebro), `lib/track-token-usage.ts`, `lib/security/{encryption,reencrypt}.ts`; migración `20261002200000_platform_ai_credentials`.
+
+**Qué se hizo:**
+- **Regla nueva (decisión de Santiago): una organización usa sólo su propia clave de Claude.** `resolveCredentialForOrg` ya no cae a `ANTHROPIC_API_KEY`: sin clave usable devuelve `none`, las funciones devuelven `null` y los crons saltean la org (log `info`, sin error ni reintentos).
+- `executeWithCredentialFallback` → `executeWithOrgCredential`: ante 401/403 marca `invalid` y tira `AI_KEY_REJECTED_MESSAGE`; ante el 400 de créditos marca `valid_no_credits` (nuevo `marcarClaveDeOrgSinCreditos`) y tira el mensaje de créditos. Lo mismo en el stream del agente (`registrarFallaDeClave`). `createClaudeMessage` dejaba de pasar el error crudo (lo traducía antes), así que el "sin créditos" nunca se habría marcado: lo encontró un test.
+- El agente sin clave responde `NO_AI_CREDENTIALS_MESSAGE` (qué falta y dónde cargarlo) en vez de "No pudimos generar la respuesta".
+- Aviso en toda la plataforma para los cuatro casos: sin clave (nuevo), rota, ilegible (`keyUnreadable`, nuevo en `loadOrgCredentialState`) y sin créditos (nuevo). Textos en `lib/ai/aviso-clave-ia.ts`.
+- **Clave de Claude de la plataforma** para el Batch API del cerebro: tabla `platform_ai_credentials` (una fila, cifrada, RLS sin políticas), pantalla en Super-admin → Infraestructura (reusa `ClaudeApiKeySettings` con `scope="platform"`), acciones con `requireSuperAdmin`. Ya no usa la clave de Optimiza tu Control. El costo de cada lote va a `token_usage` con `organization_id` nulo y a mitad de precio (`costMultiplier`). Columna nueva en `SECRET_FIELDS`/`SECRET_COLUMNS` (AAD con alcance fijo `platform`).
+- Textos de Ajustes → IA sin la promesa de "volver a la key global".
+- Tests: `lib/ai/__tests__/aviso-clave-ia.test.ts` (5), `credential-resolver.test.ts` (7: incluso con `ANTHROPIC_API_KEY` cargada, ninguna org la usa), `clave-rechazada.test.ts` (3) y el de la clave de plataforma en `reencrypt.test.ts`. Suite: 115 archivos, 1492 tests.
+- Docs: ADR-004 (revisión 2026-10-02), `areas/agente-ia.md`, `operacion/entorno-y-deploy.md` (`ANTHROPIC_API_KEY` ya no la lee la web), `incidentes.md` §D, `seguridad.md`, `rotacion-master-key.md`, `base-de-datos.md`, `diagramas.md`, `areas/clientes.md`, `ESTADO_PARA_EQUIPO.md`, `FUNCIONAL.md` (F-IA-25, 26, 27, 28, F-PLA-20, 30, F-CLI-07, F-IA-01, F-DIS-11) e historias (bajas H-IA-26 y H-IA-28; H-PLA-30 queda por `[AUD-SEG-9]`); verificación manual § Agente 1 y 2 nuevos, V-INFRA-1 sin `ANTHROPIC_API_KEY`.
+
+**Por qué / finalidad:** cierra `[1A1-CLAVE-ANTHROPIC-ROTA]` (SCRUM-7), `[IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN]` (SCRUM-71), `[AGENTE-SIN-FALLBACK-CLAVE]` (SCRUM-69), `[IA-CLAVES-INVALIDAS]` (SCRUM-70), `[IA-CLAVE-SIN-CREDITOS]` (SCRUM-211), `[BYOK-DESCIFRADO-SILENCIOSO]` y `[ENV-ANTHROPIC-VERCEL]`; da de baja la historia H-IA-26 (SCRUM-363). La clave global nunca estuvo cargada (el respaldo era teórico) y, si alguien la cargaba, todas las orgs sin clave iban a gastar IA a cuenta de Limitless.
+
+**Decisiones de diseño relevantes:** `valid_no_credits` se sigue usando (cuando carga saldo vuelve sola) pero se avisa. La clave de la plataforma va en una tabla y no en una variable de Vercel para poder cargarla desde el panel, como pidió Santiago. El agente no reintenta: no hay a qué clave reintentar.
+
+**Riesgos / deuda técnica pendiente:** al 2026-10-02 **ninguna** org tiene clave de Claude cargada (las de Limitless, Optimiza tu Control y familiayformacion se perdieron con la clave maestra): hasta que la carguen, nadie tiene IA y todas ven el aviso. Falta cargar la clave de la plataforma en Super-admin. familiayformacion (cliente que ya no usa el sistema) se borra desde Super-admin → Organizaciones.
+
+---
+
 ### 2026-10-02 — Registro del backup manual de producción (SCRUM-11, sigue abierto)
 
 **Rama:** `claude/elegant-gauss-r25zrv` (traído a `claude/great-thompson-n7ts63`)
