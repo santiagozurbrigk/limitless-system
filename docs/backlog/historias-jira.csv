@@ -545,7 +545,7 @@ Funcionalidad: F-EMB-18 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/ba
 * [EMBUDOS-MEDIDAS-POR-EMBUDO] Dinero y anuncios son de la org entera en todos los embudos (P1)
 
 Funcionalidad: F-EMB-19 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-19]",H-EMB-19,Embudos y Lanzamientos,P1,Alta,EMBUDOS-CUENTAS-REALES EMBUDOS-TIMEOUTS EMBUDOS-MEDIDAS-POR-EMBUDO,
-[H-FIN-05] Cargar gastos fijos con totales correctos,Story,High,historia,finanzas,p1,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero cargar, editar, pausar y borrar mis gastos fijos, mensuales o anuales, y ver totales que no mezclen monedas, para saber cuánto me cuesta operar.
+[H-FIN-05] Cargar gastos fijos con totales correctos,Story,High,historia,operaciones-y-equipo,p1,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero cargar, editar, pausar y borrar mis gastos fijos, mensuales o anuales, y ver totales que no mezclen monedas, para saber cuánto me cuesta operar.
 
 *Criterios de aceptación:*
 * Dados gastos en pesos y en dólares, los totales se muestran separados por moneda (o convertidos), o avisan que hay más de una moneda.
@@ -558,8 +558,8 @@ Funcionalidad: F-EMB-19 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/ba
 *Para confirmar:*
 * Agustín: ¿alcanza con separar por moneda o hay que convertir? (si se convierte, de dónde sale la cotización).
 
-Funcionalidad: F-FIN-05 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-05]",H-FIN-05,Finanzas,P1,Alta,FIN-MONEDAS PERMISOS-SERVER-ACTIONS/ops-fin-prod,
-[H-FIN-06] Cargar suscripciones con totales correctos,Story,High,historia,finanzas,p1,sev-alta,,,"*Historia:* Como founder, quiero cargar, editar y borrar las herramientas pagas del negocio y ver su total sin mezclar monedas, para controlar cuánto gasto en suscripciones.
+Funcionalidad: F-FIN-05 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-05]",H-FIN-05,Operaciones y equipo,P1,Alta,FIN-MONEDAS PERMISOS-SERVER-ACTIONS/ops-fin-prod,
+[H-FIN-06] Cargar suscripciones con totales correctos,Story,High,historia,operaciones-y-equipo,p1,sev-alta,,,"*Historia:* Como founder, quiero cargar, editar y borrar las herramientas pagas del negocio y ver su total sin mezclar monedas, para controlar cuánto gasto en suscripciones.
 
 *Criterios de aceptación:*
 * Dadas suscripciones en pesos y en dólares, el total se muestra separado por moneda (o convertido), o avisa que hay más de una moneda.
@@ -569,8 +569,8 @@ Funcionalidad: F-FIN-05 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * [FIN-MONEDAS] Finanzas suma montos de monedas distintas [Finanzas] (P2)
 * [PERMISOS-SERVER-ACTIONS/ops-fin-prod] Las actions y la RLS de estas áreas no miran el rol [transversal] (P1)
 
-Funcionalidad: F-FIN-06 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-06]",H-FIN-06,Finanzas,P1,Alta,FIN-MONEDAS PERMISOS-SERVER-ACTIONS/ops-fin-prod,
-[H-FIN-07] Definir la compensación del equipo y ver el gasto real del mes,Story,High,historia,finanzas,p1,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero definir el sueldo fijo y la comisión de cada miembro y ver el gasto de equipo del mes, para saber cuánto me cuesta el equipo con el mismo número que después voy a pagar.
+Funcionalidad: F-FIN-06 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-06]",H-FIN-06,Operaciones y equipo,P1,Alta,FIN-MONEDAS PERMISOS-SERVER-ACTIONS/ops-fin-prod,
+[H-FIN-07] Definir la compensación del equipo y ver el gasto real del mes,Story,High,historia,operaciones-y-equipo,p1,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero definir el sueldo fijo y la comisión de cada miembro y ver el gasto de equipo del mes, para saber cuánto me cuesta el equipo con el mismo número que después voy a pagar.
 
 *Criterios de aceptación:*
 * Para cada tipo de comisión (por venta, por facturación, por upsell, por agenda, personalizada), el gasto de equipo del mes da lo mismo que la liquidación.
@@ -584,8 +584,8 @@ Funcionalidad: F-FIN-06 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 *Para confirmar:*
 * Agustín: qué cuenta como facturación mensual para la comisión por facturación, y de dónde sale quién agendó cada turno (Calendly o GoHighLevel).
 
-Funcionalidad: F-FIN-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-07]",H-FIN-07,Finanzas,P1,Alta,FIN-PAYROLL-BASES PERMISOS-SERVER-ACTIONS/ops-fin-prod,
-[H-FIN-08] Calcular bien la liquidación del mes,Story,High,historia,finanzas,p1,sev-alta,,,"*Historia:* Como founder, quiero que la liquidación del mes de cada miembro calcule bien el fijo más la comisión según su tipo, para pagarle a cada uno lo que corresponde.
+Funcionalidad: F-FIN-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-07]",H-FIN-07,Operaciones y equipo,P1,Alta,FIN-PAYROLL-BASES PERMISOS-SERVER-ACTIONS/ops-fin-prod,
+[H-FIN-08] Calcular bien la liquidación del mes,Story,High,historia,operaciones-y-equipo,p1,sev-alta,,,"*Historia:* Como founder, quiero que la liquidación del mes de cada miembro calcule bien el fijo más la comisión según su tipo, para pagarle a cada uno lo que corresponde.
 
 *Criterios de aceptación:*
 * Dado un miembro con comisión personalizada, la liquidación muestra la comisión calculada y no cero.
@@ -598,7 +598,7 @@ Funcionalidad: F-FIN-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * [FIN-MESES-UTC] La liquidación arma el mes en UTC [Finanzas] (P2)
 * [PERMISOS-SERVER-ACTIONS/ops-fin-prod] Las actions y la RLS de estas áreas no miran el rol [transversal] (P1)
 
-Funcionalidad: F-FIN-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-08]",H-FIN-08,Finanzas,P1,Alta,FIN-PAYROLL-BASES FIN-MESES-UTC PERMISOS-SERVER-ACTIONS/ops-fin-prod,
+Funcionalidad: F-FIN-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-08]",H-FIN-08,Operaciones y equipo,P1,Alta,FIN-PAYROLL-BASES FIN-MESES-UTC PERMISOS-SERVER-ACTIONS/ops-fin-prod,
 [H-IA-01] Chatear con el agente sin que se corte,Story,High,historia,agente-de-negocio-e-ia,p1,sev-media,para-confirmar,,"*Historia:* Como founder, quiero chatear con el agente de negocio y ver la respuesta escribiéndose en vivo aunque la conversación sea larga o mi clave de Claude haya dejado de andar, para no quedarme sin respuesta en medio del trabajo.
 
 *Criterios de aceptación:*
@@ -1300,7 +1300,7 @@ Funcionalidad: F-EMB-21 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * Agustín: ¿el pulso diario que ya existe tiene que sumar los números de los embudos?
 
 Funcionalidad: F-EMB-22 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-22]",H-EMB-22,Embudos y Lanzamientos,P2,,EMBUDOS-SNAPSHOTS,
-[H-FIN-11] Ver cobros y saldo de Stripe,Story,Medium,historia,finanzas,p2,para-confirmar,,,"*Historia:* Como founder, quiero conectar mi cuenta de Stripe y ver mis cobros y saldo, para tener mi plata en un solo lugar.
+[H-FIN-11] Ver cobros y saldo de Stripe,Story,Medium,historia,operaciones-y-equipo,p2,para-confirmar,,,"*Historia:* Como founder, quiero conectar mi cuenta de Stripe y ver mis cobros y saldo, para tener mi plata en un solo lugar.
 
 *Criterios de aceptación:*
 * Si se sigue: Stripe aparece en Integraciones, la conexión queda guardada de forma segura y los cobros de Stripe se ven en Finanzas.
@@ -1312,8 +1312,8 @@ Funcionalidad: F-EMB-22 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 *Para confirmar:*
 * Decisión: construir lo que falta o sacarlo de la pantalla.
 
-Funcionalidad: F-FIN-11 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-11]",H-FIN-11,Finanzas,P2,,FIN-STRIPE-MP-DECIDIR,
-[H-FIN-12] Recibir los pagos de Mercado Pago,Story,Medium,historia,finanzas,p2,para-confirmar,,,"*Historia:* Como founder, quiero conectar Mercado Pago y que sus avisos de pago queden registrados en mi cuenta, para ver esos cobros en Finanzas sin cargarlos a mano.
+Funcionalidad: F-FIN-11 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-11]",H-FIN-11,Operaciones y equipo,P2,,FIN-STRIPE-MP-DECIDIR,
+[H-FIN-12] Recibir los pagos de Mercado Pago,Story,Medium,historia,operaciones-y-equipo,p2,para-confirmar,,,"*Historia:* Como founder, quiero conectar Mercado Pago y que sus avisos de pago queden registrados en mi cuenta, para ver esos cobros en Finanzas sin cargarlos a mano.
 
 *Criterios de aceptación:*
 * Si se sigue: un aviso de pago de Mercado Pago queda registrado sólo en la empresa dueña de esa cuenta, no en todas.
@@ -1328,7 +1328,7 @@ Funcionalidad: F-FIN-11 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * Decisión: construir lo que falta o sacarlo de la pantalla.
 * ---
 
-Funcionalidad: F-FIN-12 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-12]",H-FIN-12,Finanzas,P2,,FIN-STRIPE-MP-DECIDIR FIN-MP-WEBHOOK,
+Funcionalidad: F-FIN-12 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-12]",H-FIN-12,Operaciones y equipo,P2,,FIN-STRIPE-MP-DECIDIR FIN-MP-WEBHOOK,
 [H-IA-09] Ver y borrar un Canvas guardado en la base de conocimiento,Story,Medium,historia,agente-de-negocio-e-ia,p2,,,,"*Historia:* Como founder, quiero que un Canvas que guardo en la base de conocimiento aparezca ahí como cualquier otro documento, para poder verlo, controlarlo y borrarlo si ya no quiero que el agente lo use.
 
 *Criterios de aceptación:*
@@ -1609,26 +1609,3 @@ Funcionalidad: F-EMB-23 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * Agustín: ¿el rol admin puede gestionar el equipo (dar de alta, cambiar roles, desactivar) o sólo el founder?
 
 Funcionalidad: F-OPS-19 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-OPS-19]",H-OPS-19,Operaciones y equipo,P3,,EQUIPO-ADMIN,
-[H-OPS-21] Cambiarle el rol a un miembro,Story,Medium,historia,operaciones-y-equipo,prioridad-a-definir,,,,"*Historia:* Como founder, quiero cambiarle el rol a un miembro, para ajustar su acceso cuando cambia su función.
-
-*Criterios de aceptación:*
-* Dado un miembro, cuando le asigno otro rol de mi empresa, su acceso cambia según ese rol.
-* Si se intenta asignar un rol que no es de mi empresa, da error y el miembro no cambia.
-* Hay una prueba automática que cubre los dos casos.
-
-*Tareas técnicas:* ~~EQUIPO-CUSTOM-ROLE-ORG~~ (resuelta en SCRUM-75)
-
-Funcionalidad: F-OPS-21 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-OPS-21]",H-OPS-21,Operaciones y equipo,a definir,,,
-[H-OPS-22] Cortarle el acceso a un miembro desactivado,Story,Medium,historia,operaciones-y-equipo,prioridad-a-definir,para-confirmar,,,"*Historia:* Como founder, quiero desactivar a un miembro y que deje de entrar en ese momento, para que alguien que se fue del equipo no pueda ver ni tocar los datos del negocio.
-
-*Criterios de aceptación:*
-* Dado un miembro con la sesión abierta, cuando lo desactivo en Equipo, al recargar cualquier página queda sin acceso.
-* Si intenta iniciar sesión otra vez con su usuario y contraseña, no puede entrar.
-* Hay una prueba automática que cubre que un miembro inactivo no pasa.
-
-*Tareas técnicas:* ~~EQUIPO-DESACTIVAR-NO-BLOQUEA~~ (resuelta en SCRUM-8)
-
-*Para confirmar:*
-* ---
-
-Funcionalidad: F-OPS-22 · No funciona · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-OPS-22]",H-OPS-22,Operaciones y equipo,a definir,,,

@@ -58,7 +58,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado que alguien prueba muchas contraseñas contra emails distintos desde un mismo lugar, entonces queda bloqueado y, después de varios intentos fallidos, la pantalla de ingreso le pide un captcha.
   - Dado un miembro con la sesión abierta, cuando el founder lo desactiva en Equipo, entonces al recargar cualquier pantalla queda sin acceso y si vuelve a intentar entrar con su contraseña es rechazado.
   - Después de entrar, siempre termino dentro de la aplicación (nunca en otro sitio, aunque el link traiga una dirección externa), y hay pruebas automáticas que cubren el ingreso, el bloqueo de desactivados y el caso del holding.
-- **Tareas técnicas:** `[LOGIN-RATE-LIMIT]`, ~~EQUIPO-DESACTIVAR-NO-BLOQUEA~~ (resuelta en SCRUM-8), ~~AUTH-CALLBACK-NEXT~~ (resuelta en SCRUM-2), `[TESTS-AUTH]`
+- **Tareas técnicas:** `[LOGIN-RATE-LIMIT]`, EQUIPO-DESACTIVAR-NO-BLOQUEA (resuelta en SCRUM-8), AUTH-CALLBACK-NEXT (resuelta en SCRUM-2), `[TESTS-AUTH]`
 - **Para confirmar:** —
 
 ### [H-PLA-02] Decidir quién puede crear una cuenta de founder
@@ -78,7 +78,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado que estoy en la pantalla de ingreso, cuando toco "¿Olvidaste tu contraseña?", entonces me pide el mail y muestra el mismo mensaje exista o no una cuenta con ese mail.
   - Dado que mi cuenta existe, cuando abro el link del mail que me llega, entonces caigo en la pantalla para poner una contraseña nueva dentro de la aplicación, la guardo y puedo entrar con ella.
   - Un mail que no tiene cuenta no recibe nada y la pantalla no deja adivinar que no existe.
-- **Tareas técnicas:** `[AUTH-RECUPERAR-PASSWORD]`, ~~AUTH-CALLBACK-NEXT~~ (resuelta en SCRUM-2)
+- **Tareas técnicas:** `[AUTH-RECUPERAR-PASSWORD]`, AUTH-CALLBACK-NEXT (resuelta en SCRUM-2)
 - **Para confirmar:** Martín: el login interno del staff de Limitless tiene el mismo link que no hace nada; ¿entra en esta historia o se saca de esa pantalla?
 
 ### [H-PLA-06] Que los roles del equipo realmente limiten lo que cada uno puede cambiar
@@ -353,7 +353,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Una hora de registros de la sincronización no muestra errores de turnos duplicados.
   - Cuando llega un aviso de Calendly firmado hace más de 5 minutos (repetido), el sistema lo rechaza.
   - Las credenciales de la conexión con Calendly quedan guardadas cifradas, y la sincronización sigue funcionando después del cambio.
-- **Tareas técnicas:** `[CALENDLY-CRONS-SUPERPUESTOS]`, ~~CALENDLY-WEBHOOK-REPLAY~~ (resuelta en SCRUM-489), `[TOKENS-TEXTO-PLANO]`
+- **Tareas técnicas:** `[CALENDLY-CRONS-SUPERPUESTOS]`, CALENDLY-WEBHOOK-REPLAY (resuelta en SCRUM-489), `[TOKENS-TEXTO-PLANO]`
 - **Para confirmar:** —
 
 ### [H-VEN-07] Que los turnos del Calendly de cada closer entren al seguimiento
@@ -491,7 +491,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Si alguien intenta asignar una grabación a un cliente de otra empresa, recibe un error y no se guarda nada en ninguna de las dos.
   - Llego a la pantalla de grabaciones pendientes desde la lista de Clientes, con la cantidad pendiente a la vista.
   - Se apretó «Cargar identidades desde el CRM» con la cuenta real y quedó anotado cuántas grabaciones pasaron a asignarse solas.
-- **Tareas técnicas:** ~~FATHOM-CLIENTID-SIN-VALIDAR~~ (resuelta en SCRUM-43), `[B-SEMBRAR-IDENTIDADES]`, `[CLIENTES-PENDING-CALLS-HUERFANA]`
+- **Tareas técnicas:** FATHOM-CLIENTID-SIN-VALIDAR (resuelta en SCRUM-43), `[B-SEMBRAR-IDENTIDADES]`, `[CLIENTES-PENDING-CALLS-HUERFANA]`
 - **Para confirmar:**
   - Martín: es la misma pantalla que F-CLI-12 (Clientes); conviene decidir si se cargan como una sola historia.
 
@@ -737,7 +737,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Un cobro que quedó con error o sin interpretar se puede volver a procesar (por reintento del proveedor o con una herramienta de reproceso) y termina registrado.
   - Probado con cuentas reales de Whop y Commas y el resultado quedó anotado: compra, suscripción con y sin fin, y reembolso quedan procesados y con los mismos montos que el panel del proveedor.
   - Los cobros anteriores a la conexión se pueden traer desde Whop y Commas.
-- **Tareas técnicas:** ~~EMBUDOS-WEBHOOK-PERDIDA~~ (resuelta en SCRUM-6), `[EMBUDOS-PAGOS-VERIFICAR]`, `[EMBUDOS-CUENTAS-REALES]`, `[EMBUDOS-PAGOS-BACKFILL]`
+- **Tareas técnicas:** EMBUDOS-WEBHOOK-PERDIDA (resuelta en SCRUM-6), `[EMBUDOS-PAGOS-VERIFICAR]`, `[EMBUDOS-CUENTAS-REALES]`, `[EMBUDOS-PAGOS-BACKFILL]`
 - **Para confirmar:** Martín: traer los cobros anteriores ¿entra en esta historia o se separa? Hoy es la condición para que retención y LTV tengan historia (ver H-EMB-15).
 
 ### [H-EMB-15] Ver retención y LTV con un año de cobros
@@ -759,7 +759,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Al conectar, las oportunidades que ya existían entran con su etapa actual sin contarse como "creadas" en el período.
   - "Ganadas" cuenta sólo las oportunidades que pasaron a ganada en el período, no las que ya estaban ganadas y cambiaron de etapa.
   - Un aviso repetido o viejo reenviado no se registra dos veces, y la clave de conexión no queda escrita en la dirección del aviso.
-- **Tareas técnicas:** `[EMBUDOS-GHL-ENTREGA]`, ~~EMBUDOS-WEBHOOK-PERDIDA~~ (resuelta en SCRUM-6), `[EMBUDOS-GHL-BACKFILL]`, `[EMBUDOS-GHL-WON]`, `[EMBUDOS-GHL-WEBHOOK-HARDENING]`
+- **Tareas técnicas:** `[EMBUDOS-GHL-ENTREGA]`, EMBUDOS-WEBHOOK-PERDIDA (resuelta en SCRUM-6), `[EMBUDOS-GHL-BACKFILL]`, `[EMBUDOS-GHL-WON]`, `[EMBUDOS-GHL-WEBHOOK-HARDENING]`
 - **Para confirmar:** Martín: son cinco tareas; conviene partirla (verificación y pérdida de avisos primero, conteos después).
 
 ### [H-EMB-17] Ver en el embudo cómo rinde el VSL de VTurb
@@ -1038,7 +1038,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado que invito a un miembro con un rol de mi empresa, queda creado con ese rol y su acceso limitado a lo que el rol permite.
   - Si se intenta dar de alta con un rol que no es de mi empresa, da error y no se crea el miembro.
   - Un admin puede (o no) dar de alta miembros según lo que se decida, y la pantalla y el sistema se comportan igual.
-- **Tareas técnicas:** ~~EQUIPO-CUSTOM-ROLE-ORG~~ (resuelta en SCRUM-75), `[EQUIPO-ADMIN]`
+- **Tareas técnicas:** EQUIPO-CUSTOM-ROLE-ORG (resuelta en SCRUM-75), `[EQUIPO-ADMIN]`
 - **Para confirmar:** Agustín: ¿el rol admin puede gestionar el equipo (dar de alta, cambiar roles, desactivar) o sólo el founder?
 
 ### [H-OPS-20] Que los permisos por rol protejan los datos, no sólo las pantallas
@@ -1051,30 +1051,6 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Hay una prueba automática de los tres niveles: sin acceso, ver y completo.
 - **Tareas técnicas:** `[PERMISOS-SERVER-ACTIONS/ops-fin-prod]`, `[PERMISOS-SERVER-ACTIONS]`
 - **Para confirmar:** Agustín: confirmar que "Ver" significa "no puede editar nada del módulo".
-
-### [H-OPS-21] Cambiarle el rol a un miembro
-- **Funcionalidad:** F-OPS-21 · Con fallas
-- **Historia:** Como founder, quiero cambiarle el rol a un miembro, para ajustar su acceso cuando cambia su función.
-- **Criterios de aceptación:**
-  - Dado un miembro, cuando le asigno otro rol de mi empresa, su acceso cambia según ese rol.
-  - Si se intenta asignar un rol que no es de mi empresa, da error y el miembro no cambia.
-  - Hay una prueba automática que cubre los dos casos.
-- **Tareas técnicas:** ~~EQUIPO-CUSTOM-ROLE-ORG~~ (resuelta en SCRUM-75)
-- **Para confirmar:** —
-
-### [H-OPS-22] Cortarle el acceso a un miembro desactivado
-- **Funcionalidad:** F-OPS-22 · No funciona
-- **Historia:** Como founder, quiero desactivar a un miembro y que deje de entrar en ese momento, para que alguien que se fue del equipo no pueda ver ni tocar los datos del negocio.
-- **Criterios de aceptación:**
-  - Dado un miembro con la sesión abierta, cuando lo desactivo en Equipo, al recargar cualquier página queda sin acceso.
-  - Si intenta iniciar sesión otra vez con su usuario y contraseña, no puede entrar.
-  - Hay una prueba automática que cubre que un miembro inactivo no pasa.
-- **Tareas técnicas:** ~~EQUIPO-DESACTIVAR-NO-BLOQUEA~~ (resuelta en SCRUM-8)
-- **Para confirmar:** —
-
----
-
-## Finanzas
 
 ### [H-FIN-05] Cargar gastos fijos con totales correctos
 - **Funcionalidad:** F-FIN-05 · Con fallas
