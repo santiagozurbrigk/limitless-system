@@ -479,6 +479,7 @@ hoy se ven sin análisis: eso es `[FATHOM-DEEP-ANALISIS-ALCANCE]`, no esta panta
 
 **Prerrequisitos:** cuenta real de Fathom para dos miembros; `ENCRYPTION_MASTER_KEY` configurada.
 
+0. ⚠️ Estado al 2026-10-02: las 8 filas de Fathom en `team_member_integrations` vienen de la conexión **de la organización** (`connectFathomAction` registra a quien conectó como miembro), que no crea webhook: ninguna tiene `webhook_id`. Para probar el webhook, el miembro tiene que conectar (o volver a conectar) su key desde la sección de cuentas por miembro de **Integraciones → Fathom** (`connectMemberFathomAction`), que es la que lo crea.
 1. Un miembro conecta su key en **Integraciones → Fathom**: se valida antes de guardar y figura conectado.
 2. ⭐ Se le muestra el mail deducido de su cuenta para confirmar; no se asume.
 3. 🔒 En un entorno sin `ENCRYPTION_MASTER_KEY`: falla con motivo y no guarda nada.
