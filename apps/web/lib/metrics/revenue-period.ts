@@ -25,9 +25,15 @@ function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+/**
+ * Días del rango, incluidos los dos extremos. Se cuenta con el calendario y no
+ * con milisegundos: un día de cambio de horario dura 23 o 25 horas y la cuenta
+ * por milisegundos perdía un día (SCRUM-102).
+ */
 function daysInclusive(start: Date, end: Date): number {
-  const ms = startOfDay(end).getTime() - startOfDay(start).getTime();
-  return Math.floor(ms / 86_400_000) + 1;
+  const a = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const b = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+  return Math.round((b - a) / 86_400_000) + 1;
 }
 
 function formatShort(d: Date): string {
@@ -119,25 +125,30 @@ export function isDateInRange(
   return d >= period.start && d <= period.end;
 }
 
-/** Prorratea gastos mensuales al número de días del período seleccionado. */
+/**
+ * Prorratea gastos mensuales al período seleccionado.
+ *
+ * Cada mes que toca el período aporta la fracción de sus días que cae dentro:
+ * un mes completo aporta el gasto entero. Antes, un rango que cruzaba de mes
+ * se prorrateaba con los días del primer mes (1-sep al 31-oct daba 61/30 de un
+ * mes en vez de 2) (SCRUM-102).
+ */
 export function prorateMonthlyExpenses(
   totalMonthly: number,
   period: ResolvedRevenuePeriod
 ): number {
-  const daysInAnchorMonth = new Date(
-    period.start.getFullYear(),
-    period.start.getMonth() + 1,
-    0
-  ).getDate();
-
-  const isFullCalendarMonth =
-    period.start.getDate() === 1 &&
-    period.end.getDate() === daysInAnchorMonth &&
-    period.start.getMonth() === period.end.getMonth();
-
-  if (isFullCalendarMonth) return totalMonthly;
-
-  return totalMonthly * (period.dayCount / daysInAnchorMonth);
+  let total = 0;
+  let cursor = new Date(period.start.getFullYear(), period.start.getMonth(), 1);
+  const fin = startOfDay(period.end);
+  while (cursor <= fin) {
+    const inicioMes = cursor;
+    const finMes = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const desde = period.start > inicioMes ? startOfDay(period.start) : inicioMes;
+    const hasta = fin < finMes ? fin : finMes;
+    total += totalMonthly * (daysInclusive(desde, hasta) / finMes.getDate());
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  return total;
 }
 
 export const DEFAULT_REVENUE_RANGE: RevenueDateRange = { preset: "month" };

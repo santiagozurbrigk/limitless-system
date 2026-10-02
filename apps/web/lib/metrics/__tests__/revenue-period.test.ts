@@ -3,8 +3,14 @@
  * pertenencia de una fecha al período y prorrateo de gastos mensuales.
  *
  * Todas las fechas se leen como día local (`parseDateOnly`). Los casos corren
- * en dos zonas horarias (UTC, como Vercel, y Argentina, como el navegador de
- * los usuarios) para que un cambio que mezcle UTC con hora local se note.
+ * en tres zonas horarias: UTC (como Vercel), Argentina (como el navegador de
+ * los usuarios) y Madrid, que tiene cambio de horario, para que se note un
+ * cambio que mezcle UTC con hora local o que cuente días por milisegundos.
+ *
+ * Cambiar `process.env.TZ` en tiempo de ejecución funciona con el pool
+ * `forks` de vitest (el de por defecto). El `beforeAll` comprueba que la zona
+ * cambió de verdad, así que si alguien pasa a `threads` el test falla en vez
+ * de pasar sin probar nada.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -20,11 +26,19 @@ function dia(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-describe.each(["UTC", "America/Argentina/Buenos_Aires"])("en %s", (zona) => {
+/** Desfase con UTC, en minutos, el 1 de enero (como lo da getTimezoneOffset). */
+const DESFASE_EN_ENERO: Record<string, number> = {
+  UTC: 0,
+  "America/Argentina/Buenos_Aires": 180,
+  "Europe/Madrid": -60,
+};
+
+describe.each(Object.keys(DESFASE_EN_ENERO))("en %s", (zona) => {
   let tzAnterior: string | undefined;
   beforeAll(() => {
     tzAnterior = process.env.TZ;
     process.env.TZ = zona;
+    expect(new Date(2026, 0, 1).getTimezoneOffset(), "la zona horaria no cambió").toBe(DESFASE_EN_ENERO[zona]);
   });
   afterAll(() => {
     if (tzAnterior === undefined) delete process.env.TZ;
@@ -96,6 +110,14 @@ describe.each(["UTC", "America/Argentina/Buenos_Aires"])("en %s", (zona) => {
       expect(p.dayCount).toBe(11);
     });
 
+    it("⭐ un rango que cruza el cambio de horario cuenta todos los días", () => {
+      // En Europa el horario de verano empieza el último domingo de marzo.
+      const marzo = resolveRevenueDateRange({ preset: "custom", customFrom: "2026-03-01", customTo: "2026-03-31" });
+      expect(marzo.dayCount).toBe(31);
+      const octubreEuropa = resolveRevenueDateRange({ preset: "custom", customFrom: "2026-10-20", customTo: "2026-10-31" });
+      expect(octubreEuropa.dayCount).toBe(12);
+    });
+
     it("personalizado con las fechas invertidas: las ordena", () => {
       const p = resolveRevenueDateRange({ preset: "custom", customFrom: "2026-10-05", customTo: "2026-09-25" });
       expect(dia(p.start)).toBe("2026-09-25");
@@ -148,15 +170,20 @@ describe.each(["UTC", "America/Argentina/Buenos_Aires"])("en %s", (zona) => {
       expect(prorateMonthlyExpenses(3100, p)).toBeCloseTo(700);
     });
 
-    it("hoy: un rango que cruza de mes se prorratea con los días del mes en que empieza", () => {
-      // 25-sep al 5-oct = 11 días; septiembre tiene 30.
+    it("⭐ un rango que cruza de mes suma la parte de cada mes", () => {
+      // 25-sep al 5-oct: 6 de 30 días de septiembre + 5 de 31 de octubre.
       const p = resolveRevenueDateRange({ preset: "custom", customFrom: "2026-09-25", customTo: "2026-10-05" });
-      expect(prorateMonthlyExpenses(3000, p)).toBeCloseTo(1100);
+      expect(prorateMonthlyExpenses(3000, p)).toBeCloseTo(3000 * (6 / 30) + 3000 * (5 / 31));
     });
 
-    it("del 1 al último día de dos meses distintos no se toma como un mes completo", () => {
+    it("⭐ dos meses completos llevan dos veces el gasto", () => {
       const p = resolveRevenueDateRange({ preset: "custom", customFrom: "2026-09-01", customTo: "2026-10-31" });
-      expect(prorateMonthlyExpenses(3000, p)).toBeCloseTo(3000 * (61 / 30));
+      expect(prorateMonthlyExpenses(3000, p)).toBeCloseTo(6000);
+    });
+
+    it("un rango del mismo mes que no es el mes entero se prorratea por días", () => {
+      const p = resolveRevenueDateRange({ preset: "custom", customFrom: "2026-10-10", customTo: "2026-10-20" });
+      expect(prorateMonthlyExpenses(3100, p)).toBeCloseTo(1100);
     });
   });
 });
