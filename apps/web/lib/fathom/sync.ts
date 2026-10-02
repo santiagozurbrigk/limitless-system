@@ -69,10 +69,18 @@ function buildFathomCallRow(organizationId: string, meeting: FathomMeetingRecord
  * identificación— y devolvía a "pendiente" llamadas ya procesadas en cada
  * corrida.
  */
+export type FathomCallOrigin = {
+  /** Quién grabó: una llamada sin vincular la ve sólo esta persona. */
+  userId?: string;
+  /** Por dónde entró. Default de la columna: `'sync'`. */
+  ingestSource?: "sync" | "webhook";
+};
+
 export async function upsertFathomCallFromMeeting(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
-  meeting: FathomMeetingRecord
+  meeting: FathomMeetingRecord,
+  origin: FathomCallOrigin = {}
 ): Promise<boolean> {
   const recordingId = meeting.recording_id ?? meeting.id;
   console.log("[Fathom:sync] Upserting meeting:", recordingId);
@@ -82,7 +90,7 @@ export async function upsertFathomCallFromMeeting(
 
   const { data: existing, error: existingError } = await admin
     .from("fathom_calls")
-    .select("id, client_id, association_confidence, status")
+    .select("id, client_id, association_confidence, status, user_id")
     .eq("organization_id", organizationId)
     .eq("fathom_call_id", row.fathom_call_id)
     .maybeSingle();
@@ -115,7 +123,12 @@ export async function upsertFathomCallFromMeeting(
   if (existing) {
     const { error } = await admin
       .from("fathom_calls")
-      .update(syncFields)
+      .update(
+        // El dueño se completa si faltaba; nunca se pisa el de otra persona.
+        origin.userId && !existing.user_id
+          ? { ...syncFields, user_id: origin.userId }
+          : syncFields
+      )
       .eq("id", existing.id);
 
     if (error) {
@@ -138,6 +151,8 @@ export async function upsertFathomCallFromMeeting(
         association_candidates: row.association_candidates,
         ai_next_steps: row.ai_next_steps,
         ai_problems_detected: row.ai_problems_detected,
+        ...(origin.userId ? { user_id: origin.userId } : {}),
+        ...(origin.ingestSource ? { ingest_source: origin.ingestSource } : {}),
       })
       .select("id")
       .single();

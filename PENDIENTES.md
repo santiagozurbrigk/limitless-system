@@ -73,7 +73,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|---|---|
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 33 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
-| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 14 | 17 | 8 |
+| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 13 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
@@ -800,7 +800,7 @@ Doc del área: [`docs/areas/ventas.md`](./docs/areas/ventas.md)
 #### [FATHOM-SYNC-CURSOR] La sync de Fathom saltea para siempre una llamada que no se pudo guardar
 - **Tipo:** bug
 - **Severidad:** Alta
-- **Estado verificado:** `syncFathomMeetingsForOrganization` cuenta las reuniones guardadas (`lib/fathom/sync.ts:268`) y, si guardó al menos una, pone `last_sync_at = now()` (`:274-277`) aunque otras hayan fallado (`upsertFathomCallFromMeeting` devuelve `false`). La corrida siguiente pide `created_after = last_sync_at` (`lib/fathom/sync-window.ts:50-58`). El cursor es la hora del servidor, no el `created_at` más nuevo recibido. Como el webhook por miembro está roto (`[FATHOM-WEBHOOK-MIEMBRO-ROTO]`), esta sync es la única vía automática de entrada.
+- **Estado verificado:** `syncFathomMeetingsForOrganization` cuenta las reuniones guardadas (`lib/fathom/sync.ts:268`) y, si guardó al menos una, pone `last_sync_at = now()` (`:274-277`) aunque otras hayan fallado (`upsertFathomCallFromMeeting` devuelve `false`). La corrida siguiente pide `created_after = last_sync_at` (`lib/fathom/sync-window.ts:50-58`). El cursor es la hora del servidor, no el `created_at` más nuevo recibido. Para la key de la org esta sync es la única vía automática de entrada (el webhook por miembro sólo cubre las keys de miembros).
 - **Riesgo:** Si en una misma corrida una llamada falla al guardarse y otra entra bien, entonces la que falló no se vuelve a pedir nunca. Si Fathom asigna `created_at` antes de que la reunión aparezca en el listado (no verificado), también se pierden las reuniones creadas durante la corrida.
 - **Impacto:** Llamadas de venta y de entrega que no llegan a Limitless: sin clasificación, sin análisis, sin hitos propuestos, sin cruce con el turno. Se nota sólo si alguien compara contra Fathom.
 - **Qué hay que hacer:** avanzar el cursor al `created_at` máximo de las guardadas bien, sin pasar del `created_at` de la más vieja que falló; restar un solape de unos minutos (el upsert deduplica).
@@ -808,16 +808,6 @@ Doc del área: [`docs/areas/ventas.md`](./docs/areas/ventas.md)
 - **Dónde:** `apps/web/lib/fathom/sync.ts`, `apps/web/lib/fathom/sync-window.ts`.
 
 Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio usa.
-
-#### [FATHOM-WEBHOOK-MIEMBRO-ROTO] El webhook de Fathom por miembro no puede guardar ninguna grabación
-- **Tipo:** bug
-- **Severidad:** Media
-- **Estado verificado:** ítem nuevo (2026-09-23). `app/api/integrations/fathom/webhook/[token]/route.ts:76-87` hace `upsert` en `fathom_calls` con `{ organization_id, fathom_call_id, user_id, raw_payload, status }`. En producción `fathom_calls` **no tiene** columna `raw_payload` (ni en migraciones ni en `information_schema`, consultado 2026-09-23) y `title` es `NOT NULL` sin default (`20260522000000_phase11_integrations.sql`), así que PostgREST rechaza el upsert y la ruta responde 500. Aunque se guardara, la fila quedaría sin `processed_after` (el cron exige `.lte("processed_after", now)`, `lib/fathom/process-call.ts:97-103`), sin `calendar_invitees` ni transcript (el pipeline no vuelve a pedir la reunión, sólo el título y con la key de la org) y con `ingest_source` en `'sync'`. Hoy las grabaciones de un miembro sólo entran con el botón "Sincronizar mis llamadas" (`syncMemberFathomAction`). Lo tapa `[B-FATHOM-NUNCA-PROBADO]`: nunca se probó con una cuenta real.
-- **Riesgo:** Si un miembro configura su key y el webhook de Fathom, entonces cada grabación nueva recibe un 500 (fathom_calls no tiene raw_payload y title es NOT NULL, confirmado en producción) y no se guarda nada, ni siquiera el crudo.
-- **Impacto:** Los miembros que dependen del webhook por miembro; el botón «Sincronizar mis llamadas» sí guarda, así que hay workaround manual. Nunca se usó con cuenta real, así que el alcance actual probablemente es cero.
-- **Qué hay que hacer:** que el webhook reuse `upsertFathomCallFromMeeting` (`lib/fathom/sync.ts`) con el cuerpo del webhook mapeado, o que sólo encole el id y el cron pida la reunión con la key del miembro; guardar el crudo en una columna que exista (o crearla) antes de interpretarlo; setear `processed_after`, `user_id` e `ingest_source = 'webhook'`.
-- **Criterio de aceptación:** Un POST firmado al webhook de un miembro con el cuerpo real de `new-meeting-content-ready` responde 200 y deja una fila en fathom_calls con title, calendar_invitees, user_id del miembro, ingest_source = 'webhook' y processed_after; la siguiente corrida de /api/integrations/fathom/process la clasifica; hay un test de la ruta con un payload de ejemplo
-- **Dónde:** `apps/web/app/api/integrations/fathom/webhook/[token]/route.ts`, `apps/web/lib/fathom/sync.ts`.
 
 #### [CLOSER-AMOUNT-CLOSED] La pestaña Equipo de Closing siempre sale vacía
 - **Tipo:** bug
@@ -903,8 +893,8 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 #### [B-FATHOM-NUNCA-PROBADO] Keys de Fathom por miembro nunca probadas contra Fathom
 - **Tipo:** verificación manual
 - **Severidad:** Media
-- **Estado verificado:** el código existe (`app/fathom/member-actions.ts`, `lib/fathom/webhooks.ts`, `app/api/integrations/fathom/webhook/[token]/route.ts`). La firma se asume HMAC-SHA256 con tres headers posibles. CHANGES.md no registra una prueba real. Aunque la firma valide, el guardado del webhook falla hoy por código (ver `[FATHOM-WEBHOOK-MIEMBRO-ROTO]`); la sincronización manual por miembro sí guarda.
-- **Riesgo:** Si la firma del webhook no es HMAC-SHA256 con alguno de los tres headers supuestos, entonces todas las entregas se rechazan además del error de guardado ya conocido; la key por miembro para sincronizar puede tener otros supuestos falsos.
+- **Estado verificado:** el código existe (`app/fathom/member-actions.ts`, `lib/fathom/webhooks.ts`, `app/api/integrations/fathom/webhook/[token]/route.ts`). Desde SCRUM-37 (2026-10-02) la firma sigue el esquema de la doc de Fathom (`webhook-id`/`webhook-timestamp`/`webhook-signature`) y el guardado usa el mismo upsert que la sync, con el crudo en `fathom_webhook_events`; probado con tests, no con una entrega real. La forma del cuerpo de `new-meeting-content-ready` no está en la doc. CHANGES.md no registra una prueba real.
+- **Riesgo:** Si el cuerpo real del webhook no tiene la forma de `/meetings`, entonces las entregas quedan guardadas en `fathom_webhook_events` con `error` y la llamada no se crea hasta reprocesarlas; la key por miembro para sincronizar puede tener otros supuestos falsos.
 - **Impacto:** Miembros que conecten su propia cuenta de Fathom; hay sincronización manual como alternativa y hoy no hay evidencia de uso real.
 - **Qué hay que hacer:** ver `docs/operacion/verificacion-manual.md` § Ventas ("Fathom por miembro").
 - **Criterio de aceptación:** Se ejecutó el paso de verificacion-manual.md § Ventas 6 («Fathom por miembro») con cuentas reales de Fathom y el resultado quedó anotado (incluido si la firma del webhook valida); si falló, se abrió un ítem nuevo

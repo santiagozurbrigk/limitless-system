@@ -1103,14 +1103,13 @@ Funcionalidad: F-VEN-19 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * Una grabación que no quedó vinculada a nada sólo la ve quien la grabó; una vinculada a un lead la ve quien se decida (ver Para confirmar).
 
 *Tareas técnicas (PENDIENTES.md):*
-* [FATHOM-WEBHOOK-MIEMBRO-ROTO] El webhook de Fathom por miembro no puede guardar ninguna grabación (P1)
 * [B-FATHOM-NUNCA-PROBADO] Keys de Fathom por miembro nunca probadas contra Fathom (P1)
 * [FATHOM-PRIVACIDAD-LEAD] Una grabación vinculada a un lead sigue siendo privada (P2)
 
 *Para confirmar:*
 * Agustín: una venta grabada por un closer con su cuenta y vinculada a un lead, ¿la tiene que ver el founder? Hoy sigue siendo privada del closer.
 
-Funcionalidad: F-VEN-21 · No funciona · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-21]",H-VEN-21,Ventas,P1,Media,FATHOM-WEBHOOK-MIEMBRO-ROTO B-FATHOM-NUNCA-PROBADO FATHOM-PRIVACIDAD-LEAD,
+Funcionalidad: F-VEN-21 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-21]",H-VEN-21,Ventas,P1,Media,B-FATHOM-NUNCA-PROBADO FATHOM-PRIVACIDAD-LEAD,
 [H-VEN-22] Que cada grabación se cruce con su turno y se clasifique bien,Story,High,historia,ventas,p1,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que cada grabación se cruce sola con el turno de la agenda y quede clasificada como venta, entrega o equipo, para que las métricas, los análisis y el ranking de ventas se armen sólo con llamadas de venta.
 
 *Criterios de aceptación:*

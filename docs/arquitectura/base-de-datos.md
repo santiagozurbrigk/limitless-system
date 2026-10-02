@@ -74,7 +74,7 @@ Estas tablas se leen sólo con `createAdminClient()` (service role). El cliente 
 | `zernio_integrations` | `api_key` (cifrada) y `webhook_secret` |
 | `instagram_integrations`, `stripe_integrations`, `mercadopago_integrations`, `vturb_integrations`, `webinarjam_integrations`, `hyros_integrations`, `payment_integrations`, `super_admin_google_tokens` | RLS sin policies |
 | `ghl_integrations` | El miembro puede insertar/actualizar/borrar la de su org, pero no leerla |
-| `ai_brain_documents`, `super_admin_users`, `super_admin_deletions`, `platform_ai_credentials`, `waitlist_leads`, `rate_limits`, `holding_active_sessions` | Sólo service role / plataforma |
+| `ai_brain_documents`, `super_admin_users`, `super_admin_deletions`, `platform_ai_credentials`, `fathom_webhook_events`, `waitlist_leads`, `rate_limits`, `holding_active_sessions` | Sólo service role / plataforma |
 
 Excepciones que **sí** son editables por cualquier miembro: `discord_integrations` y `unipile_integrations` (policy `FOR ALL` por org) y `team_member_integrations` (sólo la fila propia).
 
@@ -149,6 +149,7 @@ Propósito de cada una en el doc del área. Las notas del cliente son columnas d
 | `sales_leads` | Leads del seguimiento |
 | `sales_follow_up_options` | Opciones configurables del seguimiento |
 | `fathom_calls`, `call_analyses` | Grabaciones y análisis profundo |
+| `fathom_webhook_events` | Crudo de cada webhook de Fathom por miembro, guardado antes de interpretarlo; único por (`integration_id`, `webhook_message_id`), con `processed_at`/`error` (SCRUM-37). RLS sin políticas |
 | `conversations` | Inbox legacy (ManyChat/Unipile/IG). 0 filas en prod |
 | `zernio_conversation_analysis` | Análisis IA de conversaciones de Zernio |
 | `zernio_messages`, `zernio_comments` | Escritas por el webhook de Zernio. 0 filas en prod |

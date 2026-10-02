@@ -34,6 +34,47 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — El webhook de Fathom por miembro guarda las grabaciones (SCRUM-37)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Ventas → Llamadas / Integraciones → Fathom.
+`app/api/integrations/fathom/webhook/[token]/route.ts`, `lib/fathom/webhook-signature.ts` (nuevo),
+`lib/fathom/webhook-meeting.ts` (nuevo), `lib/fathom/sync.ts`, migración
+`20261002234203_fathom_webhook_events.sql` (aplicada en producción).
+
+**Qué se hizo:**
+- **Firma:** la ruta verificaba un HMAC hex del cuerpo en `x-fathom-signature`, un supuesto nunca
+  probado. La doc bajada (`docs/external-apis/fathom/webhooks.md`) dice otra cosa: `webhook-id`,
+  `webhook-timestamp`, `webhook-signature` (`v1,<base64>`), HMAC-SHA256 de `id.timestamp.cuerpo` con el
+  secreto `whsec_` decodificado y 5 minutos de tolerancia. Implementada así en `webhook-signature.ts`.
+- **Crudo primero:** tabla nueva `fathom_webhook_events` (RLS sin políticas, sólo service role). Cada
+  entrega firmada se guarda antes de interpretarla; único por (`integration_id`, `webhook_message_id`),
+  así un reintento de una entrega ya procesada responde 200 sin repetir.
+- **Guardado:** `leerReunionDelWebhook` mapea el cuerpo con `mapFathomMeeting` (forma de `/meetings`, en la
+  raíz o bajo `meeting`/`recording`/`data`) y la ruta llama a `upsertFathomCallFromMeeting` con el nuevo
+  parámetro `origin = { userId, ingestSource: "webhook" }`: la fila queda con título, invitados, transcript,
+  `processed_after`, `user_id` del miembro e `ingest_source = 'webhook'`. Antes hacía upsert de una
+  columna `raw_payload` inexistente y sin `title` (NOT NULL): 500 siempre.
+- Sin id de grabación: el evento queda con `error` y se responde 200 (no se inventa una llamada). Si la
+  llamada no se guarda: 500, el evento queda sin `processed_at` y el reintento de Fathom lo reprocesa.
+- En un update, `upsertFathomCallFromMeeting` completa `user_id` sólo si faltaba (nunca pisa al dueño).
+- Tests: `webhook-signature.test.ts` (7), `webhook-meeting.test.ts` (3) y el de la ruta
+  `app/api/integrations/fathom/__tests__/webhook-token.test.ts` (6).
+
+**Por qué / finalidad:** Fathom por miembro es necesario para este release (SCRUM-37 / SCRUM-448). Cierra
+`[FATHOM-WEBHOOK-MIEMBRO-ROTO]`.
+
+**Decisiones de diseño relevantes:** se reusa el único upsert de llamadas en vez de un guardado propio; el
+crudo va en tabla aparte (no en `fathom_calls`, que exige `title`). Se sacó la firma supuesta: aceptar dos
+esquemas dejaría abierto el que no es de Fathom.
+
+**Riesgos / deuda técnica pendiente:** la forma del cuerpo de `new-meeting-content-ready` no está en la
+doc; se confirma con la primera entrega real (`[B-FATHOM-NUNCA-PROBADO]`, verificación manual Ventas §6,
+SCRUM-47). La ruta legacy `/api/integrations/fathom/webhook` sigue con la firma vieja (no la ofrece la UI).
+
+---
+
 ### 2026-10-02 — Sin clave propia no hay IA, y super-admin con su propia clave (SCRUM-7)
 
 **Rama:** `claude/great-thompson-n7ts63`

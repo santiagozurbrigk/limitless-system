@@ -451,13 +451,13 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Para confirmar:** —
 
 ### [H-VEN-21] Conectar mi propia cuenta de Fathom y que mis grabaciones lleguen solas
-- **Funcionalidad:** F-VEN-21 · No funciona
+- **Funcionalidad:** F-VEN-21 · Sin verificar
 - **Historia:** Como closer, quiero conectar mi cuenta de Fathom y que cada grabación nueva llegue sola a Limitless, para no depender de apretar «Sincronizar mis llamadas» ni de la cuenta del negocio.
 - **Criterios de aceptación:**
   - Probado con una cuenta real de Fathom y el resultado quedó anotado (incluido si Fathom acepta el aviso de grabación nueva); si falló, se abrió una tarea nueva.
   - Dado un miembro con su Fathom conectado, cuando termina una grabación, entonces aparece en Limitless a su nombre y en la siguiente pasada se clasifica como venta, entrega o equipo.
   - Una grabación que no quedó vinculada a nada sólo la ve quien la grabó; una vinculada a un lead la ve quien se decida (ver Para confirmar).
-- **Tareas técnicas:** `[FATHOM-WEBHOOK-MIEMBRO-ROTO]`, `[B-FATHOM-NUNCA-PROBADO]`, `[FATHOM-PRIVACIDAD-LEAD]`
+- **Tareas técnicas:** `[B-FATHOM-NUNCA-PROBADO]`, `[FATHOM-PRIVACIDAD-LEAD]`
 - **Para confirmar:**
   - Agustín: una venta grabada por un closer con su cuenta y vinculada a un lead, ¿la tiene que ver el founder? Hoy sigue siendo privada del closer.
 
