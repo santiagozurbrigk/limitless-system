@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@ai-coo/ui";
+import { ESCONDIDO } from "@/lib/release/escondido";
 
 export type SettingsTabId =
   | "general"
@@ -17,7 +18,10 @@ const BASE_TABS: { id: SettingsTabId; label: string }[] = [
   { id: "notificaciones", label: "Notificaciones" },
   { id: "ia", label: "IA" },
   { id: "seguridad", label: "Seguridad" },
-];
+].filter(
+  // Escondida para el release (SCRUM-490): los interruptores no mandan nada.
+  (tab) => !(tab.id === "notificaciones" && ESCONDIDO.ajustesNotificaciones)
+) as { id: SettingsTabId; label: string }[];
 
 const PAYMENTS_TAB = { id: "pagos" as const, label: "Pagos" };
 const CLOSER_CALENDLY_TAB = { id: "closer-calendly" as const, label: "Mi Calendly" };

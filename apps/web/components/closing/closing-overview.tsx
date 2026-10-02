@@ -24,6 +24,7 @@ import { useHashTab } from "@/lib/hooks/use-hash-tab";
 import { usePlatformData } from "@/providers";
 import { useToast } from "@/providers/toast-provider";
 import { paths } from "@/routes";
+import { ESCONDIDO } from "@/lib/release/escondido";
 import type { ClosingCall, ClosingCallSource, ClosingCallStatus } from "@/types/closing";
 import { CalendlyManualSyncNotice } from "@/components/integrations/calendly-manual-sync-notice";
 import type { GHLCalendar } from "@/lib/ghl/client";
@@ -42,7 +43,11 @@ const TABS = [
   { label: "Lista", hash: "lista" },
   { label: "Seguimiento", hash: "seguimiento" },
   { label: "Equipo", hash: "equipo" },
-] as const;
+].filter(
+  // Escondida para el release (SCRUM-490): el ranking sale siempre vacío
+  // ([CLOSER-AMOUNT-CLOSED]).
+  (tab) => !(tab.hash === "equipo" && ESCONDIDO.closingEquipo)
+);
 
 // Las etiquetas viven en lib/closing/call-status.ts: eran tres copias distintas
 // del mismo vocabulario, y así fue como se desincronizaron.
@@ -110,7 +115,10 @@ export function ClosingOverview({
     markCallNotClosed,
     markCallNoShow,
   } = usePlatformData();
-  const activeTab = useHashTab("calendario");
+  const hashTab = useHashTab("calendario");
+  // `#equipo` cae en el calendario mientras la pestaña está escondida.
+  const activeTab =
+    hashTab === "equipo" && ESCONDIDO.closingEquipo ? "calendario" : hashTab;
   const root = paths.platform.sales.closing;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [listFilter, setListFilter] = useState<ClosingCallStatus | "all">("all");
@@ -602,9 +610,12 @@ function CallDetailPanel({
             <Video className="h-4 w-4" />
             Grabación Fathom
           </div>
-          <div className="aspect-video rounded-md bg-muted/50 flex items-center justify-center text-xs text-muted-foreground">
-            Vista previa
-          </div>
+          {/* El recuadro "Vista previa" no previsualizaba nada (SCRUM-490). */}
+          {!ESCONDIDO.vistaPreviaFathomEnTurno && (
+            <div className="aspect-video rounded-md bg-muted/50 flex items-center justify-center text-xs text-muted-foreground">
+              Vista previa
+            </div>
+          )}
           <Button size="sm" variant="outline" className="w-full gap-2" asChild>
             <a href={call.fathomUrl} target="_blank" rel="noopener noreferrer">
               Abrir en Fathom

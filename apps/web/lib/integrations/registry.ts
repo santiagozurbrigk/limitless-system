@@ -1,4 +1,5 @@
 import type { IntegrationProvider } from "@/constants/integrations";
+import { ESCONDIDO } from "@/lib/release/escondido";
 
 /**
  * lib/integrations/registry.ts — **registro único de integraciones**.
@@ -192,7 +193,12 @@ const DEFINITIONS: IntegrationDefinition[] = [
       },
     ],
     connect: "dialog",
-    listed: true,
+    // Escondida para el release (SCRUM-490): lo que trae va a una bandeja que
+    // ninguna pantalla muestra. Las orgs conectadas siguen recibiendo igual.
+    listed: !ESCONDIDO.integracionManyChat,
+    unlistedReason: ESCONDIDO.integracionManyChat
+      ? "Escondida para el release de octubre: los mensajes no se muestran en ninguna pantalla."
+      : undefined,
   },
   {
     provider: "calendly",

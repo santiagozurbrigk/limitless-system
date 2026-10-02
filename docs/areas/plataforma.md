@@ -225,3 +225,11 @@ acciones de Ajustes, `derive-dashboard-data.ts` (`[T-13]`). Sin e2e de onboardin
 - `apps/web/app/super-admin/actions.ts`, `delete-actions.ts`
 - `apps/web/lib/super-admin/queries.ts`, `execute-deletion.ts`, `deletion-plan.ts`
 - `apps/web/lib/supabase/public-paths.ts`
+
+## Escondido para el release de octubre (SCRUM-490)
+
+Banderas en `apps/web/lib/release/escondido.ts` (detalle en `docs/FUNCIONAL.md` § Escondido para el release):
+el link "¿Olvidaste tu contraseña?" de los dos logins, la pestaña Notificaciones de Ajustes (`?tab=notificaciones`
+cae en General), ManyChat en el catálogo de Integraciones (`listed` sale de la bandera), `/demo`, `/design-system`
+y `/redesign-preview` (un `layout.tsx` en cada una responde `notFound()`), `/lanzamientos` (redirige al Panel) y el
+"Recorrido guiado (demo)" del ⌘K y de la página 404. El ⌘K (`buildPlatformNavigation`) filtra los hijos `hidden`.

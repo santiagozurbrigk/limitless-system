@@ -1,4 +1,5 @@
 import { paths } from "@/routes/paths";
+import { ESCONDIDO } from "@/lib/release/escondido";
 import type { AddOnId } from "@/lib/auth/get-current-permissions";
 import type {
   SidebarDirectModule,
@@ -78,6 +79,9 @@ export const modulesWithChildren: Record<SidebarParentKey, SidebarParentModule> 
           label: "Overview",
           href: paths.platform.marketing.overview,
           permissionId: "marketing",
+          // Escondido para el release (SCRUM-490): lee la integración vieja de
+          // Instagram y casi siempre sale vacío. `/marketing` lleva a Contenido.
+          hidden: ESCONDIDO.marketingOverview,
         },
         {
           label: "Contenido",

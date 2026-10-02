@@ -43,6 +43,7 @@ import {
 import { CloserCalendlySettings } from "./closer-calendly-settings";
 import { ThemeSelector } from "./theme-selector";
 import { brandColors } from "@/lib/brand";
+import { ESCONDIDO } from "@/lib/release/escondido";
 
 function getInitials(name: string): string {
   return name
@@ -62,7 +63,10 @@ const SETTINGS_TABS: SettingsTabId[] = [
   "seguridad",
   "pagos",
   "closer-calendly",
-];
+].filter(
+  // `?tab=notificaciones` cae en General mientras la pestaña está escondida.
+  (tab) => !(tab === "notificaciones" && ESCONDIDO.ajustesNotificaciones)
+) as SettingsTabId[];
 
 function resolveSettingsTab(
   tab: string | null,

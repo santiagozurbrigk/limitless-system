@@ -1172,3 +1172,16 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 
 **Resultado esperado:** sincroniza sin error. Si dice que no se puede leer la credencial, el miembro reconecta su key (la nueva se guarda cifrada) y se anota acá.
 
+## Escondido para el release de octubre (SCRUM-490)
+
+**Prerrequisitos:** una sesión de founder en producción.
+
+1. `/login` y `/superadmin/login`: no aparece "¿Olvidaste tu contraseña?"; "Crear cuenta" sigue.
+2. Ajustes: no hay pestaña Notificaciones; `/settings?tab=notificaciones` abre General.
+3. Ventas → Closing: no hay pestaña Equipo; `/sales/closing#equipo` muestra el calendario. En un turno con grabación, sólo el botón "Abrir en Fathom".
+4. Marketing: el menú entra por Contenido; `/marketing` y `/marketing/sales-connection` llevan a Contenido; el detalle de una pieza no tiene "Atribución de ventas"; Administrar no tiene "Nueva carpeta".
+5. Lead Magnets → crear: sólo DM de Instagram (elegido) y Manual.
+6. Integraciones: no aparece ManyChat.
+7. ⌘K: no aparecen Overview de Marketing, Conexión con Ventas, UTMs, Administrar ni "Recorrido guiado (demo)".
+8. `/demo`, `/design-system` y `/redesign-preview` responden 404; `/lanzamientos` lleva al Panel.
+

@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { safeThumbnailUrl } from "@/lib/marketing/cdn-utils";
 import { brandColors } from "@/lib/brand";
+import { ESCONDIDO } from "@/lib/release/escondido";
 
 // ─── Types & helpers ────────────────────────────────────────────────────────
 
@@ -665,7 +666,8 @@ function MetricasTab({
       ) : null}
 
       {/* ── Section 5: Sales attribution ── */}
-      <SalesAttributionSection piece={piece} />
+      {/* Siempre vacía: escondida para el release (SCRUM-490). */}
+      {!ESCONDIDO.marketingConexionVentas && <SalesAttributionSection piece={piece} />}
 
       {/* Metrics freshness */}
       {piece.metrics_updated_at ? (

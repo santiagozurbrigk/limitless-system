@@ -10,6 +10,7 @@ import {
   MOCK_SUPER_ADMIN_CREDENTIALS,
 } from "@/lib/auth/mock-credentials";
 import { paths } from "@/routes";
+import { ESCONDIDO } from "@/lib/release/escondido";
 
 export type LoginVariant = "client" | "superAdmin";
 
@@ -145,7 +146,7 @@ export function LoginScreen({
           {loading ? "Accediendo…" : copy.submitLabel}
         </Button>
 
-        {showForgotPassword && (
+        {showForgotPassword && !ESCONDIDO.olvideContrasena && (
           <p className="text-center">
             <Link
               href="#"

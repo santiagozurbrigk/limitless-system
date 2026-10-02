@@ -324,3 +324,9 @@ Detalle y prioridad en [`PENDIENTES.md` § Ventas](../../PENDIENTES.md#ventas).
 13. `apps/web/app/sales/metrics-actions.ts` — métricas
 14. `apps/web/app/sales/payment-actions.ts` + `components/sales/cobros-page.tsx` — cobros
 15. `apps/web/lib/integrations/registry.ts` — qué integración de ventas está listada y cuál no
+
+## Escondido para el release de octubre (SCRUM-490)
+
+La pestaña Equipo de Closing (`#equipo` cae en Calendario; `[CLOSER-AMOUNT-CLOSED]`) y el recuadro "Vista previa"
+de Fathom del drawer del turno (queda "Abrir en Fathom"). Banderas `closingEquipo` y `vistaPreviaFathomEnTurno` en
+`apps/web/lib/release/escondido.ts`.

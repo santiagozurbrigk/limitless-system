@@ -313,3 +313,15 @@ Sin cubrir: `resolve-analytics.ts` `[T-11]`, `lib/utm/*` `[T-5]`, `overview-metr
 - La carga de música de Trial Reels en `/integrations` (se sacó; el componente quedó sin montar).
 - El fallback en la lambda `/api/queue/process-reel-variations` existe pero exige `sourceStoragePath`, que la
   acción ya no manda (sólo Drive): sin `REEL_WORKER_URL`, la lambda responde 400 y el job queda en `pending`.
+
+## Escondido para el release de octubre (SCRUM-490)
+
+Banderas en `apps/web/lib/release/escondido.ts`:
+- **Overview** (`marketingOverview`): fuera del menú y del ⌘K; `/marketing` redirige a Contenido, que pasa a ser la
+  entrada del módulo (`[MKT-OVERVIEW-LEGACY]`).
+- **Conexión con Ventas** (`marketingConexionVentas`): `/marketing/sales-connection` redirige a Contenido y el detalle
+  de una pieza no muestra "Atribución de ventas".
+- **"Nueva carpeta"** en Administrar (`marketingNuevaCarpeta`, `[MKT-DRIVE-CARPETA]`).
+- **Lead Magnets** (`leadMagnetsCanalesSinCaptura`): al crear sólo se ofrecen DM de Instagram (viene elegido) y
+  Manual (`lib/marketing/lead-magnet-canales.ts`). Los ya guardados con otro canal se muestran igual
+  (`[MKT-LEAD-MAGNETS-CAPTURA]`).
