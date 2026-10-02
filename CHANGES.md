@@ -34,6 +34,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — Registro del backup manual de producción (SCRUM-11, sigue abierto)
+
+**Rama:** `claude/elegant-gauss-r25zrv` (traído a `claude/great-thompson-n7ts63`)
+**Commit(s):** este
+**Módulo(s) afectado(s):** backlog (`PENDIENTES.md` → `[DR-BACKUPS-SUPABASE]`)
+
+**Qué se hizo:** se actualizó el "Estado verificado" de `[DR-BACKUPS-SUPABASE]`: el 2026-09-28 el equipo hizo un backup manual de la base y de los archivos de Storage de producción, guardado fuera de Supabase (Google Drive del equipo, protegido con clave). El paso (2) de "Qué hay que hacer" ahora dice que ese backup manual se reemplaza por un dump diario automatizado. Se dejó un comentario con lo mismo en SCRUM-11.
+
+**Por qué / finalidad:** el pendiente decía que no existía ningún respaldo propio, y eso ya no es cierto.
+
+**Decisiones de diseño relevantes:** el pendiente no se cierra: el criterio de aceptación pide un backup de menos de 24 h generado por un proceso automático, una copia de los buckets de menos de 7 días, una restauración ensayada con el procedimiento escrito y la regla de dump previo a migraciones destructivas. El backup manual no cumple ninguno de esos puntos.
+
+**Riesgos / deuda técnica pendiente:** sigue abierta la decisión del plan de Supabase (Pro o Pro + PITR). Mientras tanto, cualquier dato cargado después del 2026-09-28 no tiene respaldo (`[DR-BACKUPS-SUPABASE]`).
+
+---
+
 ### 2026-10-02 — Cierre de SCRUM-86: clave maestra nueva, 19 secretos perdidos desconectados, Fathom cifrado y fin del formato v1
 
 **Rama:** `claude/great-thompson-n7ts63`
