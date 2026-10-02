@@ -4,11 +4,8 @@ import {
   type AnthropicErrorBody,
 } from "@/lib/ai/validate-claude-key";
 
-export type ClaudeKeySource = "api_key" | "global";
-
-function isOrgOwnedKey(source: ClaudeKeySource): boolean {
-  return source === "api_key";
-}
+/** Sólo la clave propia de la organización: no hay clave global (SCRUM-7). */
+export type ClaudeKeySource = "api_key";
 
 function extractAnthropicError(
   error: unknown
@@ -54,21 +51,20 @@ function parseAnthropicErrorFromMessage(
   };
 }
 
-export function claudeNoCreditsUserMessage(keySource: ClaudeKeySource): string {
-  if (isOrgOwnedKey(keySource)) {
-    return "No se pudo generar el contenido con IA: tu cuenta de Claude no tiene créditos disponibles. Revisá tu configuración en Settings → IA, o contactá al soporte si el problema persiste.";
-  }
-
-  return "No se pudo generar el contenido con IA: el servicio no está disponible momentáneamente por falta de capacidad de IA. Contactá al soporte si el problema persiste.";
+export function claudeNoCreditsUserMessage(): string {
+  return "No se pudo generar el contenido con IA: tu cuenta de Claude no tiene créditos disponibles. Cargá saldo en console.anthropic.com o revisá Ajustes → IA.";
 }
 
-export function mapAnthropicCallError(
-  error: unknown,
-  keySource: ClaudeKeySource
-): Error {
+/** ¿El error de Anthropic es "la cuenta no tiene créditos"? */
+export function esErrorSinCreditos(error: unknown): boolean {
+  const parsed = extractAnthropicError(error);
+  return Boolean(parsed && isAnthropicNoCreditsError(parsed.status, parsed.body));
+}
+
+export function mapAnthropicCallError(error: unknown): Error {
   const parsed = extractAnthropicError(error);
   if (parsed && isAnthropicNoCreditsError(parsed.status, parsed.body)) {
-    return new Error(claudeNoCreditsUserMessage(keySource));
+    return new Error(claudeNoCreditsUserMessage());
   }
 
   if (error instanceof Error) return error;

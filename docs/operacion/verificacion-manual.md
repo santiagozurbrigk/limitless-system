@@ -788,21 +788,24 @@ con una sesión real.
 
 Marcas: ⚠️ alta probabilidad de falla · 🔒 verifica seguridad · ⭐ verifica regla central.
 
-### 1. Clave de IA rechazada: marca, cartel y fallback ⭐⚠️ — `[1A1-CLAVE-ANTHROPIC-ROTA]`
-**Prerrequisitos:** acceso a Vercel (env y logs) y a la base de producción; la org `997e94be-…` (o una de prueba con una clave `sk-ant-` revocada).
-1. Confirmar si `ANTHROPIC_API_KEY` está cargada en Vercel producción.
-2. `select claude_api_key_status from organizations where id = '<org>'`.
-3. Entrar como founder de esa org y mirar cualquier pantalla de la plataforma.
-4. Esperar una corrida del cron de Fathom (cada 10 min) y leer los logs `[anthropic] La clave propia …`.
+### 1. Sin clave propia no hay IA: avisos y agente ⭐⚠️ — SCRUM-7
+**Prerrequisitos:** acceso a los logs de Vercel y a la base de producción; una org sin clave de Claude y otra con clave válida; para el caso 3, una org de prueba con una clave `sk-ant-` que después se revoca en la consola de Anthropic.
+1. Entrar como founder de la org **sin** clave: arriba de toda la plataforma aparece "Las funciones de inteligencia artificial están desactivadas", con el link "Cargar la clave" (un miembro que no es founder ve "Avisale a quien administra la cuenta").
+2. En esa org, mandar un mensaje en `/agent`: responde "Las funciones de IA están desactivadas: falta la clave de Claude de tu organización…", no "No pudimos generar la respuesta".
+3. Con la org de prueba: revocar la clave en Anthropic y mandar un mensaje en `/agent` (o esperar el cron de Fathom). `select claude_api_key_status from organizations where id = '<org>'`.
+4. Cargar una clave válida en Ajustes → IA: el aviso desaparece y el agente responde.
+5. Logs del cron de Fathom: para las orgs sin clave, `[anthropic] La organización … no tiene clave de IA usable: se saltea` y ningún `401`.
 
-**Resultado esperado:** status `invalid`; barra roja con link a Ajustes; con global cargada, el log dice "Se sigue con la clave global" y las llamadas se procesan; sin global, el log lo dice y no se gastan más 401 (la clave marcada ya no se usa).
+**Resultado esperado:** 1–2 → como se describe; 3 → status `invalid`, barra roja "dejó de funcionar" y el agente dice que la clave fue rechazada; nunca se usa otra clave; 4 → todo vuelve; 5 → ninguna org usa una clave que no sea la suya.
 
-### 2. Agente con clave de org inválida ⚠️
-**Prerrequisitos:** org de prueba con clave cargada como `valid` que después se revoca en la consola de Anthropic.
-1. Revocar la clave en Anthropic sin tocar Limitless.
-2. Mandar un mensaje en `/agent`.
+### 2. Clave de Claude de la plataforma (super-admin) ⭐ — SCRUM-71
+**Prerrequisitos:** cuenta de super admin; una clave de Anthropic de la plataforma.
+1. Sin clave cargada: Super-admin → Cerebro de IA → generar resúmenes por lote.
+2. Super-admin → Infraestructura → "Clave de Claude de la plataforma": cargar la clave.
+3. Generar resúmenes y, cuando el lote termine, sincronizar los resultados.
+4. `select organization_id, feature, total_cost_usd from token_usage where feature = 'super_admin_brain_summary_batch' order by created_at desc limit 5`.
 
-**Resultado esperado hoy:** falla con error (el stream no tiene fallback, `[AGENTE-SIN-FALLBACK-CLAVE]`). Tras el arreglo: responde con la global y el status pasa a `invalid`.
+**Resultado esperado:** 1 → error "Falta la clave de Claude de la plataforma…" y no se usa la clave de ninguna org; 3 → los resúmenes se guardan; 4 → filas con `organization_id` nulo y el costo a mitad de precio (Batch).
 
 ### 3. El agente respeta permisos por módulo 🔒⚠️
 **Prerrequisitos:** miembro con rol que incluye `agent` y **no** `finance` ni `clients`.
@@ -1014,17 +1017,15 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 
 ---
 
-### V-INFRA-1 · Variables críticas cargadas en producción ⚠️⭐ — `[ENV-ANTHROPIC-VERCEL]`
+### V-INFRA-1 · Variables críticas cargadas en producción ⚠️⭐
 
 **Prerrequisitos:** acceso de lectura a Vercel (proyecto `otc-plaform`, team `otcteam`, incluidas las Shared Environment Variables del team).
 
-1. Buscar `ANTHROPIC_API_KEY` en el proyecto y en las variables compartidas del team.
-2. Buscar `ZERNIO_WEBHOOK_SECRET`.
-3. Buscar `LIMITLESS_WEBHOOK_SECRET` (hoy sólo está `OTC_WEBHOOK_SECRET`).
-4. `curl -i -X POST https://<app>/api/integrations/zernio/webhook -d '{}'`.
-5. En una org **sin** BYOK de Claude, disparar cualquier función de IA (p. ej. el agente) y mirar el log.
+1. Buscar `ZERNIO_WEBHOOK_SECRET`.
+2. Buscar `LIMITLESS_WEBHOOK_SECRET` (hoy sólo está `OTC_WEBHOOK_SECRET`).
+3. `curl -i -X POST https://<app>/api/integrations/zernio/webhook -d '{}'`.
 
-**Resultado esperado:** 1 → existe, o se documenta que todas las orgs usan BYOK; 4 → 401 "Firma inválida" (si da **503**, el webhook de Zernio está muerto: `[ENV-ZERNIO-WEBHOOK-SECRET]`); 5 → responde. ⚠️ En el listado del proyecto no aparecen ni `ANTHROPIC_API_KEY` ni `ZERNIO_WEBHOOK_SECRET`.
+**Resultado esperado:** 3 → 401 "Firma inválida" (si da **503**, el webhook de Zernio está muerto: `[ENV-ZERNIO-WEBHOOK-SECRET]`). ⚠️ En el listado del proyecto no aparece `ZERNIO_WEBHOOK_SECRET`. (`ANTHROPIC_API_KEY` ya no hace falta en `apps/web` desde SCRUM-7.)
 
 ---
 

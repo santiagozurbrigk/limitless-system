@@ -44,13 +44,16 @@ export const MODEL_PRICING = {
 export type TokenUsageModel = keyof typeof MODEL_PRICING;
 
 export type TokenUsageParams = {
-  organizationId: string;
+  /** `null` = trabajo de plataforma (super-admin), no de una organización. */
+  organizationId: string | null;
   model: string;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
   feature?: string;
+  /** Descuento sobre el precio de lista; el Batch API de Anthropic cobra la mitad (0.5). */
+  costMultiplier?: number;
 };
 
 export function resolvePricingModel(model: string): TokenUsageModel {
@@ -99,14 +102,18 @@ export async function trackTokenUsage({
   cacheReadTokens = 0,
   cacheCreationTokens = 0,
   feature,
+  costMultiplier = 1,
 }: TokenUsageParams): Promise<void> {
-  const { inputCost, outputCost, totalCost } = computeTokenCostUsd(
+  const listPrice = computeTokenCostUsd(
     model,
     inputTokens,
     outputTokens,
     cacheReadTokens,
     cacheCreationTokens
   );
+  const inputCost = listPrice.inputCost * costMultiplier;
+  const outputCost = listPrice.outputCost * costMultiplier;
+  const totalCost = listPrice.totalCost * costMultiplier;
 
   const admin = createAdminClient();
   const { error } = await admin.from("token_usage").insert({

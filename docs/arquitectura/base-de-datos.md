@@ -74,7 +74,7 @@ Estas tablas se leen sólo con `createAdminClient()` (service role). El cliente 
 | `zernio_integrations` | `api_key` (cifrada) y `webhook_secret` |
 | `instagram_integrations`, `stripe_integrations`, `mercadopago_integrations`, `vturb_integrations`, `webinarjam_integrations`, `hyros_integrations`, `payment_integrations`, `super_admin_google_tokens` | RLS sin policies |
 | `ghl_integrations` | El miembro puede insertar/actualizar/borrar la de su org, pero no leerla |
-| `ai_brain_documents`, `super_admin_users`, `super_admin_deletions`, `waitlist_leads`, `rate_limits`, `holding_active_sessions` | Sólo service role / plataforma |
+| `ai_brain_documents`, `super_admin_users`, `super_admin_deletions`, `platform_ai_credentials`, `waitlist_leads`, `rate_limits`, `holding_active_sessions` | Sólo service role / plataforma |
 
 Excepciones que **sí** son editables por cualquier miembro: `discord_integrations` y `unipile_integrations` (policy `FOR ALL` por org) y `team_member_integrations` (sólo la fila propia).
 
@@ -123,7 +123,7 @@ Una línea por tabla de producción. Filas = conteo aproximado de prod el 2026-0
 | `team_invitations` | Invitaciones por token (`/invite`) |
 | `notification_preferences` | Preferencias por usuario |
 | `onboarding_state`, `onboarding_responses` | Estado del onboarding guiado y respuestas del founder |
-| `token_usage` | Consumo de IA por org/feature/modelo |
+| `token_usage` | Consumo de IA por org/feature/modelo (`organization_id` nulo = trabajo de plataforma, p. ej. resúmenes del cerebro en super-admin) |
 | `rate_limits` | Contadores de `consume_rate_limit` |
 | `waitlist_leads` | Altas de waitlist / prueba (`/api/waitlist`, `/api/trial-confirm`) |
 
@@ -134,6 +134,7 @@ Una línea por tabla de producción. Filas = conteo aproximado de prod el 2026-0
 | `holding_active_sessions` | Negocio activo por usuario; fuente del Auth Hook |
 | `holdings`, `holding_organizations` | Modelo de holdings del super-admin (panel de holdings) |
 | `super_admin_users`, `super_admin_deletions`, `super_admin_google_tokens` | Staff Limitless, registro de bajas, Drive del super-admin |
+| `platform_ai_credentials` | Una fila (id = 1): la clave de Claude de la plataforma, cifrada, para el trabajo de super-admin (SCRUM-7). RLS sin políticas |
 | `organization_notes` | Notas internas por org del super-admin |
 | `ai_brain_documents` | "Cerebro de IA" del super-admin |
 

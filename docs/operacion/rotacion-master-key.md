@@ -138,8 +138,8 @@ Entrada en `CHANGES.md`: fecha, motivo de la rotación y la tabla de conteos del
   responden **500** (no 404) y el log dice `[payments] no se pudo descifrar el secreto`. Whop reintenta
   unos 3 días. Commas no está documentado que reintente: esos cobros hay que recuperarlos a mano
   (`docs/operacion/incidentes.md` §B).
-- **Clave de Claude propia de una org**: si no descifra, la org pasa en silencio a la clave global
-  (`[BYOK-DESCIFRADO-SILENCIOSO]`). Buscar en los logs `[credential-resolver] No se pudo descifrar`.
+- **Clave de Claude propia de una org**: si no descifra, la IA de esa org se frena y la plataforma le muestra
+  la barra roja (no hay clave de respaldo, SCRUM-7). Buscar en los logs `[credential-resolver] No se pudo descifrar`.
 - **Una clave mal copiada** (espacios, caracteres de más): si no decodifica a exactamente 32 bytes, el
   sistema la rechaza con `ENCRYPTION_MASTER_KEY inválida` en vez de usarla.
 
@@ -172,6 +172,7 @@ Lista única en `apps/web/lib/security/encryption.ts` (`SECRET_FIELDS`) y en
 | `vturb_integrations.api_key_encrypted`, `webinarjam_integrations.api_key_encrypted`, `hyros_integrations.api_key_encrypted` | sí |
 | `zernio_integrations.api_key` | sí |
 | `team_member_integrations.encrypted_api_key` (Fathom por miembro) | sí |
+| `platform_ai_credentials.claude_api_key_encrypted` (clave de Claude de la plataforma; AAD con alcance fijo `platform`) | no |
 
 **Si se agrega una columna cifrada**: sumarla a `SECRET_FIELDS` y a `SECRET_COLUMNS` y a esta tabla.
 Si no, el script no la re-cifra y, al sacar la clave anterior, esa integración deja de andar.

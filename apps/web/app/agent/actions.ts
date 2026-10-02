@@ -27,8 +27,8 @@ import {
   callClaudeText,
   callClaudeAgent,
   detectAgentComplexity,
-  isAnthropicConfigured,
 } from "@/lib/ai/anthropic";
+import { NO_AI_CREDENTIALS_MESSAGE } from "@/lib/ai/anthropic-auth-errors";
 import { resolveClientForOrg } from "@/lib/ai/credential-resolver";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
@@ -807,9 +807,6 @@ export async function sendAgentMessageAction(input: {
   const agentTask = detectAgentComplexity(trimmed, hasRagContext);
   const flags = resolveAgentFlags(trimmed, input.flags ?? {});
 
-  const anthropicConfigured = isAnthropicConfigured();
-  const anthropicGlobalKeyPresent = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
-
   let clientResolution: Awaited<ReturnType<typeof resolveClientForOrg>> = {
     client: null,
     keySource: "none",
@@ -831,8 +828,6 @@ export async function sendAgentMessageAction(input: {
     commit: process.env.VERCEL_GIT_COMMIT_SHA ?? "local",
     conversationId,
     organizationId,
-    isAnthropicConfigured: anthropicConfigured,
-    anthropicGlobalKeyPresent,
     orgByokKeyPresent,
     orgClaudeClientSource: clientResolution.keySource,
     orgClaudeClientAvailable,
@@ -1153,10 +1148,10 @@ export async function sendAgentMessageAction(input: {
     console.error("[Agent:Claude] sin respuesta del modelo", {
       organizationId,
       claudeThrew,
-      isAnthropicConfigured: anthropicConfigured,
       orgClaudeClientAvailable,
     });
-    throw new Error(AGENT_ERROR_REPLY);
+    // Sin clave propia no hay IA (SCRUM-7): decirlo, no el error genérico.
+    throw new Error(orgClaudeClientAvailable ? AGENT_ERROR_REPLY : NO_AI_CREDENTIALS_MESSAGE);
   }
 
   // Build document attachments if a document was generated via tool call

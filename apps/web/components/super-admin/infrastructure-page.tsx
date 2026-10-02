@@ -1,11 +1,15 @@
 import { Badge } from "@ai-coo/ui";
 import { isResendConfigured } from "@/lib/email";
+import { ClaudeApiKeySettings } from "@/components/settings/claude-api-key-settings";
+import type { PlatformClaudeKeyStatus } from "@/lib/ai/platform-credential";
 import type { InfrastructureStats } from "@/types/super-admin";
 
 export function InfrastructurePage({
   stats,
+  platformClaudeKey,
 }: {
   stats: InfrastructureStats;
+  platformClaudeKey: PlatformClaudeKeyStatus;
 }) {
   const integrations = [
     {
@@ -82,6 +86,10 @@ export function InfrastructurePage({
             </div>
           ))}
         </dl>
+      </section>
+
+      <section className="rounded-xl border border-border/60 p-6">
+        <ClaudeApiKeySettings initialStatus={platformClaudeKey} scope="platform" />
       </section>
 
       <section className="rounded-xl border border-border/60 p-6">

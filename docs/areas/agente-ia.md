@@ -10,7 +10,7 @@ La capa de IA de Limitless y los productos que viven encima de ella:
 - **Base de conocimiento** (`/business-context/documents`): notas, PDFs, Google Docs/Sheets y llamadas de Fathom, indexados con embeddings de OpenAI (RAG) para el agente.
 - **Inteligencia** (`/intelligence`, `/founder`) y **reportes ejecutivos** (pulso diario, semanal, mensual): generados por cron, sin intervención del usuario.
 - **Tono del founder**: análisis semanal de cómo escribe el founder, que se inyecta como contexto.
-- **Infraestructura compartida**: `lib/ai/anthropic.ts` (routing de modelos, BYOK, fallback de clave, prompt caching, tracking de costo en `token_usage`), `wrap-untrusted-content`, QStash.
+- **Infraestructura compartida**: `lib/ai/anthropic.ts` (routing de modelos, clave propia de la org, prompt caching, tracking de costo en `token_usage`), `wrap-untrusted-content`, QStash.
 
 No hace: análisis de llamadas, scoring de leads/formularios, etiquetado o análisis de contenido. Esos pipelines usan esta capa pero se documentan en sus áreas (Ventas, Marketing, Clientes). El mapa completo de llamadas a Claude/OpenAI está más abajo.
 
@@ -176,9 +176,9 @@ El botón `GenerateWeeklyPipelineButton` (empty states de Inteligencia y Operaci
 
 | Proveedor / vía | Dónde | BYOK + fallback | `token_usage` |
 |---|---|---|---|
-| `callClaudeText` / `callClaudeJson` / `callClaudeVisionJson` / `callClaudeAgent` | Todos los de la tabla anterior | Sí (`executeWithCredentialFallback`) | Sí |
-| `streamClaudeAgent` (SDK stream directo) | `lib/agent/stream-claude-agent.ts` | Clave de la org o global, **sin** reintento con la global ante 401 | Sí |
-| `new Anthropic` + Batch API (Haiku, `ai_summary` del cerebro) | `app/super-admin/actions.ts` (`submitBrainSummaryBatchAction` y siguientes) | Global; si falta, **la clave de una org cliente hardcodeada** (`SUPER_ADMIN_CREDENTIAL_ORG_ID`) | No |
+| `callClaudeText` / `callClaudeJson` / `callClaudeVisionJson` / `callClaudeAgent` | Todos los de la tabla anterior | Sólo la de la org (`executeWithOrgCredential`) | Sí |
+| `streamClaudeAgent` (SDK stream directo) | `lib/agent/stream-claude-agent.ts` | Sólo la de la org; ante 401 o sin créditos la marca | Sí |
+| `new Anthropic` + Batch API (Haiku, `ai_summary` del cerebro) | `app/super-admin/actions.ts` (`submitBrainSummaryBatchAction` y siguientes) | Clave de la plataforma (`platform_ai_credentials`); si falta, error claro | Sí (org nula, precio Batch) |
 | `fetch api.anthropic.com/v1/messages` (Haiku, validar clave) | `lib/ai/validate-claude-key.ts` | La clave a validar | No |
 | OpenAI embeddings `text-embedding-3-small` | `lib/rag/embeddings.ts` (ingesta, búsqueda del agente, canvas) | Sólo `OPENAI_API_KEY` global | No |
 | `new Anthropic` en el worker de reels (Haiku, captions de variantes) | `apps/reel-worker/src/captions.ts` | Sólo `ANTHROPIC_API_KEY` del worker | No |
@@ -186,15 +186,19 @@ El botón `GenerateWeeklyPipelineButton` (empty states de Inteligencia y Operaci
 
 El bot de Discord (`apps/discord-bot`) no llama a ningún proveedor de IA; su clasificador corre en la web (`lib/discord/classify-run.ts`).
 
-### BYOK y fallback de clave
+### Clave de Claude: sólo la propia de cada organización
+
+**Regla (SCRUM-7, 2026-10-02): sin clave propia, no hay IA.** No hay clave global de respaldo (ADR-004, revisión 2026-10-02).
 
 `lib/ai/credential-resolver.ts`:
 
-1. Lee `claude_api_key_encrypted` y `claude_api_key_status` con admin client. Sólo usa la clave si el status es `valid` o `valid_no_credits`; la descifra (AES-256-GCM, `lib/security/encryption.ts`).
-2. Sin clave válida → `ANTHROPIC_API_KEY` global. Sin ninguna → `source: none` y las funciones devuelven `null` (no lanzan).
+1. Lee `claude_api_key_encrypted` y `claude_api_key_status` con admin client. Sólo usa la clave si el status es `valid` o `valid_no_credits` y se puede descifrar (AES-256-GCM, `lib/security/encryption.ts`).
+2. Si no → `source: none`: no se llama a nadie, las funciones devuelven `null` y los crons saltean la org. `ANTHROPIC_API_KEY` no se lee en `apps/web`.
 3. Cache en memoria por lambda de **30 s**.
-4. `executeWithCredentialFallback`: si la clave de la org da **401/403**, invalida el cache, marca `claude_api_key_status = 'invalid'` (condicionado a que siga `valid`, para no pisar una clave recién corregida) y reintenta **toda** la función con la global. Desde ese momento la org ve la barra roja y el resolver ya no usa su clave.
-5. Un 400 `billing_error` (sin créditos) **no** cae a la global: se traduce a un mensaje en español (`mapAnthropicCallError`) y se lanza.
+4. `executeWithOrgCredential` (`lib/ai/anthropic.ts`) y `streamClaudeAgent`: si Anthropic da **401/403**, `registrarFallaDeClave` invalida el cache, marca `claude_api_key_status = 'invalid'` (condicionado a que siga `valid`) y se tira `AI_KEY_REJECTED_MESSAGE`; con un 400 de créditos marca `valid_no_credits` y tira el mensaje de créditos. No se reintenta con otra clave.
+5. El agente sin clave responde `NO_AI_CREDENTIALS_MESSAGE` (dice qué falta y dónde cargarla), no el genérico.
+6. Aviso en toda la plataforma (`components/platform/aviso-clave-ia.tsx`; textos en `lib/ai/aviso-clave-ia.ts`): sin clave, rota, ilegible (`keyUnreadable`) o sin créditos. No se puede cerrar; el link a Ajustes → IA sólo para el founder.
+7. **Trabajo de plataforma (super-admin, Batch API del cerebro):** clave propia de la plataforma en `platform_ai_credentials` (`lib/ai/platform-credential.ts`), cargada en Super-admin → Infraestructura. Su costo va a `token_usage` con `organization_id` nulo y la mitad del precio de lista (Batch).
 
 OAuth de Claude: no existe más. `normalizeCredentialMode` trata cualquier modo legacy como API key; las columnas `claude_oauth_*` quedaron en la DB sin uso.
 
@@ -209,7 +213,7 @@ Validación al guardar (`saveClaudeApiKeyAction` en `app/settings/actions.ts`): 
 
 | Proveedor | Qué se usa | Sin configurar |
 |---|---|---|
-| Anthropic | Messages (stream y no stream), tools, web search, extended thinking, visión, Batch API | Sin clave de org ni global: el agente responde error "No pudimos generar la respuesta"; crons se saltean la org |
+| Anthropic | Messages (stream y no stream), tools, web search, extended thinking, visión, Batch API | Sin clave de la org: el agente dice que falta la clave y dónde cargarla; crons se saltean la org; la plataforma muestra el aviso |
 | OpenAI | Embeddings y Whisper | Sin `OPENAI_API_KEY`: RAG devuelve vacío (el agente sigue sin contexto semántico), la indexación marca el documento en `error`, transcripción responde 503 |
 | Upstash QStash | Cola de ingesta RAG y fan-out de crons | Sin `QSTASH_TOKEN`: ingesta inline y crons en serie (con el riesgo de timeout: 60 s, 300 s el mensual) |
 | Google Drive | Import de Docs/Sheets a la base de conocimiento (`lib/google/drive-content.ts`) | La página recibe `googleConnected` de `getGoogleFormsIntegrationStatusAction`; sin conexión no hay import |
@@ -219,7 +223,6 @@ Validación al guardar (`saveClaudeApiKeyAction` en `app/settings/actions.ts`): 
 
 - **Dos caminos al agente.** El vivo es `/api/agent/send` (SSE). `sendAgentMessageAction` (`app/agent/actions.ts`, ~570 líneas) es la versión no-stream del chat flotante, que dejó de renderizarse el 2026-08-26; sigue exportada y alcanzable como server action. No tiene compaction ni JIT ni las 8 tools de lectura, y duplica definiciones de tools. Cualquier cambio al agente se hace en `lib/agent/*`.
 - **El resolver de modelo está duplicado** en `lib/agent/stream-claude-agent.ts` (alias y mapa legacy propios). Si se cambia un modelo en `anthropic.ts`, cambiarlo también ahí.
-- **El fallback reintenta la función entera.** En `callClaudeAgent` eso incluye las tools ya ejecutadas; en la práctica el 401 llega en la primera llamada, antes de cualquier tool.
 - **El JIT tiene fallback, la compaction casi no:** si la selección de contexto falla se usan los 3 bloques más recientes; si la llamada del resumen de la compaction tira error, falla el mensaje entero (si sólo vuelve vacía, se manda el historial sin compactar).
 - **El prompt caching del agente casi no pega:** el bloque cacheado es el contexto elegido por Haiku para *esa* pregunta, que cambia de mensaje a mensaje.
 - **El contexto incluye mensajes de otras conversaciones de la org** (últimos 20, todos los usuarios). Un operador con acceso al agente ve fragmentos de lo que charló el founder.
@@ -239,14 +242,11 @@ Validación al guardar (`saveClaudeApiKeyAction` en `app/settings/actions.ts`): 
 - Inteligencia y reportes leen `conversations` y `content_assets` (legacy, 0 y 6 filas en prod al 2026-09-23) en vez de `sales_leads` y `content_pieces` `[INTELIGENCIA-FUENTES-LEGACY]`.
 - Ventana fija de 14 días para el pulso diario `[REPORTES-VENTANA-FIJA]`.
 - Sin índice único en `executive_reports` ni en `intelligence_snapshots`: un reintento duplica `[REPORTES-DUPLICADOS]`.
-- `streamClaudeAgent` no reintenta con la clave global ante 401 ni marca la clave `[AGENTE-SIN-FALLBACK-CLAVE]`.
-- Clave sin créditos (`valid_no_credits`) se sigue usando y no hay fallback `[IA-CLAVE-SIN-CREDITOS]`.
 - Una falla de ingesta en la cola RAG responde 200 y QStash no reintenta `[RAG-INGESTA-SIN-REINTENTO]`.
 - Google Docs/Sheets importados no se re-sincronizan: re-importar falla y el "resync" sólo regenera el Markdown del visor `[KB-GOOGLE-SIN-RESYNC]`.
 - SOP archivado o pasado a draft sigue en RAG `[RAG-SOP-HUERFANO]`; canvas guardado invisible e imborrable `[RAG-CANVAS-INVISIBLE]`.
 - Links de documentos generados vencen a la hora (`SIGNED_URL_EXPIRES_IN = 3600`) y quedan persistidos en `attachments` `[AGENTE-LINKS-VENCIDOS]`.
-- `MODEL_PRICING` de Haiku (0,80/4 USD por MTok) parece el precio de Haiku 3.5; embeddings y Batch no se registran `[IA-COSTOS-INCOMPLETOS]`.
-- Super-admin usa la clave de una org cliente si falta la global `[IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN]`.
+- `MODEL_PRICING` de Haiku (0,80/4 USD por MTok) parece el precio de Haiku 3.5; los embeddings no se registran `[IA-COSTOS-INCOMPLETOS]`.
 - `sendAgentMessageAction` sin llamadas desde la UI: su único caller es `FloatingChatProvider`, que sigue montado en `AppProviders` pero nadie lo consume `[AGENTE-CAMINO-LEGACY]`.
 - Sin tests de `lib/agent`, `lib/ai`, `lib/rag`, `lib/queue`, `lib/intelligence` `[T-14]`, `[IA-TESTS]`.
 
@@ -261,12 +261,12 @@ Detalle y prioridades en `PENDIENTES.md` § Agente de negocio e IA.
 | Agente accesible dentro del negocio activo del holding (sólo navegación) | `apps/web/e2e/holding.spec.ts` |
 | Scripts manuales de ingesta (no Vitest) | `apps/web/scripts/test-ingest-throws-on-failure.ts`, `apps/web/scripts/verify-business-context-rag.ts` |
 
-Sin cobertura: compaction, JIT, `detectAgentComplexity`, `resolveAgentFlags`, `parseAgentActions`, `parseSseBuffer`, credential resolver y fallback, `computeTokenCostUsd`, chunker, `mapAnthropicCallError`, generadores de reportes. Todos son lógica pura o casi pura y testeable en `node`.
+Sin cobertura: compaction, JIT, `detectAgentComplexity`, `resolveAgentFlags`, `parseAgentActions`, `parseSseBuffer`, `computeTokenCostUsd`, chunker, `mapAnthropicCallError`, generadores de reportes. Todos son lógica pura o casi pura y testeable en `node`.
 
 ## Archivos clave
 
-1. `apps/web/lib/ai/anthropic.ts` — modelos, tasks, fallback de clave, `callClaude*`
-2. `apps/web/lib/ai/credential-resolver.ts` — BYOK, cache, marca de clave rechazada
+1. `apps/web/lib/ai/anthropic.ts` — modelos, tasks, clave de la org y sus fallas, `callClaude*`
+2. `apps/web/lib/ai/credential-resolver.ts` — clave propia de la org, cache, marca de clave rechazada o sin créditos
 3. `apps/web/lib/track-token-usage.ts` — precios y `token_usage`
 4. `apps/web/app/api/agent/send/route.ts` — entrada SSE
 5. `apps/web/lib/agent/stream-agent-message.ts` — orquestación del agente

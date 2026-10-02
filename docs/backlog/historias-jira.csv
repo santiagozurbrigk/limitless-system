@@ -12,53 +12,6 @@ Summary,Issue Type,Priority,Labels,Labels,Labels,Labels,Labels,Labels,Descriptio
 * [ALTA-CLIENTES-PROBAR] Confirmar el alta con una cuenta de equipo (P2)
 
 Funcionalidad: F-CLI-23 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-CLI-23]",H-CLI-23,Clientes,P0,Alta,PERMISOS-SERVER-ACTIONS/clientes PERMISOS-SERVER-ACTIONS ALTA-CLIENTES-PROBAR,
-[H-DIS-11] Que la IA me marque cada día qué mensajes necesitan atención,Story,Highest,historia,discord,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que cada día la IA lea los mensajes nuevos de Discord, me diga el tono, me resuma y marque los que requieren atención, y me proponga hitos del recorrido de cada cliente, para enterarme de lo importante sin leer todo.
-
-*Criterios de aceptación:*
-* Probado con una cuenta real de Discord y el resultado quedó anotado: al día siguiente de escribir, los mensajes nuevos de alumnos tienen tono y resumen, y los del equipo no se clasifican.
-* Dado un cliente con mensajes que muestran un avance, entonces aparece una propuesta de hito en su recorrido.
-* Si la clave de Claude de la organización deja de funcionar, la clasificación sigue con la clave de Limitless o el founder ve el aviso rojo.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [DISCORD-SIN-PROBAR] Canales, equipo, sugerencias y atribución sin probar (P1)
-* [1A1-CLAVE-ANTHROPIC-ROTA] Una organización sin clave válida y sin clave global (P0)
-
-*Para confirmar:*
-* Martín: la prueba manual de Discord no incluye la propuesta de hitos; sumarla.
-
-Funcionalidad: F-DIS-11 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-DIS-11]",H-DIS-11,Discord,P0,Alta,DISCORD-SIN-PROBAR 1A1-CLAVE-ANTHROPIC-ROTA,
-[H-IA-25] Cargar mi clave de Claude y enterarme si deja de andar,Story,Highest,historia,agente-de-negocio-e-ia,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero cargar la clave de Claude de mi empresa, que sólo yo pueda cambiarla y que el sistema me avise si deja de funcionar o se queda sin créditos, para que la IA de mi organización no se corte sin que me entere.
-
-*Criterios de aceptación:*
-* Dado un miembro del equipo que no es founder, cuando intenta cambiar o borrar la clave de Claude, entonces recibe un error y la clave no cambia.
-* Dada la organización con la clave rechazada, cuando el founder entra a la plataforma, entonces ve la barra roja; se probó con esa organización y el resultado quedó anotado.
-* Dada una clave sin créditos, el founder lo ve marcado en Ajustes (o la IA sigue con la clave de Limitless, según lo que se decida).
-
-*Tareas técnicas (PENDIENTES.md):*
-* [1A1-CLAVE-ANTHROPIC-ROTA] Una organización sin clave válida y sin clave global (P0)
-* [PERMISOS-SERVER-ACTIONS/agente-ia] (parte IA) El agente lee todos los módulos sin mirar permisos (P1)
-* [IA-CLAVE-SIN-CREDITOS] (nuevo) Una clave sin créditos no cae a la global (P2)
-
-*Para confirmar:*
-* Agustín: una organización cuya clave se quedó sin créditos, ¿sigue con la clave de Limitless o queda sin IA hasta que cargue créditos?
-
-Funcionalidad: F-IA-25 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-25]",H-IA-25,Agente de negocio e IA,P0,Alta,1A1-CLAVE-ANTHROPIC-ROTA PERMISOS-SERVER-ACTIONS/agente-ia IA-CLAVE-SIN-CREDITOS,
-[H-IA-26] Seguir con la IA de Limitless si mi clave es rechazada,Story,Highest,historia,agente-de-negocio-e-ia,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que si Anthropic rechaza la clave de mi empresa el sistema siga trabajando con la clave de Limitless, para que el análisis de llamadas, los reportes y el agente no se detengan.
-
-*Criterios de aceptación:*
-* Probado con una cuenta real de Anthropic y el resultado quedó anotado: con la clave de la organización rechazada y la de Limitless cargada, las llamadas de esa organización se procesan y la clave queda marcada como rechazada.
-* Dada una clave rechazada, cuando mando un mensaje en el agente, entonces recibo respuesta igual.
-* Quedó decidido y anotado hasta cuándo una organización con clave rechazada puede usar la clave de Limitless, y se avisó a las organizaciones que están en esa situación.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [1A1-CLAVE-ANTHROPIC-ROTA] Una organización sin clave válida y sin clave global (P0)
-* [AGENTE-SIN-FALLBACK-CLAVE] (nuevo) El agente SSE no cae a la clave global (P1)
-* [IA-CLAVES-INVALIDAS] Organizaciones con clave vencida que gastan la global (P1)
-
-*Para confirmar:*
-* Martín: hoy no se sabe si la clave de Limitless está cargada en producción; confirmar con quien administra Vercel antes de estimar.
-
-Funcionalidad: F-IA-26 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-26]",H-IA-26,Agente de negocio e IA,P0,Alta,1A1-CLAVE-ANTHROPIC-ROTA AGENTE-SIN-FALLBACK-CLAVE IA-CLAVES-INVALIDAS,
 "[H-OPS-20] Que los permisos por rol protejan los datos, no sólo las pantallas",Story,Highest,historia,operaciones-y-equipo,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero crear roles y decidir por módulo si no tienen acceso, sólo ven o tienen acceso completo, y que eso se cumpla de verdad, para que cada persona toque sólo lo que le corresponde.
 
 *Criterios de aceptación:*
@@ -116,14 +69,13 @@ Funcionalidad: F-PLA-18 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 
 *Criterios de aceptación:*
 * Dado un miembro con Ajustes en ""sin acceso"", cuando intenta cambiar o borrar la clave (incluso por fuera de la pantalla), entonces recibe un error de permiso y la clave no cambia.
-* Dado que mi clave es rechazada por Claude, entonces veo el aviso rojo en la aplicación y el trabajo de IA de mi negocio sigue (con la clave de Limitless) o queda claro que está frenado hasta que cargue una nueva.
+* Dado que mi clave es rechazada por Claude, entonces veo el aviso rojo en la aplicación y queda claro que el trabajo de IA de mi negocio está frenado hasta que cargue una nueva.
 * Se probó con la organización que hoy tiene la clave rechazada y el resultado quedó anotado.
 
 *Tareas técnicas (PENDIENTES.md):*
 * [PERMISOS-SERVER-ACTIONS] Los permisos por módulo no protegen datos, sólo pantallas (P0)
-* [1A1-CLAVE-ANTHROPIC-ROTA] Una organización sin clave válida y sin clave global (P0)
 
-Funcionalidad: F-PLA-20 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-20]",H-PLA-20,Plataforma,P0,Alta,PERMISOS-SERVER-ACTIONS 1A1-CLAVE-ANTHROPIC-ROTA,
+Funcionalidad: F-PLA-20 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-20]",H-PLA-20,Plataforma,P0,Alta,PERMISOS-SERVER-ACTIONS,
 [H-PLA-21] Ver y manejar todas mis integraciones en un tablero confiable,Story,Highest,historia,plataforma,p0,sev-alta,,,"*Historia:* Como founder, quiero ver mis integraciones con un estado que refleje lo que realmente pasa y poder conectarlas o desconectarlas sólo yo o quien autorice, para saber qué datos están entrando y arreglar lo que falla.
 
 *Criterios de aceptación:*
@@ -394,6 +346,20 @@ Funcionalidad: F-DIS-09 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/ba
 * Martín: la prueba manual de Discord no tiene un paso para testimonios; sumarlo.
 
 Funcionalidad: F-DIS-10 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-DIS-10]",H-DIS-10,Discord,P1,Media,DISCORD-SIN-PROBAR DISCORD-BOT-SIN-TESTS,
+[H-DIS-11] Que la IA me marque cada día qué mensajes necesitan atención,Story,High,historia,discord,p1,sev-media,para-confirmar,,"*Historia:* Como founder, quiero que cada día la IA lea los mensajes nuevos de Discord, me diga el tono, me resuma y marque los que requieren atención, y me proponga hitos del recorrido de cada cliente, para enterarme de lo importante sin leer todo.
+
+*Criterios de aceptación:*
+* Probado con una cuenta real de Discord y el resultado quedó anotado: al día siguiente de escribir, los mensajes nuevos de alumnos tienen tono y resumen, y los del equipo no se clasifican.
+* Dado un cliente con mensajes que muestran un avance, entonces aparece una propuesta de hito en su recorrido.
+* Si la clave de Claude de la organización deja de funcionar, la clasificación se frena y el founder ve el aviso rojo.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [DISCORD-SIN-PROBAR] Canales, equipo, sugerencias y atribución sin probar (P1)
+
+*Para confirmar:*
+* Martín: la prueba manual de Discord no incluye la propuesta de hitos; sumarla.
+
+Funcionalidad: F-DIS-11 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-DIS-11]",H-DIS-11,Discord,P1,Media,DISCORD-SIN-PROBAR,
 [H-DIS-13] Poner el bot en modo silencioso,Story,High,historia,discord,p1,sev-media,para-confirmar,,"*Historia:* Como founder, quiero que el bot pueda leer mi servidor sin escribir nada, para medir la actividad de mis alumnos sin que se note su presencia.
 
 *Criterios de aceptación:*
@@ -599,22 +565,6 @@ Funcionalidad: F-FIN-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * [PERMISOS-SERVER-ACTIONS/ops-fin-prod] Las actions y la RLS de estas áreas no miran el rol [transversal] (P1)
 
 Funcionalidad: F-FIN-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-08]",H-FIN-08,Operaciones y equipo,P1,Alta,FIN-PAYROLL-BASES FIN-MESES-UTC PERMISOS-SERVER-ACTIONS/ops-fin-prod,
-[H-IA-01] Chatear con el agente sin que se corte,Story,High,historia,agente-de-negocio-e-ia,p1,sev-media,para-confirmar,,"*Historia:* Como founder, quiero chatear con el agente de negocio y ver la respuesta escribiéndose en vivo aunque la conversación sea larga o mi clave de Claude haya dejado de andar, para no quedarme sin respuesta en medio del trabajo.
-
-*Criterios de aceptación:*
-* Dada una organización con clave propia de Claude que Anthropic dejó de aceptar, cuando mando un mensaje en el agente, entonces recibo la respuesta igual (con la clave de Limitless) y la clave queda marcada como rechazada en Ajustes.
-* Si el problema con la clave aparece cuando la respuesta ya empezó a escribirse, la respuesta no se duplica ni se vuelve a empezar.
-* Dada una conversación muy larga, cuando mando un mensaje nuevo y falla el paso de resumir lo anterior, igual recibo la respuesta (tomando los últimos mensajes) en lugar de un error.
-* Cuando termino el primer intercambio de una conversación nueva, la conversación queda con su título automático en el historial.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [AGENTE-SIN-FALLBACK-CLAVE] (nuevo) El agente SSE no cae a la clave global (P1)
-* [AGENTE-COMPACTION-FRAGIL] (nuevo) Si falla la compaction, falla el mensaje (P2)
-
-*Para confirmar:*
-* Martín: la fila también nombra el ahorro de costo por reutilizar contexto (AGENTE-CACHE-INEFECTIVO) y la protección contra textos maliciosos (AUDITORIA-ABIERTOS §3.6); los dejé fuera porque no cambian lo que ve el usuario en el chat (el segundo está en H-IA-13 y H-IA-10).
-
-Funcionalidad: F-IA-01 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-01]",H-IA-01,Agente de negocio e IA,P1,Media,AGENTE-SIN-FALLBACK-CLAVE AGENTE-COMPACTION-FRAGIL,
 [H-IA-03] Que el agente sólo muestre los datos que cada uno puede ver,Story,High,historia,agente-de-negocio-e-ia,p1,sev-alta,,,"*Historia:* Como founder, quiero que el agente consulte los datos reales de todos los módulos respetando los permisos de cada miembro y con la foto completa del negocio, para que cada uno obtenga respuestas correctas sin ver lo que no le corresponde.
 
 *Criterios de aceptación:*
@@ -718,31 +668,17 @@ Funcionalidad: F-IA-21 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlo
 * [CRONS-ORGS-INACTIVAS] (nuevo) Los crons de IA corren sobre orgs dadas de baja (P2)
 
 Funcionalidad: F-IA-24 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-24]",H-IA-24,Agente de negocio e IA,P1,Alta,INTELIGENCIA-FUENTES-LEGACY INTELIGENCIA-SIN-REINTENTO CRONS-ORGS-INACTIVAS,
-[H-IA-27] Ver el costo real de la IA por organización,Story,High,historia,agente-de-negocio-e-ia,p1,sev-alta,,,"*Historia:* Como super admin de Limitless, quiero ver el costo de cada uso de IA por organización con precios correctos y sin usos que falten, para saber cuánto nos cuesta cada cliente.
+[H-IA-25] Cargar mi clave de Claude y enterarme si deja de andar,Story,High,historia,agente-de-negocio-e-ia,p1,sev-alta,,,"*Historia:* Como founder, quiero cargar la clave de Claude de mi empresa, que sólo yo pueda cambiarla y que el sistema me avise si deja de funcionar o se queda sin créditos, para que la IA de mi organización no se corte sin que me entere.
 
 *Criterios de aceptación:*
-* El costo registrado de cada modelo coincide con el precio publicado por Anthropic.
-* Los usos que hoy no se cuentan (indexado de documentos y resúmenes del cerebro global) aparecen en el registro de costos.
-* El trabajo de plataforma (cerebro global) queda registrado a nombre de Limitless, no de una organización cliente.
+* Dado un miembro del equipo que no es founder, cuando intenta cambiar o borrar la clave de Claude, entonces recibe un error y la clave no cambia.
+* Dada la organización con la clave rechazada, cuando el founder entra a la plataforma, entonces ve la barra roja; se probó con esa organización y el resultado quedó anotado.
+* Dada una clave sin créditos, el founder lo ve marcado en Ajustes y en el aviso de la plataforma; la IA vuelve sola cuando carga saldo.
 
 *Tareas técnicas (PENDIENTES.md):*
-* [IA-COSTOS-INCOMPLETOS] (nuevo) Costos de IA subestimados (P2)
-* [IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN] (nuevo) Super-admin usa la clave de una org cliente (P1)
+* [PERMISOS-SERVER-ACTIONS/agente-ia] (parte IA) El agente lee todos los módulos sin mirar permisos (P1)
 
-Funcionalidad: F-IA-27 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-27]",H-IA-27,Agente de negocio e IA,P1,Alta,IA-COSTOS-INCOMPLETOS IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN,
-[H-IA-28] Cargar el cerebro global sin usar la clave de un cliente,Story,High,historia,agente-de-negocio-e-ia,p1,sev-alta,para-confirmar,,"*Historia:* Como super admin de Limitless, quiero cargar documentos al cerebro global y generar sus resúmenes usando sólo la clave de Limitless, para no usar ni cobrarle a un cliente trabajo que es de la plataforma.
-
-*Criterios de aceptación:*
-* Sin la clave de Limitless cargada, generar resúmenes del cerebro global muestra un error claro y no usa la clave de ninguna organización cliente.
-* Con la clave de Limitless cargada, cada tanda de resúmenes deja registrado su costo a nombre de la plataforma.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN] (nuevo) Super-admin usa la clave de una org cliente (P1)
-
-*Para confirmar:*
-* ---
-
-Funcionalidad: F-IA-28 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-28]",H-IA-28,Agente de negocio e IA,P1,Alta,IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN,
+Funcionalidad: F-IA-25 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-25]",H-IA-25,Agente de negocio e IA,P1,Alta,PERMISOS-SERVER-ACTIONS/agente-ia,
 "[H-MKT-01] Ver toda mi biblioteca de contenido, siempre al día",Story,High,historia,marketing,p1,sev-media,para-confirmar,,"*Historia:* Como founder, quiero ver todas mis publicaciones de Instagram y YouTube en la biblioteca, con sus números reales y actualizadas solas, para saber qué contenido me funciona sin revisar cada red por separado.
 
 *Criterios de aceptación:*
@@ -1070,19 +1006,19 @@ Funcionalidad: F-PLA-23 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * [BAJAS-SIN-PROBAR] La baja del super admin nunca se ejecutó entera (P1)
 
 Funcionalidad: F-PLA-26 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-26]",H-PLA-26,Plataforma,P1,Media,BAJAS-SIN-PROBAR,
-[H-PLA-30] Mantener el cerebro de IA general sin usar la clave de un cliente,Story,High,historia,plataforma,p1,sev-alta,para-confirmar,,"*Historia:* Como super admin de Limitless, quiero cargar y resumir los documentos del cerebro de IA general usando sólo la cuenta de Limitless, para no cobrarle a un cliente trabajo de la plataforma ni usar su clave sin permiso.
+[H-PLA-30] Que los documentos del cerebro de IA general no dependan de un bucket creado a mano,Story,High,historia,plataforma,p1,sev-media,para-confirmar,,"*Historia:* Como super admin de Limitless, quiero que el bucket donde se guardan los documentos del cerebro de IA general esté definido en las migraciones y sea privado, para que un entorno nuevo o una restauración no lo pierdan ni lo dejen público.
 
 *Criterios de aceptación:*
-* Dado que falta la clave de Claude de Limitless, cuando genero resúmenes del cerebro, entonces la pantalla muestra un error claro y no usa la clave de ningún cliente.
-* Dado que la clave de Limitless está cargada, cuando genero resúmenes, entonces el costo de cada lote queda registrado como gasto de la plataforma, no a nombre de un cliente.
+* El bucket {{ai-brain-documents}} se crea desde una migración, es privado y su configuración coincide con la de producción.
+* (Resuelto el 2026-10-02, SCRUM-7: los resúmenes usan la clave de la plataforma, nunca la de un cliente, y su costo se registra a nombre de la plataforma.)
 
 *Tareas técnicas (PENDIENTES.md):*
-* [IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN] (nuevo) Super-admin usa la clave de una org cliente (P1)
+* [AUD-SEG-9] Buckets de Storage fuera de las migraciones (P1)
 
 *Para confirmar:*
 * ---
 
-Funcionalidad: F-PLA-30 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-30]",H-PLA-30,Plataforma,P1,Alta,IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN,
+Funcionalidad: F-PLA-30 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-30]",H-PLA-30,Plataforma,P1,Media,AUD-SEG-9,
 [H-VEN-05] Que los turnos de Calendly del negocio entren a tiempo y de forma segura,Story,High,historia,ventas,p1,sev-media,,,"*Historia:* Como founder, quiero que los turnos del Calendly del negocio entren solos, sin atrasos y sin que nadie de afuera pueda colar turnos falsos, para que Closing y el seguimiento reflejen la agenda real.
 
 *Criterios de aceptación:*
@@ -1328,6 +1264,21 @@ Funcionalidad: F-FIN-11 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * ---
 
 Funcionalidad: F-FIN-12 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-FIN-12]",H-FIN-12,Operaciones y equipo,P2,,FIN-STRIPE-MP-DECIDIR FIN-MP-WEBHOOK,
+[H-IA-01] Chatear con el agente sin que se corte,Story,Medium,historia,agente-de-negocio-e-ia,p2,para-confirmar,,,"*Historia:* Como founder, quiero chatear con el agente de negocio y ver la respuesta escribiéndose en vivo aunque la conversación sea larga o mi clave de Claude haya dejado de andar, para no quedarme sin respuesta en medio del trabajo.
+
+*Criterios de aceptación:*
+* Dada una organización con clave propia de Claude que Anthropic dejó de aceptar, cuando mando un mensaje en el agente, entonces recibo la respuesta igual (con la clave de Limitless) y la clave queda marcada como rechazada en Ajustes.
+* Si el problema con la clave aparece cuando la respuesta ya empezó a escribirse, la respuesta no se duplica ni se vuelve a empezar.
+* Dada una conversación muy larga, cuando mando un mensaje nuevo y falla el paso de resumir lo anterior, igual recibo la respuesta (tomando los últimos mensajes) en lugar de un error.
+* Cuando termino el primer intercambio de una conversación nueva, la conversación queda con su título automático en el historial.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [AGENTE-COMPACTION-FRAGIL] (nuevo) Si falla la compaction, falla el mensaje (P2)
+
+*Para confirmar:*
+* Martín: la fila también nombra el ahorro de costo por reutilizar contexto (AGENTE-CACHE-INEFECTIVO) y la protección contra textos maliciosos (AUDITORIA-ABIERTOS §3.6); los dejé fuera porque no cambian lo que ve el usuario en el chat (el segundo está en H-IA-13 y H-IA-10).
+
+Funcionalidad: F-IA-01 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-01]",H-IA-01,Agente de negocio e IA,P2,,AGENTE-COMPACTION-FRAGIL,
 [H-IA-09] Ver y borrar un Canvas guardado en la base de conocimiento,Story,Medium,historia,agente-de-negocio-e-ia,p2,,,,"*Historia:* Como founder, quiero que un Canvas que guardo en la base de conocimiento aparezca ahí como cualquier otro documento, para poder verlo, controlarlo y borrarlo si ya no quiero que el agente lo use.
 
 *Criterios de aceptación:*
@@ -1352,6 +1303,20 @@ Funcionalidad: F-IA-09 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/
 * Agustín: decisión: construir el botón ""Sincronizar"" o sacar la promesa y dejar sólo la importación única.
 
 Funcionalidad: F-IA-15 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-15]",H-IA-15,Agente de negocio e IA,P2,,KB-GOOGLE-SIN-RESYNC RAG-INGESTA-SIN-REINTENTO,
+[H-IA-27] Ver el costo real de la IA por organización,Story,Medium,historia,agente-de-negocio-e-ia,p2,para-confirmar,,,"*Historia:* Como super admin de Limitless, quiero ver el costo de cada uso de IA por organización con precios correctos y sin usos que falten, para saber cuánto nos cuesta cada cliente.
+
+*Criterios de aceptación:*
+* El costo registrado de cada modelo coincide con el precio publicado por Anthropic.
+* Los usos que hoy no se cuentan (indexado de documentos y resúmenes del cerebro global) aparecen en el registro de costos.
+* El trabajo de plataforma (cerebro global) queda registrado a nombre de Limitless, no de una organización cliente.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [IA-COSTOS-INCOMPLETOS] (nuevo) Costos de IA subestimados (P2)
+
+*Para confirmar:*
+* ---
+
+Funcionalidad: F-IA-27 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-27]",H-IA-27,Agente de negocio e IA,P2,,IA-COSTOS-INCOMPLETOS,
 [H-MKT-02] Ver mis historias de Instagram como historias,Story,Medium,historia,marketing,p2,,,,"*Historia:* Como founder, quiero que mis historias de Instagram de las últimas 24 horas aparezcan en la biblioteca como historias (y no como reels), para medirlas aparte del resto de mi contenido.
 
 *Criterios de aceptación:*
