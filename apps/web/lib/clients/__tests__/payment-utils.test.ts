@@ -73,6 +73,14 @@ describe("getPaidAmountFromClosePayload", () => {
     ).toBe(1000);
   });
 
+  it("cuotas con una primera cuota manual en 0: cae al promedio, no registra un pago de 0", () => {
+    expect(
+      getPaidAmountFromClosePayload(
+        payload({ paymentType: "installments", installmentAmount: 250, customInstallmentAmounts: [0, 500] })
+      )
+    ).toBe(250);
+  });
+
   it("hoy: un payload incompleto devuelve 0 en vez de marcar que falta el monto", () => {
     expect(getPaidAmountFromClosePayload(payload({ paymentType: "upfront" }))).toBe(0);
     expect(getPaidAmountFromClosePayload(payload({ paymentType: "installments" }))).toBe(0);
@@ -117,8 +125,9 @@ describe("getPaymentDateFromClosePayload", () => {
 });
 
 describe("fechaDeHoyLocal", () => {
-  it("⭐ usa el día local, no el de UTC (un pago de noche no queda con fecha de mañana)", () => {
-    // 1-oct a las 22:00 en la hora local de la máquina.
+  it("arma la fecha con el día local de la máquina", () => {
+    // Este caso pasa en cualquier zona horaria; el que prueba el bug de UTC es
+    // el de Argentina, más abajo.
     expect(fechaDeHoyLocal(new Date(2026, 9, 1, 22, 0))).toBe("2026-10-01");
     expect(fechaDeHoyLocal(new Date(2026, 9, 1, 23, 59))).toBe("2026-10-01");
   });
@@ -130,7 +139,10 @@ describe("fechaDeHoyLocal", () => {
       // 2-oct 01:00 UTC = 1-oct 22:00 en Buenos Aires.
       expect(fechaDeHoyLocal(new Date("2026-10-02T01:00:00Z"))).toBe("2026-10-01");
     } finally {
-      process.env.TZ = tzAnterior;
+      // Asignar `undefined` dejaría el texto "undefined" (en la práctica, UTC)
+      // para el resto del archivo: si no había TZ, se borra.
+      if (tzAnterior === undefined) delete process.env.TZ;
+      else process.env.TZ = tzAnterior;
     }
   });
 

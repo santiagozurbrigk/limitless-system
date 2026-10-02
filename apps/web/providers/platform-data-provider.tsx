@@ -43,6 +43,7 @@ import {
   getPaidAmountFromClosePayload,
   getPaymentDateFromClosePayload,
   installmentNumberForClosePayload,
+  fechaDeHoyLocal,
 } from "@/lib/clients/payment-utils";
 import { mockClosingCalls } from "@/mocks/closing";
 import { mockClients } from "@/mocks/clients";
@@ -142,7 +143,7 @@ function buildClientFromPayment(
           const paidAt =
             i === 0
               ? (payment.firstInstallmentDate ??
-                new Date().toISOString().slice(0, 10))
+                fechaDeHoyLocal())
               : undefined;
           // Monto: usa el override manual si está disponible, si no el uniforme
           const amount =
@@ -173,7 +174,7 @@ function buildClientFromPayment(
     // ⭐ El mail viaja del turno al cliente. Sin esto, el hilo entre el lead y
     // el cliente en que se convirtió se corta justo en el momento del cierre.
     email: leadEmail ?? null,
-    joinDate: new Date().toISOString().slice(0, 10),
+    joinDate: fechaDeHoyLocal(),
     paymentType: payment.paymentType,
     platform: "other",
     totalAmount: revenue,
@@ -202,7 +203,7 @@ function buildClientFromPayment(
           {
             id: `fc-${callId}`,
             title: `Llamada de cierre — ${payment.clientName}`,
-            date: new Date().toISOString().slice(0, 10),
+            date: fechaDeHoyLocal(),
             duration: "—",
             url: payment.fathomUrl,
           },

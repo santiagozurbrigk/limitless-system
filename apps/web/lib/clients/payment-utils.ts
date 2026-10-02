@@ -4,6 +4,10 @@ import type { ClosePaymentPayload } from "@/types/closing";
  * La fecha de hoy (YYYY-MM-DD) en la zona horaria de quien registra el pago.
  * `toISOString()` da la de UTC: de noche en Argentina ya es el día siguiente
  * y el pago quedaba registrado con fecha de mañana (SCRUM-104).
+ *
+ * Sólo tiene sentido en el navegador: en el servidor (Vercel, UTC) daría la
+ * fecha de UTC. Si una server action necesita "hoy", que lo reciba armado
+ * desde el cliente.
  */
 export function fechaDeHoyLocal(ahora: Date = new Date()): string {
   const y = ahora.getFullYear();
@@ -18,7 +22,9 @@ export function getPaidAmountFromClosePayload(payment: ClosePaymentPayload): num
   if (payment.paymentType === "installments") {
     // Con montos manuales por cuota, lo pagado al cerrar es la primera cuota;
     // `installmentAmount` es el promedio, que puede no coincidir con ninguna.
-    return payment.customInstallmentAmounts?.[0] ?? payment.installmentAmount ?? 0;
+    const primeraCuota = payment.customInstallmentAmounts?.[0];
+    if (primeraCuota != null && primeraCuota > 0) return primeraCuota;
+    return payment.installmentAmount ?? 0;
   }
   return payment.upfrontAmount ?? 0;
 }
