@@ -49,19 +49,24 @@ export async function computeDepartmentStatuses(
   organizationId: string,
   options: {
     sinceDays?: number;
+    /** Rango fijo (YYYY-MM-DD) de `week_start`. Si viene, reemplaza a `sinceDays`. */
+    desde?: string;
+    hasta?: string;
     frequentObjections?: FrequentObjectionSummary[];
   } = {}
 ): Promise<ExecutiveReport["departments"]> {
   const sinceDays = options.sinceDays ?? 7;
-  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  const since =
+    options.desde ??
+    new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const { data } = await admin
+  let query = admin
     .from("weekly_inputs")
     .select("department, content, rating")
     .eq("organization_id", organizationId)
     .gte("week_start", since);
+  if (options.hasta) query = query.lte("week_start", options.hasta);
+  const { data } = await query;
 
   const byDept = new Map<string, { ratings: number[]; hasContent: boolean }>();
   for (const row of data ?? []) {

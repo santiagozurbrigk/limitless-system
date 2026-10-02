@@ -74,24 +74,32 @@ export async function getLatestReportsByCadenceAction(): Promise<
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
-  // Se traen los últimos de la org y se toma el primero de cada cadencia. Con
-  // el índice (organization_id, period, period_start DESC) es una sola pasada.
-  const { data, error } = await supabase
-    .from("executive_reports")
-    .select(SELECT)
-    .eq("organization_id", organizationId)
-    .order("period_start", { ascending: false })
-    .limit(60);
+  // El último de cada cadencia, con una consulta por cadencia (usa el índice
+  // organization_id, period, period_start DESC). Antes se traían los últimos
+  // 60 de cualquier cadencia: el mensual guarda el día 1 del mes que reporta
+  // y, hacia fin de mes, los diarios lo dejaban fuera de esos 60 (SCRUM-67).
+  const periodos = Object.keys(empty) as ReportPeriod[];
+  const resultados = await Promise.all(
+    periodos.map((period) =>
+      supabase
+        .from("executive_reports")
+        .select(SELECT)
+        .eq("organization_id", organizationId)
+        .eq("period", period)
+        .order("period_start", { ascending: false })
+        .order("generated_at", { ascending: false })
+        .limit(1)
+    )
+  );
 
-  if (error) {
-    console.error("[getLatestReportsByCadence]", error.message);
-    return empty;
-  }
-
-  for (const row of data ?? []) {
-    const report = mapRow(row);
-    if (empty[report.period] === null) empty[report.period] = report;
-  }
+  resultados.forEach(({ data, error }, i) => {
+    if (error) {
+      console.error("[getLatestReportsByCadence]", periodos[i], error.message);
+      return;
+    }
+    const row = data?.[0];
+    if (row) empty[periodos[i]!] = mapRow(row);
+  });
 
   return empty;
 }

@@ -123,8 +123,12 @@ export async function generateMonthlyExecutiveReport(
   const orgContextText = buildOrgContextText(orgContext);
   const weeklyText = formatWeeklyReportsForPrompt(weeklies);
 
+  // El estado de cada área sale de las cargas semanales del mes reportado, no
+  // de los últimos días: así da lo mismo si el cron corre el 1 o se dispara a
+  // mano más tarde (SCRUM-67).
   const departments = await computeDepartmentStatuses(admin, organizationId, {
-    sinceDays: 35,
+    desde: start,
+    hasta: end,
   });
 
   const system = `Sos el COO de IA de "${orgContext.orgName}". Redactás el reporte ejecutivo MENSUAL para el founder, analizando la EVOLUCIÓN del negocio a lo largo del mes.

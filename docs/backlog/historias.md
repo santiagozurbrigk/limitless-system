@@ -918,7 +918,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Para confirmar:** —
 
 ### [H-IA-21] Recibir el reporte mensual del mes que cerró
-- **Funcionalidad:** F-IA-21 · No funciona
+- **Funcionalidad:** F-IA-21 · Con fallas
 - **Historia:** Como founder, quiero recibir el día 1 un reporte ejecutivo del mes que acaba de terminar, para ver cómo fue el mes completo.
 - **Criterios de aceptación:**
   - Dado el día 1 de un mes, cuando se genera el reporte mensual, entonces está titulado con el mes anterior y resume los reportes semanales de ese mes.
