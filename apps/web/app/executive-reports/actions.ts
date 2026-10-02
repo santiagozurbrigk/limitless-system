@@ -92,11 +92,16 @@ export async function getLatestReportsByCadenceAction(): Promise<
     )
   );
 
-  resultados.forEach(({ data, error }, i) => {
-    if (error) {
-      console.error("[getLatestReportsByCadence]", periodos[i], error.message);
-      return;
-    }
+  // Si falla alguna consulta no se muestra a medias: una cadencia en `null`
+  // diría "todavía no se generó" aunque el reporte exista.
+  const fallida = resultados.findIndex(({ error }) => error);
+  if (fallida >= 0) {
+    const mensaje = resultados[fallida]!.error!.message;
+    console.error("[getLatestReportsByCadence]", periodos[fallida], mensaje);
+    throw new Error("No se pudieron cargar los reportes.");
+  }
+
+  resultados.forEach(({ data }, i) => {
     const row = data?.[0];
     if (row) empty[periodos[i]!] = mapRow(row);
   });

@@ -8,7 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Fila = Record<string, unknown>;
-const estado = vi.hoisted(() => ({ filas: [] as Fila[] }));
+const estado = vi.hoisted(() => ({ filas: [] as Fila[], fallaEn: null as string | null }));
 
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
 vi.mock("@/lib/auth/bootstrap", () => ({ requireOrganizationId: async () => "org-a" }));
@@ -19,11 +19,17 @@ vi.mock("@/lib/supabase/server", () => ({
       let limite = Infinity;
       const q = {
         select: () => q,
-        eq: (c: string, v: unknown) => (filtros.push((f) => f[c] === v), q),
+        eq: (c: string, v: unknown) => {
+          if (c === "period") (q as { periodo?: unknown }).periodo = v;
+          filtros.push((f) => f[c] === v);
+          return q;
+        },
         order: () => q,
         limit: (n: number) => ((limite = n), q),
         then: (ok: (r: unknown) => unknown) =>
-          Promise.resolve({
+          (q as { periodo?: unknown }).periodo === estado.fallaEn
+            ? Promise.resolve({ data: null, error: { message: "timeout" } }).then(ok)
+            : Promise.resolve({
             data: estado.filas
               .filter((f) => filtros.every((fn) => fn(f)))
               .sort((a, b) => String(b.period_start).localeCompare(String(a.period_start)))
@@ -58,6 +64,7 @@ function reporte(period: string, periodStart: string): Fila {
 describe("getLatestReportsByCadenceAction", () => {
   beforeEach(() => {
     estado.filas = [];
+    estado.fallaEn = null;
   });
 
   it("⭐ el mensual sigue apareciendo aunque haya más de 60 diarios más nuevos", async () => {
@@ -87,5 +94,12 @@ describe("getLatestReportsByCadenceAction", () => {
     estado.filas.push({ ...reporte("monthly", "2026-09-01"), organization_id: "org-b" });
     const r = await getLatestReportsByCadenceAction();
     expect(r.monthly).toBeNull();
+  });
+
+  it("si falla la consulta de una cadencia, no muestra el panel a medias", async () => {
+    estado.filas.push(reporte("weekly", "2026-10-19"), reporte("daily", "2026-10-25"));
+    estado.fallaEn = "weekly";
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(getLatestReportsByCadenceAction()).rejects.toThrow(/No se pudieron cargar/);
   });
 });
