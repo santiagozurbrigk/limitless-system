@@ -233,12 +233,11 @@ Mapa general de integraciones: `docs/integraciones/README.md` y `lib/integration
 ## Limitaciones conocidas y deuda
 
 - Medidas org-wide presentadas como si fueran del embudo `[EMBUDOS-MEDIDAS-POR-EMBUDO]`.
-- `otcNote` de GHL ("no consume /opportunities") es falso hoy y se ve en `/funnels` y en
-  "configurar". El de checkout ("cubierto por Stripe y Mercado Pago") también es falso —los
-  datos de Stripe/Mercado Pago **no** alimentan los embudos— pero no se muestra: su
-  `otcStatus` es `equivalent`, así que Whop/Commas no aparece en la lista de pendientes. El de
-  Meta Ads ("live fetch, no persiste") quedó viejo desde `ad_metrics_daily` (tampoco se
-  muestra, es `available`) `[EMBUDOS-INSTRUMENTATION-DESACTUALIZADA]`.
+- (Resuelto el 2026-10-02, SCRUM-60) Las notas de herramientas de `lib/funnels/instrumentation.ts`
+  ya dicen lo que existe: GHL trae pipelines y etapas y arma el historial con el webhook (sigue
+  `partial`, porque hay que asociar etapas y no hay historial previo); checkout está
+  `available` vía Whop y Fanbasis y aclara que Stripe y Mercado Pago no alimentan los embudos;
+  Meta Ads persiste en `ad_metrics_daily`; el pulso diario existe pero no lee embudos.
 - (Resuelto el 2026-09-30, SCRUM-6) Los webhooks de Whop, Commas y GHL responden 500 si el
   evento no quedó guardado y procesado, para que el proveedor reintente; un reintento de un
   evento en `error` o trabado en `pending` se reprocesa (`lib/webhooks/reclamar.ts`). Commas no
@@ -248,9 +247,8 @@ Mapa general de integraciones: `docs/integraciones/README.md` y `lib/integration
   alguien aprieta "sincronizar" `[EMBUDOS-SYNC-PROGRAMADO]`.
 - Salud (bandas) sin UI `[EMBUDOS-SALUD]`; snapshots sin construir `[EMBUDOS-SNAPSHOTS]`
   (el pulso diario sí existe como reporte ejecutivo de la org —cron `executive-report-daily`,
-  `lib/executive-reports/generate-daily.ts`— pero no lee los embudos, y
-  `REPORTING_CADENCE.daily` en `instrumentation.ts` sigue diciendo "Falta el cron de pulso
-  diario"); `/funnels/comparar` sin construir `[EMBUDOS-COMPARAR]`.
+  `lib/executive-reports/generate-daily.ts`— pero no lee los embudos; `REPORTING_CADENCE.daily`
+  lo marca `partial`); `/funnels/comparar` sin construir `[EMBUDOS-COMPARAR]`.
 - Sin backfill del estado de oportunidades de GHL `[EMBUDOS-GHL-BACKFILL]`; webhooks sólo
   por Workflow hasta que exista la app del Marketplace `[FEAT-GHL-OAUTH]`.
 - `ghl_opportunities_won` cuenta cualquier transición con `status = 'won'` en el período,

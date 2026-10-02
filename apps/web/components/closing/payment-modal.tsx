@@ -20,6 +20,7 @@ import {
 } from "@/components/sales/payment-receipt-dropzone";
 import { useFinanceData } from "@/providers";
 import type { ClosePaymentPayload } from "@/types/closing";
+import { fechaDeHoyLocal } from "@/lib/clients/payment-utils";
 import type { Plan } from "@/types/plans";
 import Link from "next/link";
 import { paths } from "@/routes";
@@ -228,7 +229,7 @@ export function PaymentModal({
         paymentDate:
           paymentType === "installments" && firstDate
             ? firstDate
-            : new Date().toISOString().slice(0, 10),
+            : fechaDeHoyLocal(),
         proof: {
           storagePath: uploaded.storagePath,
           mimeType: uploaded.mimeType,

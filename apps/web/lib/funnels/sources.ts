@@ -326,10 +326,12 @@ export function sourcesForStage(stageId: SpineStageId): FunnelSource[] {
  * conteos del DM al pipeline del CRM— pero necesitan que el usuario elija a qué
  * etapa corresponde cada paso, así que no se pueden poner por defecto.
  *
- * `dm.trigger` queda deliberadamente SIN binding: Limitless no tiene hoy una fuente de
- * disparadores (comentarios / historias / anuncios que inician una conversación).
- * Ese hueco es correcto y se muestra como problema de instrumentación, no como
- * rotura de negocio.
+ * `dm.trigger` queda deliberadamente SIN binding por defecto. Existe una fuente
+ * para los comentarios (`zernio_comment_triggers`), pero necesita Zernio
+ * conectado, y las historias y los anuncios que inician una conversación no
+ * tienen fuente (Meta sólo expone las historias vigentes de las últimas 24 h).
+ * El usuario la puede elegir; sin binding, el hueco se muestra como problema de
+ * instrumentación, no como rotura de negocio.
  */
 export const DEFAULT_DM_BINDINGS: Record<string, FunnelSourceId> = {
   "dm.conversation": "conversations_opened",

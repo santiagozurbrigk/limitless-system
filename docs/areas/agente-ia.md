@@ -234,7 +234,7 @@ Validación al guardar (`saveClaudeApiKeyAction` en `app/settings/actions.ts`): 
 
 ## Limitaciones conocidas y deuda
 
-- Reporte mensual: calcula el mes **en curso** el día 1, así que casi nunca encuentra semanales y se saltea `[REPORTES-MENSUAL-MES-EQUIVOCADO]`.
+- (Resuelto el 2026-10-02, SCRUM-67) Reporte mensual: el cron del día 1 reporta el mes que terminó (`mesAReportar`), con sus semanales; antes calculaba el mes en curso y casi siempre se salteaba.
 - El semanal se etiqueta con la semana que empieza el lunes del cron, no con la que terminó `[REPORTES-SEMANA-ETIQUETA]`.
 - Inteligencia y reportes leen `conversations` y `content_assets` (legacy, 0 y 6 filas en prod al 2026-09-23) en vez de `sales_leads` y `content_pieces` `[INTELIGENCIA-FUENTES-LEGACY]`.
 - Ventana fija de 14 días para el pulso diario `[REPORTES-VENTANA-FIJA]`.

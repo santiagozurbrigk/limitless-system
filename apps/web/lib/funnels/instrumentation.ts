@@ -30,7 +30,7 @@ export const INSTRUMENTATION_TOOLS = [
     label: "Meta Ads",
     owns: "Spend, CTR, CPC, cost/lead",
     otcStatus: "available",
-    otcNote: "Vía Zernio (getMarketingAdsAction). Live fetch, no persiste.",
+    otcNote: "Vía Zernio. El cron capture-ad-metrics guarda las métricas de cada día en ad_metrics_daily.",
   },
   {
     id: "hyros",
@@ -77,15 +77,16 @@ export const INSTRUMENTATION_TOOLS = [
     owns: "Stage counts, set/close, follow-up",
     otcStatus: "partial",
     otcNote:
-      "La integración GHL de Limitless consume /calendars y /contacts, pero NO /opportunities ni /pipelines. " +
-      "Los conteos por etapa y el set/close que el documento le asigna todavía no se sincronizan: es lo que necesita el embudo DM.",
+      "Limitless trae los pipelines y las etapas de GHL y arma el historial de cambios de etapa con el webhook de oportunidades. " +
+      "Para que un paso del embudo cuente, hay que asociarlo a una etapa en la configuración del embudo, y el historial empieza a contar desde que el webhook está conectado: lo anterior no se recupera.",
   },
   {
     id: "checkout",
     label: "Whop / Fanbasis",
     owns: "AOV, cash collected, refunds",
-    otcStatus: "equivalent",
-    otcNote: "Cubierto por Stripe y Mercado Pago, ya integrados. No bloquea.",
+    otcStatus: "available",
+    otcNote:
+      "Whop y Fanbasis (Commas) están integrados por webhook. Stripe y Mercado Pago no alimentan los embudos. Falta verificar el mapeo con eventos reales.",
   },
 ] as const satisfies readonly {
   id: string;
@@ -132,8 +133,8 @@ export const REPORTING_CADENCE = [
     title: "Pulse",
     watches: "spend, leads, CPL, bookings, roturas obvias",
     note: "Lectura de 5 minutos. No se toman decisiones con un solo día de datos.",
-    otcStatus: "missing",
-    otcNote: "Falta el cron de pulso diario.",
+    otcStatus: "partial",
+    otcNote: "Existe el pulso diario de la organización (cron executive-report-daily), pero todavía no lee los números de los embudos.",
   },
   {
     id: "weekly",

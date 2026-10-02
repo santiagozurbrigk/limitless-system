@@ -76,10 +76,10 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 14 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 7 | 15 | 7 |
-| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 19 | 7 |
-| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 22 | 42 | 13 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
+| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 7 | 19 | 7 |
+| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 20 | 42 | 13 |
 
 ---
 
@@ -1383,16 +1383,6 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Criterio de aceptación:** Agustín decidió cómo se asignan cobros y gasto a cada embudo (producto de Whop/Commas, campaña o cuenta de Meta, cuenta de Hyros) y la decisión quedó registrada en docs/areas/embudos.md; mientras no esté implementado, el detalle del embudo rotula el gasto, la facturación y los KPIs de dinero como 'de toda la organización'; una vez implementado, dos embudos de la misma org con filtros distintos muestran gasto y revenue distintos
 - **Dónde:** `apps/web/lib/funnels/resolve.ts`, `apps/web/app/(platform)/funnels/[funnelId]/page.tsx`, `components/funnels/funnel-kpi-panel.tsx`.
 
-#### [EMBUDOS-INSTRUMENTATION-DESACTUALIZADA] Texto visible en /funnels que dice cosas falsas
-- **Tipo:** bug
-- **Severidad:** Baja
-- **Estado verificado:** `INSTRUMENTATION_TOOLS` en `lib/funnels/instrumentation.ts` se muestra en `/funnels` y en `/funnels/[funnelId]/configurar` (`blockingTools()` → `otcNote`). Hay otras dos notas viejas que no se ven en pantalla: `meta_ads` dice "Live fetch, no persiste" (hoy se persiste en `ad_metrics_daily`) y `REPORTING_CADENCE.daily` dice `missing` / "Falta el cron de pulso diario" (existe `executive-report-daily`). La nota de `crm_pipeline` dice que GHL "NO consume /opportunities ni /pipelines" (existen `lib/ghl/sync-pipelines.ts` y el webhook). La de `checkout` dice "Cubierto por Stripe y Mercado Pago" con estado `equivalent`, pero el resolver sólo lee Whop/Commas (`payment_orders`): los datos de Stripe/MP no llegan a ningún embudo. Hoy en pantalla se ve sólo la nota de GHL (`partial`): `blockingTools()` filtra `missing`/`partial`, así que la de checkout (`equivalent`) está mal pero no se muestra (revisado 2026-09-23). También el comentario de `DEFAULT_DM_BINDINGS` dice que no hay fuente de disparadores (existe `zernio_comment_triggers`).
-- **Riesgo:** Si un usuario lee la nota de GHL en /funnels o en configurar, entonces cree que los pipelines de GHL no están integrados y puede no conectarlos. Las otras notas falsas (checkout, meta_ads, pulso diario) no se muestran.
-- **Impacto:** Texto engañoso en una sola nota visible; no cambia ningún número ni dato.
-- **Qué hay que hacer:** corregir `otcStatus`/`otcNote` de GHL y checkout (checkout = `available` vía Whop/Commas, aclarando que Stripe/MP no alimentan embudos), la nota de `meta_ads` y `REPORTING_CADENCE.daily` (el pulso diario de la org existe, aunque no lee embudos), actualizar el comentario, y ajustar `instrumentation.test.ts` si fija esos estados.
-- **Criterio de aceptación:** La lista de herramientas de /funnels ya no dice que GHL 'no consume /opportunities ni /pipelines'; checkout figura como disponible vía Whop/Commas y aclara que Stripe y Mercado Pago no alimentan los embudos; instrumentation.test.ts refleja esos estados y los tests pasan
-- **Dónde:** `apps/web/lib/funnels/instrumentation.ts`, `apps/web/lib/funnels/sources.ts`.
-
 #### [EMBUDOS-CUENTAS-REALES] Conectar las cuentas y correr la verificación 🔴
 - **Tipo:** verificación manual
 - **Severidad:** Alta
@@ -1609,16 +1599,6 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 - **Qué hay que hacer:** filtrar `AGENT_CHAT_TOOLS` según los módulos del rol antes de mandarlas a Claude (y rechazar en el handler); limitar `getRecentOrgMessages` al usuario actual; exigir founder en `saveClaudeApiKeyAction`/`removeClaudeApiKeyAction`.
 - **Criterio de aceptación:** Un miembro con permiso 'agent' y sin 'finance' ni 'clients' pregunta en /agent por facturación y por clientes: el agente no devuelve esos datos (las tools de esos módulos no se le ofrecen y el handler las rechaza); el mismo miembro no ve en las respuestas fragmentos de conversaciones de otros usuarios de la org; un no-founder que invoca saveClaudeApiKeyAction o removeClaudeApiKeyAction recibe un error y la clave no cambia
 - **Dónde:** `apps/web/lib/agent/stream-agent-message.ts`, `lib/agent/agent-tool-handler.ts`, `app/settings/actions.ts`.
-
-#### [REPORTES-MENSUAL-MES-EQUIVOCADO] (nuevo) El reporte mensual mira el mes que empieza
-- **Tipo:** bug
-- **Severidad:** Media
-- **Estado verificado:** el cron corre `0 13 1 * *`; `monthBounds()` en `lib/executive-reports/generate-monthly.ts:30` usa `new Date()` → mes en curso (el que empieza ese día). Busca semanales con `period_start` en ese mes: el día 1 casi nunca hay ninguno, así que se saltea ("sin reportes semanales en …"). Si hay uno (día 1 lunes), el reporte se titula con el mes nuevo.
-- **Riesgo:** Si el cron corre el día 1 (siempre), entonces busca semanales del mes que empieza, casi nunca encuentra y se saltea en silencio; cuando el 1 cae lunes, genera un reporte titulado con el mes nuevo basado en una sola semana.
-- **Impacto:** Todas las orgs con reportes ejecutivos se quedan sin reporte mensual (o con uno engañoso unas pocas veces al año). Los semanales siguen existiendo y son el workaround; no se pierden datos.
-- **Qué hay que hacer:** usar el mes anterior (`monthBounds(fecha del último día del mes previo)`) y agregar un test. Verificar en prod cuántas filas `period = 'monthly'` hay.
-- **Criterio de aceptación:** Con el cron corriendo el día 1 de un mes, el reporte mensual toma el mes anterior (period_start/period_end y título del mes cerrado) y agrupa los semanales de ese mes; hay un test unitario de monthBounds con ese caso; se anotó cuántas filas period='monthly' había en prod
-- **Dónde:** `apps/web/lib/executive-reports/generate-monthly.ts`.
 
 #### [INTELIGENCIA-FUENTES-LEGACY] (nuevo) Inteligencia y reportes leen tablas legacy
 - **Tipo:** bug
@@ -1849,6 +1829,16 @@ Doc del área: [`docs/areas/operaciones.md`](./docs/areas/operaciones.md)
 ### Operaciones, Finanzas y Producto · P0
 
 ### Operaciones, Finanzas y Producto · P1
+
+#### [FACTURACION-CLIENTES-SIN-PAGOS] Con el primer pago registrado, la facturación deja de contar a los clientes sin pagos
+- **Tipo:** decisión de negocio
+- **Severidad:** Alta
+- **Estado verificado:** `collectRevenueEvents` (`apps/web/lib/metrics/revenue-events.ts:143-151`) usa sólo `client_payments` en cuanto la organización tiene al menos un pago registrado, y si no tiene ninguno arma los ingresos desde los clientes (pago único en la fecha de alta, cuotas pagadas en su fecha de cobro). No mezcla las dos fuentes. Los clientes importados (Excel, ClickUp) o cargados antes de `client_payments` no tienen filas de pago. Lo deja escrito el test "hoy: con un solo pago registrado, los clientes sin pagos dejan de contar" de `lib/metrics/__tests__/revenue-events.test.ts` (SCRUM-102). Además, no todas las llamadas pasan los pagos: el número de Finanzas y el MRR del Panel los reciben (`derive-finance-summary.ts:105`, `derive-monthly-series.ts:32`, `components/finance/finance-metrics.tsx:85`), pero el gráfico del MRR del Panel (`lib/metrics/derive-dashboard-data.ts:32,133`), la vista del super admin (`lib/super-admin/org-metrics.ts:32`) y el contexto de la IA (`lib/intelligence/collect-context.ts:297`) siguen contando desde los clientes.
+- **Riesgo:** Si una organización con clientes importados registra su primer pago por la ficha o al cerrar una venta, entonces la facturación de Finanzas y del Panel cae de golpe: sólo cuenta lo registrado como pago.
+- **Impacto:** Revenue, cash collected y lo que de ellos depende, subestimados en las organizaciones que mezclan clientes importados con pagos registrados; y pantallas que se contradicen: después del primer pago, el número del MRR baja pero su gráfico, la vista del super admin y lo que lee la IA no.
+- **Qué hay que hacer:** decidir (Agustín) si la fuente única de facturación es `client_payments`. Si sí, migrar los cobros de los clientes viejos a `client_payments` y avisar; si no, combinar las dos fuentes sin contar dos veces (por cliente: sus pagos si tiene, y si no, lo que dice el cliente).
+- **Criterio de aceptación:** Hay una decisión escrita sobre la fuente de facturación; todas las llamadas (Finanzas, Panel y su gráfico, super admin, IA) usan la misma fuente; una organización con un cliente importado sin pagos y otro con un pago registrado ve en Finanzas la suma de los dos (o, si se decide la fuente única, los cobros del importado ya están en client_payments); el test de revenue-events refleja la regla elegida.
+- **Dónde:** `apps/web/lib/metrics/revenue-events.ts`, `client_payments`.
 
 #### [PERMISOS-SERVER-ACTIONS/ops-fin-prod] Las actions y la RLS de estas áreas no miran el rol [transversal]
 - **Parte de:** `[PERMISOS-SERVER-ACTIONS]` (ítem transversal en Plataforma). Acá, lo específico del área.
@@ -2373,16 +2363,6 @@ Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe su
 - **Criterio de aceptación:** Hay tests de derive-finance-summary.ts y derive-monthly-series.ts que cubren agrupación por mes en hora de Argentina vs UTC, meses vacíos, deriveCloserBreakdown con 0/1 closer y sin closed_by_name, reembolsos y valores null; pnpm test pasa
 - **Dónde:** `apps/web/lib/metrics/`.
 
-#### [T-2] Tests de `revenue-period.ts` y `revenue-events.ts`
-- **Tipo:** tests
-- **Severidad:** Media
-- **Estado verificado:** sin tests.
-- **Riesgo:** Si se cambia el cálculo de período o de eventos de revenue, entonces cuotas que cruzan meses o pagos sin fecha pueden contarse doble o desaparecer sin aviso.
-- **Impacto:** Revenue por período en dashboards de Finanzas; prevención, sin bug confirmado.
-- **Qué hay que hacer:** bordes de período, cuotas entre meses, pago sin fecha.
-- **Criterio de aceptación:** Hay tests de revenue-period.ts y revenue-events.ts que cubren bordes de período, cuotas que cruzan meses y pagos sin fecha; pnpm test pasa
-- **Dónde:** `apps/web/lib/metrics/`.
-
 #### [T-3] Tests de `parse-client-import.ts` y `excel-parser.ts`
 - **Tipo:** tests
 - **Severidad:** Media
@@ -2392,16 +2372,6 @@ Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe su
 - **Qué hay que hacer:** título fusionado, filas vacías, `pickBestSheet`, `sheetName` explícito, montos con punto decimal; workbooks armados en memoria.
 - **Criterio de aceptación:** Hay tests de parse-client-import.ts y excel-parser.ts con workbooks armados en memoria que cubren título fusionado, filas vacías, pickBestSheet, sheetName explícito y montos con punto decimal; pnpm test pasa (el caso de montos con punto decimal pasa recién cuando se cierre AUD-DIN-1)
 - **Dónde:** `apps/web/lib/clients/`, `apps/web/lib/metrics/excel-parser.ts`.
-
-#### [T-4] Tests de `lib/clients/payment-utils.ts`
-- **Tipo:** tests
-- **Severidad:** Media
-- **Estado verificado:** sin tests.
-- **Riesgo:** Si cambia el formato del payload de cierre o la lógica de cuotas, entonces el monto pagado, el número de cuota o la fecha se leen mal sin que un test lo marque.
-- **Impacto:** Pagos de clientes y cuotas mal registrados en la ficha y en Finanzas; prevención.
-- **Qué hay que hacer:** pago único, cuotas, payload incompleto en `getPaidAmountFromClosePayload`, `installmentNumberForClosePayload`, `getPaymentDateFromClosePayload`.
-- **Criterio de aceptación:** Hay tests de lib/clients/payment-utils.ts que cubren pago único, cuotas y payload incompleto en getPaidAmountFromClosePayload, installmentNumberForClosePayload y getPaymentDateFromClosePayload; pnpm test pasa
-- **Dónde:** `apps/web/lib/clients/payment-utils.ts`.
 
 #### [T-5] Tests de `lib/utm/`
 - **Tipo:** tests

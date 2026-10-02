@@ -830,7 +830,7 @@ Marcas: ⚠️ alta probabilidad de falla · 🔒 verifica seguridad · ⭐ veri
 1. Contar filas `period = 'monthly'` y ver su `period_start` y `title`.
 2. Revisar logs del 2026-09-01 13:00 UTC (`sin reportes semanales en …`).
 
-**Resultado esperado (regla):** un mensual por org y mes, del mes **cerrado**. ⚠️ Lo más probable es que no haya ninguno o que esté titulado con el mes nuevo (`[REPORTES-MENSUAL-MES-EQUIVOCADO]`).
+**Resultado esperado (regla):** un mensual por org y mes, del mes **cerrado** (desde SCRUM-67, el cron del día 1 toma el mes anterior). Los mensuales generados antes del 2026-10-02 pueden faltar o estar titulados con el mes nuevo. Para contarlos: `select count(*), min(period_start), max(period_start), count(distinct organization_id) from executive_reports where period = 'monthly';`
 
 ### 7. Reintentos de QStash en inteligencia y tono ⚠️ — `[INTELIGENCIA-SIN-REINTENTO]`
 **Prerrequisitos:** QStash configurado; poder forzar un fallo (p. ej. org con clave sin créditos).

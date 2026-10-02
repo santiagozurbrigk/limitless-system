@@ -59,6 +59,86 @@ al terminar cada bloque de trabajo, aunque sea chico.
 - 14 orgs tienen que reconectar GHL/Zernio o volver a cargar su clave de Claude. Optimiza tu Control tiene que regenerar el secreto del webhook de GHL en sus workflows.
 - Probar Fathom de los miembros cuyas keys se reescribieron (V-INFRA-13).
 - Falta anotar la segunda persona con acceso a la clave nueva (V-INFRA-11).
+### 2026-10-02 — El reporte mensual reporta el mes que terminó (SCRUM-67)
+
+**Rama:** `fix/SCRUM-67-reporte-mensual`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `lib/executive-reports/generate-monthly.ts`
+
+**Qué se hizo:**
+- `mesAReportar()`: el cron mensual (`0 13 1 * *`) toma el mes anterior. Antes calculaba el mes en curso, el que empieza ese día: casi nunca había semanales y se salteaba en silencio, y cuando el 1 caía lunes el reporte salía titulado con el mes nuevo y con una sola semana.
+- `monthBounds()` arma las fechas con el día del calendario y no con `toISOString()`, que en una zona al este de UTC las corría al día anterior.
+- Tests en `lib/executive-reports/__tests__/generate-monthly.test.ts` (1 de octubre, 1 de enero, febrero bisiesto) en tres zonas horarias, comprobadas por mutación.
+- El panel de reportes (`getLatestReportsByCadenceAction`) busca el último de cada cadencia con una consulta por cadencia. Antes traía los últimos 60 de cualquier cadencia y, al guardar el mensual con el día 1 del mes reportado, hacia el día 22 o 23 los diarios lo dejaban afuera y la pestaña "Mensual" mostraba "todavía no se generó". Si falla alguna de las consultas, el panel no se muestra (como antes) en vez de decir "todavía no se generó" de un reporte que existe. Test en `app/executive-reports/__tests__/latest-reports.test.ts`.
+- El estado de cada área del mensual sale de las cargas semanales del mes reportado (`computeDepartmentStatuses` acepta `desde`/`hasta`) y no de los últimos 35 días, así da lo mismo cuándo corra.
+- F-IA-21 pasa de "No funciona" a "Con fallas": el contenido todavía depende de `[INTELIGENCIA-FUENTES-LEGACY]`.
+
+**Por qué / finalidad:** cierra `[REPORTES-MENSUAL-MES-EQUIVOCADO]`. Las organizaciones con reportes ejecutivos se quedaban sin reporte mensual.
+
+**Decisiones de diseño relevantes:** no se regeneran los mensuales pasados; el primero bien hecho sale el 1 de noviembre, con octubre.
+
+**Riesgos / deuda técnica pendiente:** el mensual se puede disparar a mano con `CRON_SECRET` (en Vercel); cada disparo dentro del mes duplica el mismo mes, porque `saveExecutiveReport` hace insert (`[REPORTES-DUPLICADOS]`, ya en el backlog). La verificación en vivo es el 1 de noviembre. En producción, el 2026-10-02 había **0** reportes mensuales (0 organizaciones): el bug hizo que nunca se generara ninguno. No hay datos viejos que corregir.
+
+---
+
+### 2026-10-02 — Tests de los períodos de facturación y de dónde sale cada ingreso (SCRUM-102)
+
+**Rama:** `test/SCRUM-102-revenue-period`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `lib/metrics/revenue-period.ts` y sus tests, tests de `lib/metrics/revenue-events.ts`; `PENDIENTES.md`
+
+**Qué se hizo:**
+- `lib/metrics/__tests__/revenue-period.test.ts`: día, semana de lunes a domingo (también con ancla en domingo y cruzando de mes), mes (febrero, bisiesto, diciembre), personalizado (invertido, sin una fecha, cruzando el cambio de horario), bordes del período, fechas con hora y prorrateo de gastos. Corre en UTC, en hora de Argentina y en Madrid (con cambio de horario), y comprueba que la zona cambió de verdad.
+- Dos arreglos en `revenue-period.ts` que salieron al escribir los tests: el prorrateo de gastos de un rango que cruza de mes suma la parte de cada mes (1-sep al 31-oct daba 61/30 de un mes en vez de 2). En Finanzas, para un rango que cruza de mes, cambian "Gastos" y con ellos "Ganancia neta / Cash collected" y "Margen %"; los períodos de un solo mes dan exactamente lo mismo que antes; y los días del rango se cuentan con el calendario, porque en zonas con cambio de horario un rango de marzo daba 30 días en vez de 31.
+- `lib/metrics/__tests__/revenue-events.test.ts`: cuotas que cruzan meses, cuotas pagadas sin fecha (la primera cuenta en la fecha de alta y las demás no cuentan), adelanto más fee, pagos registrados y su tipo de ingreso.
+- Nuevo ítem `[FACTURACION-CLIENTES-SIN-PAGOS]`: con el primer pago registrado, la facturación deja de contar a los clientes sin pagos. Lo deja escrito un test marcado "hoy"; la regla la decide Agustín.
+
+**Por qué / finalidad:** cierra `[T-2]`. El cálculo de períodos y de ingresos no tenía tests.
+
+**Decisiones de diseño relevantes:** los tests fijan el comportamiento actual; el único caso discutible que no se cambia (clientes sin pagos) va marcado "hoy". Se probó por mutación que detectan los cambios (bordes exclusivos, semana que empieza en domingo, cuota sin fecha contada hoy, fechas en UTC, días por milisegundos y el prorrateo anterior).
+
+**Riesgos / deuda técnica pendiente:** `[FACTURACION-CLIENTES-SIN-PAGOS]` queda abierto hasta la decisión.
+
+---
+
+### 2026-10-02 — Los textos de herramientas de /funnels dicen lo que hoy existe (SCRUM-60)
+
+**Rama:** `fix/SCRUM-60-textos-embudos`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `lib/funnels/instrumentation.ts`, `lib/funnels/sources.ts`
+
+**Qué se hizo:**
+- GHL: la nota visible en /funnels y en configurar ya no dice que no se consumen pipelines ni oportunidades. Ahora explica que se traen pipelines y etapas, que el historial sale del webhook de oportunidades, que cada paso se asocia a una etapa y que lo anterior al webhook no se recupera. Sigue `partial`.
+- Checkout pasa de `equivalent` a `available` vía Whop y Fanbasis (Commas), y aclara que Stripe y Mercado Pago no alimentan los embudos.
+- Meta Ads: las métricas diarias se guardan en `ad_metrics_daily` (antes decía "no persiste").
+- Pulso diario: pasa de `missing` a `partial`; existe el cron `executive-report-daily`, pero no lee los embudos.
+- Comentario de `DEFAULT_DM_BINDINGS`: existe la fuente `zernio_comment_triggers`.
+- `instrumentation.test.ts` fija los estados nuevos y que la nota de GHL no vuelva a decir lo anterior.
+
+**Por qué / finalidad:** cierra `[EMBUDOS-INSTRUMENTATION-DESACTUALIZADA]`. Quien leía la nota de GHL creía que los pipelines no estaban integrados.
+
+**Decisiones de diseño relevantes:** GHL se deja en `partial` y no en `available`, porque falta asociar etapas a mano y no hay historial previo al webhook; además así sigue mostrándose el aviso en /funnels.
+
+**Riesgos / deuda técnica pendiente:** ninguno. No cambia ningún número.
+
+---
+
+### 2026-10-02 — Tests de los cálculos de pagos, y dos arreglos que salieron al escribirlos (SCRUM-104)
+
+**Rama:** `test/SCRUM-104-payment-utils`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `lib/clients/payment-utils.ts`, `components/closing/payment-modal.tsx`, `components/sales/client-payments-section.tsx`, `providers/platform-data-provider.tsx`
+
+**Qué se hizo:**
+- Tests de `getPaidAmountFromClosePayload`, `getPaymentDateFromClosePayload` e `installmentNumberForClosePayload`: pago único, cuotas, adelanto más fee y payload incompleto (`lib/clients/__tests__/payment-utils.test.ts`).
+- La fecha de "hoy" de un pago pasa a ser la del día local (`fechaDeHoyLocal`) en vez de la de UTC. Antes, un pago registrado después de las 21:00 en Argentina quedaba con fecha del día siguiente. Aplica al cierre de venta (pago, fecha de alta del cliente y fecha de la llamada) y a los diálogos de registrar una cuota o un pago extra de la ficha.
+- Con montos manuales por cuota, el respaldo del monto pagado usa la primera cuota en vez del promedio, y si la primera es 0 cae al promedio en vez de registrar un pago de 0. La pantalla ya mandaba la primera cuota, así que no cambia nada visible.
+
+**Por qué / finalidad:** cierra `[T-4]`. Los cálculos de pagos no tenían tests y la fecha del pago se corría de día.
+
+**Decisiones de diseño relevantes:** el respaldo que devuelve 0 con un payload incompleto queda como está y documentado en el test: la pantalla no deja cerrar con un monto de 0 o menos. `fechaDeHoyLocal` es para el navegador; en el servidor daría la fecha de UTC.
+
+**Riesgos / deuda técnica pendiente:** ninguno.
 
 ---
 
