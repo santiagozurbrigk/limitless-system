@@ -479,11 +479,12 @@ hoy se ven sin análisis: eso es `[FATHOM-DEEP-ANALISIS-ALCANCE]`, no esta panta
 
 **Prerrequisitos:** cuenta real de Fathom para dos miembros; `ENCRYPTION_MASTER_KEY` configurada.
 
+0. ⚠️ Estado al 2026-10-02: las 8 filas de Fathom en `team_member_integrations` vienen de la conexión **de la organización** (`connectFathomAction` registra a quien conectó como miembro), que no crea webhook: ninguna tiene `webhook_id`. Para probar el webhook, el miembro tiene que conectar (o volver a conectar) su key desde la sección de cuentas por miembro de **Integraciones → Fathom** (`connectMemberFathomAction`), que es la que lo crea.
 1. Un miembro conecta su key en **Integraciones → Fathom**: se valida antes de guardar y figura conectado.
 2. ⭐ Se le muestra el mail deducido de su cuenta para confirmar; no se asume.
 3. 🔒 En un entorno sin `ENCRYPTION_MASTER_KEY`: falla con motivo y no guarda nada.
 4. En Fathom → Settings → Webhooks aparece el webhook creado por Limitless.
-5. ⚠️ Grabar una llamada: llega sola (`/api/integrations/fathom/webhook/[token]`). Si no llega, mirar la firma (HMAC-SHA256 asumida; headers `x-fathom-signature`/`fathom-signature`/`x-signature`).
+5. ⚠️ Grabar una llamada (2 minutos alcanzan): llega sola (`/api/integrations/fathom/webhook/[token]`). Mirar `fathom_webhook_events`: tiene que haber una fila con `processed_at` y `error` vacío, y en `fathom_calls` la llamada con `ingest_source = 'webhook'`, título e invitados. Si el evento tiene `error`, el cuerpo real de Fathom no tiene la forma de `/meetings`: anotar `payload` y abrir un ítem. Si no hay evento y el miembro figura con "firma inválida", la firma no coincide con la de la doc (`webhook-id`/`webhook-timestamp`/`webhook-signature`).
 6. ⭐ Dos miembros en la misma llamada: una sola fila en `fathom_calls`.
 7. `fathom_calls.user_id` dice quién grabó.
 8. 🔒 ⭐ Una llamada sin vincular a cliente la ve sólo quien grabó; al vincularla a cliente la ve toda la org.

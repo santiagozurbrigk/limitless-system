@@ -82,8 +82,11 @@ improvisadas, que son las que no tienen tipo asignado.
 - **Que las orgs tengan tipos de reunión configurados.** Si nadie los usa en
   Fathom, `meeting_type` viene `null` y el mapeo no tiene de dónde partir.
 - **Si el payload del webhook trae los mismos campos que `/meetings`.** El
-  markdown de `new-meeting-content-ready` no detalla el cuerpo. Hoy el webhook por
-  miembro (`app/api/integrations/fathom/webhook/[token]/route.ts`) no interpreta el cuerpo:
-  intenta guardar sólo el id de la grabación y el payload crudo en una columna `raw_payload`
-  que `fathom_calls` no tiene, y el pipeline no vuelve a consultar la reunión (sólo el título, y
-  con la key de la org). Ver `[FATHOM-WEBHOOK-MIEMBRO-ROTO]` en `PENDIENTES.md`.
+  markdown de `new-meeting-content-ready` no detalla el cuerpo. El webhook por miembro
+  (`app/api/integrations/fathom/webhook/[token]/route.ts`) guarda el crudo en
+  `fathom_webhook_events` antes de interpretarlo y lo mapea con `mapFathomMeeting` (forma de
+  `/meetings`, en la raíz o bajo `meeting`/`recording`/`data`); lo que no se entiende queda en el
+  evento con `error`. Confirmar con la primera entrega real (`[B-FATHOM-NUNCA-PROBADO]`).
+- **Firma de los webhooks:** esquema de `webhooks.md` ("Verifying Webhooks"): `webhook-id`,
+  `webhook-timestamp`, `webhook-signature` (`v1,<base64>`), HMAC-SHA256 de `id.timestamp.cuerpo`
+  con el secreto `whsec_` decodificado. Implementado en `lib/fathom/webhook-signature.ts`.

@@ -56,8 +56,6 @@ Dos problemas se juntaron al construir Embudos (ADR-009):
 - **Webhooks que responden 200 aunque no guardaron el crudo**: Whop, Commas y GHL no reintentan y el evento se
   pierde (`[EMBUDOS-WEBHOOK-PERDIDA]`, severidad Crítica). El índice único sin `organization_id` hace que un reintento
   legítimo tras un error se descarte como duplicado (`[AUD-CONF-5]`, Crítica).
-- El webhook de Fathom por miembro intenta guardar un `raw_payload` que no existe en la tabla y no guarda nada
-  (`[FATHOM-WEBHOOK-MIEMBRO-ROTO]`).
 - Fuentes de embudo que todavía devuelven `0` en una org sin historia (`[EMBUDOS-SIGNAL-INCONSISTENTE]`); la sync de
   contenido de Zernio escribe ceros cuando no reconoce el analytics (`[AUD-CONF-11]`); `ghl-sync` devuelve `ok` con
   ceros cuando falla una org (`[EMBUDOS-CRON-ERRORES]`).

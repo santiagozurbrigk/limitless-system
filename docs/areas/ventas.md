@@ -130,7 +130,7 @@ No es atómico: si falla a mitad, queda el turno cerrado sin cliente o el client
 ```
 Key org:     cron /api/integrations/fathom/sync (hora) ─┐
 Key miembro: webhook /api/integrations/fathom/webhook/[token] ─┼→ fathom_calls (status pending)
-             (hoy falla: ver [FATHOM-WEBHOOK-MIEMBRO-ROTO] abajo)
+             (crudo primero en fathom_webhook_events; user_id del miembro, ingest_source 'webhook')
              + botón "Sincronizar mis llamadas" (syncMemberFathomAction) ┤
 Legacy:      webhook /api/integrations/fathom/webhook (409 si la firma sirve a >1 org) ┘
                          │
@@ -146,6 +146,22 @@ cron /api/integrations/fathom/process (10 min, espera 30 min por llamada) → pr
 /sales/llamadas → getSalesCallsAction: fathom_calls (purpose = 'sales', últimas 100)
                   + call_analyses por fathom_call_id in (…) → attachCallAnalyses (lib/fathom/sales-calls.ts)
 ```
+
+**Webhook por miembro** (`app/api/integrations/fathom/webhook/[token]/route.ts`, SCRUM-37):
+
+1. El token de la URL identifica **una** fila de `team_member_integrations`; la firma se verifica
+   contra su `webhook_secret` con el esquema de la doc de Fathom (headers `webhook-id`,
+   `webhook-timestamp`, `webhook-signature`; HMAC-SHA256 base64 de `id.timestamp.cuerpo`, secreto
+   `whsec_` decodificado, tolerancia 5 min) — `lib/fathom/webhook-signature.ts`.
+2. El cuerpo crudo se guarda en `fathom_webhook_events` **antes** de interpretarlo. `webhook-id`
+   es único por integración: un reintento de una entrega ya procesada responde 200 sin repetir.
+3. `leerReunionDelWebhook` (`lib/fathom/webhook-meeting.ts`) mapea el cuerpo con el mismo parser
+   que la sync (`mapFathomMeeting`), en la raíz o bajo `meeting`/`recording`/`data`. Sin id de
+   grabación, el evento queda con `error` y se responde 200 (no se inventa una llamada).
+4. `upsertFathomCallFromMeeting(..., { userId, ingestSource: "webhook" })`: el mismo guardado que
+   la sync, con `title`, `calendar_invitees`, transcript, `processed_after` (+30 min), el dueño de
+   la grabación y `ingest_source = 'webhook'`. Si falla responde 500 y deja el evento sin
+   `processed_at`, así el reintento de Fathom lo vuelve a intentar.
 
 - **Unión llamada ↔ análisis:** `call_analyses.fathom_call_id` guarda el ID de la grabación en Fathom
   (el mismo texto que `fathom_calls.fathom_call_id`), no `fathom_calls.id`, y no hay FK entre las
@@ -264,11 +280,6 @@ Detalle y prioridad en [`PENDIENTES.md` § Ventas](../../PENDIENTES.md#ventas).
 - **Análisis profundo con criterio equivocado** `[FATHOM-DEEP-ANALISIS-ALCANCE]`: corre para toda
   llamada vinculada a cliente de ≥10 min (también 1-1 de entrega) y nunca para ventas con leads;
   `closer_name` queda null → el ranking agrupa todo en "Sin nombre".
-- **El webhook de Fathom por miembro no puede guardar nada** `[FATHOM-WEBHOOK-MIEMBRO-ROTO]`:
-  `app/api/integrations/fathom/webhook/[token]/route.ts` hace upsert en `fathom_calls` con
-  `raw_payload` (columna que no existe) y sin `title` (NOT NULL), y tampoco setea
-  `processed_after`, que el cron exige. Las grabaciones de un miembro sólo entran con el botón
-  de sincronizar.
 - **Peldaño de cruce con agenda desconectado:** `processSingleFathomCall` pasa `calendarLeadId: null`;
   y el peldaño 5 del resolvedor marca `purpose = sales` a cualquier externo no resuelto.
 - **Métricas de leads leen `conversations`** (0) `[EMBUDO-PANEL-DMS]`; show rate incluye canceladas.

@@ -486,7 +486,7 @@ flowchart LR
     content --> metrics
     cc --> intel
 
-    fwm["/api/integrations/fathom/webhook/token<br/>FATHOM-WEBHOOK-MIEMBRO-ROTO"]:::roto
+    fwm["/api/integrations/fathom/webhook/token"]
     fwl["/api/integrations/fathom/webhook<br/>legacy por org"]:::legacy
     zwh["/api/integrations/zernio/webhook<br/>503 sin ZERNIO_WEBHOOK_SECRET"]:::roto
     igpoll["cron instagram/poll y sync, Unipile,<br/>ManyChat webhook"]:::legacy
