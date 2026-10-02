@@ -137,6 +137,9 @@ export function prorateMonthlyExpenses(
   totalMonthly: number,
   period: ResolvedRevenuePeriod
 ): number {
+  // Un período al revés no se arma (`resolveRevenueDateRange` ordena las
+  // fechas), pero si llegara no tiene que dar un gasto negativo.
+  if (!(period.start <= period.end)) return 0;
   let total = 0;
   let cursor = new Date(period.start.getFullYear(), period.start.getMonth(), 1);
   const fin = startOfDay(period.end);

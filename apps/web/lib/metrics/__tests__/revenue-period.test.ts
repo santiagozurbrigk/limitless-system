@@ -176,6 +176,24 @@ describe.each(Object.keys(DESFASE_EN_ENERO))("en %s", (zona) => {
       expect(prorateMonthlyExpenses(3000, p)).toBeCloseTo(3000 * (6 / 30) + 3000 * (5 / 31));
     });
 
+    it("una semana que cruza de mes lleva la parte de cada mes", () => {
+      // 28-sep al 4-oct: 3 de 30 días de septiembre + 4 de 31 de octubre.
+      const p = resolveRevenueDateRange({ preset: "week", anchor: "2026-09-30" });
+      expect(prorateMonthlyExpenses(3000, p)).toBeCloseTo(3000 * (3 / 30) + 3000 * (4 / 31));
+    });
+
+    it("un año completo lleva doce veces el gasto, también en año bisiesto", () => {
+      for (const anio of ["2026", "2028"]) {
+        const p = resolveRevenueDateRange({ preset: "custom", customFrom: `${anio}-01-01`, customTo: `${anio}-12-31` });
+        expect(prorateMonthlyExpenses(1000, p)).toBeCloseTo(12000);
+      }
+    });
+
+    it("un período al revés no da un gasto negativo", () => {
+      const p = { start: new Date(2026, 9, 20), end: new Date(2026, 9, 10), label: "", dayCount: 0 };
+      expect(prorateMonthlyExpenses(3100, p)).toBe(0);
+    });
+
     it("⭐ dos meses completos llevan dos veces el gasto", () => {
       const p = resolveRevenueDateRange({ preset: "custom", customFrom: "2026-09-01", customTo: "2026-10-31" });
       expect(prorateMonthlyExpenses(3000, p)).toBeCloseTo(6000);
