@@ -35,7 +35,7 @@ Todas bajo el layout `(platform)`; el acceso por pantalla lo corta `app/(platfor
 | `/clients/wins` | `app/(platform)/clients/wins/page.tsx` → `components/clients/wins/wins-page.tsx` | Tracker, dashboard de casos y candidatos desde Discord. Ver doc de recorrido |
 | `/clients/campos` | `app/(platform)/clients/campos/page.tsx` → `components/clients/custom-fields/custom-fields-page.tsx` | Campos personalizados: solapas Wins / Checkpoints / Clientes. Ver doc de recorrido |
 | `/clients/revision` | `app/(platform)/clients/revision/page.tsx` → `components/clients/weekly-review/weekly-review-page.tsx` | Revisión semanal: cuatro listas de nombres |
-| `/clients/pending-calls` | `app/(platform)/clients/pending-calls/page.tsx` → `components/clients/pending-fathom-calls.tsx` | Grabaciones de Fathom sin cliente, para confirmar a mano, y el botón «Cargar identidades desde el CRM». **No hay ningún link a esta pantalla en la UI de escritorio** (ver `[CLIENTES-PENDING-CALLS-HUERFANA]`) |
+| `/clients/pending-calls` | `app/(platform)/clients/pending-calls/page.tsx` → `components/clients/pending-fathom-calls.tsx` | Grabaciones de Fathom sin cliente, para confirmar a mano, y el botón «Cargar identidades desde el CRM». Se llega desde el botón «Llamadas sin asociar» de la barra de `/clients`, que muestra la cantidad pendiente, y desde el aviso de «Última 1-1» (SCRUM-31) |
 | `/onboarding-cliente/[token]` | `app/onboarding-cliente/[token]/page.tsx` | Formulario **público** de onboarding (add-on). Ver doc de growth partners |
 
 ### La ficha (`components/clients/client-detail.tsx`)
@@ -159,7 +159,6 @@ PlatformDataProvider.listClientsAction()  ← select * de clients (incluye custo
 | `[CLIENTES-TECHO-1000]` | `listClientsAction`, `getClientsJourneyStatusAction`, próxima tarea, wins y eventos no paginan: pasadas las 1000 filas se trunca en silencio |
 | `[CLIENTES-IMPORT-EXCEL-MONTOS]` | El parser de Excel convierte montos ilegibles en 0 y fechas ilegibles en hoy |
 | `[CLIENTES-SIN-MAIL]` | Casi ningún cliente viejo tiene mail; el import de Excel lee la columna Email y **no la guarda** en `clients.email` (queda como texto en `ai_insights`) |
-| `[CLIENTES-PENDING-CALLS-HUERFANA]` | `/clients/pending-calls` no tiene link en la navegación de escritorio |
 | `[1A1-EDITAR-DETALLE]` | La acción de editar tarea existe; la UI no la ofrece |
 | `[PERMISOS-SERVER-ACTIONS]` | Roles sin enforcement en actions/RLS |
 | `[TRACKERS-RIESGO-PAGOS]` | «Pago atrasado» sólo mira `clients.installments` |

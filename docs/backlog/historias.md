@@ -291,7 +291,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dada la lista de Clientes en computadora, cuando hay grabaciones sin asignar, entonces veo un acceso a «Llamadas sin asociar» con la cantidad pendiente y me lleva a esa pantalla.
   - El aviso de «Última 1-1» que dice «Confirmalo en Llamadas sin asociar» es un link a esa pantalla.
   - Se apretó «Cargar identidades desde el CRM» con la cuenta real, el sistema quedó con los datos de los clientes cargados y quedó anotado cuántas grabaciones pasaron a asignarse solas y cuántas se asignaron mal por nombre.
-- **Tareas técnicas:** `[CLIENTES-PENDING-CALLS-HUERFANA]`, `[B-SEMBRAR-IDENTIDADES]`
+- **Tareas técnicas:** CLIENTES-PENDING-CALLS-HUERFANA (resuelta en SCRUM-31), `[B-SEMBRAR-IDENTIDADES]`
 - **Para confirmar:**
   - Martín: esta funcionalidad es la misma pantalla que F-VEN-25 (Ventas); conviene decidir si se cargan como una sola historia.
 
@@ -491,7 +491,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Si alguien intenta asignar una grabación a un cliente de otra empresa, recibe un error y no se guarda nada en ninguna de las dos.
   - Llego a la pantalla de grabaciones pendientes desde la lista de Clientes, con la cantidad pendiente a la vista.
   - Se apretó «Cargar identidades desde el CRM» con la cuenta real y quedó anotado cuántas grabaciones pasaron a asignarse solas.
-- **Tareas técnicas:** FATHOM-CLIENTID-SIN-VALIDAR (resuelta en SCRUM-43), `[B-SEMBRAR-IDENTIDADES]`, `[CLIENTES-PENDING-CALLS-HUERFANA]`
+- **Tareas técnicas:** FATHOM-CLIENTID-SIN-VALIDAR (resuelta en SCRUM-43), `[B-SEMBRAR-IDENTIDADES]`, CLIENTES-PENDING-CALLS-HUERFANA (resuelta en SCRUM-31)
 - **Para confirmar:**
   - Martín: es la misma pantalla que F-CLI-12 (Clientes); conviene decidir si se cargan como una sola historia.
 
