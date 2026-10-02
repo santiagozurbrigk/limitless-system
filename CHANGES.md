@@ -34,6 +34,26 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — «Llamadas sin asociar» tiene acceso desde la barra de Clientes (SCRUM-31)
+
+**Rama:** `fix/SCRUM-31-link-llamadas-sin-asociar`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `components/clients/clients-list.tsx`, `lib/clients/llamadas-sin-asociar.ts`
+
+**Qué se hizo:**
+- Botón «Llamadas sin asociar» en la barra de `/clients` (escritorio), con la cantidad de grabaciones pendientes (`countPendingFathomCallsAction`, la misma del badge del menú móvil). Sin pendientes no muestra número; con más de 99 dice "99+".
+- El aviso de «Última 1-1» ("Confirmalo en Llamadas sin asociar") pasa a ser un link a esa pantalla. Va fuera del link a la grabación (un link dentro de otro no es válido) y frena la propagación para no abrir la ficha.
+- El link a la grabación de «Última 1-1» también frena la propagación: antes abría la grabación en otra pestaña y, además, la ficha del cliente en la pestaña actual.
+- Test de `cantidadPendienteVisible`.
+
+**Por qué / finalidad:** cierra `[CLIENTES-PENDING-CALLS-HUERFANA]`. A esa pantalla sólo se llegaba escribiendo la URL, así que las grabaciones sin asociar se acumulaban y no se cargaban las identidades desde el CRM.
+
+**Decisiones de diseño relevantes:** el botón se muestra siempre, aunque no haya pendientes, porque desde esa pantalla también se cargan identidades desde el CRM.
+
+**Riesgos / deuda técnica pendiente:** ninguno.
+
+---
+
 ### 2026-10-02 — El reporte mensual reporta el mes que terminó (SCRUM-67)
 
 **Rama:** `fix/SCRUM-67-reporte-mensual`
