@@ -34,6 +34,26 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — Tests de los períodos de facturación y de dónde sale cada ingreso (SCRUM-102)
+
+**Rama:** `test/SCRUM-102-revenue-period`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `lib/metrics/revenue-period.ts` y sus tests, tests de `lib/metrics/revenue-events.ts`; `PENDIENTES.md`
+
+**Qué se hizo:**
+- `lib/metrics/__tests__/revenue-period.test.ts`: día, semana de lunes a domingo (también con ancla en domingo y cruzando de mes), mes (febrero, bisiesto, diciembre), personalizado (invertido, sin una fecha, cruzando el cambio de horario), bordes del período, fechas con hora y prorrateo de gastos. Corre en UTC, en hora de Argentina y en Madrid (con cambio de horario), y comprueba que la zona cambió de verdad.
+- Dos arreglos en `revenue-period.ts` que salieron al escribir los tests: el prorrateo de gastos de un rango que cruza de mes suma la parte de cada mes (1-sep al 31-oct daba 61/30 de un mes en vez de 2). En Finanzas, para un rango que cruza de mes, cambian "Gastos" y con ellos "Ganancia neta / Cash collected" y "Margen %"; los períodos de un solo mes dan exactamente lo mismo que antes; y los días del rango se cuentan con el calendario, porque en zonas con cambio de horario un rango de marzo daba 30 días en vez de 31.
+- `lib/metrics/__tests__/revenue-events.test.ts`: cuotas que cruzan meses, cuotas pagadas sin fecha (la primera cuenta en la fecha de alta y las demás no cuentan), adelanto más fee, pagos registrados y su tipo de ingreso.
+- Nuevo ítem `[FACTURACION-CLIENTES-SIN-PAGOS]`: con el primer pago registrado, la facturación deja de contar a los clientes sin pagos. Lo deja escrito un test marcado "hoy"; la regla la decide Agustín.
+
+**Por qué / finalidad:** cierra `[T-2]`. El cálculo de períodos y de ingresos no tenía tests.
+
+**Decisiones de diseño relevantes:** los tests fijan el comportamiento actual; el único caso discutible que no se cambia (clientes sin pagos) va marcado "hoy". Se probó por mutación que detectan los cambios (bordes exclusivos, semana que empieza en domingo, cuota sin fecha contada hoy, fechas en UTC, días por milisegundos y el prorrateo anterior).
+
+**Riesgos / deuda técnica pendiente:** `[FACTURACION-CLIENTES-SIN-PAGOS]` queda abierto hasta la decisión.
+
+---
+
 ### 2026-10-02 — Los textos de herramientas de /funnels dicen lo que hoy existe (SCRUM-60)
 
 **Rama:** `fix/SCRUM-60-textos-embudos`

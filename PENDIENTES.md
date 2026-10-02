@@ -78,8 +78,8 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 1 | 8 | 19 | 7 |
-| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 6 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 22 | 42 | 13 |
+| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 21 | 42 | 13 |
 
 ---
 
@@ -1840,6 +1840,16 @@ Doc del área: [`docs/areas/operaciones.md`](./docs/areas/operaciones.md)
 
 ### Operaciones, Finanzas y Producto · P1
 
+#### [FACTURACION-CLIENTES-SIN-PAGOS] Con el primer pago registrado, la facturación deja de contar a los clientes sin pagos
+- **Tipo:** decisión de negocio
+- **Severidad:** Alta
+- **Estado verificado:** `collectRevenueEvents` (`apps/web/lib/metrics/revenue-events.ts:143-151`) usa sólo `client_payments` en cuanto la organización tiene al menos un pago registrado, y si no tiene ninguno arma los ingresos desde los clientes (pago único en la fecha de alta, cuotas pagadas en su fecha de cobro). No mezcla las dos fuentes. Los clientes importados (Excel, ClickUp) o cargados antes de `client_payments` no tienen filas de pago. Lo deja escrito el test "hoy: con un solo pago registrado, los clientes sin pagos dejan de contar" de `lib/metrics/__tests__/revenue-events.test.ts` (SCRUM-102). Además, no todas las llamadas pasan los pagos: el número de Finanzas y el MRR del Panel los reciben (`derive-finance-summary.ts:105`, `derive-monthly-series.ts:32`, `components/finance/finance-metrics.tsx:85`), pero el gráfico del MRR del Panel (`lib/metrics/derive-dashboard-data.ts:32,133`), la vista del super admin (`lib/super-admin/org-metrics.ts:32`) y el contexto de la IA (`lib/intelligence/collect-context.ts:297`) siguen contando desde los clientes.
+- **Riesgo:** Si una organización con clientes importados registra su primer pago por la ficha o al cerrar una venta, entonces la facturación de Finanzas y del Panel cae de golpe: sólo cuenta lo registrado como pago.
+- **Impacto:** Revenue, cash collected y lo que de ellos depende, subestimados en las organizaciones que mezclan clientes importados con pagos registrados; y pantallas que se contradicen: después del primer pago, el número del MRR baja pero su gráfico, la vista del super admin y lo que lee la IA no.
+- **Qué hay que hacer:** decidir (Agustín) si la fuente única de facturación es `client_payments`. Si sí, migrar los cobros de los clientes viejos a `client_payments` y avisar; si no, combinar las dos fuentes sin contar dos veces (por cliente: sus pagos si tiene, y si no, lo que dice el cliente).
+- **Criterio de aceptación:** Hay una decisión escrita sobre la fuente de facturación; todas las llamadas (Finanzas, Panel y su gráfico, super admin, IA) usan la misma fuente; una organización con un cliente importado sin pagos y otro con un pago registrado ve en Finanzas la suma de los dos (o, si se decide la fuente única, los cobros del importado ya están en client_payments); el test de revenue-events refleja la regla elegida.
+- **Dónde:** `apps/web/lib/metrics/revenue-events.ts`, `client_payments`.
+
 #### [PERMISOS-SERVER-ACTIONS/ops-fin-prod] Las actions y la RLS de estas áreas no miran el rol [transversal]
 - **Parte de:** `[PERMISOS-SERVER-ACTIONS]` (ítem transversal en Plataforma). Acá, lo específico del área.
 - **Tipo:** seguridad
@@ -2373,16 +2383,6 @@ Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe su
 - **Impacto:** Métricas de Finanzas y comisiones por closer que el negocio usa para decidir; hoy no hay bug conocido, es prevención.
 - **Qué hay que hacer:** agrupación por mes (ART vs UTC), meses vacíos, `deriveCloserBreakdown` con 0/1 closer y sin `closed_by_name`, reembolsos y `null`.
 - **Criterio de aceptación:** Hay tests de derive-finance-summary.ts y derive-monthly-series.ts que cubren agrupación por mes en hora de Argentina vs UTC, meses vacíos, deriveCloserBreakdown con 0/1 closer y sin closed_by_name, reembolsos y valores null; pnpm test pasa
-- **Dónde:** `apps/web/lib/metrics/`.
-
-#### [T-2] Tests de `revenue-period.ts` y `revenue-events.ts`
-- **Tipo:** tests
-- **Severidad:** Media
-- **Estado verificado:** sin tests.
-- **Riesgo:** Si se cambia el cálculo de período o de eventos de revenue, entonces cuotas que cruzan meses o pagos sin fecha pueden contarse doble o desaparecer sin aviso.
-- **Impacto:** Revenue por período en dashboards de Finanzas; prevención, sin bug confirmado.
-- **Qué hay que hacer:** bordes de período, cuotas entre meses, pago sin fecha.
-- **Criterio de aceptación:** Hay tests de revenue-period.ts y revenue-events.ts que cubren bordes de período, cuotas que cruzan meses y pagos sin fecha; pnpm test pasa
 - **Dónde:** `apps/web/lib/metrics/`.
 
 #### [T-3] Tests de `parse-client-import.ts` y `excel-parser.ts`
