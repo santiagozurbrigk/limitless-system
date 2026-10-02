@@ -247,9 +247,8 @@ Mapa general de integraciones: `docs/integraciones/README.md` y `lib/integration
   alguien aprieta "sincronizar" `[EMBUDOS-SYNC-PROGRAMADO]`.
 - Salud (bandas) sin UI `[EMBUDOS-SALUD]`; snapshots sin construir `[EMBUDOS-SNAPSHOTS]`
   (el pulso diario sí existe como reporte ejecutivo de la org —cron `executive-report-daily`,
-  `lib/executive-reports/generate-daily.ts`— pero no lee los embudos, y
-  `REPORTING_CADENCE.daily` en `instrumentation.ts` sigue diciendo "Falta el cron de pulso
-  diario"); `/funnels/comparar` sin construir `[EMBUDOS-COMPARAR]`.
+  `lib/executive-reports/generate-daily.ts`— pero no lee los embudos; `REPORTING_CADENCE.daily`
+  lo marca `partial`); `/funnels/comparar` sin construir `[EMBUDOS-COMPARAR]`.
 - Sin backfill del estado de oportunidades de GHL `[EMBUDOS-GHL-BACKFILL]`; webhooks sólo
   por Workflow hasta que exista la app del Marketplace `[FEAT-GHL-OAUTH]`.
 - `ghl_opportunities_won` cuenta cualquier transición con `status = 'won'` en el período,

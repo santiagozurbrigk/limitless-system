@@ -269,14 +269,14 @@ export type ResolvedMetric = {
 | `organizations.enabled_add_ons` + `AddOnId` | Precedente exacto para el add-on `embudos` (decisión 6). |
 | `buildPlatformSidebarNav(enabledAddOns)` | Sidebar ya es dinámico. Extender para recibir instancias (§6). |
 | `components/holding/holding-business-switcher.tsx` | Referencia visual del switcher (§6). |
-| Crons `executive-report-weekly` / `-monthly` | Cubren 2 de las 3 cadencias del doc. Falta el pulso diario. |
+| Crons `executive-report-weekly` / `-monthly` | Cubren 2 de las 3 cadencias del doc. Falta el pulso diario. *(Después se sumó `executive-report-daily`, que no lee los embudos.)* |
 | `components/dashboard/sales-funnel-strip.tsx` | Embudo DM **hardcodeado**. Debe pasar a ser la instancia DM renderizada por el motor. |
 
 ### 4.2 Mapeo del spine a fuentes reales
 
 | Etapa | Fuente en Limitless hoy | Estado |
 |---|---|---|
-| **1. Spend** | Meta Ads vía Zernio (`getMarketingAdsAction`), `expenses` | ⚠️ Live fetch, **no persiste** — ver §9 |
+| **1. Spend** | Meta Ads vía Zernio (`getMarketingAdsAction`), `expenses` | ⚠️ Live fetch, **no persiste** — ver §9 *(después se sumó `ad_metrics_daily`, que sí persiste)* |
 | **2. Click** | `utm_links.clicks`, `ZernioAdMetrics` | ✅ |
 | **3. Lead** | `utm_lead_captures`, `conversations`, Typeform, Google Forms, lead magnets | ✅ |
 | **4. Engaged** | `conversations` (respuesta activa), `content_pieces.metrics` | 🟡 Sirve para DM. **No** para webinar ni VSL |
@@ -450,7 +450,7 @@ explícito sobre esto porque cambia el camino crítico.
 | **Hyros** | Atribución real, ROAS by-source, EPL, journeys | ❌ No existe | Etiquetado `[Hyros]`, KPIs universales, sección 03 y 05 del doc |
 | **WebinarJam / Zoom** | Show-up rate, stick rate, CTA clicks | ❌ No existe | **Embudo Webinar entero** (etapa Engaged) |
 | **Hosting de VSL con analytics** | Play rate, avg watch % | ❌ No existe | **Embudo VSL** (etapa Engaged) |
-| **Whop / Fanbasis** | AOV, cash collected, refunds | 🟡 Equivalente: Stripe + Mercado Pago | Nada — cubierto por los equivalentes |
+| **Whop / Fanbasis** | AOV, cash collected, refunds | 🟡 Equivalente: Stripe + Mercado Pago *(corregido: hoy Whop y Fanbasis están integrados y Stripe y Mercado Pago no alimentan los embudos, ver la nota de arriba)* | Nada — cubierto por los equivalentes |
 | Scoring de calificación | Qualified rate (aplicaciones) | 🟡 Derivable de Typeform/Google Forms + IA | Etapa Intent del VSL |
 
 **Consecuencia sobre las fases:** las Fases 0–5 quedan como fueron aprobadas, pero el **track

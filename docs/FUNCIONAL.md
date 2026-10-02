@@ -40,7 +40,7 @@ cambio, igual que el doc técnico del área.
 |---|---|---|---|---|---|---|
 | [Plataforma](#plataforma) | 30 | 11 | 14 | 1 | 3 | 1 |
 | [Clientes](#clientes) | 28 | 20 | 5 | 0 | 1 | 2 |
-| [Ventas](#ventas) | 28 | 12 | 9 | 4 | 2 | 1 |
+| [Ventas](#ventas) | 28 | 12 | 10 | 3 | 2 | 1 |
 | [Marketing](#marketing) | 27 | 9 | 7 | 4 | 3 | 4 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 24 | 11 | 3 | 1 | 3 | 6 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | 28 | 13 | 10 | 1 | 3 | 1 |
@@ -48,7 +48,7 @@ cambio, igual que el doc técnico del área.
 | [Finanzas](#finanzas) | 12 | 6 | 4 | 0 | 2 | 0 |
 | [Producto](#producto) | 15 | 13 | 0 | 0 | 2 | 0 |
 | [Discord](#discord) | 13 | 0 | 2 | 0 | 1 | 10 |
-| **Total** | **228** | **109** | **59** | **12** | **22** | **26** |
+| **Total** | **228** | **109** | **60** | **11** | **22** | **26** |
 
 Lecturas rápidas:
 
@@ -355,7 +355,6 @@ Doc técnico: [`docs/areas/embudos.md`](./areas/embudos.md)
 ### Legacy visible
 
 - `/lanzamientos` y `/lanzamientos/[id]` se pueden abrir por URL y muestran "Próximamente". El ítem de la barra está deshabilitado.
-- El índice `/funnels` le muestra al usuario una nota de GoHighLevel que dice que Limitless "no consume /opportunities ni /pipelines", y eso es falso hoy.
 - Los defaults del embudo DM apuntan al inbox viejo (ManyChat/Unipile), que quedó vacío con el paso a Zernio. Un DM recién creado muestra ceros y "sin datos" mezclados.
 - En el Panel General sigue el "Embudo de conversión" hardcodeado, paralelo al módulo Embudos y con otra lógica.
 
