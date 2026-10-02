@@ -42,13 +42,13 @@ cambio, igual que el doc técnico del área.
 | [Clientes](#clientes) | 28 | 20 | 5 | 0 | 1 | 2 |
 | [Ventas](#ventas) | 28 | 12 | 9 | 4 | 2 | 1 |
 | [Marketing](#marketing) | 27 | 9 | 7 | 4 | 3 | 4 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 24 | 10 | 4 | 1 | 3 | 6 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 24 | 11 | 3 | 1 | 3 | 6 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | 28 | 13 | 10 | 1 | 3 | 1 |
 | [Operaciones y equipo](#operaciones-y-equipo) | 23 | 14 | 5 | 1 | 2 | 1 |
 | [Finanzas](#finanzas) | 12 | 6 | 4 | 0 | 2 | 0 |
 | [Producto](#producto) | 15 | 13 | 0 | 0 | 2 | 0 |
 | [Discord](#discord) | 13 | 0 | 2 | 0 | 1 | 10 |
-| **Total** | **228** | **108** | **60** | **12** | **22** | **26** |
+| **Total** | **228** | **109** | **59** | **12** | **22** | **26** |
 
 Lecturas rápidas:
 
