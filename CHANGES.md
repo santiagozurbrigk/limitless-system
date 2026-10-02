@@ -34,6 +34,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-02 — El reporte mensual reporta el mes que terminó (SCRUM-67)
+
+**Rama:** `fix/SCRUM-67-reporte-mensual`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `lib/executive-reports/generate-monthly.ts`
+
+**Qué se hizo:**
+- `mesAReportar()`: el cron mensual (`0 13 1 * *`) toma el mes anterior. Antes calculaba el mes en curso, el que empieza ese día: casi nunca había semanales y se salteaba en silencio, y cuando el 1 caía lunes el reporte salía titulado con el mes nuevo y con una sola semana.
+- `monthBounds()` arma las fechas con el día del calendario y no con `toISOString()`, que en una zona al este de UTC las corría al día anterior.
+- Tests en `lib/executive-reports/__tests__/generate-monthly.test.ts` (1 de octubre, 1 de enero, febrero bisiesto) en tres zonas horarias, comprobadas por mutación.
+- El panel de reportes (`getLatestReportsByCadenceAction`) busca el último de cada cadencia con una consulta por cadencia. Antes traía los últimos 60 de cualquier cadencia y, al guardar el mensual con el día 1 del mes reportado, hacia el día 22 o 23 los diarios lo dejaban afuera y la pestaña "Mensual" mostraba "todavía no se generó". Si falla alguna de las consultas, el panel no se muestra (como antes) en vez de decir "todavía no se generó" de un reporte que existe. Test en `app/executive-reports/__tests__/latest-reports.test.ts`.
+- El estado de cada área del mensual sale de las cargas semanales del mes reportado (`computeDepartmentStatuses` acepta `desde`/`hasta`) y no de los últimos 35 días, así da lo mismo cuándo corra.
+- F-IA-21 pasa de "No funciona" a "Con fallas": el contenido todavía depende de `[INTELIGENCIA-FUENTES-LEGACY]`.
+
+**Por qué / finalidad:** cierra `[REPORTES-MENSUAL-MES-EQUIVOCADO]`. Las organizaciones con reportes ejecutivos se quedaban sin reporte mensual.
+
+**Decisiones de diseño relevantes:** no se regeneran los mensuales pasados; el primero bien hecho sale el 1 de noviembre, con octubre.
+
+**Riesgos / deuda técnica pendiente:** el mensual se puede disparar a mano con `CRON_SECRET` (en Vercel); cada disparo dentro del mes duplica el mismo mes, porque `saveExecutiveReport` hace insert (`[REPORTES-DUPLICADOS]`, ya en el backlog). La verificación en vivo es el 1 de noviembre. En producción, el 2026-10-02 había **0** reportes mensuales (0 organizaciones): el bug hizo que nunca se generara ninguno. No hay datos viejos que corregir.
+
+---
+
 ### 2026-10-02 — Tests de los períodos de facturación y de dónde sale cada ingreso (SCRUM-102)
 
 **Rama:** `test/SCRUM-102-revenue-period`

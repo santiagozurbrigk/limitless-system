@@ -959,23 +959,6 @@ Fuente: PENDIENTES.md [EMBUDOS-SYNC-PROGRAMADO] · Doc del área: docs/areas/emb
 *Dónde:* {{apps/web/lib/agent/stream-agent-message.ts}}, {{lib/agent/agent-tool-handler.ts}}, {{app/settings/actions.ts}}.
 
 Fuente: PENDIENTES.md [PERMISOS-SERVER-ACTIONS/agente-ia] · Doc del área: docs/areas/agente-ia.md",PERMISOS-SERVER-ACTIONS/agente-ia,Agente de negocio e IA,P1,Alta,seguridad
-[REPORTES-MENSUAL-MES-EQUIVOCADO] (nuevo) El reporte mensual mira el mes que empieza,Bug,High,agente-ia,p1,sev-media,bug,,,"*Tipo:* bug
-
-*Severidad:* Media
-
-*Estado verificado:* el cron corre {{0 13 1 * *}}; {{monthBounds()}} en {{lib/executive-reports/generate-monthly.ts:30}} usa {{new Date()}} → mes en curso (el que empieza ese día). Busca semanales con {{period_start}} en ese mes: el día 1 casi nunca hay ninguno, así que se saltea (""sin reportes semanales en …""). Si hay uno (día 1 lunes), el reporte se titula con el mes nuevo.
-
-*Riesgo:* Si el cron corre el día 1 (siempre), entonces busca semanales del mes que empieza, casi nunca encuentra y se saltea en silencio; cuando el 1 cae lunes, genera un reporte titulado con el mes nuevo basado en una sola semana.
-
-*Impacto:* Todas las orgs con reportes ejecutivos se quedan sin reporte mensual (o con uno engañoso unas pocas veces al año). Los semanales siguen existiendo y son el workaround; no se pierden datos.
-
-*Qué hay que hacer:* usar el mes anterior ({{monthBounds(fecha del último día del mes previo)}}) y agregar un test. Verificar en prod cuántas filas {{period = 'monthly'}} hay.
-
-*Criterio de aceptación:* Con el cron corriendo el día 1 de un mes, el reporte mensual toma el mes anterior (period_start/period_end y título del mes cerrado) y agrupa los semanales de ese mes; hay un test unitario de monthBounds con ese caso; se anotó cuántas filas period='monthly' había en prod
-
-*Dónde:* {{apps/web/lib/executive-reports/generate-monthly.ts}}.
-
-Fuente: PENDIENTES.md [REPORTES-MENSUAL-MES-EQUIVOCADO] · Doc del área: docs/areas/agente-ia.md",REPORTES-MENSUAL-MES-EQUIVOCADO,Agente de negocio e IA,P1,Media,bug
 [INTELIGENCIA-FUENTES-LEGACY] (nuevo) Inteligencia y reportes leen tablas legacy,Bug,High,agente-ia,p1,sev-alta,bug,,,"*Tipo:* bug
 
 *Severidad:* Alta

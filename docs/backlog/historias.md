@@ -918,13 +918,13 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Para confirmar:** —
 
 ### [H-IA-21] Recibir el reporte mensual del mes que cerró
-- **Funcionalidad:** F-IA-21 · No funciona
+- **Funcionalidad:** F-IA-21 · Con fallas
 - **Historia:** Como founder, quiero recibir el día 1 un reporte ejecutivo del mes que acaba de terminar, para ver cómo fue el mes completo.
 - **Criterios de aceptación:**
   - Dado el día 1 de un mes, cuando se genera el reporte mensual, entonces está titulado con el mes anterior y resume los reportes semanales de ese mes.
   - El reporte aparece en el historial de reportes ejecutivos (no se saltea en silencio).
   - Dada una organización con leads y piezas de contenido, el reporte incluye datos de DMs/leads y de marketing.
-- **Tareas técnicas:** `[REPORTES-MENSUAL-MES-EQUIVOCADO]`, `[INTELIGENCIA-FUENTES-LEGACY]`
+- **Tareas técnicas:** REPORTES-MENSUAL-MES-EQUIVOCADO (resuelta en SCRUM-67), `[INTELIGENCIA-FUENTES-LEGACY]`
 - **Para confirmar:** —
 
 ### [H-IA-24] Que el agente escriba con el tono real del founder

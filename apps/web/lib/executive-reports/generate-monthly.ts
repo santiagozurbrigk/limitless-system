@@ -27,7 +27,16 @@ function toStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((v) => String(v)) : [];
 }
 
-function monthBounds(date = new Date()): {
+function fechaIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Primer y último día (YYYY-MM-DD) y nombre del mes de `date`. Las fechas se
+ * arman con el día del calendario y no con `toISOString()`, que en una zona
+ * al este de UTC las corría al día anterior.
+ */
+export function monthBounds(date: Date): {
   start: string;
   end: string;
   label: string;
@@ -39,10 +48,21 @@ function monthBounds(date = new Date()): {
     year: "numeric",
   });
   return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
+    start: fechaIso(start),
+    end: fechaIso(end),
     label: label.charAt(0).toUpperCase() + label.slice(1),
   };
+}
+
+/**
+ * [REPORTES-MENSUAL-MES-EQUIVOCADO] (SCRUM-67): el cron mensual corre el día 1
+ * (`0 13 1 * *`), así que el mes a reportar es el que acaba de terminar, no el
+ * que empieza ese día. Antes usaba el mes en curso: casi nunca había semanales
+ * y se salteaba en silencio, o se titulaba con el mes nuevo.
+ */
+export function mesAReportar(ahora: Date = new Date()): ReturnType<typeof monthBounds> {
+  // El día 0 del mes en curso es el último día del mes anterior.
+  return monthBounds(new Date(ahora.getFullYear(), ahora.getMonth(), 0));
 }
 
 function formatWeeklyReportsForPrompt(rows: WeeklyReportRow[]): string {
@@ -64,7 +84,7 @@ export async function generateMonthlyExecutiveReport(
   organizationId: string
 ): Promise<ExecutiveReportRecord | null> {
   const admin = createAdminClient();
-  const { start, end, label } = monthBounds();
+  const { start, end, label } = mesAReportar();
 
   const { data: weeklyRows } = await admin
     .from("executive_reports")
@@ -103,8 +123,12 @@ export async function generateMonthlyExecutiveReport(
   const orgContextText = buildOrgContextText(orgContext);
   const weeklyText = formatWeeklyReportsForPrompt(weeklies);
 
+  // El estado de cada área sale de las cargas semanales del mes reportado, no
+  // de los últimos días: así da lo mismo si el cron corre el 1 o se dispara a
+  // mano más tarde (SCRUM-67).
   const departments = await computeDepartmentStatuses(admin, organizationId, {
-    sinceDays: 35,
+    desde: start,
+    hasta: end,
   });
 
   const system = `Sos el COO de IA de "${orgContext.orgName}". Redactás el reporte ejecutivo MENSUAL para el founder, analizando la EVOLUCIÓN del negocio a lo largo del mes.
