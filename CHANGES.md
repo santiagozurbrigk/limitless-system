@@ -58,7 +58,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:**
 - 14 orgs tienen que reconectar GHL/Zernio o volver a cargar su clave de Claude. Optimiza tu Control tiene que regenerar el secreto del webhook de GHL en sus workflows.
 - Probar Fathom de los miembros cuyas keys se reescribieron (V-INFRA-13).
-- Falta anotar la segunda persona con acceso a la clave nueva (V-INFRA-11).
+- Clave nueva en el gestor con acceso de Santiago y Martin (V-INFRA-11, paso 4).
 ### 2026-10-02 — El reporte mensual reporta el mes que terminó (SCRUM-67)
 
 **Rama:** `fix/SCRUM-67-reporte-mensual`
