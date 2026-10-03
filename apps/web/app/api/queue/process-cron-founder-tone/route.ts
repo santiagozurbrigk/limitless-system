@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyQueueRequest } from "@/lib/queue/verify-queue-request";
 import { generateAndSaveFounderTone } from "@/lib/founder-tone/analyze-tone";
+import { reportarFalla } from "@/lib/observability/reportar-falla";
 
 export const runtime = "nodejs";
 export const maxDuration = 120; // Análisis de tono con IA
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, organizationId, result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    reportarFalla(err, { cron: "/api/queue/process-cron-founder-tone", organizationId: organizationId });
     console.error("[Queue] process-cron-founder-tone error", { organizationId, message });
     return NextResponse.json({ error: message }, { status: 500 });
   }

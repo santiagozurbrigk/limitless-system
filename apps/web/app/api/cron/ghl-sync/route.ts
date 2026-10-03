@@ -4,14 +4,15 @@ import {
   syncAllGHLOrganizationsSafe,
   syncGHLOrganizationSafe,
 } from "@/lib/ghl/sync-pipeline";
+import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /** Vercel Cron invoca GET — delegar a la misma lógica que POST. */
-export async function GET(request: Request) {
+export const GET = conMonitorDeCron("/api/cron/ghl-sync", async (request: Request) => {
   return POST(request);
-}
+});
 
 /**
  * Cron: sync GHL appointments → closing_calls.

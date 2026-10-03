@@ -19,6 +19,7 @@ import { assertCronAuthorized } from "@/lib/integrations/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ReelVariation } from "@/types/reel-variations";
 import { soloRutasDeLaOrg } from "@/lib/storage/org-path";
+import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -26,9 +27,9 @@ export const maxDuration = 60;
 /** Días de retención: mantener videos en storage hasta este período post-done/failed */
 const RETENTION_DAYS = 30;
 
-export async function GET(request: Request) {
+export const GET = conMonitorDeCron("/api/cron/cleanup-trial-reels", async (request: Request) => {
   return POST(request);
-}
+});
 
 export async function POST(request: Request) {
   const unauthorized = assertCronAuthorized(request);

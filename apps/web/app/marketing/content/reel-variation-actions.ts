@@ -5,7 +5,12 @@ import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getGoogleAccessTokenForOrganization } from "@/lib/google/get-access-token";
-import { getQStashClient, getPublicAppUrl, getReelVariationPublishUrl } from "@/lib/queue/qstash-client";
+import {
+  getQStashClient,
+  getPublicAppUrl,
+  getQueueFailureCallbackUrl,
+  getReelVariationPublishUrl,
+} from "@/lib/queue/qstash-client";
 import { callClaudeJson } from "@/lib/ai/anthropic";
 import type { ReelVariationJob, ReelVariation, ReelVariationType } from "@/types/reel-variations";
 import type { ContentPiece } from "@/types/content";
@@ -177,6 +182,7 @@ export async function createTrialReelsJobAction(
             : undefined,
           retries: 2,
           timeout: 900, // 15 min — FFmpeg puede tardar
+          failureCallback: getQueueFailureCallbackUrl(),
         });
         console.log("[TrialReels] QStash published OK", { jobId, messageId: qstashResult.messageId, workerUrl });
       } catch (qstashErr) {
@@ -410,6 +416,7 @@ export async function publishVariationsAction(
               : undefined,
             delay: delaySecs > 0 ? delaySecs : undefined,
             retries: 2,
+            failureCallback: getQueueFailureCallbackUrl(),
           });
           console.log("[TrialReels] variation enqueued", {
             jobId,
@@ -598,6 +605,7 @@ export async function retryVariationAction(
             }
           : undefined,
         retries: 2,
+        failureCallback: getQueueFailureCallbackUrl(),
       });
       console.log("[TrialReels] variation retry enqueued", { jobId, variationIndex });
     } else {

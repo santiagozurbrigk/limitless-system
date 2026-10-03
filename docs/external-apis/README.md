@@ -25,6 +25,7 @@ la URL de origen está en el front-matter de cada archivo.
 | **Hyros** | [`hyros/`](./hyros/) | 482 guías · **3 specs OpenAPI** · 51 endpoints · 10 webhooks | I-8 atribución |
 | **WebinarJam / EverWebinar** | [`webinarjam/`](./webinarjam/) | 17 artículos · 10 endpoints | I-5 webinar |
 | **Fathom** | [`fathom/`](./fathom/) | 39 archivos markdown de `developers.fathom.ai` (referencia de API, webhooks, OAuth) | Llamadas (no es de las olas de embudos) |
+| **QStash** (Upstash) | [`qstash/`](./qstash/) | 4 páginas: callbacks y failure callbacks, firma, reintentos (2026-10-03) | Colas de jobs (SCRUM-84) |
 
 **Los seis proveedores de las tres olas de integración están cubiertos**, más Fathom (bajado después, sin script en `regenerar.sh`: se reproduce con `tools/fathom-urls.txt`).
 

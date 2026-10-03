@@ -6,6 +6,7 @@ import {
   syncCalendlyOrganizationSafe,
 } from "@/lib/calendly/sync-pipeline";
 import type { CalendlyEventSyncPayload } from "@/types/calendly";
+import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -30,9 +31,9 @@ async function parseBody(request: Request): Promise<SyncBody | null> {
  * Ruta dedicada para evitar colisión con Server Actions en /api/integrations/calendly/sync.
  */
 /** Vercel Cron invoca GET — delegar a la misma lógica que POST. */
-export async function GET(request: Request) {
+export const GET = conMonitorDeCron("/api/cron/calendly-sync", async (request: Request) => {
   return POST(request);
-}
+});
 
 export async function POST(request: Request) {
   const unauthorized = assertCronAuthorized(request);

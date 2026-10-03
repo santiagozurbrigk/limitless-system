@@ -4,6 +4,7 @@ import { verifyQueueRequest } from "@/lib/queue/verify-queue-request";
 import { generateAndSaveDailyExecutiveReport } from "@/lib/executive-reports/generate-daily";
 import { generateAndSaveMonthlyExecutiveReport } from "@/lib/executive-reports/generate-monthly";
 import { generateAndSaveWeeklyExecutiveReport } from "@/lib/executive-reports/generate-weekly";
+import { reportarFalla } from "@/lib/observability/reportar-falla";
 
 export const runtime = "nodejs";
 export const maxDuration = 120; // Reporte ejecutivo con IA
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, organizationId, period, result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    reportarFalla(err, { cron: "/api/queue/process-cron-executive-report", organizationId: organizationId });
     console.error("[Queue] process-cron-executive-report error", {
       organizationId,
       period,

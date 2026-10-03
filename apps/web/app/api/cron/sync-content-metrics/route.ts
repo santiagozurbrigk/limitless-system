@@ -10,13 +10,14 @@ import {
   getCronSyncMetricsWorkerUrl,
 } from "@/lib/queue/qstash-client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // Fan-out: solo publica jobs, no procesa orgs
 
-export async function GET(request: Request) {
+export const GET = conMonitorDeCron("/api/cron/sync-content-metrics", async (request: Request) => {
   return POST(request);
-}
+});
 
 export async function POST(request: Request) {
   const unauthorized = assertCronAuthorized(request);

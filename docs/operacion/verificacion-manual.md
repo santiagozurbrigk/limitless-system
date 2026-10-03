@@ -1185,3 +1185,14 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 7. ⌘K: no aparecen Overview de Marketing, Conexión con Ventas, UTMs, Administrar ni "Recorrido guiado (demo)".
 8. `/demo`, `/design-system` y `/redesign-preview` responden 404; `/lanzamientos` lleva al Panel.
 
+## Alertas de procesos de fondo (SCRUM-84)
+
+**Prerrequisitos:** plan Team de Sentry comprado, las reglas de [`alertas.md`](./alertas.md) creadas y `SENTRY_DSN` cargada en Railway y Fly.
+
+1. Sentry → Crons: aparecen los 19 monitores, con el horario de `vercel.json`, después de su primera corrida.
+2. ⭐ Error por org: en una org de prueba con GHL, poner un token inválido y esperar la corrida de las :00 de `cron-ghl-sync`. En Sentry aparece el issue con tag `org_id` de esa org y `provider=ghl`, y llega el mail.
+3. Cron que no corre: en Sentry → Crons, un monitor sin check-in pasado su horario + 5 min queda en "missed". Se puede forzar pausando un cron en Vercel una hora, y a las 2 faltas llega el mail.
+4. Job que agota reintentos: encolar un job de prueba contra un worker que responda 500 (por ejemplo `process-cron-sync-metrics` con una org inexistente). Después de los reintentos llega un issue "QStash: … agotó sus reintentos" con el worker y la org.
+5. Bot de Discord y reel-worker: forzar un error (por ejemplo, un job de reel con un archivo inexistente). Aparece en Sentry con `app=reel-worker` / `app=discord-bot`.
+6. Anotar fecha, quién recibió el mail y cuánto tardó.
+

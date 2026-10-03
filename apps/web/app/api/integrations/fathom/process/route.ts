@@ -6,6 +6,7 @@ import { processPendingFathomCalls } from "@/lib/fathom/process-call";
 import { reclaimStuckFathomCalls } from "@/lib/fathom/reclaim-stuck";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -156,6 +157,6 @@ export async function POST(request: Request) {
   return runFathomProcess(request);
 }
 
-export async function GET(request: Request) {
+export const GET = conMonitorDeCron("/api/integrations/fathom/process", async (request: Request) => {
   return runFathomProcess(request);
-}
+});

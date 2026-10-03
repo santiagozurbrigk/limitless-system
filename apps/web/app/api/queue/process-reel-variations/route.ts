@@ -15,6 +15,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyQStashRequest } from "@/lib/queue/qstash-verify";
+import { reportarFalla } from "@/lib/observability/reportar-falla";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 min
@@ -91,6 +92,7 @@ export async function POST(request: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[Queue] process-reel-variations error", { jobId, message });
+    reportarFalla(err, { cron: "/api/queue/process-reel-variations", extra: { jobId } });
     return NextResponse.json({ ok: false, jobId, error: message }, { status: 500 });
   }
 }

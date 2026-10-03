@@ -89,6 +89,7 @@ Cliente: `apps/web/lib/queue/qstash-client.ts`. Verificación: `lib/queue/qstash
 | `/api/queue/process-reel-variations` | `app/marketing/content/reel-variation-actions.ts` cuando falta `REEL_WORKER_URL` (fallback local del worker de Fly) | firma QStash | 300 |
 | `/api/queue/publish-reel-variation` | reel-variation-actions, con `delay` por posición | `verifyQueueRequest` + `WORKER_AUTH_SECRET` | 60 |
 | Fly.io `POST /` (`apps/reel-worker`) | reel-variation-actions con `REEL_WORKER_URL` | `WORKER_AUTH_SECRET` o firma QStash | — |
+| `/api/queue/failure` | QStash, como `failureCallback` de todos los jobs, cuando agotan sus reintentos | firma QStash (`verifyQStashRequest`) | — |
 
 `verifyQueueRequest`: si `WORKER_AUTH_SECRET` está configurado **acepta sólo ese secreto** (header `x-worker-secret`, `Authorization: Bearer` o `?workerSecret=`) y no mira la firma; si no, exige la firma QStash (`QSTASH_CURRENT_SIGNING_KEY` + `QSTASH_NEXT_SIGNING_KEY`; 503 sin las dos). En producción `WORKER_AUTH_SECRET` está seteado, así que los workers de cron se autentican por secreto compartido.
 
@@ -120,8 +121,12 @@ No hay límite para "conectar integración" a propósito (comentario en el archi
 - `apps/web/instrumentation.ts` carga `sentry.server.config.ts` (Node) o `sentry.edge.config.ts` (Edge) y exporta `onRequestError = Sentry.captureRequestError` para errores no capturados de Server Components, route handlers y middleware. `sentry.client.config.ts` cubre el navegador.
 - DSN: `SENTRY_DSN` o `NEXT_PUBLIC_SENTRY_DSN`. Habilitado sólo con `NODE_ENV=production` o `SENTRY_FORCE=true`. `sampleRate 1.0`, `tracesSampleRate 0.05`. `beforeSend` descarta errores "Rate limit exceeded" y borra cookies.
 - Source maps: `withSentryConfig` en `next.config.ts` los sube sólo si hay `SENTRY_AUTH_TOKEN` (+ `SENTRY_ORG`, `SENTRY_PROJECT`). Las cuatro están en Vercel.
-- `captureException` explícito en paths críticos (holding refresh, agente SSE). El resto de los crons y webhooks sólo loguea con `console.*` (logs de Vercel).
-- `apps/discord-bot` y `apps/reel-worker` **no tienen Sentry**: sus errores quedan en los logs de Railway y Fly.
+- `captureException` explícito en paths críticos (holding refresh, agente SSE).
+- **Procesos de fondo (SCRUM-84):** `lib/observability/reportar-falla.ts` (`reportarFalla(error, { cron, organizationId, provider })`) manda el error a Sentry con los tags `proceso_de_fondo`, `cron`, `org_id` y `provider`. Lo usan los 8 workers de `/api/queue/*`, el error por org de GHL, Calendly y Fathom (sync), y el aviso de QStash. El resto de los catch internos siguen con `console.*`.
+- **Cron Monitors:** el `GET` de los 19 crons pasa por `conMonitorDeCron(path, handler)` (`lib/observability/cron-monitor.ts`). Manda un check-in `in_progress` y después `ok`, o `error` si el handler tira o responde 5xx. El horario sale de `vercel.json` (UTC, margen 5 min, máx. 15 min, issue a las 2 fallas seguidas) y el slug de la ruta (`/api/cron/ghl-sync` → `cron-ghl-sync`). Sólo cuenta las corridas autorizadas con `CRON_SECRET`. Un test exige que todo cron de `vercel.json` esté envuelto.
+- **Jobs que agotan reintentos:** cada `publishJSON` lleva `failureCallback` → `/api/queue/failure`, que verifica la firma de QStash, lee el worker, la org y el job (`lib/queue/failure-callback.ts`, sin el resto del cuerpo ni la query de la URL) y lo reporta a Sentry. Doc bajada en `docs/external-apis/qstash/`.
+- `apps/discord-bot` (cada `logError`) y `apps/reel-worker` (excepciones del proceso y fallas de job) reportan a Sentry con `@sentry/node` si tienen `SENTRY_DSN`.
+- Las reglas de alerta (mail) se configuran en Sentry: [`operacion/alertas.md`](../operacion/alertas.md).
 
 ## Archivos clave
 

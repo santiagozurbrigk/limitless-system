@@ -34,6 +34,60 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-03 — Los procesos de fondo avisan cuando fallan (SCRUM-84, código)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** observabilidad.
+- `apps/web/lib/observability/` (nuevo), los 19 crons de `vercel.json`, los 8 workers de `/api/queue/*`.
+- `/api/queue/failure` (nuevo), `lib/queue/failure-callback.ts` (nuevo), `lib/queue/qstash-client.ts`.
+- `lib/ghl/sync-pipeline.ts`, `lib/calendly/sync-pipeline.ts`, `lib/fathom/sync.ts`.
+- `apps/discord-bot`, `apps/reel-worker` (dependencia `@sentry/node@10.70.0`).
+
+**Qué se hizo:**
+- `reportarFalla(error, { cron, organizationId, provider })` manda el error a Sentry con los tags `proceso_de_fondo`,
+  `cron`, `org_id` y `provider`. Se usa en:
+  - el catch de los 8 workers de QStash;
+  - el error por org de GHL, Calendly (token y listado) y la sync de Fathom.
+- `conMonitorDeCron(path, handler)` envuelve el `GET` de los 19 crons con Sentry Cron Monitors (`captureCheckIn`):
+  - el horario se toma de `vercel.json`, en UTC, con 5 min de margen y 15 min de máximo;
+  - abre issue a las 2 fallas seguidas;
+  - un 5xx cuenta como error;
+  - sólo registra las corridas autorizadas con `CRON_SECRET`;
+  - hace `flush` antes de devolver.
+- `failureCallback` en los 7 `publishJSON` hacia `/api/queue/failure`:
+  - el endpoint verifica la firma de QStash y lee worker, org y job sin guardar el resto del cuerpo (puede traer un
+    token de Drive o un transcript) ni la query de la URL (puede traer el secreto del worker);
+  - después lo reporta.
+  - La doc de QStash quedó bajada en `docs/external-apis/qstash/`.
+- `@sentry/node` en el bot de Discord (cada `logError`) y en el reel-worker (excepciones del proceso y fallas de job).
+  Sin `SENTRY_DSN` no hacen nada.
+- Tests:
+  - `lib/observability/__tests__/cron-monitor.test.ts` (4): slug, horario, que los 19 crons estén envueltos y tags;
+  - `lib/queue/__tests__/failure-callback.test.ts` (3): lectura del cuerpo y que no se filtren el secreto ni el
+    token.
+
+**Por qué / finalidad:** las fallas de fondo duraban semanas sin que nadie se enterara:
+- 168 × token de GHL inválido;
+- ~3.000 × 401 de Anthropic;
+- 849 × 429 de Zernio.
+
+**Decisiones de diseño relevantes:**
+- Check-ins manuales en vez de `Sentry.withMonitor`, porque los crons devuelven 500 en vez de tirar y `withMonitor`
+  los contaría como ok.
+- Los monitores se crean solos con `upsertMonitorConfig`, sin configurarlos a mano.
+- `/api/queue/failure` verifica sólo la firma: QStash no reenvía `x-worker-secret` a los callbacks.
+
+**Riesgos / deuda técnica pendiente:** `[OBS-SIN-ALERTAS]` sigue abierto. Falta lo que no es código:
+- comprar el plan Team;
+- crear las reglas de mail;
+- cargar `SENTRY_DSN` en Railway y Fly;
+- la prueba de aceptación (`docs/operacion/alertas.md`).
+
+Typeform, Google Forms, Instagram, anuncios y `daily-signals` no reportan por org (sí tienen monitor).
+
+---
+
 ### 2026-10-02 — Esconder lo roto que no entra en el release de octubre (SCRUM-490)
 
 **Rama:** `claude/great-thompson-n7ts63`
