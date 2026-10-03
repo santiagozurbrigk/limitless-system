@@ -34,27 +34,6 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
-### 2026-10-02 — Tests del resumen de Finanzas y de la serie de 6 meses, y tres arreglos de fechas (SCRUM-101)
-
-**Rama:** `test/SCRUM-101-finanzas`
-**Commit(s):** este
-**Módulo(s) afectado(s):** `lib/metrics/derive-finance-summary.ts`, `lib/metrics/derive-monthly-series.ts`
-
-**Qué se hizo:**
-- Tests de `deriveCloserBreakdown` (0, 1 y varios closers, sin quién cerró, sin resultado) y de `deriveFinanceSummary` (facturación, gastos, margen sin NaN, por cobrar sin negativos, por cobrar por mes, saldo por plataforma), y de `deriveMonthlySeries` (los 6 meses, cambio de año, meses vacíos, separación por tipo de ingreso). Corren en varias zonas horarias, con control de que la zona cambió.
-- Arreglo: en "Por cobrar por mes", una cuota que vence el día 1 aparecía en el mes anterior para quien está en Argentina (`new Date("YYYY-MM-DD")` es medianoche UTC). Ahora se lee como día local.
-- Arreglo: "Por cobrar por mes" agrupaba sólo por el nombre del mes, así que octubre de 2026 y octubre de 2027 se sumaban juntos, y el orden era el de los clientes. Ahora agrupa por mes y año, en orden cronológico; si hay varios años, el nombre lleva el año.
-- Arreglo: en la serie de 6 meses, en una zona al este de UTC cada barra mostraba los datos del mes anterior (el ancla se armaba con `toISOString()`). `deriveMonthlySeries` acepta además un `now` opcional para los tests.
-- Casos marcados "hoy": un cierre con facturación 0 no cuenta para el closer; no hay reembolsos en el modelo.
-
-**Por qué / finalidad:** cierra `[T-1]`. El resumen de Finanzas y la serie no tenían tests, y al escribirlos aparecieron los tres errores.
-
-**Decisiones de diseño relevantes:** el nombre del mes lleva el año sólo cuando hay cuotas de más de un año, para no cambiar lo que se ve en el caso común. Probado contra el código anterior: los tests de los arreglos fallan con él.
-
-**Riesgos / deuda técnica pendiente:** ninguno.
-
----
-
 ### 2026-10-03 — Los procesos de fondo avisan cuando fallan (SCRUM-84, código)
 
 **Rama:** `claude/great-thompson-n7ts63`
@@ -107,6 +86,27 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 Typeform, Google Forms, Instagram, anuncios y `daily-signals` no reportan por org (sí tienen monitor).
 
+
+---
+
+### 2026-10-02 — Tests del resumen de Finanzas y de la serie de 6 meses, y tres arreglos de fechas (SCRUM-101)
+
+**Rama:** `test/SCRUM-101-finanzas`
+**Commit(s):** este
+**Módulo(s) afectado(s):** `lib/metrics/derive-finance-summary.ts`, `lib/metrics/derive-monthly-series.ts`
+
+**Qué se hizo:**
+- Tests de `deriveCloserBreakdown` (0, 1 y varios closers, sin quién cerró, sin resultado) y de `deriveFinanceSummary` (facturación, gastos, margen sin NaN, por cobrar sin negativos, por cobrar por mes, saldo por plataforma), y de `deriveMonthlySeries` (los 6 meses, cambio de año, meses vacíos, separación por tipo de ingreso). Corren en varias zonas horarias, con control de que la zona cambió.
+- Arreglo: en "Por cobrar por mes", una cuota que vence el día 1 aparecía en el mes anterior para quien está en Argentina (`new Date("YYYY-MM-DD")` es medianoche UTC). Ahora se lee como día local.
+- Arreglo: "Por cobrar por mes" agrupaba sólo por el nombre del mes, así que octubre de 2026 y octubre de 2027 se sumaban juntos, y el orden era el de los clientes. Ahora agrupa por mes y año, en orden cronológico; si hay varios años, el nombre lleva el año.
+- Arreglo: en la serie de 6 meses, en una zona al este de UTC cada barra mostraba los datos del mes anterior (el ancla se armaba con `toISOString()`). `deriveMonthlySeries` acepta además un `now` opcional para los tests.
+- Casos marcados "hoy": un cierre con facturación 0 no cuenta para el closer; no hay reembolsos en el modelo.
+
+**Por qué / finalidad:** cierra `[T-1]`. El resumen de Finanzas y la serie no tenían tests, y al escribirlos aparecieron los tres errores.
+
+**Decisiones de diseño relevantes:** el nombre del mes lleva el año sólo cuando hay cuotas de más de un año, para no cambiar lo que se ve en el caso común. Probado contra el código anterior: los tests de los arreglos fallan con él.
+
+**Riesgos / deuda técnica pendiente:** ninguno.
 ---
 
 ### 2026-10-02 — Esconder lo roto que no entra en el release de octubre (SCRUM-490)
