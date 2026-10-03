@@ -78,7 +78,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 19 | 42 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 18 | 42 | 13 |
 
 ---
 
@@ -2280,16 +2280,6 @@ Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe su
 - **Qué hay que hacer:** empezar por `compact-conversation.ts` (no muta la entrada, conserva los últimos 6), `credential-resolver.ts`/`executeWithCredentialFallback` (orden BYOK → global), `verify-queue-request.ts` (secreto vs firma) y `resolveEffectiveOrganizationId` del holding.
 - **Criterio de aceptación:** Existen tests en lib/agent, lib/ai, lib/queue y lib/holding que verifican: la compaction no muta la entrada y conserva los últimos 6 mensajes; executeWithCredentialFallback usa primero la key BYOK de la org y cae a la global; verifyQueueRequest acepta secreto o firma QStash y rechaza sin ninguno, y resolveEffectiveOrganizationId respeta el holding; pnpm test pasa
 - **Dónde:** `apps/web/lib/{agent,ai,queue,auth,holding}/__tests__/`.
-
-#### [T-1] Tests de `derive-finance-summary.ts` y `derive-monthly-series.ts`
-- **Tipo:** tests
-- **Severidad:** Media
-- **Estado verificado:** `lib/metrics/__tests__/` sólo tiene `build-sales-funnel-stages` y `match-closer`.
-- **Riesgo:** Si se toca la agregación mensual o el desglose por closer, entonces un corrimiento ART/UTC o un mes vacío mal tratado cambia los números del dashboard sin que nada lo detecte.
-- **Impacto:** Métricas de Finanzas y comisiones por closer que el negocio usa para decidir; hoy no hay bug conocido, es prevención.
-- **Qué hay que hacer:** agrupación por mes (ART vs UTC), meses vacíos, `deriveCloserBreakdown` con 0/1 closer y sin `closed_by_name`, reembolsos y `null`.
-- **Criterio de aceptación:** Hay tests de derive-finance-summary.ts y derive-monthly-series.ts que cubren agrupación por mes en hora de Argentina vs UTC, meses vacíos, deriveCloserBreakdown con 0/1 closer y sin closed_by_name, reembolsos y valores null; pnpm test pasa
-- **Dónde:** `apps/web/lib/metrics/`.
 
 #### [T-3] Tests de `parse-client-import.ts` y `excel-parser.ts`
 - **Tipo:** tests

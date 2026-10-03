@@ -26,17 +26,20 @@ const MONTH_SHORT = [
 export function deriveMonthlySeries(
   clients: Client[],
   expenses: ExpensesSummary,
-  payments?: ClientPayment[]
+  payments?: ClientPayment[],
+  now: Date = new Date()
 ): MonthlySeriesPoint[] {
-  const now = new Date();
   const events = collectRevenueEvents(clients, payments);
   const buckets: MonthlySeriesPoint[] = [];
 
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    // El ancla se arma con el día local: con `toISOString()`, en una zona al
+    // este de UTC el día 1 pasaba a ser el último del mes anterior y cada barra
+    // mostraba los datos del mes previo (SCRUM-101).
     const period = resolveRevenueDateRange({
       preset: "month",
-      anchor: d.toISOString().slice(0, 10),
+      anchor: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
     });
     const monthEvents = filterRevenueEvents(events, period);
 

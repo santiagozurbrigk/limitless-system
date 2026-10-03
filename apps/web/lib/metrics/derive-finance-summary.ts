@@ -13,6 +13,7 @@ import {
 } from "@/lib/metrics/revenue-events";
 import {
   DEFAULT_REVENUE_RANGE,
+  parseDateOnly,
   prorateMonthlyExpenses,
   resolveRevenueDateRange,
   type ResolvedRevenuePeriod,
@@ -61,8 +62,18 @@ function pendientePorCobrar(client: Client): number {
   return Math.max(0, client.totalAmount - cobradoSegunPagoForClient(client));
 }
 
-function monthLabelEs(dateIso: string): string {
-  return new Date(dateIso).toLocaleDateString("es", { month: "long" });
+/**
+ * Mes (YYYY-MM) y nombre del mes de una fecha YYYY-MM-DD, leída como día local.
+ * `new Date("2026-10-01")` es medianoche UTC: en Argentina daba "septiembre"
+ * para una cuota que vence el 1 de octubre (SCRUM-101).
+ */
+function mesDeVencimiento(dateIso: string): { clave: string; nombre: string; anio: number } {
+  const d = parseDateOnly(dateIso);
+  return {
+    clave: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+    nombre: d.toLocaleDateString("es", { month: "long" }),
+    anio: d.getFullYear(),
+  };
 }
 
 export function deriveCloserBreakdown(
@@ -117,18 +128,28 @@ export function deriveFinanceSummary(
 
   const porCobrar = clients.reduce((sum, c) => sum + pendientePorCobrar(c), 0);
 
-  const pendingByMonth = new Map<string, number>();
+  // Por mes y año, en orden cronológico. Antes se agrupaba sólo por el nombre
+  // del mes: octubre de 2026 y octubre de 2027 se sumaban juntos, y el orden
+  // era el de los clientes (SCRUM-101).
+  const pendingByMonth = new Map<string, { nombre: string; anio: number; amount: number }>();
   for (const client of clients) {
     for (const inst of client.installments ?? []) {
       if (inst.status !== "pending" || !inst.dueDate) continue;
-      const label = monthLabelEs(inst.dueDate);
-      pendingByMonth.set(label, (pendingByMonth.get(label) ?? 0) + inst.amount);
+      const mes = mesDeVencimiento(inst.dueDate);
+      // Una fecha que no se puede leer no arma un mes "NaN-NaN" (el esquema ya
+      // valida YYYY-MM-DD; esto es por si llega algo de otro lado).
+      if (!Number.isFinite(mes.anio)) continue;
+      const prev = pendingByMonth.get(mes.clave);
+      pendingByMonth.set(mes.clave, { ...mes, amount: (prev?.amount ?? 0) + inst.amount });
     }
   }
 
-  const porCobrarByMonth = Array.from(pendingByMonth.entries()).map(
-    ([month, amount]) => ({ month, amount })
-  );
+  const ordenados = Array.from(pendingByMonth.entries()).sort(([a], [b]) => a.localeCompare(b));
+  const variosAnios = new Set(ordenados.map(([, m]) => m.anio)).size > 1;
+  const porCobrarByMonth = ordenados.map(([, m]) => ({
+    month: variosAnios ? `${m.nombre} ${m.anio}` : m.nombre,
+    amount: m.amount,
+  }));
 
   const balanceByPlatform = new Map<string, number>();
   for (const event of periodEvents) {

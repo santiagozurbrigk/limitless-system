@@ -66,7 +66,7 @@ Qué no testear en Vitest: componentes React, actions que sólo hacen `select`, 
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **89 archivos, ~1.130 casos**. No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **123 archivos, ~1.401 casos** (recontado el 2026-10-02). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -86,7 +86,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/sops` | 2 | 25 | marcadores de adjuntos, chunks de audio |
 | `lib/integrations` | 1 | 23 | `health.ts` y completitud del registro |
 | `lib/vturb` | 2 | 23 | normalización de stats, período cerrado |
-| `lib/metrics` | 2 | 21 | etapas del embudo de ventas, match de closer |
+| `lib/metrics` | 6 | 79 | etapas del embudo de ventas, match de closer, períodos y prorrateo, ingresos por fecha, resumen de Finanzas, serie de 6 meses (varias zonas horarias) |
 | `lib/closing` | 1 | 20 | estado de llamadas |
 | `constants` | 2 | 16 | módulos de permisos |
 | `lib/navigation` | 2 | 15 | módulo por path, metadata de página |
@@ -99,10 +99,13 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/workboard` | 1 | 6 | filtro por responsable |
 | `lib/chart` | 1 | 5 | escala del embudo |
 | `lib/supabase` | 2 | 4 | rutas públicas del middleware, `fetchAllRows` |
+| `lib/release` | 1 | 4 | lo escondido para el release: ⌘K, catálogo de integraciones, canales de Lead Magnets |
+| `lib/observability` | 1 | 4 | aviso a Sentry de los crons |
 | `lib/storage` | 1 | 3 | validación de rutas por org |
+| `lib/queue` | 1 | 3 | aviso cuando falla un trabajo de QStash |
 | `lib/unipile` | 1 | 3 | secreto del webhook |
 
-**Sin ningún test:** `lib/agent` (compaction, JIT, streaming), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap, permisos), `lib/holding`, `lib/queue`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence`, `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan Finanzas y el Panel, y los parsers de import de clientes. Tampoco hay tests de route handlers ni de Server Actions.
+**Sin ningún test:** `lib/agent` (compaction, JIT, streaming), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap, permisos), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence`, `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`), los gastos y las métricas de ventas, y los parsers de import de clientes. Tampoco hay tests de route handlers ni de Server Actions.
 
 ### E2E
 

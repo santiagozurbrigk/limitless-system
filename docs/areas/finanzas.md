@@ -138,10 +138,12 @@ Finanzas: escriben en `payment_transactions`, que este módulo no lee.
 | Archivo | Cubre |
 |---|---|
 | `lib/metrics/__tests__/match-closer.test.ts` | Qué closer se lleva cada llamada (usado por las dos comisiones) |
+| `lib/metrics/__tests__/derive-finance-summary.test.ts` | Resumen de Finanzas: facturación, gastos, margen, por cobrar y por mes, saldo por plataforma, desglose por closer (SCRUM-101) |
+| `lib/metrics/__tests__/derive-monthly-series.test.ts` | Serie de los últimos 6 meses, en varias zonas horarias (SCRUM-101) |
+| `lib/metrics/__tests__/revenue-period.test.ts` y `revenue-events.test.ts` | Períodos, prorrateo de gastos y en qué fecha cuenta cada cobro (SCRUM-102) |
 
-Sin tests: `derive-finance-summary.ts`, `derive-monthly-series.ts`, `compute-expenses-summary.ts`,
-`enrich-team-compensation.ts`, `computeTeamPayrollAction`, `lib/mercadopago/*` (incluida la verificación de
-firma), `lib/stripe/*`. No hay e2e. Backlog: `[T-1]` en `PENDIENTES.md`.
+Sin tests: `compute-expenses-summary.ts`, `enrich-team-compensation.ts`, `computeTeamPayrollAction`,
+`lib/mercadopago/*` (incluida la verificación de firma), `lib/stripe/*`. No hay e2e.
 
 ## Archivos clave
 
