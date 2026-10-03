@@ -26,7 +26,7 @@ Vercel invoca los crons con **GET** y el header `Authorization: Bearer <CRON_SEC
 | Path | Schedule | Qué hace | maxDuration | Fan-out QStash |
 |---|---|---|---|---|
 | `/api/integrations/fathom/process` | `*/10 * * * *` | Procesa la cola de `fathom_calls` pendientes (no lista reuniones); reclama llamadas trabadas (`lib/fathom/reclaim-stuck.ts`) y encola el análisis profundo | 60 | análisis vía `publishFathomAnalysisJob` |
-| `/api/integrations/fathom/sync` | `0 * * * *` | Lista reuniones nuevas de Fathom por API key (`syncAllFathomIntegrations`) | 60 | no |
+| `/api/integrations/fathom/sync` | `0 * * * *` | Lista reuniones nuevas de Fathom por API key: la de cada org (`syncAllFathomIntegrations`) y la de cada miembro conectado desde la sección por miembro (`sincronizarTodosLosMiembrosFathom`, SCRUM-448) | 60 | no |
 | `/api/integrations/typeform/sync` | `0 * * * *` | Formularios y respuestas de Typeform → `forms`, `form_responses` | 60 | no |
 | `/api/integrations/google-forms/sync` | `0 * * * *` | Formularios y respuestas de Google Forms | 60 | no |
 | `/api/cron/calendly-sync` | `0 * * * *` | Respaldo de turnos de Calendly (org) → `closing_calls`; 500 si falla | 60 | no |

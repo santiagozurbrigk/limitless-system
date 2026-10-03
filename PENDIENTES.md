@@ -73,7 +73,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|---|---|
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 33 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
-| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 13 | 17 | 8 |
+| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 12 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
@@ -889,16 +889,6 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 - **Qué hay que hacer:** apretar "Cargar identidades desde el CRM" en `/clients/pending-calls`, dejar correr el cron y medir `purpose`/`resolution_method`. Medir falsos positivos del peldaño de nombre.
 - **Criterio de aceptación:** Se ejecutó el paso de verificacion-manual.md § Ventas 7 («Cruce grabación ↔ turno y clasificación», siembra de identidades) con la cuenta real: client_identities tiene filas y quedaron anotadas la distribución de purpose/resolution_method y la tasa de falsos positivos por nombre; si falló, se abrió un ítem nuevo
 - **Dónde:** `apps/web/lib/fathom/identities.ts`, `apps/web/lib/fathom/seed-identities.ts`.
-
-#### [B-FATHOM-NUNCA-PROBADO] Keys de Fathom por miembro nunca probadas contra Fathom
-- **Tipo:** verificación manual
-- **Severidad:** Media
-- **Estado verificado:** el código existe (`app/fathom/member-actions.ts`, `lib/fathom/webhooks.ts`, `app/api/integrations/fathom/webhook/[token]/route.ts`). Desde SCRUM-37 (2026-10-02) la firma sigue el esquema de la doc de Fathom (`webhook-id`/`webhook-timestamp`/`webhook-signature`) y el guardado usa el mismo upsert que la sync, con el crudo en `fathom_webhook_events`; probado con tests, no con una entrega real. La forma del cuerpo de `new-meeting-content-ready` no está en la doc. CHANGES.md no registra una prueba real.
-- **Riesgo:** Si el cuerpo real del webhook no tiene la forma de `/meetings`, entonces las entregas quedan guardadas en `fathom_webhook_events` con `error` y la llamada no se crea hasta reprocesarlas; la key por miembro para sincronizar puede tener otros supuestos falsos.
-- **Impacto:** Miembros que conecten su propia cuenta de Fathom; hay sincronización manual como alternativa y hoy no hay evidencia de uso real.
-- **Qué hay que hacer:** ver `docs/operacion/verificacion-manual.md` § Ventas ("Fathom por miembro").
-- **Criterio de aceptación:** Se ejecutó el paso de verificacion-manual.md § Ventas 6 («Fathom por miembro») con cuentas reales de Fathom y el resultado quedó anotado (incluido si la firma del webhook valida); si falló, se abrió un ítem nuevo
-- **Dónde:** idem.
 
 #### [LLAMADAS-VERIFICAR-FATHOM] Cruce grabación ↔ turno con datos reales
 - **Tipo:** verificación manual

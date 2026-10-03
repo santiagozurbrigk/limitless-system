@@ -86,7 +86,9 @@ improvisadas, que son las que no tienen tipo asignado.
   (`app/api/integrations/fathom/webhook/[token]/route.ts`) guarda el crudo en
   `fathom_webhook_events` antes de interpretarlo y lo mapea con `mapFathomMeeting` (forma de
   `/meetings`, en la raíz o bajo `meeting`/`recording`/`data`); lo que no se entiende queda en el
-  evento con `error`. Confirmar con la primera entrega real (`[B-FATHOM-NUNCA-PROBADO]`).
+  evento con `error`. En la prueba real del 2026-10-03 Fathom **no disparó** el webhook aunque la grabación
+  ya estaba en `/meetings`; por eso el cron horario también sincroniza las keys por miembro
+  (`lib/fathom/member-sync.ts`). Si alguna vez llega una entrega, confirmar la forma del cuerpo.
 - **Firma de los webhooks:** esquema de `webhooks.md` ("Verifying Webhooks"): `webhook-id`,
   `webhook-timestamp`, `webhook-signature` (`v1,<base64>`), HMAC-SHA256 de `id.timestamp.cuerpo`
   con el secreto `whsec_` decodificado. Implementado en `lib/fathom/webhook-signature.ts`.

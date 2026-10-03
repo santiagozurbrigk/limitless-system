@@ -34,6 +34,42 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-03 — Las grabaciones de cada miembro de Fathom entran solas cada hora (SCRUM-448, SCRUM-47)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Ventas → Llamadas. `lib/fathom/member-sync.ts` (nuevo),
+`app/api/integrations/fathom/sync/route.ts`, `app/fathom/member-actions.ts`.
+
+**Qué se hizo:**
+- `sincronizarMiembroFathom` es la sincronización de un miembro con su propia key: desde la conexión en adelante,
+  con el mismo upsert que la sync de la org y `user_id` del miembro. Si alguna grabación falla, el cursor no avanza.
+- La usan el botón "Sincronizar mis llamadas" y el cron horario `/api/integrations/fathom/sync`, a través de
+  `sincronizarTodosLosMiembrosFathom`.
+- El cron sólo toma las conexiones hechas desde la sección por miembro (`webhook_token`) que no están `revoked`.
+- Si la key de un miembro falla, su fila queda en `status = 'error'` con `last_error` y el error va a Sentry.
+- Tests: `lib/fathom/__tests__/member-sync.test.ts` (4).
+
+**Por qué / finalidad:** la prueba real del 2026-10-03 (`[B-FATHOM-NUNCA-PROBADO]`, SCRUM-47):
+- conectar la key creó el webhook en Fathom con la URL correcta;
+- se grabó una llamada y Fathom no disparó el aviso en 25 minutos;
+- la grabación sí estaba en `/meetings`.
+
+Con el cron, las grabaciones de cada miembro llegan solas, como mucho una hora después. Cierra
+`[B-FATHOM-NUNCA-PROBADO]` (el resultado quedó en `verificacion-manual.md` § Ventas). F-VEN-21 pasa a "Funciona" y
+se borra la historia H-VEN-21.
+
+**Decisiones de diseño relevantes:**
+- No se sincronizan las filas que crea la conexión de la organización. Llevan la key del negocio, ya entran por la
+  sync de la org, y ponerles dueño haría privadas de quien conectó todas las llamadas del negocio.
+- El webhook queda activo como vía instantánea.
+
+**Riesgos / deuda técnica pendiente:**
+- Si Fathom empieza a disparar el webhook, la misma grabación entra por las dos vías; el upsert deduplica.
+- Sigue abierto `[FATHOM-PRIVACIDAD-LEAD]`.
+
+---
+
 ### 2026-10-03 — Los procesos de fondo avisan cuando fallan (SCRUM-84, código)
 
 **Rama:** `claude/great-thompson-n7ts63`

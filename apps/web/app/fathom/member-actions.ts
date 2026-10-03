@@ -2,13 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAuthContext } from "@/lib/auth/require-auth";
-import { resolverVentanaDeSync } from "@/lib/fathom/sync-window";
-import {
-  validateFathomApiKey,
-  listFathomMeetings,
-  mensajeDeFathom,
-} from "@/lib/fathom/api";
-import { upsertFathomCallFromMeeting } from "@/lib/fathom/sync";
+import { validateFathomApiKey } from "@/lib/fathom/api";
+import { sincronizarMiembroFathom } from "@/lib/fathom/member-sync";
 import {
   createFathomWebhook,
   deleteFathomWebhook,
@@ -233,67 +228,15 @@ async function sincronizarLlamadasDelMiembro(): Promise<{
     throw new Error("No tenés Fathom conectado");
   }
 
-  const apiKey = readMemberFathomKey(
-    integration.encrypted_api_key as string,
-    organizationId,
-    user.id
-  );
-
-  const ventana = resolverVentanaDeSync(
-    integration.last_sync_at as string | null,
-    integration.connected_at as string | null
-  );
-
-  let meetings;
-  try {
-    meetings = await listFathomMeetings(apiKey, {
-      // Misma regla que la sincronización de la organización: desde la
-      // conexión en adelante. Antes esto traía TODO lo que la cuenta tuviera
-      // grabado desde siempre, que es lo que se decidió no hacer.
-      createdAfter: ventana.desde ?? undefined,
-      maxPages: 5,
-    });
-  } catch (fallo) {
-    throw new Error(mensajeDeFathom(fallo));
-  }
-
-  let synced = 0;
-  let fallidas = 0;
-
-  for (const meeting of meetings) {
-    /**
-     * ⭐ El mismo upsert que el sync por organización.
-     *
-     * Antes acá había una copia del guardado que se había quedado atrás: no
-     * persistía `calendar_invitees` —sin eso una llamada nunca se puede cruzar
-     * con un turno agendado— y forzaba `status: pending` en cada corrida, así
-     * que una llamada ya procesada y asociada volvía a la cola cada vez que
-     * alguien apretaba el botón.
-     */
-    const ok = await upsertFathomCallFromMeeting(admin, organizationId, meeting);
-    if (ok) {
-      synced += 1;
-      // El dueño de la grabación: es lo que hace que una llamada sin vincular
-      // la vea sólo quien la grabó.
-      await admin
-        .from("fathom_calls")
-        .update({ user_id: user.id })
-        .eq("organization_id", organizationId)
-        .eq("fathom_call_id", String(meeting.recording_id ?? meeting.id))
-        .is("user_id", null);
-    } else {
-      fallidas += 1;
-    }
-  }
-
-  await admin
-    .from("team_member_integrations")
-    .update({
-      last_sync_at: new Date().toISOString(),
-    })
-    .eq("organization_id", organizationId)
-    .eq("user_id", user.id)
-    .eq("integration_type", "fathom");
+  // ⭐ La misma sincronización que corre el cron cada hora
+  // (`lib/fathom/member-sync.ts`): mismo upsert, mismo dueño, misma ventana.
+  const { synced, fallidas } = await sincronizarMiembroFathom(admin, {
+    organization_id: organizationId,
+    user_id: user.id,
+    encrypted_api_key: integration.encrypted_api_key as string,
+    last_sync_at: integration.last_sync_at as string | null,
+    connected_at: integration.connected_at as string | null,
+  });
 
   revalidatePath(paths.platform.integrations);
 

@@ -475,9 +475,16 @@ hoy se ven sin análisis: eso es `[FATHOM-DEEP-ANALISIS-ALCANCE]`, no esta panta
 
 ---
 
-### 6. Fathom por miembro (keys, webhooks, privacidad) ⚠️🔒 — `[B-FATHOM-NUNCA-PROBADO]`
+### 6. Fathom por miembro (keys, webhooks, privacidad) ⚠️🔒 — probado 2026-10-03 (SCRUM-47)
 
 **Prerrequisitos:** cuenta real de Fathom para dos miembros; `ENCRYPTION_MASTER_KEY` configurada.
+
+**Resultado 2026-10-03 (SCRUM-47):** probado con la cuenta real de Santiago Zurbrigk en Optimiza tu Control.
+- Al conectar la key desde la sección por miembro, se creó el webhook en Fathom (destino `https://www.optimizatucontrol.com/...`, scopes My Recordings y My Team-Shared Recordings) y se dedujo bien el mail.
+- Se grabó una llamada de 2 min a las 00:49 UTC. Fathom **no disparó el webhook**: en 25 min no llegó ningún pedido a `/api/integrations/fathom/webhook/*` y `fathom_webhook_events` siguió vacía, aunque la grabación ya aparecía en `GET /meetings`.
+- "Sincronizar mis llamadas" la trajo a nombre del miembro (`user_id`), y entró al pipeline.
+- Decisión: el cron horario sincroniza también las keys por miembro (SCRUM-448), así la grabación entra sola igual. El webhook queda activo: si Fathom lo dispara, la llamada entra al instante.
+- Si algún día llega una entrega, revisar que `fathom_webhook_events` la tenga sin `error`.
 
 0. ⚠️ Estado al 2026-10-02: las 8 filas de Fathom en `team_member_integrations` vienen de la conexión **de la organización** (`connectFathomAction` registra a quien conectó como miembro), que no crea webhook: ninguna tiene `webhook_id`. Para probar el webhook, el miembro tiene que conectar (o volver a conectar) su key desde la sección de cuentas por miembro de **Integraciones → Fathom** (`connectMemberFathomAction`), que es la que lo crea.
 1. Un miembro conecta su key en **Integraciones → Fathom**: se valida antes de guardar y figura conectado.
