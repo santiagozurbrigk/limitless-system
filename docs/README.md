@@ -70,6 +70,7 @@ integraciones, reglas de negocio no obvias, limitaciones, tests y archivos clave
 | [`operacion/entorno-y-deploy.md`](./operacion/entorno-y-deploy.md) | Setup local, variables de entorno verificadas, Vercel, Fly, Railway, migraciones, git |
 | [`operacion/testing.md`](./operacion/testing.md) | Typecheck, lint, Vitest, Playwright, CI y cobertura por área |
 | [`operacion/verificacion-manual.md`](./operacion/verificacion-manual.md) | Lo que hay que probar a mano con cuentas reales, por área |
+| [`operacion/alertas.md`](./operacion/alertas.md) | Qué manda a Sentry cada proceso de fondo y qué reglas de alerta (mail) crear |
 | [`operacion/discord-bot-deploy.md`](./operacion/discord-bot-deploy.md) | Runbook del bot de Discord en Railway |
 | [`operacion/incidentes.md`](./operacion/incidentes.md) | Qué hacer cuando algo se rompe en producción (runbook de incidentes) |
 

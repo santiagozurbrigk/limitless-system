@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { processRagIngestion } from "@/lib/queue/processors/rag-ingestion";
 import { verifyQStashRequest } from "@/lib/queue/qstash-verify";
+import { reportarFalla } from "@/lib/observability/reportar-falla";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    reportarFalla(err, { cron: "/api/queue/process-rag-ingestion", organizationId: parsed.data.organizationId });
     console.error("[Queue] process-rag-ingestion error", {
       documentId: parsed.data.documentId,
       durationMs: Date.now() - started,

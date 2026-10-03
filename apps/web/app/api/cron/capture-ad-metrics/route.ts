@@ -4,6 +4,7 @@ import {
   captureAdMetricsForAllOrganizations,
   captureAdMetricsForOrganization,
 } from "@/lib/marketing/ad-metrics-snapshot";
+import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,9 +23,9 @@ export const maxDuration = 60;
  * Test manual:
  *   curl -X POST "$APP_URL/api/cron/capture-ad-metrics" -H "Authorization: Bearer $CRON_SECRET"
  */
-export async function GET(request: Request) {
+export const GET = conMonitorDeCron("/api/cron/capture-ad-metrics", async (request: Request) => {
   return POST(request);
-}
+});
 
 export async function POST(request: Request) {
   const unauthorized = assertCronAuthorized(request);

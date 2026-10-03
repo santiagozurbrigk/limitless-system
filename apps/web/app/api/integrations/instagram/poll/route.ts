@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { assertCronAuthorized } from "@/lib/integrations/cron-auth";
 import { pollInstagramConversations } from "@/lib/instagram/poll-conversations";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -43,9 +44,9 @@ async function runPoll(request: Request) {
 }
 
 /** Polling de DMs vía Graph API — cada 5 min (Vercel Cron) o manual con CRON_SECRET. */
-export async function GET(request: Request) {
+export const GET = conMonitorDeCron("/api/integrations/instagram/poll", async (request: Request) => {
   return runPoll(request);
-}
+});
 
 export async function POST(request: Request) {
   return runPoll(request);

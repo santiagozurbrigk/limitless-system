@@ -10,13 +10,14 @@ import {
   publishCronFanout,
   getCronExecutiveReportWorkerUrl,
 } from "@/lib/queue/qstash-client";
+import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-export async function GET(request: Request) {
+export const GET = conMonitorDeCron("/api/cron/executive-report-monthly", async (request: Request) => {
   return POST(request);
-}
+});
 
 export async function POST(request: Request) {
   const unauthorized = assertCronAuthorized(request);

@@ -22,6 +22,7 @@ import { classifyDiscordMessagesForOrg } from "@/lib/discord/classify-run";
 import { proposeCheckpointsFromDiscordForOrg } from "@/lib/discord/propose-checkpoints";
 import { proposeCheckpointsFromCallsForOrg } from "@/lib/fathom/propose-checkpoints";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
 /** Varias llamadas a Haiku por organización, en serie. */
@@ -34,9 +35,9 @@ type OrgResult = {
   hitosDesdeLlamadas?: { evaluados: number; propuestos: number; creados: number } | { error: string };
 };
 
-export async function GET(request: Request) {
+export const GET = conMonitorDeCron("/api/cron/daily-signals", async (request: Request) => {
   return POST(request);
-}
+});
 
 export async function POST(request: Request) {
   const unauthorized = assertCronAuthorized(request);

@@ -6,6 +6,7 @@ import {
 } from "@/lib/calendly/oauth-token";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { CalendlyEventSyncPayload } from "@/types/calendly";
+import { reportarFalla } from "@/lib/observability/reportar-falla";
 
 export type CalendlyOrgSyncResult = {
   organizationId: string;
@@ -63,6 +64,12 @@ export async function syncCalendlyOrganizationSafe(
         `[calendly/sync] Token inválido o expirado (org=${organizationId}):`,
         e
       );
+      reportarFalla(e, {
+        cron: "/api/cron/calendly-sync",
+        organizationId,
+        provider: "calendly",
+        extra: { etapa: "token_error" },
+      });
       return EMPTY_ORG_RESULT(organizationId, "token_error");
     }
 
@@ -74,6 +81,12 @@ export async function syncCalendlyOrganizationSafe(
         `[calendly/sync] Error al listar eventos (org=${organizationId}):`,
         e
       );
+      reportarFalla(e, {
+        cron: "/api/cron/calendly-sync",
+        organizationId,
+        provider: "calendly",
+        extra: { etapa: "fetch_error" },
+      });
       return EMPTY_ORG_RESULT(organizationId, "fetch_error");
     }
 

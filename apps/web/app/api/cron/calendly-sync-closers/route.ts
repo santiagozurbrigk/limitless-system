@@ -5,13 +5,14 @@
 import { NextResponse } from "next/server";
 import { assertCronAuthorized } from "@/lib/integrations/cron-auth";
 import { syncAllClosersGlobal, syncAllClosersForOrganization } from "@/lib/calendly/closer-sync";
+import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-export async function GET(request: Request) {
+export const GET = conMonitorDeCron("/api/cron/calendly-sync-closers", async (request: Request) => {
   return POST(request);
-}
+});
 
 export async function POST(request: Request) {
   const unauthorized = assertCronAuthorized(request);

@@ -13,17 +13,20 @@
 console.log("[Worker] starting up, Node.js", process.version, "pid", process.pid);
 process.on("uncaughtException", (err) => {
   console.error("[Worker] uncaughtException", err.message, err.stack);
-  process.exit(1);
+  reportarErrorDelWorker(err);
+  void vaciarSentry().finally(() => process.exit(1));
 });
 process.on("unhandledRejection", (reason) => {
   console.error("[Worker] unhandledRejection", reason);
-  process.exit(1);
+  reportarErrorDelWorker(reason);
+  void vaciarSentry().finally(() => process.exit(1));
 });
 
 import express, { type Express } from "express";
 import { z } from "zod";
 import { Receiver } from "@upstash/qstash";
 import { processReelVariationJob } from "./processor";
+import { reportarErrorDelWorker, vaciarSentry } from "./sentry";
 import type { ReelVariationJobPayload } from "./types";
 
 const app: Express = express();
@@ -178,6 +181,10 @@ app.post("/", async (req, res) => {
     console.error("[Worker] unhandled error in processReelVariationJob", {
       jobId: payload.jobId,
       error: message,
+    });
+    reportarErrorDelWorker(err, {
+      jobId: payload.jobId,
+      organizationId: payload.organizationId,
     });
     // Responder 200 aunque haya error — el job ya fue marcado como "failed"
     // en DB por el processor. Si respondemos 5xx, QStash reintentaría.

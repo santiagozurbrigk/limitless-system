@@ -11,6 +11,7 @@ import {
   getFathomIntegrationDiagnostics,
 } from "@/lib/fathom/diagnostics";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { reportarFalla } from "@/lib/observability/reportar-falla";
 
 
 function buildFathomCallRow(organizationId: string, meeting: FathomMeetingRecord) {
@@ -352,6 +353,11 @@ export async function syncAllFathomIntegrations(options?: {
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       console.error("[Fathom:sync] Org sync failed:", organizationId, error, e);
+      reportarFalla(e, {
+        cron: "/api/integrations/fathom/sync",
+        organizationId,
+        provider: "fathom",
+      });
       skippedOrgs.push(organizationId);
       orgResults.push({ organizationId, ingested: 0, error });
     }

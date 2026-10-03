@@ -35,6 +35,15 @@ export function getPublicAppUrl(): string {
   );
 }
 
+/**
+ * Adónde avisa QStash cuando un job agota sus reintentos (SCRUM-84). Se pasa
+ * como `failureCallback` en cada `publishJSON`: sin esto, un job que falla
+ * siempre quedaba sólo en la cola de mensajes muertos de Upstash.
+ */
+export function getQueueFailureCallbackUrl(): string {
+  return `${getPublicAppUrl()}/api/queue/failure`;
+}
+
 export function getRagIngestionWorkerUrl(): string {
   return `${getPublicAppUrl()}/api/queue/process-rag-ingestion`;
 }
@@ -101,6 +110,7 @@ export async function publishCronFanout(
         body: { organizationId, ...extraBody },
         retries,
         headers: extraHeaders,
+        failureCallback: getQueueFailureCallbackUrl(),
       })
     )
   );
@@ -142,6 +152,7 @@ export async function publishFathomAnalysisJob(
       url: getFathomAnalysisQueueUrl(),
       body: payload,
       retries: 2,
+      failureCallback: getQueueFailureCallbackUrl(),
     });
 
     console.log("[Queue] fathom-analysis published to QStash", {
@@ -167,6 +178,7 @@ export async function publishRagIngestionJob(
       url: getRagIngestionWorkerUrl(),
       body: payload,
       retries: 3,
+      failureCallback: getQueueFailureCallbackUrl(),
     });
 
     console.log("[Queue] rag-ingestion published to QStash", {

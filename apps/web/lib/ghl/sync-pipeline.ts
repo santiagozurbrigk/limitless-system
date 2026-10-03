@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { listGHLAppointments } from "./client";
 import { decryptGHLApiKey, getGHLIntegrationForOrg } from "./integration";
 import { syncGHLAppointmentsForOrganization, type GHLSyncResult } from "./sync-appointments";
+import { reportarFalla } from "@/lib/observability/reportar-falla";
 
 // Rango: últimos 90 días + próximos 90 días
 // GHL /calendars/events requiere Unix timestamps en milisegundos (no ISO 8601)
@@ -90,6 +91,9 @@ export async function syncGHLOrganizationSafe(
     return { organizationId, ...result };
   } catch (e) {
     console.error(`[ghl-sync] Error org=${organizationId}:`, e);
+    // Un token de GHL vencido falló 168 veces en tres semanas sin que nadie se
+    // enterara (SCRUM-84): ahora va a Sentry con la org.
+    reportarFalla(e, { cron: "/api/cron/ghl-sync", organizationId, provider: "ghl" });
     return empty;
   }
 }

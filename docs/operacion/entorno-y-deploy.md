@@ -100,9 +100,11 @@ Relevadas con grep de `process.env.*` en `apps/` y `packages/` (89 nombres, incl
 
 El bot valida al arrancar que estén las cinco (`apps/discord-bot/src/index.ts`) y dice cuál falta. Plantilla: `apps/discord-bot/.env.example`.
 
+Opcional: `SENTRY_DSN` (el mismo de Vercel): con ella cada `logError` va a Sentry (SCRUM-84). Sin ella el bot arranca igual.
+
 ### `apps/reel-worker` (Fly.io)
 
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY` (captions con Haiku), `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`, `WORKER_AUTH_SECRET`, `PORT` (8080), `NODE_ENV`. `WORKER_AUTH_SECRET` **falta** en la lista de secrets comentada en `fly.toml`, aunque el código lo usa como método principal de auth (el README del worker sí lo lista).
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY` (captions con Haiku), `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`, `WORKER_AUTH_SECRET`, `PORT` (8080), `NODE_ENV`, y opcional `SENTRY_DSN` (SCRUM-84: errores del worker a Sentry). `WORKER_AUTH_SECRET` **falta** en la lista de secrets comentada en `fly.toml`, aunque el código lo usa como método principal de auth (el README del worker sí lo lista).
 
 ## Deploy de `apps/web` (Vercel)
 

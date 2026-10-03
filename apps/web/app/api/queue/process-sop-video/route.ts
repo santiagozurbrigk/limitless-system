@@ -30,6 +30,7 @@ import {
 import { validateAttachmentMarkers } from "@/lib/sops/attachment-markers";
 import { SOP_VIDEOS_BUCKET } from "@/lib/sops/constants";
 import { assertOrgStoragePath } from "@/lib/storage/org-path";
+import { reportarFalla } from "@/lib/observability/reportar-falla";
 
 export const runtime = "nodejs";
 /** Un Loom largo puede tardar: el máximo que permite el plan de Vercel. */
@@ -180,6 +181,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[process-sop-video]", jobId, message);
+    reportarFalla(error, { cron: "/api/queue/process-sop-video", extra: { jobId } });
     await admin
       .from("sop_generation_jobs")
       .update({ status: "failed", error: message })

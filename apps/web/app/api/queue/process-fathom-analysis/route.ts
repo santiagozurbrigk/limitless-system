@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateDeepCallAnalysis } from "@/lib/fathom/deep-call-analysis";
 import { verifyQueueRequest } from "@/lib/queue/verify-queue-request";
+import { reportarFalla } from "@/lib/observability/reportar-falla";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // análisis profundo con transcripts largos
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, fathomCallId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    reportarFalla(err, { cron: "/api/queue/process-fathom-analysis", organizationId: organizationId, provider: "anthropic" });
     console.error("[Queue] process-fathom-analysis error", {
       fathomCallId,
       message,

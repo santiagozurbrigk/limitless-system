@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyQueueRequest } from "@/lib/queue/verify-queue-request";
 import { syncContentMetricsForOrg } from "@/lib/marketing/sync-content-metrics";
+import { reportarFalla } from "@/lib/observability/reportar-falla";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // Una sola org — mucho menos que los 300s del batch
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, organizationId, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    reportarFalla(err, { cron: "/api/queue/process-cron-sync-metrics", organizationId: organizationId, provider: "zernio" });
     console.error("[Queue] process-cron-sync-metrics error", { organizationId, message });
     // 500 → QStash reintenta según `retries` configurado en el publish
     return NextResponse.json({ error: message }, { status: 500 });

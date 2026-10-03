@@ -1,5 +1,5 @@
 /** Pone un job de SOP-desde-video en la cola de QStash. */
-import { getQStashClient } from "@/lib/queue/qstash-client";
+import { getQStashClient, getQueueFailureCallbackUrl } from "@/lib/queue/qstash-client";
 
 export async function enqueueSopVideoJob(jobId: string): Promise<void> {
   const client = getQStashClient();
@@ -17,5 +17,6 @@ export async function enqueueSopVideoJob(jobId: string): Promise<void> {
     // transcripción para que el segundo intento sólo pague la generación.
     retries: 1,
     headers: workerSecret ? { "x-worker-secret": workerSecret } : {},
+    failureCallback: getQueueFailureCallbackUrl(),
   });
 }
