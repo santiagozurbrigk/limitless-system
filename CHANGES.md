@@ -34,24 +34,6 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
-### 2026-10-02 — Procedimiento para dar de alta un super admin (SCRUM-494)
-
-**Rama:** `docs/SCRUM-494-alta-super-admin`
-**Commit(s):** este
-**Módulo(s) afectado(s):** documentación de operación. Sin cambios de código ni de base.
-
-**Qué se hizo:**
-- `docs/operacion/alta-super-admin.md` (nuevo): primero se crea la cuenta (Supabase, confirmada, sin invitación) y después se agrega el email a `super_admin_users`; la persona entra recién después. Cada paso tiene su consulta de control y qué hacer si da distinto. Incluye la baja (y el caso del super admin dueño de un holding).
-- Enlazado desde `docs/README.md` (que tampoco listaba `rotacion-master-key.md`; ya lo lista), `docs/arquitectura/auth-organizaciones-y-permisos.md` y el ítem `[AUTH-ALTA-EMAIL-AJENO]` de `PENDIENTES.md`.
-
-**Por qué / finalidad:** parte b de `[AUTH-ALTA-EMAIL-AJENO]` (SCRUM-15). Mientras el super admin se reconozca por email, agregar a la lista un email sin cuenta le abre el panel interno a cualquier founder que lo invite a su org. Y si la persona entra antes de estar en la lista, la app le crea una organización propia.
-
-**Decisiones de diseño relevantes:** no se usa "Send invitation" de Supabase porque el link abre sesión y la persona podría entrar antes de estar en la lista. Las consultas se probaron sobre la base armada con todas las migraciones (con las columnas de `auth.users` que tiene Supabase): cada paso da lo esperado y la baja de un dueño de holding falla por `holdings_owner_email_fkey`, como dice el procedimiento.
-
-**Riesgos / deuda técnica pendiente:** el ítem sigue abierto por sus partes a (identificar al super admin por su cuenta) y c (SCRUM-495, invitaciones). La recuperación de contraseña está escondida para el release (SCRUM-490), así que el cambio de contraseña inicial se hace con la sesión abierta en `/auth/update-password`.
-
----
-
 ### 2026-10-03 — Los procesos de fondo avisan cuando fallan (SCRUM-84, código)
 
 **Rama:** `claude/great-thompson-n7ts63`
@@ -104,6 +86,24 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 Typeform, Google Forms, Instagram, anuncios y `daily-signals` no reportan por org (sí tienen monitor).
 
+
+---
+
+### 2026-10-02 — Procedimiento para dar de alta un super admin (SCRUM-494)
+
+**Rama:** `docs/SCRUM-494-alta-super-admin`
+**Commit(s):** este
+**Módulo(s) afectado(s):** documentación de operación. Sin cambios de código ni de base.
+
+**Qué se hizo:**
+- `docs/operacion/alta-super-admin.md` (nuevo): primero se crea la cuenta (Supabase, confirmada, sin invitación) y después se agrega el email a `super_admin_users`; la persona entra recién después. Cada paso tiene su consulta de control y qué hacer si da distinto; la cuenta que se agrega a la lista tiene que ser la que se acaba de crear (mismo UID, recién creada, confirmada, sin login ni perfil). Incluye la baja, con su control y la consulta para pasar un holding a otro super admin.
+- Enlazado desde `docs/README.md` (que tampoco listaba `rotacion-master-key.md`; ya lo lista), `docs/arquitectura/auth-organizaciones-y-permisos.md` y el ítem `[AUTH-ALTA-EMAIL-AJENO]` de `PENDIENTES.md`.
+
+**Por qué / finalidad:** parte b de `[AUTH-ALTA-EMAIL-AJENO]` (SCRUM-15). Mientras el super admin se reconozca por email, agregar a la lista un email sin cuenta le abre el panel interno a cualquier founder que lo invite a su org. Y si la persona entra antes de estar en la lista, la app le crea una organización propia.
+
+**Decisiones de diseño relevantes:** no se usa "Send invitation" de Supabase porque el link abre sesión y la persona podría entrar antes de estar en la lista. Las consultas se probaron sobre la base armada con todas las migraciones (con las columnas de `auth.users` que tiene Supabase): cada paso da lo esperado y la baja de un dueño de holding falla por `holdings_owner_email_fkey`, como dice el procedimiento.
+
+**Riesgos / deuda técnica pendiente:** el ítem sigue abierto por sus partes a (identificar al super admin por su cuenta) y c (SCRUM-495, invitaciones). La recuperación de contraseña está escondida para el release (SCRUM-490), así que el cambio de contraseña inicial se hace con la sesión abierta en `/auth/update-password`.
 
 ---
 

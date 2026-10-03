@@ -46,25 +46,30 @@ select u.id, u.email, u.created_at, u.email_confirmed_at, u.invited_at, u.last_s
        p.organization_id, p.role
 from auth.users u
 left join public.profiles p on p.id = u.id
-where lower(u.email) = lower('nombre@ejemplo.com');
+where lower(u.email) = lower(trim('nombre@ejemplo.com'));
 ```
 
 **Resultado esperado:** 0 filas.
 
 **Si sale una fila, no sigas.** Alguien ya creó una cuenta con ese email y no sabemos quién la controla: puede
-ser una invitación de un founder. Avisar en el canal del equipo antes de hacer nada más.
+ser una invitación de un founder o un registro desde el login. Avisa en el canal del equipo antes de hacer nada
+más. Esto pasa también si la persona ya tiene una cuenta propia (de prueba o de otra org): en ese caso no se
+puede usar ese email para el super admin hasta que se haga la parte a de `[AUTH-ALTA-EMAIL-AJENO]`
+(reconocer al super admin por su cuenta y no por el email). Mientras tanto, usa otro email de la persona.
 
-Antes de seguir, también confirmar que el email no está ya en la lista:
+Antes de seguir, confirma también que el email no está ya en la lista:
 
 ```sql
 select email, name, created_at from public.super_admin_users
-where email = lower('nombre@ejemplo.com');
+where email = lower(trim('nombre@ejemplo.com'));
 ```
 
 **Resultado esperado:** 0 filas. Si sale una, el email está en la lista sin cuenta, que es justo el caso
-peligroso del punto 1 de "Por qué el orden importa": avisar en el canal del equipo.
+peligroso del punto 1 de "Por qué el orden importa": avisa en el canal del equipo.
 
 ### 2. Crear la cuenta
+
+Hazlo apenas termines el paso 1, sin dejar pasar tiempo entre los dos.
 
 En Supabase: **Authentication → Users → Add user → Create new user**.
 
@@ -72,45 +77,59 @@ En Supabase: **Authentication → Users → Add user → Create new user**.
 - **Password:** una generada con el gestor, de 20 caracteres o más.
 - **Auto Confirm User:** marcado.
 
-No usar **Send invitation**: ese link abre una sesión en la app, y si la persona entra antes del paso 4, la app
+Al crearla, anota el **UID** que muestra Supabase para la cuenta nueva: en el paso 3 se compara con él.
+
+**Si Supabase responde que el email ya está registrado** ("already registered" o "email exists"), no sigas:
+alguien creó la cuenta entre el paso 1 y este. Avisa en el canal del equipo.
+
+No uses **Send invitation**: ese link abre una sesión en la app, y si la persona entra antes del paso 4, la app
 le crea una organización propia (punto 2 de "Por qué el orden importa").
 
 ### 3. Verificar la cuenta creada
 
-Volver a correr la primera consulta del paso 1.
+Vuelve a correr la primera consulta del paso 1.
 
-**Resultado esperado:** 1 fila con `email_confirmed_at` con fecha, `invited_at` vacío, `last_sign_in_at` vacío y
-`organization_id` y `role` vacíos (todavía no tiene perfil).
+**Resultado esperado:** 1 fila, con todo esto:
 
-Si `last_sign_in_at` tiene fecha o ya hay perfil, alguien entró con esa cuenta antes de tiempo: no sigas y
-avisa en el canal del equipo.
+- `id` igual al UID que anotaste en el paso 2;
+- `created_at` de hace unos minutos;
+- `email_confirmed_at` con fecha;
+- `invited_at` y `last_sign_in_at` vacíos;
+- `organization_id` y `role` vacíos (todavía no tiene perfil).
+
+**Si cualquiera de esos puntos no se cumple, no sigas** y avisa en el canal del equipo: la cuenta que encontró
+la consulta no es la que acabas de crear, o alguien ya entró con ella. Por ejemplo, una cuenta registrada desde
+el login queda sin confirmar y con la contraseña de quien la registró: si su email entrara a la lista, esa
+persona tendría el panel interno apenas el dueño del email confirme.
 
 ### 4. Agregar el email a la lista
 
 ```sql
 begin;
 insert into public.super_admin_users (email, name)
-values (lower('nombre@ejemplo.com'), 'Nombre Apellido');
+values (lower(trim('nombre@ejemplo.com')), 'Nombre Apellido');
 commit;
 ```
 
-El email va en minúsculas: la app pasa a minúsculas el email de la sesión antes de buscarlo en la lista, así
-que una fila con mayúsculas nunca coincide.
+El email va en minúsculas y sin espacios: la app limpia y pasa a minúsculas el email de la sesión antes de
+buscarlo en la lista, así que una fila con mayúsculas o espacios nunca coincide.
 
-Verificar que la lista y la cuenta coinciden:
+Verifica que la lista y la cuenta coinciden:
 
 ```sql
 select s.email, s.name, u.id as user_id, u.email_confirmed_at
 from public.super_admin_users s
 join auth.users u on lower(u.email) = s.email
-where s.email = lower('nombre@ejemplo.com');
+where s.email = lower(trim('nombre@ejemplo.com'));
 ```
 
-**Resultado esperado:** 1 fila con `user_id` y `email_confirmed_at`.
+**Resultado esperado:** 1 fila, con `user_id` igual al UID del paso 2 y `email_confirmed_at` con fecha. Si da
+0 filas, revisa que el email de la fila insertada no tenga mayúsculas ni espacios
+(`select email from public.super_admin_users;`).
 
 ### 5. Primer ingreso de la persona
 
-1. Pasarle la contraseña por el gestor de contraseñas o en persona.
+1. Pásale la contraseña por el gestor de contraseñas o en persona.
 2. La persona entra por **`/superadmin/login`** (en producción, `https://otc-plaform.vercel.app/superadmin/login`).
    La app le crea un perfil sin organización y la lleva a `/super-admin/organizations`.
 3. Cambia la contraseña en **`/auth/update-password`**. Al guardar, la app la manda al Panel de clientes, que no es
@@ -122,13 +141,14 @@ where s.email = lower('nombre@ejemplo.com');
 select p.id, p.organization_id, p.role, p.must_change_password
 from public.profiles p
 join auth.users u on u.id = p.id
-where lower(u.email) = lower('nombre@ejemplo.com');
+where lower(u.email) = lower(trim('nombre@ejemplo.com'));
 ```
 
-**Resultado esperado:** 1 fila con `organization_id` vacío.
+**Resultado esperado:** 1 fila con `organization_id` vacío y `must_change_password` en `false`.
 
-Si `organization_id` tiene un valor, la persona entró antes del paso 4 y la app le creó una organización: avisar
-en el canal del equipo. No borrar nada a mano, porque la organización puede tener datos y roles colgando.
+Si `organization_id` tiene un valor, la app le creó una organización a esa cuenta antes de que estuviera en la
+lista. Primero haz la baja (sección siguiente) para que no conserve el acceso al panel interno, y después avisa
+en el canal del equipo. No borres la organización a mano, porque puede tener datos y roles colgando.
 
 ## Dar de baja a un super admin
 
@@ -136,10 +156,25 @@ Sacar el email de la lista le quita el acceso al panel interno en el próximo re
 
 ```sql
 begin;
-delete from public.super_admin_users where email = lower('nombre@ejemplo.com');
+delete from public.super_admin_users where email = lower(trim('nombre@ejemplo.com'));
 commit;
 ```
 
-Si falla porque `holdings.owner_email` lo referencia, el email es dueño de un holding: antes hay
-que pasarle el holding a otro super admin. La cuenta de Supabase queda; si la persona deja el equipo, también
-hay que borrarla desde **Authentication → Users**.
+**Resultado esperado:** `DELETE 1`. Si da `DELETE 0`, el email no coincide con ninguna fila: revisa cómo está
+escrito con `select email from public.super_admin_users;` y vuelve a correrlo con ese valor.
+
+Si falla porque `holdings.owner_email` lo referencia (`holdings_owner_email_fkey`), el email es dueño de un
+holding. La app no tiene pantalla para cambiarlo: pasa el holding a otro super admin en la misma transacción,
+antes de borrar.
+
+```sql
+begin;
+update public.holdings set owner_email = lower(trim('otro.super.admin@ejemplo.com'))
+where owner_email = lower(trim('nombre@ejemplo.com'));
+delete from public.super_admin_users where email = lower(trim('nombre@ejemplo.com'));
+commit;
+```
+
+El email nuevo tiene que estar ya en `super_admin_users`; si no, el `update` falla y no se borra nada.
+
+La cuenta de Supabase queda. Si la persona deja el equipo, bórrala también desde **Authentication → Users**.
