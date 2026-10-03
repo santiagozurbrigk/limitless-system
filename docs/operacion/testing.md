@@ -66,7 +66,7 @@ Qué no testear en Vitest: componentes React, actions que sólo hacen `select`, 
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **120 archivos, ~1.390 casos** (recontado el 2026-10-02). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **121 archivos, ~1.394 casos** (recontado el 2026-10-02). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -99,6 +99,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/workboard` | 1 | 6 | filtro por responsable |
 | `lib/chart` | 1 | 5 | escala del embudo |
 | `lib/supabase` | 2 | 4 | rutas públicas del middleware, `fetchAllRows` |
+| `lib/release` | 1 | 4 | lo escondido para el release: ⌘K, catálogo de integraciones, canales de Lead Magnets |
 | `lib/storage` | 1 | 3 | validación de rutas por org |
 | `lib/unipile` | 1 | 3 | secreto del webhook |
 
