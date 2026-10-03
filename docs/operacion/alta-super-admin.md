@@ -155,17 +155,29 @@ en el canal del equipo. No borres la organización a mano, porque puede tener da
 Sacar el email de la lista le quita el acceso al panel interno en el próximo request:
 
 ```sql
-begin;
-delete from public.super_admin_users where email = lower(trim('nombre@ejemplo.com'));
-commit;
+delete from public.super_admin_users
+where email = lower(trim('nombre@ejemplo.com'))
+returning email;
 ```
 
-**Resultado esperado:** `DELETE 1`. Si da `DELETE 0`, el email no coincide con ninguna fila: revisa cómo está
-escrito con `select email from public.super_admin_users;` y vuelve a correrlo con ese valor.
+Es un solo statement, así que se aplica entero o no se aplica. **Resultado esperado:** 1 fila con el email.
 
-Si falla porque `holdings.owner_email` lo referencia (`holdings_owner_email_fkey`), el email es dueño de un
-holding. La app no tiene pantalla para cambiarlo: pasa el holding a otro super admin en la misma transacción,
-antes de borrar.
+Si no devuelve ninguna fila, el email no coincide con ninguna de la lista. Busca cómo está guardado con
+`select email from public.super_admin_users;` y borra esa fila por su valor exacto, tal cual sale, sin
+`lower` ni `trim`:
+
+```sql
+delete from public.super_admin_users
+where email = 'valor tal cual sale en la consulta'
+returning email;
+```
+
+Una fila con mayúsculas o espacios nunca dio acceso (la app compara contra el email limpio y en minúsculas),
+pero conviene borrarla para que la lista refleje la realidad.
+
+Si el borrado falla porque `holdings.owner_email` lo referencia (`holdings_owner_email_fkey`), el email es
+dueño de un holding. La app no tiene pantalla para cambiarlo: pasa el holding a otro super admin en la misma
+transacción, antes de borrar.
 
 ```sql
 begin;
@@ -176,5 +188,15 @@ commit;
 ```
 
 El email nuevo tiene que estar ya en `super_admin_users`; si no, el `update` falla y no se borra nada.
+
+Como el SQL Editor sólo muestra el resultado del último statement, verifica después:
+
+```sql
+select
+  (select count(*) from public.super_admin_users where email = lower(trim('nombre@ejemplo.com'))) as sigue_en_lista,
+  (select count(*) from public.holdings where owner_email = lower(trim('nombre@ejemplo.com'))) as holdings_a_su_nombre;
+```
+
+**Resultado esperado:** `0` y `0`.
 
 La cuenta de Supabase queda. Si la persona deja el equipo, bórrala también desde **Authentication → Users**.
