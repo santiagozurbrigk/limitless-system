@@ -600,23 +600,6 @@ Fuente: PENDIENTES.md [PERMISOS-SERVER-ACTIONS/ventas] · Doc del área: docs/ar
 *Dónde:* {{apps/web/lib/fathom/identities.ts}}, {{apps/web/lib/fathom/seed-identities.ts}}.
 
 Fuente: PENDIENTES.md [B-SEMBRAR-IDENTIDADES] · Doc del área: docs/areas/ventas.md",B-SEMBRAR-IDENTIDADES,Ventas,P1,Alta,verificación manual
-[B-FATHOM-NUNCA-PROBADO] Keys de Fathom por miembro nunca probadas contra Fathom,Task,High,ventas,p1,sev-media,verificacion-manual,,,"*Tipo:* verificación manual
-
-*Severidad:* Media
-
-*Estado verificado:* el código existe ({{app/fathom/member-actions.ts}}, {{lib/fathom/webhooks.ts}}, {{app/api/integrations/fathom/webhook/[token]/route.ts}}). Desde SCRUM-37 (2026-10-02) la firma sigue el esquema de la doc de Fathom ({{webhook-id}}/{{webhook-timestamp}}/{{webhook-signature}}) y el guardado usa el mismo upsert que la sync, con el crudo en {{fathom_webhook_events}}; probado con tests, no con una entrega real. La forma del cuerpo de {{new-meeting-content-ready}} no está en la doc. CHANGES.md no registra una prueba real.
-
-*Riesgo:* Si el cuerpo real del webhook no tiene la forma de {{/meetings}}, entonces las entregas quedan guardadas en {{fathom_webhook_events}} con {{error}} y la llamada no se crea hasta reprocesarlas; la key por miembro para sincronizar puede tener otros supuestos falsos.
-
-*Impacto:* Miembros que conecten su propia cuenta de Fathom; hay sincronización manual como alternativa y hoy no hay evidencia de uso real.
-
-*Qué hay que hacer:* ver {{docs/operacion/verificacion-manual.md}} § Ventas (""Fathom por miembro"").
-
-*Criterio de aceptación:* Se ejecutó el paso de verificacion-manual.md § Ventas 6 («Fathom por miembro») con cuentas reales de Fathom y el resultado quedó anotado (incluido si la firma del webhook valida); si falló, se abrió un ítem nuevo
-
-*Dónde:* idem.
-
-Fuente: PENDIENTES.md [B-FATHOM-NUNCA-PROBADO] · Doc del área: docs/areas/ventas.md",B-FATHOM-NUNCA-PROBADO,Ventas,P1,Media,verificación manual
 [LLAMADAS-VERIFICAR-FATHOM] Cruce grabación ↔ turno con datos reales,Task,High,ventas,p1,sev-media,verificacion-manual,,,"*Tipo:* verificación manual
 
 *Severidad:* Media

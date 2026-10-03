@@ -131,7 +131,7 @@ No es atómico: si falla a mitad, queda el turno cerrado sin cliente o el client
 Key org:     cron /api/integrations/fathom/sync (hora) ─┐
 Key miembro: webhook /api/integrations/fathom/webhook/[token] ─┼→ fathom_calls (status pending)
              (crudo primero en fathom_webhook_events; user_id del miembro, ingest_source 'webhook')
-             + botón "Sincronizar mis llamadas" (syncMemberFathomAction) ┤
+             + cron horario /api/integrations/fathom/sync y botón "Sincronizar mis llamadas" (lib/fathom/member-sync.ts) ┤
 Legacy:      webhook /api/integrations/fathom/webhook (409 si la firma sirve a >1 org) ┘
                          │
 cron /api/integrations/fathom/process (10 min, espera 30 min por llamada) → processSingleFathomCall
@@ -146,6 +146,16 @@ cron /api/integrations/fathom/process (10 min, espera 30 min por llamada) → pr
 /sales/llamadas → getSalesCallsAction: fathom_calls (purpose = 'sales', últimas 100)
                   + call_analyses por fathom_call_id in (…) → attachCallAnalyses (lib/fathom/sales-calls.ts)
 ```
+
+**Sync horaria por miembro** (`lib/fathom/member-sync.ts`, SCRUM-448, 2026-10-03): el cron
+`/api/integrations/fathom/sync`, después de la key de cada org, trae las grabaciones de cada miembro conectado
+desde la sección por miembro (filas con `webhook_token`, no `revoked`) con su propia key, desde la conexión en
+adelante, con el mismo upsert y `user_id` del miembro. El botón "Sincronizar mis llamadas" usa la misma función.
+Si una grabación falla al guardarse, el cursor (`last_sync_at`) no avanza. Si la key falla, la fila queda en
+`status = 'error'` con `last_error` y va a Sentry. **Por qué:** en la prueba real (2026-10-03) Fathom no disparó el
+webhook aunque la grabación ya estaba lista; con el cron la grabación entra igual, como mucho una hora después.
+Las filas que crea la conexión de la organización (`connectFathomAction`, sin `webhook_token`) no se sincronizan
+acá: llevan la misma key que el negocio y harían privadas de quien conectó todas las llamadas.
 
 **Webhook por miembro** (`app/api/integrations/fathom/webhook/[token]/route.ts`, SCRUM-37):
 
