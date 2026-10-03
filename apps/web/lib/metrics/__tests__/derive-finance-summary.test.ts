@@ -154,6 +154,11 @@ describe.each(Object.keys(DESFASE_EN_ENERO))("deriveFinanceSummary en %s", (zona
     ]);
   });
 
+  it("una cuota con un vencimiento que no se puede leer no entra en el gráfico por mes", () => {
+    const c = cliente({ paymentType: "installments", installments: [cuota({ dueDate: "basura" }), cuota({ id: "ok", dueDate: "2026-10-10" })] });
+    expect(deriveFinanceSummary([c], [], gastos(), [], octubre).porCobrarByMonth).toEqual([{ month: "octubre", amount: 100 }]);
+  });
+
   it("una cuota pendiente sin vencimiento no entra en el gráfico por mes", () => {
     const c = cliente({ paymentType: "installments", installments: [cuota({ dueDate: undefined })] });
     expect(deriveFinanceSummary([c], [], gastos(), [], octubre).porCobrarByMonth).toEqual([]);

@@ -66,7 +66,7 @@ Qué no testear en Vitest: componentes React, actions que sólo hacen `select`, 
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **89 archivos, ~1.130 casos**. No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **120 archivos, ~1.390 casos** (recontado el 2026-10-02). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -86,7 +86,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/sops` | 2 | 25 | marcadores de adjuntos, chunks de audio |
 | `lib/integrations` | 1 | 23 | `health.ts` y completitud del registro |
 | `lib/vturb` | 2 | 23 | normalización de stats, período cerrado |
-| `lib/metrics` | 2 | 21 | etapas del embudo de ventas, match de closer |
+| `lib/metrics` | 6 | 79 | etapas del embudo de ventas, match de closer, períodos y prorrateo, ingresos por fecha, resumen de Finanzas, serie de 6 meses (varias zonas horarias) |
 | `lib/closing` | 1 | 20 | estado de llamadas |
 | `constants` | 2 | 16 | módulos de permisos |
 | `lib/navigation` | 2 | 15 | módulo por path, metadata de página |

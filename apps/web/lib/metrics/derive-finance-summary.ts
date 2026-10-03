@@ -136,6 +136,9 @@ export function deriveFinanceSummary(
     for (const inst of client.installments ?? []) {
       if (inst.status !== "pending" || !inst.dueDate) continue;
       const mes = mesDeVencimiento(inst.dueDate);
+      // Una fecha que no se puede leer no arma un mes "NaN-NaN" (el esquema ya
+      // valida YYYY-MM-DD; esto es por si llega algo de otro lado).
+      if (!Number.isFinite(mes.anio)) continue;
       const prev = pendingByMonth.get(mes.clave);
       pendingByMonth.set(mes.clave, { ...mes, amount: (prev?.amount ?? 0) + inst.amount });
     }
