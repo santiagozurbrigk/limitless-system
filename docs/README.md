@@ -73,6 +73,8 @@ integraciones, reglas de negocio no obvias, limitaciones, tests y archivos clave
 | [`operacion/alertas.md`](./operacion/alertas.md) | Qué manda a Sentry cada proceso de fondo y qué reglas de alerta (mail) crear |
 | [`operacion/discord-bot-deploy.md`](./operacion/discord-bot-deploy.md) | Runbook del bot de Discord en Railway |
 | [`operacion/incidentes.md`](./operacion/incidentes.md) | Qué hacer cuando algo se rompe en producción (runbook de incidentes) |
+| [`operacion/rotacion-master-key.md`](./operacion/rotacion-master-key.md) | Cambiar la clave maestra de cifrado de las integraciones sin cortar el servicio |
+| [`operacion/alta-super-admin.md`](./operacion/alta-super-admin.md) | Dar de alta y de baja a un super admin sin abrir el panel interno a un tercero |
 
 ## Diseño
 
