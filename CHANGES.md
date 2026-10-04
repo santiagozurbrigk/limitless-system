@@ -34,6 +34,23 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-04 — El progreso de onboarding del super admin pide ser super admin (SCRUM-111)
+
+**Rama:** `fix/SCRUM-111-guard-onboarding-progress`
+**Commit(s):** este
+**Módulo(s) afectado(s):** panel de super admin, `apps/web/lib/super-admin/onboarding-progress.ts`
+
+**Qué se hizo:** `loadOnboardingProgress` llama a `requireSuperAdmin()` antes de leer la RPC `onboarding_org_progress` con el service role, como las demás lecturas de `lib/super-admin`. Test nuevo `lib/super-admin/__tests__/load-onboarding-progress.test.ts`: quien no es super admin recibe el error sin que se consulte la base, un super admin lee el progreso y sin Supabase configurado sigue devolviendo la lista vacía.
+- Fix-pack de la revisión adversarial: `getSignedFileUrl` (`lib/super-admin/queries.ts`), que firma links del bucket `ai-brain-documents` con el service role, tampoco pedía ser super admin; ahora lo pide. Tampoco era explotable (su único llamador es la página del documento del cerebro, bajo el mismo layout y después de `loadAiBrainDocument`, que sí tiene el chequeo). Test nuevo `lib/super-admin/__tests__/signed-file-url.test.ts`.
+
+**Por qué / finalidad:** cierra `[SUPERADMIN-ONBOARDING-SIN-GUARD]`. No era explotable: el layout `app/(super-admin)/super-admin/layout.tsx` ya redirige a quien no es super admin. Faltaba la segunda capa que pide la regla de guard doble del panel, para que la función siga protegida si algún día se llama desde otro lugar.
+
+**Decisiones de diseño relevantes:** en `loadOnboardingProgress` el chequeo va después de `isSupabaseConfigured()` para que el modo sin Supabase siga mostrando la pantalla vacía en vez de un error. Los dos tests se comprobaron sacando el chequeo: el caso de quien no es super admin falla.
+
+**Riesgos / deuda técnica pendiente:** ninguno.
+
+---
+
 ### 2026-10-04 — Closing trae todos los turnos, formularios paginados y grabaciones de leads visibles para el founder (SCRUM-4, SCRUM-57, SCRUM-157)
 
 **Rama:** `claude/great-thompson-n7ts63`

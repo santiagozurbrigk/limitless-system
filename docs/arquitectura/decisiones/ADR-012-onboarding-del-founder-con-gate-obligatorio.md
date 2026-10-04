@@ -62,7 +62,7 @@
 - El gate suma una consulta al middleware por request de founder (pendiente medirlo).
 - Reintentar el paso de oferta duplica el producto (`[PRODUCTO-GATE-OFERTA-DUP]`); el gate muestra moneda y zona ya
   elegidas, lo que debilita el motivo de bloquear (`[ONBOARDING-GATE-DEFAULTS-PRESELECCIONADOS]`).
-- `loadOnboardingProgress` no valida super admin por sí misma (`[SUPERADMIN-ONBOARDING-SIN-GUARD]`).
+- `loadOnboardingProgress` no validaba super admin por sí misma (`[SUPERADMIN-ONBOARDING-SIN-GUARD]`); resuelto el 2026-10-04 (SCRUM-111).
 - Nada probado con sesión real de navegador (`[ONBOARDING-VERIFICAR]`).
 - Cualquiera puede crearse una cuenta founder y pasar por el gate (`[SIGNUP-PUBLICO]`).
 
