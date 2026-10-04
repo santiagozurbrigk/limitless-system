@@ -34,6 +34,46 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-04 — Closing trae todos los turnos, formularios paginados y grabaciones de leads visibles para el founder (SCRUM-4, SCRUM-57, SCRUM-157)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Ventas (Closing, Llamadas) y Marketing (Formularios).
+- Código: `app/closing/actions.ts`, `lib/forms/paginar-respuestas.ts` (nuevo), `lib/typeform/sync.ts`,
+  `lib/google-forms/sync.ts`.
+- Migraciones aplicadas en producción: `20261004000100_form_responses_unico_por_org.sql` y
+  `20261004000200_fathom_llamada_de_lead_es_de_la_org.sql`.
+
+**Qué se hizo:**
+- **SCRUM-4 · `[CLOSING-LIST-1000]`:** `listClosingCallsAction` pagina con `fetchAllRows` (orden `scheduled_at` +
+  `id`) y filtra por la organización activa. Antes cortaba en 1.000 filas ascendentes, así que los turnos más
+  nuevos quedaban afuera, y un holding veía los 1.455 turnos del portfolio mezclados. Avanza
+  `[CLOSING-HOLDING-MEZCLA]` en la lectura de Closing.
+  - Test: `app/closing/__tests__/list-closing-calls.test.ts` (2).
+- **SCRUM-57 · `[AUDITORIA-ABIERTOS §6]`:**
+  - `traerRespuestasTypeform` y `traerRespuestasGoogleForms` piden todas las páginas (cursor `before`; `nextPageToken`).
+  - Si una página falla, se llega al tope de 50 o falla un guardado, no avanzan ni el cursor del formulario ni el de
+    la integración.
+  - El upsert pasa a `onConflict: organization_id,external_response_id`, con su índice único nuevo.
+  - Docs oficiales bajadas a `docs/external-apis/typeform/` y `google-forms/`.
+  - Tests: `lib/forms/__tests__/paginar-respuestas.test.ts` (6).
+- **SCRUM-157 · `[FATHOM-PRIVACIDAD-LEAD]`:** la policy de `fathom_calls` hace de la org también una grabación
+  vinculada a un lead (`counterparty_lead_id`) o a un turno (`closing_call_id`). Decisión de Santiago: el founder la
+  tiene que ver.
+
+**Por qué / finalidad:** tareas del Sprint 1.
+
+**Decisiones de diseño relevantes:**
+- Las dos migraciones se aplicaron con `execute_sql` y se registraron a mano en
+  `supabase_migrations.schema_migrations` con la versión del archivo. `apply_migration` del MCP se cortaba por
+  tiempo. La policy se cambió con `alter policy` (sin ventana sin policy) y `lock_timeout` de 5 s.
+- `form_responses` tenía 0 filas: no hubo datos que reconciliar.
+
+**Riesgos / deuda técnica pendiente:** `[CLOSING-HOLDING-MEZCLA]` sigue para Seguimiento (`lead-actions`) y las
+escrituras con la RLS de la org del perfil.
+
+---
+
 ### 2026-10-03 — Las grabaciones de cada miembro de Fathom entran solas cada hora (SCRUM-448, SCRUM-47)
 
 **Rama:** `claude/great-thompson-n7ts63`

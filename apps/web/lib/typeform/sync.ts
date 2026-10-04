@@ -1,5 +1,6 @@
 import { scorePendingFormResponses } from "@/lib/forms/sync-scoring";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { traerRespuestasTypeform } from "@/lib/forms/paginar-respuestas";
 
 type TypeformIntegration = {
   organization_id: string;
@@ -161,6 +162,7 @@ export async function syncTypeformForOrganization(
   const formsBody = (await formsRes.json()) as { items?: TypeformFormItem[] };
   const remoteForms = formsBody.items ?? [];
 
+  let algunoIncompleto = false;
   for (const remote of remoteForms) {
     const questions = (remote.fields ?? []).map((f) => ({
       id: f.id,
@@ -189,17 +191,23 @@ export async function syncTypeformForOrganization(
     result.formsSynced++;
 
     const since = formRow.last_synced_at ?? integration.last_sync_at;
-    let url = `https://api.typeform.com/forms/${remote.id}/responses?page_size=1000`;
-    if (since) url += `&since=${encodeURIComponent(since)}`;
+    // ⭐ SCRUM-57: todas las páginas, no sólo las primeras 1.000.
+    const paginado = await traerRespuestasTypeform<TypeformResponseItem>(
+      async (url) => {
+        const res = await fetch(url, { headers });
+        return { ok: res.ok, status: res.status, json: res.ok ? await res.json() : null };
+      },
+      remote.id,
+      since
+    );
+    if (!paginado.completo && paginado.items.length === 0) {
+      algunoIncompleto = true;
+      continue;
+    }
 
-    const responsesRes = await fetch(url, { headers });
-    if (!responsesRes.ok) continue;
-
-    const responsesBody = (await responsesRes.json()) as {
-      items?: TypeformResponseItem[];
-    };
-    const items = responsesBody.items ?? [];
+    const items = paginado.items;
     let newForForm = 0;
+    let fallidas = 0;
 
     for (const item of items) {
       const { email, name } = extractRespondent(item.answers);
@@ -228,14 +236,23 @@ export async function syncTypeformForOrganization(
           completion_time_seconds: completionSeconds,
           is_complete: true,
         },
-        { onConflict: "external_response_id", ignoreDuplicates: false }
+        // Único por organización (SCRUM-57): el mismo formulario en dos orgs no
+        // mueve la respuesta de una a la otra.
+        { onConflict: "organization_id,external_response_id", ignoreDuplicates: false }
       );
 
       if (!upsertError) {
         newForForm++;
         result.responsesSynced++;
+      } else {
+        fallidas++;
       }
     }
+
+    // Si faltó una página o falló un guardado, el cursor no avanza: la próxima
+    // corrida vuelve a pedir desde el mismo punto (el upsert deduplica).
+    const avanzarCursor = paginado.completo && fallidas === 0;
+    if (!avanzarCursor) algunoIncompleto = true;
 
     const { count: totalResponses } = await admin
       .from("form_responses")
@@ -246,7 +263,7 @@ export async function syncTypeformForOrganization(
       .from("forms")
       .update({
         total_responses: totalResponses ?? 0,
-        last_synced_at: new Date().toISOString(),
+        ...(avanzarCursor ? { last_synced_at: new Date().toISOString() } : {}),
       })
       .eq("id", formRow.id);
 
@@ -259,10 +276,14 @@ export async function syncTypeformForOrganization(
     }
   }
 
-  await admin
-    .from("typeform_integrations")
-    .update({ last_sync_at: new Date().toISOString() })
-    .eq("organization_id", organizationId);
+  // Un formulario nuevo sin cursor propio cae en el de la integración: si
+  // alguno quedó incompleto, éste tampoco avanza.
+  if (!algunoIncompleto) {
+    await admin
+      .from("typeform_integrations")
+      .update({ last_sync_at: new Date().toISOString() })
+      .eq("organization_id", organizationId);
+  }
 
   return result;
 }

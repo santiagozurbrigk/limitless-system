@@ -406,7 +406,7 @@ hoy se ven sin análisis: eso es `[FATHOM-DEEP-ANALISIS-ALCANCE]`, no esta panta
 2. Comparar contra `select count(*) from closing_calls where organization_id = '<org>' and scheduled_at >= date_trunc('month', now())`.
 3. Repetir en **Lista**.
 
-**Resultado esperado:** mismos turnos que en la base. Si faltan los del mes, confirma `[CLOSING-LIST-1000]`.
+**Resultado esperado:** mismos turnos que en la base. Desde SCRUM-4 (2026-10-04) se trae todo paginado y filtrado por la org activa; si faltan, abrir un ítem nuevo.
 
 ---
 
@@ -495,7 +495,7 @@ hoy se ven sin análisis: eso es `[FATHOM-DEEP-ANALISIS-ALCANCE]`, no esta panta
 6. ⭐ Dos miembros en la misma llamada: una sola fila en `fathom_calls`.
 7. `fathom_calls.user_id` dice quién grabó.
 8. 🔒 ⭐ Una llamada sin vincular a cliente la ve sólo quien grabó; al vincularla a cliente la ve toda la org.
-9. 🔒 Una llamada vinculada sólo a un **lead** (`counterparty_lead_id`): hoy la ve sólo quien grabó — decidir si es lo buscado (`[FATHOM-PRIVACIDAD-LEAD]`).
+9. 🔒 Una llamada vinculada sólo a un **lead** (`counterparty_lead_id`) o a un turno (`closing_call_id`): la ve el founder y el resto de la org (decisión 2026-10-03, SCRUM-157).
 10. Revocar la key en Fathom: la fila pasa a "revocada" y avisa.
 11. Desconectarse: el webhook desaparece de la cuenta de Fathom.
 12. El resumen de la llamada llega (antes `default_summary` era objeto y no llegaba).

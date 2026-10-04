@@ -6,6 +6,7 @@ import {
 import { scorePendingFormResponses } from "@/lib/forms/sync-scoring";
 import { refreshGoogleAccessToken } from "@/lib/google/refresh-token";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { traerRespuestasGoogleForms } from "@/lib/forms/paginar-respuestas";
 
 type GoogleFormsIntegration = {
   organization_id: string;
@@ -140,6 +141,7 @@ export async function syncGoogleFormsForOrganization(
     throw e;
   }
 
+  let algunoIncompleto = false;
   for (const remote of remoteForms) {
     let formData;
     try {
@@ -183,22 +185,26 @@ export async function syncGoogleFormsForOrganization(
     result.formsSynced++;
 
     const since = formRow.last_synced_at ?? integration.last_sync_at;
-    let responsesUrl = `https://forms.googleapis.com/v1/forms/${remote.id}/responses?pageSize=1000`;
-    if (since) {
-      responsesUrl += `&filter=timestamp%3E${encodeURIComponent(since)}`;
-    }
-
-    const responsesRes = await fetch(responsesUrl, { headers });
-    if (responsesRes.status === 403 || responsesRes.status === 401) {
+    // ⭐ SCRUM-57: todas las páginas (`nextPageToken`), no sólo las primeras 1.000.
+    const paginado = await traerRespuestasGoogleForms<GoogleFormResponse>(
+      async (url) => {
+        const res = await fetch(url, { headers });
+        return { ok: res.ok, status: res.status, json: res.ok ? await res.json() : null };
+      },
+      remote.id,
+      since
+    );
+    if (paginado.status === 403 || paginado.status === 401) {
       return { ...result, permissionDenied: true };
     }
-    if (!responsesRes.ok) continue;
+    if (!paginado.completo && paginado.items.length === 0) {
+      algunoIncompleto = true;
+      continue;
+    }
 
-    const responsesBody = (await responsesRes.json()) as {
-      responses?: GoogleFormResponse[];
-    };
-    const items = responsesBody.responses ?? [];
+    const items = paginado.items;
     let newForForm = 0;
+    let fallidas = 0;
 
     for (const item of items) {
       const answers = mapGoogleAnswers(item.answers, questionMap);
@@ -217,14 +223,21 @@ export async function syncGoogleFormsForOrganization(
           completion_time_seconds: 0,
           is_complete: true,
         },
-        { onConflict: "external_response_id", ignoreDuplicates: false }
+        // Único por organización (SCRUM-57).
+        { onConflict: "organization_id,external_response_id", ignoreDuplicates: false }
       );
 
       if (!upsertError) {
         newForForm++;
         result.responsesSynced++;
+      } else {
+        fallidas++;
       }
     }
+
+    // Si faltó una página o falló un guardado, el cursor no avanza.
+    const avanzarCursor = paginado.completo && fallidas === 0;
+    if (!avanzarCursor) algunoIncompleto = true;
 
     const { count: totalResponses } = await admin
       .from("form_responses")
@@ -235,7 +248,7 @@ export async function syncGoogleFormsForOrganization(
       .from("forms")
       .update({
         total_responses: totalResponses ?? 0,
-        last_synced_at: new Date().toISOString(),
+        ...(avanzarCursor ? { last_synced_at: new Date().toISOString() } : {}),
       })
       .eq("id", formRow.id);
 
@@ -248,10 +261,14 @@ export async function syncGoogleFormsForOrganization(
     }
   }
 
-  await admin
-    .from("google_forms_integrations")
-    .update({ last_sync_at: new Date().toISOString() })
-    .eq("organization_id", organizationId);
+  // Un formulario nuevo sin cursor propio cae en el de la integración: si
+  // alguno quedó incompleto, éste tampoco avanza.
+  if (!algunoIncompleto) {
+    await admin
+      .from("google_forms_integrations")
+      .update({ last_sync_at: new Date().toISOString() })
+      .eq("organization_id", organizationId);
+  }
 
   return result;
 }

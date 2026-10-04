@@ -139,7 +139,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un negocio con más de 1.000 turnos, cuando abro el Panel, entonces las ventas, el ranking de closers y el embudo incluyen los turnos más recientes (los del mes coinciden con los que hay guardados).
   - Los números del Panel sólo incluyen turnos de mi organización, nunca de otra.
   - El embudo del Panel incluye el tramo de mensajes directos (conversaciones y respuestas), o deja claro que arranca en las llamadas.
-- **Tareas técnicas:** `[CLOSING-LIST-1000]`, `[EMBUDO-PANEL-DMS]`
+- **Tareas técnicas:** `[EMBUDO-PANEL-DMS]`
 - **Para confirmar:** Agustín: ¿el embudo del Panel tiene que contar los mensajes directos de la bandeja nueva, o alcanza con que arranque en las llamadas?
 
 ### [H-PLA-16] Ver mis métricas propias en el Panel
@@ -373,7 +373,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dada una organización con más de 1.000 turnos, cuando abro Closing, entonces el calendario y la lista muestran todos los turnos del mes actual (la misma cantidad que tiene guardada el sistema).
   - Nunca aparece un turno de otra organización.
   - Dado un admin del holding con el negocio A activo, cuando abre Closing y Seguimiento, entonces ve sólo turnos y leads de A, y puede marcar un resultado y editar una fila de Seguimiento sin error.
-- **Tareas técnicas:** `[CLOSING-LIST-1000]`, `[CLOSING-HOLDING-MEZCLA]`
+- **Tareas técnicas:** `[CLOSING-HOLDING-MEZCLA]`
 - **Para confirmar:** —
 
 ### [H-VEN-10] Cerrar una venta en un solo paso
@@ -417,17 +417,6 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Para confirmar:**
   - Agustín: Decisión: guardar datos de la bandeja de Zernio para calcular estas métricas, o sacar las tarjetas de DMs de la pantalla.
   - Martín: qué métricas de DMs son imprescindibles (leads, agendamiento, fantasma, tiempo de respuesta); cada una depende de guardar distinta información.
-
-### [H-VEN-17] Ver facturación y comisión por closer completas en Métricas
-- **Funcionalidad:** F-VEN-17 · Con fallas
-- **Historia:** Como founder, quiero ver en Métricas la facturación y la comisión estimada de cada closer sobre todos los turnos del período, para pagar comisiones y comparar closers con números completos.
-- **Criterios de aceptación:**
-  - Dada una organización con más de 1.000 turnos, cuando abro Métricas, entonces la facturación por closer del mes actual incluye los turnos más recientes y coincide con lo que tiene guardado el sistema para ese mes.
-  - Nunca se suman turnos de otra organización.
-- **Tareas técnicas:** `[CLOSING-LIST-1000]`
-- **Para confirmar:**
-  - Agustín: la comisión se calcula con un porcentaje fijo para todos; ¿alcanza o hay que usar la comisión de cada closer? No hay tarea para eso.
-  - Martín: no se confirmó que alguna organización pase hoy los 1.000 turnos; si ninguna los pasa, la falla todavía no se ve.
 
 ### [H-VEN-18] Ver el ranking del equipo por puntaje de llamadas y sus objeciones
 - **Funcionalidad:** F-VEN-18 · Con fallas
@@ -642,7 +631,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Un formulario con más de 1000 respuestas nuevas se trae completo.
   - Dos empresas con el mismo formulario conservan cada una sus respuestas sin pisarse.
   - Un miembro del equipo sin permiso no puede desconectar un formulario.
-- **Tareas técnicas:** `[MKT-FORMS-SIN-RESPUESTAS]`, `[AUDITORIA-ABIERTOS §6]`, `[PERMISOS-SERVER-ACTIONS/marketing]`
+- **Tareas técnicas:** `[MKT-FORMS-SIN-RESPUESTAS]`, `[PERMISOS-SERVER-ACTIONS/marketing]`
 - **Para confirmar:** —
 
 ### [H-MKT-23] Saber cuántos clics, leads, llamadas y ventas trajo cada link UTM

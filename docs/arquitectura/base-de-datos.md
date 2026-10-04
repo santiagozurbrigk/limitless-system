@@ -168,7 +168,7 @@ Propósito de cada una en el doc del área. Las notas del cliente son columnas d
 | `content_assets` | Contenido legacy (Instagram Graph / YouTube) |
 | `content_pattern_reports` | Reportes de patrones de contenido generados por IA |
 | `ad_metrics_daily` | Snapshot diario de anuncios (cron `capture-ad-metrics`) |
-| `forms`, `form_responses` | Typeform / Google Forms |
+| `forms`, `form_responses` | Typeform / Google Forms. `form_responses` único `(organization_id, external_response_id)` (SCRUM-57) |
 | `utm_links`, `utm_lead_captures`, `utm_booking_attributions`, `utm_sale_attributions` | Atribución UTM |
 | `lead_magnets`, `lead_magnet_leads` | Lead magnets entregados por DM |
 | `reel_variation_jobs` | Trial reels (worker de Fly.io) |

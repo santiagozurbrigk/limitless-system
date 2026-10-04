@@ -283,9 +283,6 @@ Detalle y prioridad en [`PENDIENTES.md` § Ventas](../../PENDIENTES.md#ventas).
 
 - **Tab Equipo de Closing siempre vacío** `[CLOSER-AMOUNT-CLOSED]`: `getCloserMetricsAction` pide
   `closing_calls.amount_closed`, que no existe.
-- **Closing pierde turnos por el techo de 1.000 filas** `[CLOSING-LIST-1000]`: `listClosingCallsAction`
-  ordena ascendente sin paginar; con 1.455 turnos en prod, los más recientes pueden quedar afuera del
-  calendario y la lista. Tampoco filtra por `organization_id` (depende de RLS; en holding mezcla negocios).
 - **Turnos del Calendly de closers sin `lead_id`** `[CALENDLY-CLOSER-SIN-LEAD]`: no entran al seguimiento.
 - **Análisis profundo con criterio equivocado** `[FATHOM-DEEP-ANALISIS-ALCANCE]`: corre para toda
   llamada vinculada a cliente de ≥10 min (también 1-1 de entrega) y nunca para ventas con leads;
@@ -340,3 +337,17 @@ Detalle y prioridad en [`PENDIENTES.md` § Ventas](../../PENDIENTES.md#ventas).
 La pestaña Equipo de Closing (`#equipo` cae en Calendario; `[CLOSER-AMOUNT-CLOSED]`) y el recuadro "Vista previa"
 de Fathom del drawer del turno (queda "Abrir en Fathom"). Banderas `closingEquipo` y `vistaPreviaFathomEnTurno` en
 `apps/web/lib/release/escondido.ts`.
+
+### Lectura de Closing (SCRUM-4, 2026-10-04)
+
+`listClosingCallsAction` (`app/closing/actions.ts`) trae los turnos con `fetchAllRows` (páginas de 1.000,
+orden `scheduled_at` y `id`) y filtra por la organización activa (`organization_id`). Antes cortaba en las
+primeras 1.000 filas ordenadas de la más vieja a la más nueva, así que quedaban afuera los turnos recientes, y
+un usuario de holding veía los turnos de todo el portfolio mezclados.
+
+### Privacidad de las grabaciones de Fathom (SCRUM-157, 2026-10-04)
+
+Policy de `fathom_calls` (`20261004000200_fathom_llamada_de_lead_es_de_la_org.sql`): una grabación vinculada a
+un cliente, a un lead (`counterparty_lead_id`) o a un turno (`closing_call_id`) la ve toda la organización,
+founder incluido. Sin vínculo, sólo quien la grabó (`user_id`); las viejas sin dueño, toda la org.
+

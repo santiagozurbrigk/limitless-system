@@ -16,23 +16,212 @@ Summary,Issue Type,Priority,Labels,Labels,Labels,Labels,Labels,Labels,Descriptio
 *Dónde:* {{apps/web/lib/auth/get-current-permissions.ts}}, {{apps/web/app/**/actions.ts}}, {{supabase/migrations/}}.
 
 Fuente: PENDIENTES.md [PERMISOS-SERVER-ACTIONS] · Doc del área: docs/areas/plataforma.md",PERMISOS-SERVER-ACTIONS,Plataforma,P0,Alta,seguridad
-[CLOSING-LIST-1000] El calendario y la lista de Closing pierden los turnos más recientes,Bug,Highest,ventas,p0,sev-alta,bug,,,"*Tipo:* bug
+[FATHOM-SYNC-CURSOR] La sync de Fathom saltea para siempre una llamada que no se pudo guardar,Bug,Highest,ventas,p0,sev-alta,bug,,,"*Tipo:* bug
 
 *Severidad:* Alta
 
-*Estado verificado:* ítem nuevo (misma familia que el punto 5 de {{[AUDITORIA-ABIERTOS]}}). {{listClosingCallsAction}} ({{app/closing/actions.ts:70-74}}) hace {{select(""*"")…order(""scheduled_at"", { ascending: true })}} sin {{.range()}} ni {{fetchAllRows}}. PostgREST corta en 1.000 (lo documenta el propio {{lead-actions.ts}}). Producción tiene 1.455 {{closing_calls}}: si una org supera 1.000, quedan afuera los *más nuevos*, que son los que el closer necesita. Falta confirmar el conteo por organización.
+*Estado verificado:* {{syncFathomMeetingsForOrganization}} cuenta las reuniones guardadas ({{lib/fathom/sync.ts:268}}) y, si guardó al menos una, pone {{last_sync_at = now()}} ({{:274-277}}) aunque otras hayan fallado ({{upsertFathomCallFromMeeting}} devuelve {{false}}). La corrida siguiente pide {{created_after = last_sync_at}} ({{lib/fathom/sync-window.ts:50-58}}). El cursor es la hora del servidor, no el {{created_at}} más nuevo recibido. Para la key de la org esta sync es la única vía automática de entrada (el webhook por miembro sólo cubre las keys de miembros).
 
-*Riesgo:* Si una org (o un usuario holding, que ve el portfolio entero por RLS) supera 1.000 turnos visibles, entonces el calendario y la lista de Closing dejan afuera los más nuevos sin aviso; producción tiene 1.455 turnos en total y no se confirmó el reparto por org.
+*Riesgo:* Si en una misma corrida una llamada falla al guardarse y otra entra bien, entonces la que falló no se vuelve a pedir nunca. Si Fathom asigna {{created_at}} antes de que la reunión aparezca en el listado (no verificado), también se pierden las reuniones creadas durante la corrida.
 
-*Impacto:* Los closers de esa org no ven los turnos de hoy y de la semana y no pueden cargar su resultado desde la lista; las métricas que salen de esa lista del provider quedan cortadas.
+*Impacto:* Llamadas de venta y de entrega que no llegan a Limitless: sin clasificación, sin análisis, sin hitos propuestos, sin cruce con el turno. Se nota sólo si alguien compara contra Fathom.
 
-*Qué hay que hacer:* paginar con {{fetchAllRows}} u ordenar descendente con un rango de fechas; agregar {{.eq(""organization_id"", organizationId)}} (hoy depende sólo de RLS, ver {{[CLOSING-HOLDING-MEZCLA]}}).
+*Qué hay que hacer:* avanzar el cursor al {{created_at}} máximo de las guardadas bien, sin pasar del {{created_at}} de la más vieja que falló; restar un solape de unos minutos (el upsert deduplica).
 
-*Criterio de aceptación:* En una org con más de 1.000 turnos, el calendario y la lista de Closing muestran los turnos del mes actual en la misma cantidad que el count de la base para ese mes; la lectura filtra por la organización activa (un turno de otra org no aparece)
+*Criterio de aceptación:* Con una corrida simulada donde una reunión falla al guardarse y otra entra, la corrida siguiente vuelve a pedir la que falló y la guarda; el cursor nunca pasa del created_at de una reunión no guardada; hay tests de la función que calcula el nuevo cursor
 
-*Dónde:* {{apps/web/app/closing/actions.ts}}, {{apps/web/providers/platform-data-provider.tsx}}.
+*Dónde:* {{apps/web/lib/fathom/sync.ts}}, {{apps/web/lib/fathom/sync-window.ts}}.
 
-Fuente: PENDIENTES.md [CLOSING-LIST-1000] · Doc del área: docs/areas/ventas.md",CLOSING-LIST-1000,Ventas,P0,Alta,bug
+Fuente: PENDIENTES.md [FATHOM-SYNC-CURSOR] · Doc del área: docs/areas/ventas.md",FATHOM-SYNC-CURSOR,Ventas,P0,Alta,bug
+[CLOSER-AMOUNT-CLOSED] La pestaña Equipo de Closing siempre sale vacía,Bug,Highest,ventas,p0,sev-media,bug,,,"*Tipo:* bug
+
+*Severidad:* Media
+
+*Estado verificado:* {{[AUDITORIA-ABIERTOS]}} punto 8 / auditoría §3 ""Dinero y datos"". {{getCloserMetricsAction}} ({{app/sales/closer-actions.ts:151}}) selecciona {{closing_calls.amount_closed}}, que no existe en ninguna migración ni en producción; el error devuelve {{[]}}. Lo consume {{components/closing/closers-ranking.tsx}}. *Escondido para el release de octubre (SCRUM-490, 2026-10-02)*: la pieza no se muestra; volver a mostrarla es una bandera en {{apps/web/lib/release/escondido.ts}}. El pendiente sigue abierto.
+
+*Riesgo:* Siempre: la consulta pide closing_calls.amount_closed, que no existe, y la pestaña Equipo de Closing sale vacía en cada carga.
+
+*Impacto:* Todas las orgs con closers: no ven ranking, conversión, facturación ni comisión por closer. El error es visible (lista vacía), no un número falso, y la facturación se puede reconstruir desde Cobros o Clientes.
+
+*Qué hay que hacer:* decidir de dónde sale la facturación por closer ({{outcome.revenue}}, {{clients.total_amount}} vía {{clients.closing_call_id}}, o {{client_payments}}) y reescribir la agregación.
+
+*Criterio de aceptación:* Con al menos una venta cerrada en el período, la pestaña Equipo de Closing muestra a su closer con cierres y facturación distintos de cero; la fuente de la facturación elegida quedó escrita en docs/areas/ventas.md; getCloserMetricsAction no referencia ninguna columna inexistente y no devuelve error
+
+*Dónde:* {{apps/web/app/sales/closer-actions.ts}}.
+
+Fuente: PENDIENTES.md [CLOSER-AMOUNT-CLOSED] · Doc del área: docs/areas/ventas.md",CLOSER-AMOUNT-CLOSED,Ventas,P0,Media,bug
+[CALENDLY-CLOSER-SIN-LEAD] Los turnos del Calendly de cada closer no entran al seguimiento,Bug,Highest,ventas,p0,sev-alta,bug,,,"*Tipo:* bug
+
+*Severidad:* Alta
+
+*Estado verificado:* auditoría §3 ""Salud del código"" 2. {{lib/calendly/closer-sync.ts:217-229}} inserta sin {{lead_id}} y el update tampoco lo completa; no llama {{resolveLeadId}} (sí lo hacen {{sync-events.ts:90}} y {{ghl/sync-appointments.ts:204}}). {{listLeadsTableAction}} sólo ve turnos colgados de un {{sales_leads}}.
+
+*Riesgo:* Si un lead agenda en el Calendly propio de un closer, entonces el turno entra sin lead_id y no aparece en Closing → Seguimiento; pasa con cada turno de esa vía, sin error.
+
+*Impacto:* Orgs con closers que conectaron su Calendly personal: esos leads quedan fuera del seguimiento y de las métricas por lead (falla silenciosa del embudo comercial). Cantidad de closers conectados no medida.
+
+*Qué hay que hacer:* resolver el lead en {{closer-sync}} igual que {{sync-events}}; idealmente unificar las dos syncs en una con {{closer_id}} opcional. Backfill de {{lead_id}} para turnos con {{lead_email}}.
+
+*Criterio de aceptación:* Un turno nuevo agendado en el Calendly propio de un closer con un mail nuevo queda, tras el cron, con closer_id y lead_id completos y el lead aparece en Closing → Seguimiento → Todos; después del backfill no quedan closing_calls con lead_email y sin lead_id
+
+*Dónde:* {{apps/web/lib/calendly/closer-sync.ts}}, {{apps/web/lib/calendly/sync-events.ts}}.
+
+Fuente: PENDIENTES.md [CALENDLY-CLOSER-SIN-LEAD] · Doc del área: docs/areas/ventas.md",CALENDLY-CLOSER-SIN-LEAD,Ventas,P0,Alta,bug
+[CALENDLY-CRONS-SUPERPUESTOS] calendly-sync y calendly-sync-closers corren a la misma hora,Bug,Highest,ventas,p0,sev-media,bug,,,"*Tipo:* bug
+
+*Severidad:* Media
+
+*Estado verificado:* auditoría §3 ""Confiabilidad"" 3. {{vercel.json}}: los dos con {{0 * * * *}}. Ambos insertan por {{calendly_event_id}}; si compiten, el índice único rechaza el batch entero. Además N+1 por evento ({{resolveLeadId}} en loop) y {{.in()}} con URIs largas.
+
+*Riesgo:* Si el Calendly de la org y el de un closer devuelven el mismo evento nuevo en la misma corrida, entonces el índice único (organization_id, calendly_event_id) rechaza el insert en lote y se pierden todos los turnos nuevos de ese lote hasta la corrida siguiente.
+
+*Impacto:* Orgs que usan las dos syncs de Calendly: turnos que aparecen con una hora de atraso; se autocorrige en la corrida siguiente (el evento ya existe y se actualiza), por eso no hay pérdida permanente.
+
+*Qué hay que hacer:* unificar (ver ítem anterior) o desfasar el schedule; insertar con upsert {{onConflict}} en vez de insert en batch.
+
+*Criterio de aceptación:* Los dos syncs de Calendly ya no se disparan en el mismo minuto (o quedaron unificados en uno) en vercel.json; correr el sync con un evento que ya existe actualiza la fila sin rechazar el resto del lote (upsert por calendly_event_id); una hora de logs de cron no muestra errores de clave duplicada
+
+*Dónde:* {{apps/web/vercel.json}}, {{apps/web/lib/calendly/*}}.
+
+Fuente: PENDIENTES.md [CALENDLY-CRONS-SUPERPUESTOS] · Doc del área: docs/areas/ventas.md",CALENDLY-CRONS-SUPERPUESTOS,Ventas,P0,Media,bug
+[FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas,Bug,Highest,ventas,p0,sev-alta,bug,,,"*Tipo:* bug
+
+*Severidad:* Alta
+
+*Estado verificado:* ítem nuevo. El análisis profundo ({{generateDeepCallAnalysis}} → {{call_analyses}}) sólo se dispara desde {{finalizeAssociatedCall}} ({{lib/fathom/process-call.ts:470-512}}), que corre cuando la grabación quedó vinculada a un *cliente*, sin mirar {{purpose}}: una 1-1 de entrega de ≥10 min se analiza como venta (costo de Sonnet y ruido en ranking/objeciones), y una venta con un lead nunca se analiza. Además no se pasa {{closerName}} ni {{closer_id}}: {{call_analyses.closer_name}} queda null y {{getTeamRankingAction}} agrupa todo en ""Sin nombre"". Busca {{form_answers}} por {{ilike lead_name}} en vez de usar {{closing_call_id}}. En producción (2026-09-28) las 19 filas de {{call_analyses}} son de una org sin llamadas de venta y tienen {{fathom_call_id}} null (todas creadas el 2026-07-05, no por este flujo): ninguna se puede atribuir a una llamada, así que Ventas → Llamadas lista las 18 llamadas de venta sin análisis.
+
+*Riesgo:* Siempre que una 1-1 de entrega de 10 min o más se asocia a un cliente, se analiza como venta; y ninguna llamada de venta con un lead (sin cliente) se analiza.
+
+*Impacto:* El ranking del equipo y las objeciones en Métricas mezclan entregas con ventas y agrupan todo en «Sin nombre»: datos que el negocio usa para evaluar closers salen incorrectos, más costo de Sonnet en llamadas que no corresponden.
+
+*Qué hay que hacer:* disparar el análisis cuando {{purpose = 'sales'}} (con o sin cliente), usar {{closing_call_id}} para {{form_answers}} y {{closing_calls.closer_id}} para el closer.
+
+*Criterio de aceptación:* Una 1-1 de entrega de 10 min o más vinculada a un cliente no genera fila en call_analyses; una llamada con purpose = 'sales' cruzada a un turno de un lead sí la genera, con closer_id y closer_name del turno; el ranking del equipo en Métricas muestra el nombre del closer en vez de «Sin nombre»
+
+*Dónde:* {{apps/web/lib/fathom/process-call.ts}}, {{apps/web/lib/fathom/deep-call-analysis.ts}}.
+
+Fuente: PENDIENTES.md [FATHOM-DEEP-ANALISIS-ALCANCE] · Doc del área: docs/areas/ventas.md",FATHOM-DEEP-ANALISIS-ALCANCE,Ventas,P0,Alta,bug
+[CLOSING-CIERRE-ATOMICO] Cerrar una venta son cinco escrituras encadenadas desde el navegador,Bug,Highest,ventas,p0,sev-critica,bug,,,"*Tipo:* bug
+
+*Severidad:* Crítica
+
+*Estado verificado:* ítem nuevo. {{markCallClosed}} ({{providers/platform-data-provider.tsx:595-680}}) hace desde el cliente: update del turno → tag en {{conversations}} → {{createClientAction}} → {{linkLeadToClientAction}} → {{recordClientPaymentAction}}. Si falla a mitad (red, validación del pago), queda un turno {{closed}} sin cliente o un cliente sin pago, y el guard ""ya tiene cliente vinculado"" impide reintentar limpio.
+
+*Riesgo:* Si falla cualquier paso después de marcar el turno como cerrado (red, validación del cliente o del pago), entonces el turno queda closed sin cliente o el cliente sin pago, y reintentar está bloqueado («Esta llamada ya está marcada como cerrada»); probabilidad baja por cierre, pero se repite con cada venta.
+
+*Impacto:* Cualquier org que cierra ventas desde Closing: una venta que no queda como cliente ni como cobro (pérdida de plata registrada), sin aviso posterior; se arregla a mano sólo si alguien lo detecta.
+
+*Qué hay que hacer:* una server action única (o RPC) que haga el cierre completo y sea idempotente por {{callId}}.
+
+*Criterio de aceptación:* Marcar un turno como cerrado con pago deja en una sola operación del servidor el turno closed, el cliente creado, el lead vinculado y el pago registrado; si se corta la red a mitad, no queda un estado parcial o reintentar completa lo que faltaba sin duplicar cliente ni pago; hay un test de la idempotencia por callId
+
+*Dónde:* {{apps/web/providers/platform-data-provider.tsx}}, {{apps/web/app/closing/actions.ts}}.
+
+Fuente: PENDIENTES.md [CLOSING-CIERRE-ATOMICO] · Doc del área: docs/areas/ventas.md",CLOSING-CIERRE-ATOMICO,Ventas,P0,Crítica,bug
+"[CLOSING-HOLDING-MEZCLA] En modo holding, Closing mezcla turnos de varios negocios",Bug,Highest,ventas,p0,sev-alta,seguridad,,,"*Tipo:* seguridad
+
+*Severidad:* Alta
+
+*Estado verificado:* ítem nuevo, a confirmar con una sesión holding. {{listClosingCallsAction}} no filtra por {{organization_id}}; la policy {{holding_reads_portfolio_closing_calls}} ({{20260630100000_holding_portfolio_rls.sql:42}}) deja leer los turnos de todos los negocios del portfolio, y {{get_my_organization_id()}} devuelve la org del perfil, no el negocio activo. Las escrituras ({{updateClosingCallAction}}, {{lead-actions}}) filtran por el negocio activo pero pasan por RLS de la org del perfil, así que probablemente fallan para el holding. *Avance 2026-10-04 (SCRUM-4):* {{listClosingCallsAction}} ya filtra por la organización activa; faltan {{lead-actions}} (Seguimiento) y las escrituras con la RLS de la org del perfil.
+
+*Riesgo:* Si un usuario holding abre Closing con un negocio activo, entonces ve mezclados los turnos de todos los negocios del portfolio (la policy lo permite y la lectura no filtra por org) y probablemente no puede guardar resultados, porque la policy de update usa la org del perfil.
+
+*Impacto:* Sólo usuarios holding: no es acceso indebido (el holding puede leer su portfolio) pero sí datos de Closing y Seguimiento atribuidos al negocio equivocado y escrituras que fallan. Cantidad de holdings en uso no medida.
+
+*Qué hay que hacer:* filtrar explícitamente por {{requireOrganizationId()}} en todas las lecturas del área; probar Closing y Seguimiento con un holding.
+
+*Criterio de aceptación:* Con un usuario holding y el negocio A activo, Closing (calendario, lista) y Seguimiento muestran sólo turnos y leads de A; marcar un resultado y editar una fila de Seguimiento en A se guardan sin error
+
+*Dónde:* {{apps/web/app/closing/actions.ts}}, {{apps/web/app/sales/lead-actions.ts}}.
+
+Fuente: PENDIENTES.md [CLOSING-HOLDING-MEZCLA] · Doc del área: docs/areas/ventas.md",CLOSING-HOLDING-MEZCLA,Ventas,P0,Alta,seguridad
+[PERMISOS-SERVER-ACTIONS/ventas] (parte Ventas) Las actions del área no miran el rol,Bug,Highest,ventas,p0,sev-alta,seguridad,permisos-transversal,,"*Tipo:* seguridad
+
+*Severidad:* Alta
+
+*Parte de:* {{[PERMISOS-SERVER-ACTIONS]}} (ítem transversal en Plataforma). Acá, lo específico del área.
+
+*Estado verificado:* sigue abierto; ninguna action de {{app/sales}}, {{app/closing}}, {{app/fathom}} verifica permiso de módulo. {{updateCloserCommissionAction}} ({{app/sales/closer-actions.ts:275}}) no tiene llamador (código muerto). No es una escalada: usa {{createClient()}} y en producción la policy de update de {{profiles}} más el trigger {{protect_profile_columns}} ({{20260922100000_profiles_columnas_protegidas.sql}}) sólo dejan a founder/admin cambiar la comisión (verificado en {{pg_policies}}/{{pg_trigger}} 2026-09-23).
+
+*Riesgo:* Si un miembro con Ventas en «Sin acceso» invoca directamente una action de app/sales, app/closing o app/fathom, entonces lee y escribe turnos, leads, cobros y llamadas igual que alguien con acceso total. updateCloserCommissionAction no agrega riesgo: la policy de update de profiles y el trigger protect_profile_columns (ambos en producción) sólo dejan a founder/admin cambiar la comisión de otro.
+
+*Impacto:* Todas las orgs con roles restringidos: el permiso de Ventas es sólo visual, incluidos montos y cobros que [COBROS-AVISAR-PERMISOS] pretende ocultar.
+
+*Qué hay que hacer:* borrar {{updateCloserCommissionAction}} (sin uso) y aplicar el guard por módulo que se diseñe en el ítem general.
+
+*Criterio de aceptación:* updateCloserCommissionAction ya no existe en el código; un miembro con Ventas en «Sin acceso» que invoca una action de app/sales, app/closing o app/fathom recibe error de permiso y no lee ni escribe datos; typecheck y tests pasan
+
+*Dónde:* {{apps/web/app/sales/*.ts}}, {{apps/web/app/closing/actions.ts}}, {{apps/web/app/fathom/*.ts}}.
+
+Fuente: PENDIENTES.md [PERMISOS-SERVER-ACTIONS/ventas] · Doc del área: docs/areas/ventas.md",PERMISOS-SERVER-ACTIONS/ventas,Ventas,P0,Alta,seguridad
+[B-SEMBRAR-IDENTIDADES] / [1-1-SEMBRAR-Y-MEDIR] client_identities sigue vacía,Task,Highest,ventas,p0,sev-alta,verificacion-manual,,,"*Tipo:* verificación manual
+
+*Severidad:* Alta
+
+*Estado verificado:* {{client_identities}} tiene *0 filas* en producción (2026-09-23). El botón existe ({{components/clients/pending-fathom-calls.tsx}} → {{seedClientIdentitiesAction}}). Sin siembra el resolvedor sólo resuelve por mail de invitado.
+
+*Riesgo:* Mientras client_identities siga vacía (0 filas), cada grabación sin mail de invitado reconocible cae al último peldaño y queda pendiente de confirmación manual, sin aviso de que el resolvedor está funcionando a medias.
+
+*Impacto:* Todas las orgs con Fathom: 1-1 y ventas que no se asocian solas, fichas con «Última 1-1» desactualizada y clasificación purpose incompleta; se resuelve con un botón, pero está en una pantalla sin link ([CLIENTES-PENDING-CALLS-HUERFANA]).
+
+*Qué hay que hacer:* apretar ""Cargar identidades desde el CRM"" en {{/clients/pending-calls}}, dejar correr el cron y medir {{purpose}}/{{resolution_method}}. Medir falsos positivos del peldaño de nombre.
+
+*Criterio de aceptación:* Se ejecutó el paso de verificacion-manual.md § Ventas 7 («Cruce grabación ↔ turno y clasificación», siembra de identidades) con la cuenta real: client_identities tiene filas y quedaron anotadas la distribución de purpose/resolution_method y la tasa de falsos positivos por nombre; si falló, se abrió un ítem nuevo
+
+*Dónde:* {{apps/web/lib/fathom/identities.ts}}, {{apps/web/lib/fathom/seed-identities.ts}}.
+
+Fuente: PENDIENTES.md [B-SEMBRAR-IDENTIDADES] · Doc del área: docs/areas/ventas.md",B-SEMBRAR-IDENTIDADES,Ventas,P0,Alta,verificación manual
+[LLAMADAS-VERIFICAR-FATHOM] Cruce grabación ↔ turno con datos reales,Task,Highest,ventas,p0,sev-media,verificacion-manual,,,"*Tipo:* verificación manual
+
+*Severidad:* Media
+
+*Estado verificado:* {{lib/fathom/match-appointment.ts}} (ventanas de 12 h por mail y 45 min sólo horario) sin medición real.
+
+*Riesgo:* Si las ventanas de 12 h (por mail) o 45 min (sólo horario) son demasiado amplias o estrechas, entonces grabaciones se cruzan con el turno equivocado o no se cruzan, y quedan mal clasificadas como venta o entrega.
+
+*Impacto:* Métricas de ventas, análisis y ranking de closers de las orgs con Fathom y turnos; el efecto real es desconocido hasta medirlo con datos.
+
+*Qué hay que hacer:* ver {{docs/operacion/verificacion-manual.md}} § Ventas 7 (""Cruce grabación ↔ turno y clasificación"").
+
+*Criterio de aceptación:* Se ejecutó el paso de verificacion-manual.md § Ventas 7 («Cruce grabación ↔ turno y clasificación») con datos reales y quedó anotado cuántas grabaciones de venta cruzaron un turno y si las ventanas de 12 h / 45 min son correctas; si falló, se abrió un ítem nuevo
+
+*Dónde:* {{apps/web/lib/fathom/match-appointment.ts}}, {{resolve-sales-call.ts}}.
+
+Fuente: PENDIENTES.md [LLAMADAS-VERIFICAR-FATHOM] · Doc del área: docs/areas/ventas.md",LLAMADAS-VERIFICAR-FATHOM,Ventas,P0,Media,verificación manual
+[COBROS-PROBAR] Cobros nunca se dibujó con una sesión real,Task,Highest,ventas,p0,sev-media,verificacion-manual,,,"*Tipo:* verificación manual
+
+*Severidad:* Media
+
+*Estado verificado:* {{client_payments}} tiene 7 filas en prod pero no hay registro de prueba de la pantalla nueva en CHANGES.md.
+
+*Riesgo:* Si la pantalla de Cobros tiene un error que sólo aparece con datos y sesión reales, entonces el equipo no puede registrar o ver cobros desde Ventas.
+
+*Impacto:* Registro de cobros de todas las orgs; client_payments ya tiene 7 filas, así que el flujo base al menos escribió, y la sección de cobros de la ficha es alternativa.
+
+*Qué hay que hacer:* ver {{docs/operacion/verificacion-manual.md}} § Ventas (""Cobros"").
+
+*Criterio de aceptación:* Se ejecutó el paso de verificacion-manual.md § Ventas 5 («Cobros en Ventas») con una sesión real y el resultado quedó anotado; si falló, se abrió un ítem nuevo
+
+*Dónde:* {{apps/web/components/sales/cobros-page.tsx}}, {{client-payments-section.tsx}}, {{app/sales/payment-actions.ts}}.
+
+Fuente: PENDIENTES.md [COBROS-PROBAR] · Doc del área: docs/areas/ventas.md",COBROS-PROBAR,Ventas,P0,Media,verificación manual
+[COBROS-AVISAR-PERMISOS] Quien no tiene Ventas deja de ver montos en Clientes,Task,Highest,ventas,p0,sev-baja,decision-de-negocio,,,"*Tipo:* decisión de negocio
+
+*Severidad:* Baja
+
+*Estado verificado:* {{useModuleAccess(""sales"") !== ""none""}} gatea los cobros en {{components/clients/clients-list.tsx:218}} y {{client-detail.tsx:56}}.
+
+*Riesgo:* Si un rol que necesita ver montos (p. ej. account manager) no tiene el permiso de Ventas, entonces deja de ver cobros y montos en Clientes sin entender por qué.
+
+*Impacto:* Usuarios con roles personalizados sin Ventas; es comportamiento buscado y se ajusta configurando el rol, no hay pérdida de datos.
+
+*Qué hay que hacer:* repasar roles configurados y decidir quién necesita {{sales}}.
+
+*Criterio de aceptación:* Agustín decidió qué roles necesitan el permiso de Ventas para ver montos en Clientes y la decisión quedó registrada en docs/areas/ventas.md; los roles configurados en team_roles.permissions quedaron ajustados a esa decisión
+
+*Dónde:* {{team_roles.permissions}}.
+
+Fuente: PENDIENTES.md [COBROS-AVISAR-PERMISOS] · Doc del área: docs/areas/ventas.md",COBROS-AVISAR-PERMISOS,Ventas,P0,Baja,decisión de negocio
 [DR-BACKUPS-SUPABASE] La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración,Task,Highest,infra,p0,sev-critica,decision-de-negocio,,,"*Tipo:* decisión de negocio
 
 *Severidad:* Crítica
@@ -445,212 +634,6 @@ Fuente: PENDIENTES.md [CLIENTES-DE-CLIENTES-PROBAR] · Doc del área: docs/areas
 *Dónde:* ficha → Sesiones 1-1; {{apps/web/lib/fathom/share-link.ts}}.
 
 Fuente: PENDIENTES.md [1A1-MANUALES-SIN-PROBAR] · Doc del área: docs/areas/clientes.md",1A1-MANUALES-SIN-PROBAR,Clientes,P1,Media,verificación manual
-[FATHOM-SYNC-CURSOR] La sync de Fathom saltea para siempre una llamada que no se pudo guardar,Bug,High,ventas,p1,sev-alta,bug,,,"*Tipo:* bug
-
-*Severidad:* Alta
-
-*Estado verificado:* {{syncFathomMeetingsForOrganization}} cuenta las reuniones guardadas ({{lib/fathom/sync.ts:268}}) y, si guardó al menos una, pone {{last_sync_at = now()}} ({{:274-277}}) aunque otras hayan fallado ({{upsertFathomCallFromMeeting}} devuelve {{false}}). La corrida siguiente pide {{created_after = last_sync_at}} ({{lib/fathom/sync-window.ts:50-58}}). El cursor es la hora del servidor, no el {{created_at}} más nuevo recibido. Para la key de la org esta sync es la única vía automática de entrada (el webhook por miembro sólo cubre las keys de miembros).
-
-*Riesgo:* Si en una misma corrida una llamada falla al guardarse y otra entra bien, entonces la que falló no se vuelve a pedir nunca. Si Fathom asigna {{created_at}} antes de que la reunión aparezca en el listado (no verificado), también se pierden las reuniones creadas durante la corrida.
-
-*Impacto:* Llamadas de venta y de entrega que no llegan a Limitless: sin clasificación, sin análisis, sin hitos propuestos, sin cruce con el turno. Se nota sólo si alguien compara contra Fathom.
-
-*Qué hay que hacer:* avanzar el cursor al {{created_at}} máximo de las guardadas bien, sin pasar del {{created_at}} de la más vieja que falló; restar un solape de unos minutos (el upsert deduplica).
-
-*Criterio de aceptación:* Con una corrida simulada donde una reunión falla al guardarse y otra entra, la corrida siguiente vuelve a pedir la que falló y la guarda; el cursor nunca pasa del created_at de una reunión no guardada; hay tests de la función que calcula el nuevo cursor
-
-*Dónde:* {{apps/web/lib/fathom/sync.ts}}, {{apps/web/lib/fathom/sync-window.ts}}.
-
-Fuente: PENDIENTES.md [FATHOM-SYNC-CURSOR] · Doc del área: docs/areas/ventas.md",FATHOM-SYNC-CURSOR,Ventas,P1,Alta,bug
-[CLOSER-AMOUNT-CLOSED] La pestaña Equipo de Closing siempre sale vacía,Bug,High,ventas,p1,sev-media,bug,,,"*Tipo:* bug
-
-*Severidad:* Media
-
-*Estado verificado:* {{[AUDITORIA-ABIERTOS]}} punto 8 / auditoría §3 ""Dinero y datos"". {{getCloserMetricsAction}} ({{app/sales/closer-actions.ts:151}}) selecciona {{closing_calls.amount_closed}}, que no existe en ninguna migración ni en producción; el error devuelve {{[]}}. Lo consume {{components/closing/closers-ranking.tsx}}. *Escondido para el release de octubre (SCRUM-490, 2026-10-02)*: la pieza no se muestra; volver a mostrarla es una bandera en {{apps/web/lib/release/escondido.ts}}. El pendiente sigue abierto.
-
-*Riesgo:* Siempre: la consulta pide closing_calls.amount_closed, que no existe, y la pestaña Equipo de Closing sale vacía en cada carga.
-
-*Impacto:* Todas las orgs con closers: no ven ranking, conversión, facturación ni comisión por closer. El error es visible (lista vacía), no un número falso, y la facturación se puede reconstruir desde Cobros o Clientes.
-
-*Qué hay que hacer:* decidir de dónde sale la facturación por closer ({{outcome.revenue}}, {{clients.total_amount}} vía {{clients.closing_call_id}}, o {{client_payments}}) y reescribir la agregación.
-
-*Criterio de aceptación:* Con al menos una venta cerrada en el período, la pestaña Equipo de Closing muestra a su closer con cierres y facturación distintos de cero; la fuente de la facturación elegida quedó escrita en docs/areas/ventas.md; getCloserMetricsAction no referencia ninguna columna inexistente y no devuelve error
-
-*Dónde:* {{apps/web/app/sales/closer-actions.ts}}.
-
-Fuente: PENDIENTES.md [CLOSER-AMOUNT-CLOSED] · Doc del área: docs/areas/ventas.md",CLOSER-AMOUNT-CLOSED,Ventas,P1,Media,bug
-[CALENDLY-CLOSER-SIN-LEAD] Los turnos del Calendly de cada closer no entran al seguimiento,Bug,High,ventas,p1,sev-alta,bug,,,"*Tipo:* bug
-
-*Severidad:* Alta
-
-*Estado verificado:* auditoría §3 ""Salud del código"" 2. {{lib/calendly/closer-sync.ts:217-229}} inserta sin {{lead_id}} y el update tampoco lo completa; no llama {{resolveLeadId}} (sí lo hacen {{sync-events.ts:90}} y {{ghl/sync-appointments.ts:204}}). {{listLeadsTableAction}} sólo ve turnos colgados de un {{sales_leads}}.
-
-*Riesgo:* Si un lead agenda en el Calendly propio de un closer, entonces el turno entra sin lead_id y no aparece en Closing → Seguimiento; pasa con cada turno de esa vía, sin error.
-
-*Impacto:* Orgs con closers que conectaron su Calendly personal: esos leads quedan fuera del seguimiento y de las métricas por lead (falla silenciosa del embudo comercial). Cantidad de closers conectados no medida.
-
-*Qué hay que hacer:* resolver el lead en {{closer-sync}} igual que {{sync-events}}; idealmente unificar las dos syncs en una con {{closer_id}} opcional. Backfill de {{lead_id}} para turnos con {{lead_email}}.
-
-*Criterio de aceptación:* Un turno nuevo agendado en el Calendly propio de un closer con un mail nuevo queda, tras el cron, con closer_id y lead_id completos y el lead aparece en Closing → Seguimiento → Todos; después del backfill no quedan closing_calls con lead_email y sin lead_id
-
-*Dónde:* {{apps/web/lib/calendly/closer-sync.ts}}, {{apps/web/lib/calendly/sync-events.ts}}.
-
-Fuente: PENDIENTES.md [CALENDLY-CLOSER-SIN-LEAD] · Doc del área: docs/areas/ventas.md",CALENDLY-CLOSER-SIN-LEAD,Ventas,P1,Alta,bug
-[CALENDLY-CRONS-SUPERPUESTOS] calendly-sync y calendly-sync-closers corren a la misma hora,Bug,High,ventas,p1,sev-media,bug,,,"*Tipo:* bug
-
-*Severidad:* Media
-
-*Estado verificado:* auditoría §3 ""Confiabilidad"" 3. {{vercel.json}}: los dos con {{0 * * * *}}. Ambos insertan por {{calendly_event_id}}; si compiten, el índice único rechaza el batch entero. Además N+1 por evento ({{resolveLeadId}} en loop) y {{.in()}} con URIs largas.
-
-*Riesgo:* Si el Calendly de la org y el de un closer devuelven el mismo evento nuevo en la misma corrida, entonces el índice único (organization_id, calendly_event_id) rechaza el insert en lote y se pierden todos los turnos nuevos de ese lote hasta la corrida siguiente.
-
-*Impacto:* Orgs que usan las dos syncs de Calendly: turnos que aparecen con una hora de atraso; se autocorrige en la corrida siguiente (el evento ya existe y se actualiza), por eso no hay pérdida permanente.
-
-*Qué hay que hacer:* unificar (ver ítem anterior) o desfasar el schedule; insertar con upsert {{onConflict}} en vez de insert en batch.
-
-*Criterio de aceptación:* Los dos syncs de Calendly ya no se disparan en el mismo minuto (o quedaron unificados en uno) en vercel.json; correr el sync con un evento que ya existe actualiza la fila sin rechazar el resto del lote (upsert por calendly_event_id); una hora de logs de cron no muestra errores de clave duplicada
-
-*Dónde:* {{apps/web/vercel.json}}, {{apps/web/lib/calendly/*}}.
-
-Fuente: PENDIENTES.md [CALENDLY-CRONS-SUPERPUESTOS] · Doc del área: docs/areas/ventas.md",CALENDLY-CRONS-SUPERPUESTOS,Ventas,P1,Media,bug
-[FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas,Bug,High,ventas,p1,sev-alta,bug,,,"*Tipo:* bug
-
-*Severidad:* Alta
-
-*Estado verificado:* ítem nuevo. El análisis profundo ({{generateDeepCallAnalysis}} → {{call_analyses}}) sólo se dispara desde {{finalizeAssociatedCall}} ({{lib/fathom/process-call.ts:470-512}}), que corre cuando la grabación quedó vinculada a un *cliente*, sin mirar {{purpose}}: una 1-1 de entrega de ≥10 min se analiza como venta (costo de Sonnet y ruido en ranking/objeciones), y una venta con un lead nunca se analiza. Además no se pasa {{closerName}} ni {{closer_id}}: {{call_analyses.closer_name}} queda null y {{getTeamRankingAction}} agrupa todo en ""Sin nombre"". Busca {{form_answers}} por {{ilike lead_name}} en vez de usar {{closing_call_id}}. En producción (2026-09-28) las 19 filas de {{call_analyses}} son de una org sin llamadas de venta y tienen {{fathom_call_id}} null (todas creadas el 2026-07-05, no por este flujo): ninguna se puede atribuir a una llamada, así que Ventas → Llamadas lista las 18 llamadas de venta sin análisis.
-
-*Riesgo:* Siempre que una 1-1 de entrega de 10 min o más se asocia a un cliente, se analiza como venta; y ninguna llamada de venta con un lead (sin cliente) se analiza.
-
-*Impacto:* El ranking del equipo y las objeciones en Métricas mezclan entregas con ventas y agrupan todo en «Sin nombre»: datos que el negocio usa para evaluar closers salen incorrectos, más costo de Sonnet en llamadas que no corresponden.
-
-*Qué hay que hacer:* disparar el análisis cuando {{purpose = 'sales'}} (con o sin cliente), usar {{closing_call_id}} para {{form_answers}} y {{closing_calls.closer_id}} para el closer.
-
-*Criterio de aceptación:* Una 1-1 de entrega de 10 min o más vinculada a un cliente no genera fila en call_analyses; una llamada con purpose = 'sales' cruzada a un turno de un lead sí la genera, con closer_id y closer_name del turno; el ranking del equipo en Métricas muestra el nombre del closer en vez de «Sin nombre»
-
-*Dónde:* {{apps/web/lib/fathom/process-call.ts}}, {{apps/web/lib/fathom/deep-call-analysis.ts}}.
-
-Fuente: PENDIENTES.md [FATHOM-DEEP-ANALISIS-ALCANCE] · Doc del área: docs/areas/ventas.md",FATHOM-DEEP-ANALISIS-ALCANCE,Ventas,P1,Alta,bug
-[CLOSING-CIERRE-ATOMICO] Cerrar una venta son cinco escrituras encadenadas desde el navegador,Bug,High,ventas,p1,sev-critica,bug,,,"*Tipo:* bug
-
-*Severidad:* Crítica
-
-*Estado verificado:* ítem nuevo. {{markCallClosed}} ({{providers/platform-data-provider.tsx:595-680}}) hace desde el cliente: update del turno → tag en {{conversations}} → {{createClientAction}} → {{linkLeadToClientAction}} → {{recordClientPaymentAction}}. Si falla a mitad (red, validación del pago), queda un turno {{closed}} sin cliente o un cliente sin pago, y el guard ""ya tiene cliente vinculado"" impide reintentar limpio.
-
-*Riesgo:* Si falla cualquier paso después de marcar el turno como cerrado (red, validación del cliente o del pago), entonces el turno queda closed sin cliente o el cliente sin pago, y reintentar está bloqueado («Esta llamada ya está marcada como cerrada»); probabilidad baja por cierre, pero se repite con cada venta.
-
-*Impacto:* Cualquier org que cierra ventas desde Closing: una venta que no queda como cliente ni como cobro (pérdida de plata registrada), sin aviso posterior; se arregla a mano sólo si alguien lo detecta.
-
-*Qué hay que hacer:* una server action única (o RPC) que haga el cierre completo y sea idempotente por {{callId}}.
-
-*Criterio de aceptación:* Marcar un turno como cerrado con pago deja en una sola operación del servidor el turno closed, el cliente creado, el lead vinculado y el pago registrado; si se corta la red a mitad, no queda un estado parcial o reintentar completa lo que faltaba sin duplicar cliente ni pago; hay un test de la idempotencia por callId
-
-*Dónde:* {{apps/web/providers/platform-data-provider.tsx}}, {{apps/web/app/closing/actions.ts}}.
-
-Fuente: PENDIENTES.md [CLOSING-CIERRE-ATOMICO] · Doc del área: docs/areas/ventas.md",CLOSING-CIERRE-ATOMICO,Ventas,P1,Crítica,bug
-"[CLOSING-HOLDING-MEZCLA] En modo holding, Closing mezcla turnos de varios negocios",Bug,High,ventas,p1,sev-alta,seguridad,,,"*Tipo:* seguridad
-
-*Severidad:* Alta
-
-*Estado verificado:* ítem nuevo, a confirmar con una sesión holding. {{listClosingCallsAction}} no filtra por {{organization_id}}; la policy {{holding_reads_portfolio_closing_calls}} ({{20260630100000_holding_portfolio_rls.sql:42}}) deja leer los turnos de todos los negocios del portfolio, y {{get_my_organization_id()}} devuelve la org del perfil, no el negocio activo. Las escrituras ({{updateClosingCallAction}}, {{lead-actions}}) filtran por el negocio activo pero pasan por RLS de la org del perfil, así que probablemente fallan para el holding.
-
-*Riesgo:* Si un usuario holding abre Closing con un negocio activo, entonces ve mezclados los turnos de todos los negocios del portfolio (la policy lo permite y la lectura no filtra por org) y probablemente no puede guardar resultados, porque la policy de update usa la org del perfil.
-
-*Impacto:* Sólo usuarios holding: no es acceso indebido (el holding puede leer su portfolio) pero sí datos de Closing y Seguimiento atribuidos al negocio equivocado y escrituras que fallan. Cantidad de holdings en uso no medida.
-
-*Qué hay que hacer:* filtrar explícitamente por {{requireOrganizationId()}} en todas las lecturas del área; probar Closing y Seguimiento con un holding.
-
-*Criterio de aceptación:* Con un usuario holding y el negocio A activo, Closing (calendario, lista) y Seguimiento muestran sólo turnos y leads de A; marcar un resultado y editar una fila de Seguimiento en A se guardan sin error
-
-*Dónde:* {{apps/web/app/closing/actions.ts}}, {{apps/web/app/sales/lead-actions.ts}}.
-
-Fuente: PENDIENTES.md [CLOSING-HOLDING-MEZCLA] · Doc del área: docs/areas/ventas.md",CLOSING-HOLDING-MEZCLA,Ventas,P1,Alta,seguridad
-[PERMISOS-SERVER-ACTIONS/ventas] (parte Ventas) Las actions del área no miran el rol,Bug,High,ventas,p1,sev-alta,seguridad,permisos-transversal,,"*Tipo:* seguridad
-
-*Severidad:* Alta
-
-*Parte de:* {{[PERMISOS-SERVER-ACTIONS]}} (ítem transversal en Plataforma). Acá, lo específico del área.
-
-*Estado verificado:* sigue abierto; ninguna action de {{app/sales}}, {{app/closing}}, {{app/fathom}} verifica permiso de módulo. {{updateCloserCommissionAction}} ({{app/sales/closer-actions.ts:275}}) no tiene llamador (código muerto). No es una escalada: usa {{createClient()}} y en producción la policy de update de {{profiles}} más el trigger {{protect_profile_columns}} ({{20260922100000_profiles_columnas_protegidas.sql}}) sólo dejan a founder/admin cambiar la comisión (verificado en {{pg_policies}}/{{pg_trigger}} 2026-09-23).
-
-*Riesgo:* Si un miembro con Ventas en «Sin acceso» invoca directamente una action de app/sales, app/closing o app/fathom, entonces lee y escribe turnos, leads, cobros y llamadas igual que alguien con acceso total. updateCloserCommissionAction no agrega riesgo: la policy de update de profiles y el trigger protect_profile_columns (ambos en producción) sólo dejan a founder/admin cambiar la comisión de otro.
-
-*Impacto:* Todas las orgs con roles restringidos: el permiso de Ventas es sólo visual, incluidos montos y cobros que [COBROS-AVISAR-PERMISOS] pretende ocultar.
-
-*Qué hay que hacer:* borrar {{updateCloserCommissionAction}} (sin uso) y aplicar el guard por módulo que se diseñe en el ítem general.
-
-*Criterio de aceptación:* updateCloserCommissionAction ya no existe en el código; un miembro con Ventas en «Sin acceso» que invoca una action de app/sales, app/closing o app/fathom recibe error de permiso y no lee ni escribe datos; typecheck y tests pasan
-
-*Dónde:* {{apps/web/app/sales/*.ts}}, {{apps/web/app/closing/actions.ts}}, {{apps/web/app/fathom/*.ts}}.
-
-Fuente: PENDIENTES.md [PERMISOS-SERVER-ACTIONS/ventas] · Doc del área: docs/areas/ventas.md",PERMISOS-SERVER-ACTIONS/ventas,Ventas,P1,Alta,seguridad
-[B-SEMBRAR-IDENTIDADES] / [1-1-SEMBRAR-Y-MEDIR] client_identities sigue vacía,Task,High,ventas,p1,sev-alta,verificacion-manual,,,"*Tipo:* verificación manual
-
-*Severidad:* Alta
-
-*Estado verificado:* {{client_identities}} tiene *0 filas* en producción (2026-09-23). El botón existe ({{components/clients/pending-fathom-calls.tsx}} → {{seedClientIdentitiesAction}}). Sin siembra el resolvedor sólo resuelve por mail de invitado.
-
-*Riesgo:* Mientras client_identities siga vacía (0 filas), cada grabación sin mail de invitado reconocible cae al último peldaño y queda pendiente de confirmación manual, sin aviso de que el resolvedor está funcionando a medias.
-
-*Impacto:* Todas las orgs con Fathom: 1-1 y ventas que no se asocian solas, fichas con «Última 1-1» desactualizada y clasificación purpose incompleta; se resuelve con un botón, pero está en una pantalla sin link ([CLIENTES-PENDING-CALLS-HUERFANA]).
-
-*Qué hay que hacer:* apretar ""Cargar identidades desde el CRM"" en {{/clients/pending-calls}}, dejar correr el cron y medir {{purpose}}/{{resolution_method}}. Medir falsos positivos del peldaño de nombre.
-
-*Criterio de aceptación:* Se ejecutó el paso de verificacion-manual.md § Ventas 7 («Cruce grabación ↔ turno y clasificación», siembra de identidades) con la cuenta real: client_identities tiene filas y quedaron anotadas la distribución de purpose/resolution_method y la tasa de falsos positivos por nombre; si falló, se abrió un ítem nuevo
-
-*Dónde:* {{apps/web/lib/fathom/identities.ts}}, {{apps/web/lib/fathom/seed-identities.ts}}.
-
-Fuente: PENDIENTES.md [B-SEMBRAR-IDENTIDADES] · Doc del área: docs/areas/ventas.md",B-SEMBRAR-IDENTIDADES,Ventas,P1,Alta,verificación manual
-[LLAMADAS-VERIFICAR-FATHOM] Cruce grabación ↔ turno con datos reales,Task,High,ventas,p1,sev-media,verificacion-manual,,,"*Tipo:* verificación manual
-
-*Severidad:* Media
-
-*Estado verificado:* {{lib/fathom/match-appointment.ts}} (ventanas de 12 h por mail y 45 min sólo horario) sin medición real.
-
-*Riesgo:* Si las ventanas de 12 h (por mail) o 45 min (sólo horario) son demasiado amplias o estrechas, entonces grabaciones se cruzan con el turno equivocado o no se cruzan, y quedan mal clasificadas como venta o entrega.
-
-*Impacto:* Métricas de ventas, análisis y ranking de closers de las orgs con Fathom y turnos; el efecto real es desconocido hasta medirlo con datos.
-
-*Qué hay que hacer:* ver {{docs/operacion/verificacion-manual.md}} § Ventas 7 (""Cruce grabación ↔ turno y clasificación"").
-
-*Criterio de aceptación:* Se ejecutó el paso de verificacion-manual.md § Ventas 7 («Cruce grabación ↔ turno y clasificación») con datos reales y quedó anotado cuántas grabaciones de venta cruzaron un turno y si las ventanas de 12 h / 45 min son correctas; si falló, se abrió un ítem nuevo
-
-*Dónde:* {{apps/web/lib/fathom/match-appointment.ts}}, {{resolve-sales-call.ts}}.
-
-Fuente: PENDIENTES.md [LLAMADAS-VERIFICAR-FATHOM] · Doc del área: docs/areas/ventas.md",LLAMADAS-VERIFICAR-FATHOM,Ventas,P1,Media,verificación manual
-[COBROS-PROBAR] Cobros nunca se dibujó con una sesión real,Task,High,ventas,p1,sev-media,verificacion-manual,,,"*Tipo:* verificación manual
-
-*Severidad:* Media
-
-*Estado verificado:* {{client_payments}} tiene 7 filas en prod pero no hay registro de prueba de la pantalla nueva en CHANGES.md.
-
-*Riesgo:* Si la pantalla de Cobros tiene un error que sólo aparece con datos y sesión reales, entonces el equipo no puede registrar o ver cobros desde Ventas.
-
-*Impacto:* Registro de cobros de todas las orgs; client_payments ya tiene 7 filas, así que el flujo base al menos escribió, y la sección de cobros de la ficha es alternativa.
-
-*Qué hay que hacer:* ver {{docs/operacion/verificacion-manual.md}} § Ventas (""Cobros"").
-
-*Criterio de aceptación:* Se ejecutó el paso de verificacion-manual.md § Ventas 5 («Cobros en Ventas») con una sesión real y el resultado quedó anotado; si falló, se abrió un ítem nuevo
-
-*Dónde:* {{apps/web/components/sales/cobros-page.tsx}}, {{client-payments-section.tsx}}, {{app/sales/payment-actions.ts}}.
-
-Fuente: PENDIENTES.md [COBROS-PROBAR] · Doc del área: docs/areas/ventas.md",COBROS-PROBAR,Ventas,P1,Media,verificación manual
-[COBROS-AVISAR-PERMISOS] Quien no tiene Ventas deja de ver montos en Clientes,Task,High,ventas,p1,sev-baja,decision-de-negocio,,,"*Tipo:* decisión de negocio
-
-*Severidad:* Baja
-
-*Estado verificado:* {{useModuleAccess(""sales"") !== ""none""}} gatea los cobros en {{components/clients/clients-list.tsx:218}} y {{client-detail.tsx:56}}.
-
-*Riesgo:* Si un rol que necesita ver montos (p. ej. account manager) no tiene el permiso de Ventas, entonces deja de ver cobros y montos en Clientes sin entender por qué.
-
-*Impacto:* Usuarios con roles personalizados sin Ventas; es comportamiento buscado y se ajusta configurando el rol, no hay pérdida de datos.
-
-*Qué hay que hacer:* repasar roles configurados y decidir quién necesita {{sales}}.
-
-*Criterio de aceptación:* Agustín decidió qué roles necesitan el permiso de Ventas para ver montos en Clientes y la decisión quedó registrada en docs/areas/ventas.md; los roles configurados en team_roles.permissions quedaron ajustados a esa decisión
-
-*Dónde:* {{team_roles.permissions}}.
-
-Fuente: PENDIENTES.md [COBROS-AVISAR-PERMISOS] · Doc del área: docs/areas/ventas.md",COBROS-AVISAR-PERMISOS,Ventas,P1,Baja,decisión de negocio
 [TRIAL-SECRET-EN-URL] WORKER_AUTH_SECRET en la URL de QStash y en logs,Bug,High,marketing,p1,sev-critica,seguridad,,,"*Tipo:* seguridad
 
 *Severidad:* Crítica
@@ -753,23 +736,6 @@ Fuente: PENDIENTES.md [MKT-SALES-CONN-VACIA] · Doc del área: docs/areas/market
 *Dónde:* {{apps/web/lib/google-forms/sync.ts}}
 
 Fuente: PENDIENTES.md [MKT-FORMS-SIN-RESPUESTAS] · Doc del área: docs/areas/marketing.md",MKT-FORMS-SIN-RESPUESTAS,Marketing,P1,Alta,verificación manual
-[AUDITORIA-ABIERTOS §6] Typeform y Google Forms pierden respuestas > 1000 y external_response_id es único global,Bug,High,marketing,p1,sev-critica,bug,,,"*Tipo:* bug
-
-*Severidad:* Crítica
-
-*Estado verificado:* {{lib/typeform/sync.ts:192}} ({{page_size=1000}}, sin {{before}}/paginación) y {{lib/google-forms/sync.ts:186}} ({{pageSize=1000}}, ignora {{nextPageToken}}) avanzan {{last_synced_at}} igual. {{form_responses.external_response_id text not null unique}} y los upserts {{onConflict: ""external_response_id""}}: dos orgs con el mismo form se pisan (el upsert reescribe {{organization_id}}).
-
-*Riesgo:* Si dos orgs sincronizan el mismo formulario, entonces el upsert por external_response_id reescribe organization_id y la respuesta se muda de una org a la otra; si un form recibe más de 1000 respuestas entre syncs, las que sobran se pierden para siempre porque last_synced_at avanza igual. Lo primero requiere un form compartido (raro, posible en holding o agencia); lo segundo, un form con volumen alto.
-
-*Impacto:* Pérdida de respuestas y datos de una org que terminan en otra (con nombre, email y respuestas del lead). Hoy form_responses tiene 0 filas, así que no hay daño registrado todavía.
-
-*Qué hay que hacer:* paginar; índice único {{(organization_id, external_response_id)}} y {{onConflict}} acorde.
-
-*Criterio de aceptación:* Un form de Typeform o Google Forms con más de 1000 respuestas nuevas se sincroniza completo (form_responses tiene todas); dos orgs con el mismo form y el mismo external_response_id conservan cada una su respuesta sin pisarse (índice único (organization_id, external_response_id)); hay un test o prueba anotada que cubre la paginación
-
-*Dónde:* {{apps/web/lib/typeform/sync.ts}}, {{apps/web/lib/google-forms/sync.ts}}, migración nueva
-
-Fuente: PENDIENTES.md [AUDITORIA-ABIERTOS §6] · Doc del área: docs/areas/marketing.md",AUDITORIA-ABIERTOS §6,Marketing,P1,Crítica,bug
 [ZERNIO-WEBHOOK-SIN-EVENTOS] El webhook de Zernio no registró nada,Task,High,marketing,p1,sev-baja,verificacion-manual,,,"*Tipo:* verificación manual
 
 *Severidad:* Baja
@@ -1881,15 +1847,6 @@ Fuente: PENDIENTES.md [FATHOM-REINTENTOS-SIN-TOPE] · Doc del área: docs/areas/
 *Dónde:* {{apps/web/lib/fathom/process-call.ts}}, {{apps/web/lib/fathom/resolve-counterparty.ts}}.
 
 Fuente: PENDIENTES.md [FATHOM-CRUCE-AGENDA-DESCONECTADO] · Doc del área: docs/areas/ventas.md",FATHOM-CRUCE-AGENDA-DESCONECTADO,Ventas,P2,,bug
-[FATHOM-PRIVACIDAD-LEAD] Una grabación vinculada a un lead sigue siendo privada,Task,Medium,ventas,p2,decision-de-negocio,,,,"*Tipo:* decisión de negocio
-
-*Estado verificado:* ítem nuevo. La policy de {{fathom_calls}} ({{20260903100000_fathom_member_keys.sql:76-90}}) sólo abre la fila si {{client_id is not null}}; el comentario dice ""vinculada a un cliente *ni a un lead*"". Una venta grabada por un closer con su key y cruzada a un lead no la ve el founder.
-
-*Qué hay que hacer:* decidir si {{counterparty_lead_id is not null}} o {{closing_call_id is not null}} también la hace de la org, y ajustar la policy.
-
-*Dónde:* migración nueva sobre {{fathom_calls}}.
-
-Fuente: PENDIENTES.md [FATHOM-PRIVACIDAD-LEAD] · Doc del área: docs/areas/ventas.md",FATHOM-PRIVACIDAD-LEAD,Ventas,P2,,decisión de negocio
 [METRICAS-SHOW-RATE] El show rate cuenta turnos cancelados en el denominador,Bug,Medium,ventas,p2,bug,,,,"*Tipo:* bug
 
 *Estado verificado:* ítem nuevo. {{showRate = asistencias / totalAgendas}} y {{totalAgendas = callRows.length}} ({{app/sales/metrics-actions.ts:95-140}}), incluye {{cancelled}}, que según {{call-status.ts}} son llamadas que nunca ocurrieron.
