@@ -49,7 +49,7 @@ Los conteos de filas en prod son al 2026-09-22/23.
 | `zernio_integrations` | `zernio_profile_id` (sólo el `_id`), `connected_accounts` JSONB `[{accountId, platform, username, avatarUrl}]`, `api_key` (cifrada), `webhook_secret`, `is_active` | Sin policies de miembro: sólo service role (`20260922110000`) |
 | `zernio_comments`, `zernio_messages` | `zernio_comment_id`, `is_replied`, `is_hidden`, `raw_payload` | Los llena el webhook de Zernio. **0 filas en prod** |
 | `ad_metrics_daily` | `(organization_id, metric_date, platform, ad_external_id)` único, `spend`, `impressions`, `reach`, `clicks` | Única excepción al live-fetch de ads. Escribe sólo el cron. **0 filas en prod** |
-| `forms` / `form_responses` | `forms.platform` (`typeform`,`google_forms`), único `(organization_id, platform, external_form_id)`; `form_responses.external_response_id` **único global**, `ai_lead_score`, `ai_lead_qualification`, `answers` JSONB | 38 forms y **0 respuestas** en prod |
+| `forms` / `form_responses` | `forms.platform` (`typeform`,`google_forms`), único `(organization_id, platform, external_form_id)`; `form_responses` único `(organization_id, external_response_id)` (SCRUM-57), `ai_lead_score`, `ai_lead_qualification`, `answers` JSONB | 38 forms y **0 respuestas** en prod |
 | `typeform_integrations`, `google_forms_integrations`, `youtube_integrations` | tokens OAuth / API key | Tokens OAuth en texto plano (auditoría §3 seguridad 2). `google_forms_integrations` guarda el token Google unificado (Drive+Forms+YouTube) |
 | `utm_links` | `utm_campaign`, `youtube_video_id` (external id de YouTube), `full_url`, `manychat_ref` (`yt-<campaign>`), contadores `clicks`, `leads_captured`, `bookings_attributed`, `sales_attributed`, `revenue_attributed` | Contadores vía RPC `increment_utm_*` (revocadas a anon/authenticated; sólo service role) |
 | `utm_lead_captures`, `utm_booking_attributions`, `utm_sale_attributions` | índices únicos por `closing_call_id` / `client_id` | Cadena lead → booking → venta |
@@ -120,10 +120,16 @@ cron 03:00 UTC /api/cron/cleanup-trial-reels: borra del bucket los archivos de j
 ### Formularios
 
 Cron horario `/api/integrations/typeform/sync` y `/api/integrations/google-forms/sync` (o botón "Sincronizar",
-`syncFormAction`). Cada sync upsertea `forms`, trae respuestas desde `last_synced_at` (Typeform `page_size=1000`,
-Google `pageSize=1000`, **sin paginar**), y puntúa hasta 20 pendientes por form con Haiku
+`syncFormAction`). Cada sync upsertea `forms`, trae respuestas desde `last_synced_at` (paginado, ver abajo), y puntúa hasta 20 pendientes por form con Haiku
 (`lib/forms/sync-scoring.ts` → `score-response.ts`). `scoreFormResponsesAction` (botón del detalle) puntúa hasta 20
 pendientes y después hace el análisis agregado del form (Sonnet).
+
+**Paginación y cursor (SCRUM-57, 2026-10-04):** `lib/forms/paginar-respuestas.ts` trae todas las páginas de
+respuestas: Typeform con el cursor `before` (orden `submitted_at,desc`, 1.000 por página) y Google Forms con
+`nextPageToken`, manteniendo el filtro de fecha. Tope: 50 páginas por formulario y corrida. Si una página falla,
+se llega al tope o falla un guardado, `forms.last_synced_at` no avanza, y tampoco el `last_sync_at` de la
+integración: la próxima corrida vuelve a pedir desde el mismo punto (el upsert deduplica). El upsert es por
+`(organization_id, external_response_id)`. Docs: `docs/external-apis/typeform/` y `docs/external-apis/google-forms/`.
 
 ### UTMs
 
@@ -260,7 +266,6 @@ como JSON.
 - Música propia de Trial Reels nunca llega al worker (zod la descarta) y no hay pantalla para subirla `[TRIAL-REELS-MUSICA]`, `[TRIAL-4]`.
 - `WORKER_AUTH_SECRET` viaja en la URL de QStash y se loguea `[TRIAL-SECRET-EN-URL]`.
 - Overview y Conexión con Ventas sobre tablas legacy `[MKT-OVERVIEW-LEGACY]`, `[MKT-SALES-CONN-VACIA]`.
-- Formularios sin paginar y con `external_response_id` único global `[AUDITORIA-ABIERTOS]` punto 6.
 - YouTube sin cron y métricas congeladas `[YT-SIN-CRON]`.
 - `cleanup-trial-reels` reprocesa los mismos jobs para siempre `[TRIAL-CLEANUP-LOOP]`.
 - Código huérfano: `marketing-subnav.tsx`, `marketing-content-library.tsx`, `marketing-content-detail.tsx`,

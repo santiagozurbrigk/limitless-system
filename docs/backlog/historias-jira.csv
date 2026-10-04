@@ -1,4 +1,19 @@
 Summary,Issue Type,Priority,Labels,Labels,Labels,Labels,Labels,Labels,Description,ID Historia,Épica (área),Prioridad calculada,Severidad calculada,Tareas técnicas,Octubre
+[H-CLI-12] Llegar a las grabaciones sin asignar y dejar que el sistema reconozca a los clientes,Story,Highest,historia,clientes,p0,sev-alta,para-confirmar,,"*Historia:* Como miembro del equipo, quiero encontrar desde la lista de clientes las grabaciones de Fathom que el sistema no pudo asignar y cargar una sola vez los datos de los clientes desde el CRM, para que las sesiones 1-1 lleguen a la ficha correcta y la «Última 1-1» esté al día.
+
+*Criterios de aceptación:*
+* Dada la lista de Clientes en computadora, cuando hay grabaciones sin asignar, entonces veo un acceso a «Llamadas sin asociar» con la cantidad pendiente y me lleva a esa pantalla.
+* El aviso de «Última 1-1» que dice «Confirmalo en Llamadas sin asociar» es un link a esa pantalla.
+* Se apretó «Cargar identidades desde el CRM» con la cuenta real, el sistema quedó con los datos de los clientes cargados y quedó anotado cuántas grabaciones pasaron a asignarse solas y cuántas se asignaron mal por nombre.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [CLIENTES-PENDING-CALLS-HUERFANA] «Llamadas sin asociar» no tiene link en la navegación *(nuevo)* (P1)
+* [B-SEMBRAR-IDENTIDADES] / [1-1-SEMBRAR-Y-MEDIR] client_identities sigue vacía (P0)
+
+*Para confirmar:*
+* Martín: esta funcionalidad es la misma pantalla que F-VEN-25 (Ventas); conviene decidir si se cargan como una sola historia.
+
+Funcionalidad: F-CLI-12 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-CLI-12]",H-CLI-12,Clientes,P0,Alta,CLIENTES-PENDING-CALLS-HUERFANA B-SEMBRAR-IDENTIDADES,
 [H-CLI-23] Que cada miembro sólo pueda hacer en Clientes lo que su permiso permite,Story,Highest,historia,clientes,p0,sev-alta,,,"*Historia:* Como founder, quiero que un miembro con Clientes en «Solo lectura» o «Sin acceso» no pueda borrar ni modificar clientes por ningún camino, para que el permiso por módulo proteja los datos y no sea sólo esconder botones.
 
 *Criterios de aceptación:*
@@ -40,21 +55,6 @@ Funcionalidad: F-OPS-20 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * [PERMISOS-VERIFICAR-SESION] Probar el bloqueo con un rol limitado (ex bloque de PLAN_VERIFICACION) (P1)
 
 Funcionalidad: F-PLA-06 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-06]",H-PLA-06,Plataforma,P0,Alta,PERMISOS-SERVER-ACTIONS PERMISOS-VERIFICAR-SESION,
-[H-PLA-15] Ver en el Panel General números completos y propios,Story,Highest,historia,plataforma,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que el Panel General muestre mis KPIs, embudo, ingresos, ventas y ranking de closers con todos los datos de mi negocio, para tomar decisiones con números que no estén cortados.
-
-*Criterios de aceptación:*
-* Dado un negocio con más de 1.000 turnos, cuando abro el Panel, entonces las ventas, el ranking de closers y el embudo incluyen los turnos más recientes (los del mes coinciden con los que hay guardados).
-* Los números del Panel sólo incluyen turnos de mi organización, nunca de otra.
-* El embudo del Panel incluye el tramo de mensajes directos (conversaciones y respuestas), o deja claro que arranca en las llamadas.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [CLOSING-LIST-1000] El calendario y la lista de Closing pierden los turnos más recientes (P0)
-* [EMBUDO-PANEL-DMS] El embudo del panel no mide DMs (P2)
-
-*Para confirmar:*
-* Agustín: ¿el embudo del Panel tiene que contar los mensajes directos de la bandeja nueva, o alcanza con que arranque en las llamadas?
-
-Funcionalidad: F-PLA-15 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-15]",H-PLA-15,Plataforma,P0,Alta,CLOSING-LIST-1000 EMBUDO-PANEL-DMS,
 [H-PLA-18] Que sólo quien corresponde cambie los datos de la organización,Story,Highest,historia,plataforma,p0,sev-alta,,,"*Historia:* Como founder, quiero que sólo quien tiene acceso a Ajustes pueda cambiar el nombre, la web, la moneda y la zona horaria de la organización, para que nadie del equipo altere por su cuenta cómo se muestran los números de todos.
 
 *Criterios de aceptación:*
@@ -89,6 +89,31 @@ Funcionalidad: F-PLA-20 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * [INTEGRACIONES-PLAYWRIGHT] E2E del tablero de Integraciones (P2)
 
 Funcionalidad: F-PLA-21 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-21]",H-PLA-21,Plataforma,P0,Alta,INTEGRACIONES-VERIFICAR PERMISOS-SERVER-ACTIONS INTEGRACIONES-PLAYWRIGHT,
+[H-VEN-05] Que los turnos de Calendly del negocio entren a tiempo y de forma segura,Story,Highest,historia,ventas,p0,sev-media,,,"*Historia:* Como founder, quiero que los turnos del Calendly del negocio entren solos, sin atrasos y sin que nadie de afuera pueda colar turnos falsos, para que Closing y el seguimiento reflejen la agenda real.
+
+*Criterios de aceptación:*
+* Dado un turno nuevo que aparece a la vez en el Calendly del negocio y en el de un closer, cuando corre la sincronización, entonces entra en esa misma corrida junto con los demás turnos nuevos (no se pierde el lote hasta la hora siguiente).
+* Una hora de registros de la sincronización no muestra errores de turnos duplicados.
+* Cuando llega un aviso de Calendly firmado hace más de 5 minutos (repetido), el sistema lo rechaza.
+* Las credenciales de la conexión con Calendly quedan guardadas cifradas, y la sincronización sigue funcionando después del cambio.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [CALENDLY-CRONS-SUPERPUESTOS] calendly-sync y calendly-sync-closers corren a la misma hora (P0)
+* [TOKENS-TEXTO-PLANO] (parte Ventas) Tokens de Calendly, Fathom org y ManyChat sin cifrar (P2)
+
+Funcionalidad: F-VEN-05 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-05]",H-VEN-05,Ventas,P0,Media,CALENDLY-CRONS-SUPERPUESTOS TOKENS-TEXTO-PLANO,
+[H-VEN-07] Que los turnos del Calendly de cada closer entren al seguimiento,Story,Highest,historia,ventas,p0,sev-alta,,,"*Historia:* Como closer, quiero que los turnos de mi propio Calendly entren atribuidos a mí y colgados de su lead, para poder seguirlos desde Seguimiento como cualquier otro turno.
+
+*Criterios de aceptación:*
+* Dado un turno nuevo agendado en el Calendly de un closer con un mail nuevo, cuando corre la sincronización, entonces el turno queda a nombre de ese closer y el lead aparece en Closing → Seguimiento → Todos.
+* Después de la corrección, los turnos viejos que tienen mail del lead también quedan colgados de su lead (ninguno queda suelto).
+* Si un turno está en el Calendly del negocio y en el del closer, entra igual en la misma corrida.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [CALENDLY-CLOSER-SIN-LEAD] Los turnos del Calendly de cada closer no entran al seguimiento (P0)
+* [CALENDLY-CRONS-SUPERPUESTOS] calendly-sync y calendly-sync-closers corren a la misma hora (P0)
+
+Funcionalidad: F-VEN-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-07]",H-VEN-07,Ventas,P0,Alta,CALENDLY-CLOSER-SIN-LEAD CALENDLY-CRONS-SUPERPUESTOS,
 "[H-VEN-08] Ver en Closing todos los turnos del negocio activo, incluidos los más nuevos",Story,Highest,historia,ventas,p0,sev-alta,,,"*Historia:* Como closer, quiero ver en el calendario y en la lista de Closing todos los turnos de mi negocio, incluidos los de hoy y de esta semana, para poder cargar su resultado a tiempo.
 
 *Criterios de aceptación:*
@@ -97,24 +122,104 @@ Funcionalidad: F-PLA-21 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * Dado un admin del holding con el negocio A activo, cuando abre Closing y Seguimiento, entonces ve sólo turnos y leads de A, y puede marcar un resultado y editar una fila de Seguimiento sin error.
 
 *Tareas técnicas (PENDIENTES.md):*
-* [CLOSING-LIST-1000] El calendario y la lista de Closing pierden los turnos más recientes (P0)
-* [CLOSING-HOLDING-MEZCLA] En modo holding, Closing mezcla turnos de varios negocios (P1)
+* [CLOSING-HOLDING-MEZCLA] En modo holding, Closing mezcla turnos de varios negocios (P0)
 
-Funcionalidad: F-VEN-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-08]",H-VEN-08,Ventas,P0,Alta,CLOSING-LIST-1000 CLOSING-HOLDING-MEZCLA,
-[H-VEN-17] Ver facturación y comisión por closer completas en Métricas,Story,Highest,historia,ventas,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero ver en Métricas la facturación y la comisión estimada de cada closer sobre todos los turnos del período, para pagar comisiones y comparar closers con números completos.
+Funcionalidad: F-VEN-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-08]",H-VEN-08,Ventas,P0,Alta,CLOSING-HOLDING-MEZCLA,
+[H-VEN-10] Cerrar una venta en un solo paso,Story,Highest,historia,ventas,p0,sev-critica,,,"*Historia:* Como closer, quiero marcar una venta como cerrada y que se cree el cliente con su primer pago en un solo paso, para no cargar nada dos veces ni quedarme con una venta a medias.
 
 *Criterios de aceptación:*
-* Dada una organización con más de 1.000 turnos, cuando abro Métricas, entonces la facturación por closer del mes actual incluye los turnos más recientes y coincide con lo que tiene guardado el sistema para ese mes.
-* Nunca se suman turnos de otra organización.
+* Dado un turno en Closing, cuando lo marco como cerrado con monto y comprobante, entonces aparece el cliente en Clientes, vinculado al lead y con ese pago registrado.
+* Si se corta la conexión o algo falla en el medio, no queda un turno cerrado sin cliente ni un cliente sin pago; o, si quedó algo a medias, puedo volver a intentarlo y se completa lo que faltaba.
+* Reintentar el cierre del mismo turno nunca duplica el cliente ni el pago.
 
 *Tareas técnicas (PENDIENTES.md):*
-* [CLOSING-LIST-1000] El calendario y la lista de Closing pierden los turnos más recientes (P0)
+* [CLOSING-CIERRE-ATOMICO] Cerrar una venta son cinco escrituras encadenadas desde el navegador (P0)
+
+Funcionalidad: F-VEN-10 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-10]",H-VEN-10,Ventas,P0,Crítica,CLOSING-CIERRE-ATOMICO,
+[H-VEN-14] Ver el ranking de closers en la pestaña Equipo,Story,Highest,historia,ventas,p0,sev-media,para-confirmar,,"*Historia:* Como founder, quiero ver en la pestaña Equipo de Closing a cada closer con sus cierres, su facturación y su comisión, para saber quién está vendiendo y cuánto le corresponde.
+
+*Criterios de aceptación:*
+* Dado un período con al menos una venta cerrada, cuando abro la pestaña Equipo, entonces aparece el closer de esa venta con cierres y facturación distintos de cero.
+* La pestaña no sale vacía por un error: si no hay ventas, lo dice.
+* Quedó escrito de dónde sale la facturación de cada closer (resultado del turno, monto del cliente o pagos registrados).
+
+*Tareas técnicas (PENDIENTES.md):*
+* [CLOSER-AMOUNT-CLOSED] La pestaña Equipo de Closing siempre sale vacía (P0)
 
 *Para confirmar:*
-* Agustín: la comisión se calcula con un porcentaje fijo para todos; ¿alcanza o hay que usar la comisión de cada closer? No hay tarea para eso.
-* Martín: no se confirmó que alguna organización pase hoy los 1.000 turnos; si ninguna los pasa, la falla todavía no se ve.
+* Agustín: de dónde tiene que salir la facturación por closer (lo que se cargó al cerrar, el monto total del cliente o lo efectivamente cobrado).
 
-Funcionalidad: F-VEN-17 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-17]",H-VEN-17,Ventas,P0,Alta,CLOSING-LIST-1000,
+Funcionalidad: F-VEN-14 · No funciona · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-14]",H-VEN-14,Ventas,P0,Media,CLOSER-AMOUNT-CLOSED,
+[H-VEN-18] Ver el ranking del equipo por puntaje de llamadas y sus objeciones,Story,Highest,historia,ventas,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero ver el ranking de closers según el puntaje de sus llamadas de venta y las objeciones más frecuentes, para saber a quién entrenar y en qué.
+
+*Criterios de aceptación:*
+* El ranking sólo cuenta llamadas de venta (una 1-1 de entrega con un cliente no aparece).
+* Cada llamada aparece con el nombre de su closer, no agrupada en «Sin nombre».
+* El indicador de tendencia compara contra el período anterior, o no se muestra (hoy dice siempre «estable»).
+
+*Tareas técnicas (PENDIENTES.md):*
+* [FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas (P0)
+* [RANKING-TREND-FIJO] El ranking de closers siempre dice tendencia estable (P3)
+
+*Para confirmar:*
+* Agustín: Decisión: calcular la tendencia o sacar el indicador.
+
+Funcionalidad: F-VEN-18 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-18]",H-VEN-18,Ventas,P0,Alta,FATHOM-DEEP-ANALISIS-ALCANCE RANKING-TREND-FIJO,
+[H-VEN-19] Revisar las llamadas de venta grabadas y su análisis,Story,Highest,historia,ventas,p0,sev-alta,,,"*Historia:* Como founder, quiero ver en Ventas → Llamadas todas las llamadas de venta grabadas con Fathom y su análisis, para revisar cómo vende el equipo sin ir a buscar cada grabación.
+
+*Criterios de aceptación:*
+* Dada una organización con llamadas de venta grabadas, cuando abro Ventas → Llamadas, entonces veo la misma cantidad de llamadas que tiene guardadas el sistema, cada una con su análisis cuando existe.
+* Si la carga falla, el error queda registrado para el equipo técnico en vez de mostrar «no hay llamadas».
+* Una llamada de venta con un lead (sin cliente todavía) también tiene su análisis.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas (P0)
+
+Funcionalidad: F-VEN-19 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-19]",H-VEN-19,Ventas,P0,Alta,FATHOM-DEEP-ANALISIS-ALCANCE,
+[H-VEN-22] Que cada grabación se cruce con su turno y se clasifique bien,Story,Highest,historia,ventas,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que cada grabación se cruce sola con el turno de la agenda y quede clasificada como venta, entrega o equipo, para que las métricas, los análisis y el ranking de ventas se armen sólo con llamadas de venta.
+
+*Criterios de aceptación:*
+* Probado con una cuenta real de Fathom y la agenda real, y el resultado quedó anotado: cuántas grabaciones de venta cruzaron un turno y si las ventanas de tiempo usadas son correctas; si falló, se abrió una tarea nueva.
+* Se cargaron las identidades de los clientes desde el CRM y quedó anotado cuántas grabaciones se clasificaron por cada vía y cuántas se asignaron mal por nombre.
+* Dada una grabación que cruzó un turno de un lead, entonces queda vinculada a ese lead.
+* Dada una grabación con alguien de afuera que no cruzó ningún turno, entonces no se cuenta como venta.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [LLAMADAS-VERIFICAR-FATHOM] Cruce grabación ↔ turno con datos reales (P0)
+* [B-SEMBRAR-IDENTIDADES] / [1-1-SEMBRAR-Y-MEDIR] client_identities sigue vacía (P0)
+* [FATHOM-CRUCE-AGENDA-DESCONECTADO] El peldaño ""cruce con agenda"" del resolvedor nunca se activa (P2)
+
+*Para confirmar:*
+* Agustín: una grabación con un externo que el sistema no reconoce y no cruzó ningún turno, ¿queda sin clasificar o se cuenta como venta? La tarea deja la decisión abierta.
+
+Funcionalidad: F-VEN-22 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-22]",H-VEN-22,Ventas,P0,Alta,LLAMADAS-VERIFICAR-FATHOM B-SEMBRAR-IDENTIDADES FATHOM-CRUCE-AGENDA-DESCONECTADO,
+[H-VEN-23] Que el análisis profundo se haga sobre las llamadas de venta y a nombre de su closer,Story,Highest,historia,ventas,p0,sev-alta,,,"*Historia:* Como founder, quiero que cada llamada de venta tenga su análisis (puntaje por sección, objeciones, si vendió) a nombre del closer que la hizo, para evaluar a cada closer con sus propias llamadas y no gastar en analizar llamadas que no son de venta.
+
+*Criterios de aceptación:*
+* Dada una 1-1 de entrega de 10 minutos o más con un cliente, entonces no genera análisis de venta.
+* Dada una llamada de venta cruzada con el turno de un lead, entonces genera su análisis con el closer del turno.
+* El ranking del equipo en Métricas muestra el nombre del closer en vez de «Sin nombre».
+
+*Tareas técnicas (PENDIENTES.md):*
+* [FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas (P0)
+
+Funcionalidad: F-VEN-23 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-23]",H-VEN-23,Ventas,P0,Alta,FATHOM-DEEP-ANALISIS-ALCANCE,
+[H-VEN-25] Asignar a mano las grabaciones pendientes a un cliente,Story,Highest,historia,ventas,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero asociar a un cliente las grabaciones que el sistema no pudo asignar y cargar desde el CRM los datos de mis clientes, para que cada llamada termine en la ficha correcta sin riesgo de mezclar datos con otra empresa.
+
+*Criterios de aceptación:*
+* Cuando asigno una grabación a uno de mis clientes, queda en su ficha como hoy.
+* Si alguien intenta asignar una grabación a un cliente de otra empresa, recibe un error y no se guarda nada en ninguna de las dos.
+* Llego a la pantalla de grabaciones pendientes desde la lista de Clientes, con la cantidad pendiente a la vista.
+* Se apretó «Cargar identidades desde el CRM» con la cuenta real y quedó anotado cuántas grabaciones pasaron a asignarse solas.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [B-SEMBRAR-IDENTIDADES] / [1-1-SEMBRAR-Y-MEDIR] client_identities sigue vacía (P0)
+* [CLIENTES-PENDING-CALLS-HUERFANA] «Llamadas sin asociar» no tiene link en la navegación *(nuevo)* (P1)
+
+*Para confirmar:*
+* Martín: es la misma pantalla que F-CLI-12 (Clientes); conviene decidir si se cargan como una sola historia.
+
+Funcionalidad: F-VEN-25 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-25]",H-VEN-25,Ventas,P0,Alta,B-SEMBRAR-IDENTIDADES CLIENTES-PENDING-CALLS-HUERFANA,
 [H-VEN-28] Limitar por rol quién ve Ventas y los montos,Story,Highest,historia,ventas,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que un miembro sin permiso de Ventas no pueda ver ni cambiar turnos, leads, cobros ni llamadas por ningún camino, para que los montos y los datos comerciales queden sólo para quien los necesita.
 
 *Criterios de aceptación:*
@@ -123,9 +228,9 @@ Funcionalidad: F-VEN-17 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * Quedó decidido qué roles necesitan el permiso de Ventas para ver montos en Clientes, y los roles configurados se ajustaron a esa decisión.
 
 *Tareas técnicas (PENDIENTES.md):*
-* [PERMISOS-SERVER-ACTIONS/ventas] (parte Ventas) Las actions del área no miran el rol (P1)
+* [PERMISOS-SERVER-ACTIONS/ventas] (parte Ventas) Las actions del área no miran el rol (P0)
 * [PERMISOS-SERVER-ACTIONS] Los permisos por módulo no protegen datos, sólo pantallas (P0)
-* [COBROS-AVISAR-PERMISOS] Quien no tiene Ventas deja de ver montos en Clientes (P1)
+* [COBROS-AVISAR-PERMISOS] Quien no tiene Ventas deja de ver montos en Clientes (P0)
 
 *Para confirmar:*
 * Agustín: qué roles (por ejemplo, quien lleva la cuenta del cliente) tienen que ver montos en Clientes aunque no trabajen en Ventas.
@@ -176,21 +281,6 @@ Funcionalidad: F-CLI-04 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * [AVISO-Y-SATISFACCION-SIN-PROBAR] , [C0-PROBAR-PANTALLA], [C1-PROBAR-PANTALLA], [C2-PROBAR-FICHA], [TRACKERS-PROBAR-CON-SESION], [CLIENTES-VER-CON-DATOS], [FICHA-VER-CON-DATOS] Pasadas por pantalla con sesión real (P2)
 
 Funcionalidad: F-CLI-05 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-CLI-05]",H-CLI-05,Clientes,P1,Media,CLIENTES-ETAPA-TABLA-VS-FICHA CLIENTES-TECHO-1000 AVISO-Y-SATISFACCION-SIN-PROBAR,
-[H-CLI-12] Llegar a las grabaciones sin asignar y dejar que el sistema reconozca a los clientes,Story,High,historia,clientes,p1,sev-alta,para-confirmar,,"*Historia:* Como miembro del equipo, quiero encontrar desde la lista de clientes las grabaciones de Fathom que el sistema no pudo asignar y cargar una sola vez los datos de los clientes desde el CRM, para que las sesiones 1-1 lleguen a la ficha correcta y la «Última 1-1» esté al día.
-
-*Criterios de aceptación:*
-* Dada la lista de Clientes en computadora, cuando hay grabaciones sin asignar, entonces veo un acceso a «Llamadas sin asociar» con la cantidad pendiente y me lleva a esa pantalla.
-* El aviso de «Última 1-1» que dice «Confirmalo en Llamadas sin asociar» es un link a esa pantalla.
-* Se apretó «Cargar identidades desde el CRM» con la cuenta real, el sistema quedó con los datos de los clientes cargados y quedó anotado cuántas grabaciones pasaron a asignarse solas y cuántas se asignaron mal por nombre.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [CLIENTES-PENDING-CALLS-HUERFANA] «Llamadas sin asociar» no tiene link en la navegación *(nuevo)* (P1)
-* [B-SEMBRAR-IDENTIDADES] / [1-1-SEMBRAR-Y-MEDIR] client_identities sigue vacía (P1)
-
-*Para confirmar:*
-* Martín: esta funcionalidad es la misma pantalla que F-VEN-25 (Ventas); conviene decidir si se cargan como una sola historia.
-
-Funcionalidad: F-CLI-12 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-CLI-12]",H-CLI-12,Clientes,P1,Alta,CLIENTES-PENDING-CALLS-HUERFANA B-SEMBRAR-IDENTIDADES,
 "[H-CLI-26] Que cada creador complete su onboarding por un link, sin cuenta",Story,High,historia,clientes,p1,sev-media,para-confirmar,,"*Historia:* Como miembro del equipo, quiero generar un link de onboarding para cada creador y que lo que complete llene su ficha, para dejar de usar el formulario viejo y tener sus respuestas con historial dentro de Limitless.
 
 *Criterios de aceptación:*
@@ -825,7 +915,7 @@ Funcionalidad: F-MKT-17 · No funciona · docs/FUNCIONAL.md · Fuente: docs/back
 * Decisión: construir lo que falta o sacarlo de la pantalla. Agustín: para el recorrido de compradores hay que decidir qué se guarda de los mensajes de Zernio.
 
 Funcionalidad: F-MKT-19 · No funciona · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-19]",H-MKT-19,Marketing,P1,Media,MKT-SALES-CONN-VACIA EMBUDO-PANEL-DMS,
-[H-MKT-21] Ver las respuestas de mis formularios con el puntaje de cada lead,Story,High,historia,marketing,p1,sev-critica,,,"*Historia:* Como founder, quiero que las respuestas de mis formularios de Typeform y Google Forms entren solas con un puntaje de lead por IA, para saber rápido a quién llamar primero.
+[H-MKT-21] Ver las respuestas de mis formularios con el puntaje de cada lead,Story,High,historia,marketing,p1,sev-alta,,,"*Historia:* Como founder, quiero que las respuestas de mis formularios de Typeform y Google Forms entren solas con un puntaje de lead por IA, para saber rápido a quién llamar primero.
 
 *Criterios de aceptación:*
 * Dado un formulario de Google Forms con respuestas, cuando se sincroniza, entonces las respuestas aparecen con su puntaje; si algo falla, el error queda registrado por formulario en vez de perderse en silencio (hoy hay 38 formularios y 0 respuestas en producción).
@@ -835,10 +925,9 @@ Funcionalidad: F-MKT-19 · No funciona · docs/FUNCIONAL.md · Fuente: docs/back
 
 *Tareas técnicas (PENDIENTES.md):*
 * [MKT-FORMS-SIN-RESPUESTAS] 38 formularios y 0 respuestas en producción (P1)
-* [AUDITORIA-ABIERTOS §6] Typeform y Google Forms pierden respuestas > 1000 y external_response_id es único global (P1)
 * [PERMISOS-SERVER-ACTIONS/marketing] (compartido) Drive del founder y desconexiones abiertas a cualquier miembro (P2)
 
-Funcionalidad: F-MKT-21 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-21]",H-MKT-21,Marketing,P1,Crítica,MKT-FORMS-SIN-RESPUESTAS AUDITORIA-ABIERTOS §6 PERMISOS-SERVER-ACTIONS/marketing,
+Funcionalidad: F-MKT-21 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-21]",H-MKT-21,Marketing,P1,Alta,MKT-FORMS-SIN-RESPUESTAS PERMISOS-SERVER-ACTIONS/marketing,
 "[H-MKT-23] Saber cuántos clics, leads, llamadas y ventas trajo cada link UTM",Story,High,historia,marketing,p1,sev-media,para-confirmar,,"*Historia:* Como founder, quiero que cada link UTM sume sus clics, leads, llamadas agendadas y ventas, para saber qué video de YouTube me trae clientes.
 
 *Criterios de aceptación:*
@@ -1019,126 +1108,6 @@ Funcionalidad: F-PLA-26 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/ba
 * ---
 
 Funcionalidad: F-PLA-30 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-30]",H-PLA-30,Plataforma,P1,Media,AUD-SEG-9,
-[H-VEN-05] Que los turnos de Calendly del negocio entren a tiempo y de forma segura,Story,High,historia,ventas,p1,sev-media,,,"*Historia:* Como founder, quiero que los turnos del Calendly del negocio entren solos, sin atrasos y sin que nadie de afuera pueda colar turnos falsos, para que Closing y el seguimiento reflejen la agenda real.
-
-*Criterios de aceptación:*
-* Dado un turno nuevo que aparece a la vez en el Calendly del negocio y en el de un closer, cuando corre la sincronización, entonces entra en esa misma corrida junto con los demás turnos nuevos (no se pierde el lote hasta la hora siguiente).
-* Una hora de registros de la sincronización no muestra errores de turnos duplicados.
-* Cuando llega un aviso de Calendly firmado hace más de 5 minutos (repetido), el sistema lo rechaza.
-* Las credenciales de la conexión con Calendly quedan guardadas cifradas, y la sincronización sigue funcionando después del cambio.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [CALENDLY-CRONS-SUPERPUESTOS] calendly-sync y calendly-sync-closers corren a la misma hora (P1)
-* [TOKENS-TEXTO-PLANO] (parte Ventas) Tokens de Calendly, Fathom org y ManyChat sin cifrar (P2)
-
-Funcionalidad: F-VEN-05 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-05]",H-VEN-05,Ventas,P1,Media,CALENDLY-CRONS-SUPERPUESTOS TOKENS-TEXTO-PLANO,
-[H-VEN-07] Que los turnos del Calendly de cada closer entren al seguimiento,Story,High,historia,ventas,p1,sev-alta,,,"*Historia:* Como closer, quiero que los turnos de mi propio Calendly entren atribuidos a mí y colgados de su lead, para poder seguirlos desde Seguimiento como cualquier otro turno.
-
-*Criterios de aceptación:*
-* Dado un turno nuevo agendado en el Calendly de un closer con un mail nuevo, cuando corre la sincronización, entonces el turno queda a nombre de ese closer y el lead aparece en Closing → Seguimiento → Todos.
-* Después de la corrección, los turnos viejos que tienen mail del lead también quedan colgados de su lead (ninguno queda suelto).
-* Si un turno está en el Calendly del negocio y en el del closer, entra igual en la misma corrida.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [CALENDLY-CLOSER-SIN-LEAD] Los turnos del Calendly de cada closer no entran al seguimiento (P1)
-* [CALENDLY-CRONS-SUPERPUESTOS] calendly-sync y calendly-sync-closers corren a la misma hora (P1)
-
-Funcionalidad: F-VEN-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-07]",H-VEN-07,Ventas,P1,Alta,CALENDLY-CLOSER-SIN-LEAD CALENDLY-CRONS-SUPERPUESTOS,
-[H-VEN-10] Cerrar una venta en un solo paso,Story,High,historia,ventas,p1,sev-critica,,,"*Historia:* Como closer, quiero marcar una venta como cerrada y que se cree el cliente con su primer pago en un solo paso, para no cargar nada dos veces ni quedarme con una venta a medias.
-
-*Criterios de aceptación:*
-* Dado un turno en Closing, cuando lo marco como cerrado con monto y comprobante, entonces aparece el cliente en Clientes, vinculado al lead y con ese pago registrado.
-* Si se corta la conexión o algo falla en el medio, no queda un turno cerrado sin cliente ni un cliente sin pago; o, si quedó algo a medias, puedo volver a intentarlo y se completa lo que faltaba.
-* Reintentar el cierre del mismo turno nunca duplica el cliente ni el pago.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [CLOSING-CIERRE-ATOMICO] Cerrar una venta son cinco escrituras encadenadas desde el navegador (P1)
-
-Funcionalidad: F-VEN-10 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-10]",H-VEN-10,Ventas,P1,Crítica,CLOSING-CIERRE-ATOMICO,
-[H-VEN-14] Ver el ranking de closers en la pestaña Equipo,Story,High,historia,ventas,p1,sev-media,para-confirmar,,"*Historia:* Como founder, quiero ver en la pestaña Equipo de Closing a cada closer con sus cierres, su facturación y su comisión, para saber quién está vendiendo y cuánto le corresponde.
-
-*Criterios de aceptación:*
-* Dado un período con al menos una venta cerrada, cuando abro la pestaña Equipo, entonces aparece el closer de esa venta con cierres y facturación distintos de cero.
-* La pestaña no sale vacía por un error: si no hay ventas, lo dice.
-* Quedó escrito de dónde sale la facturación de cada closer (resultado del turno, monto del cliente o pagos registrados).
-
-*Tareas técnicas (PENDIENTES.md):*
-* [CLOSER-AMOUNT-CLOSED] La pestaña Equipo de Closing siempre sale vacía (P1)
-
-*Para confirmar:*
-* Agustín: de dónde tiene que salir la facturación por closer (lo que se cargó al cerrar, el monto total del cliente o lo efectivamente cobrado).
-
-Funcionalidad: F-VEN-14 · No funciona · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-14]",H-VEN-14,Ventas,P1,Media,CLOSER-AMOUNT-CLOSED,
-[H-VEN-18] Ver el ranking del equipo por puntaje de llamadas y sus objeciones,Story,High,historia,ventas,p1,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero ver el ranking de closers según el puntaje de sus llamadas de venta y las objeciones más frecuentes, para saber a quién entrenar y en qué.
-
-*Criterios de aceptación:*
-* El ranking sólo cuenta llamadas de venta (una 1-1 de entrega con un cliente no aparece).
-* Cada llamada aparece con el nombre de su closer, no agrupada en «Sin nombre».
-* El indicador de tendencia compara contra el período anterior, o no se muestra (hoy dice siempre «estable»).
-
-*Tareas técnicas (PENDIENTES.md):*
-* [FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas (P1)
-* [RANKING-TREND-FIJO] El ranking de closers siempre dice tendencia estable (P3)
-
-*Para confirmar:*
-* Agustín: Decisión: calcular la tendencia o sacar el indicador.
-
-Funcionalidad: F-VEN-18 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-18]",H-VEN-18,Ventas,P1,Alta,FATHOM-DEEP-ANALISIS-ALCANCE RANKING-TREND-FIJO,
-[H-VEN-19] Revisar las llamadas de venta grabadas y su análisis,Story,High,historia,ventas,p1,sev-alta,,,"*Historia:* Como founder, quiero ver en Ventas → Llamadas todas las llamadas de venta grabadas con Fathom y su análisis, para revisar cómo vende el equipo sin ir a buscar cada grabación.
-
-*Criterios de aceptación:*
-* Dada una organización con llamadas de venta grabadas, cuando abro Ventas → Llamadas, entonces veo la misma cantidad de llamadas que tiene guardadas el sistema, cada una con su análisis cuando existe.
-* Si la carga falla, el error queda registrado para el equipo técnico en vez de mostrar «no hay llamadas».
-* Una llamada de venta con un lead (sin cliente todavía) también tiene su análisis.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas (P1)
-
-Funcionalidad: F-VEN-19 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-19]",H-VEN-19,Ventas,P1,Alta,FATHOM-DEEP-ANALISIS-ALCANCE,
-[H-VEN-22] Que cada grabación se cruce con su turno y se clasifique bien,Story,High,historia,ventas,p1,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que cada grabación se cruce sola con el turno de la agenda y quede clasificada como venta, entrega o equipo, para que las métricas, los análisis y el ranking de ventas se armen sólo con llamadas de venta.
-
-*Criterios de aceptación:*
-* Probado con una cuenta real de Fathom y la agenda real, y el resultado quedó anotado: cuántas grabaciones de venta cruzaron un turno y si las ventanas de tiempo usadas son correctas; si falló, se abrió una tarea nueva.
-* Se cargaron las identidades de los clientes desde el CRM y quedó anotado cuántas grabaciones se clasificaron por cada vía y cuántas se asignaron mal por nombre.
-* Dada una grabación que cruzó un turno de un lead, entonces queda vinculada a ese lead.
-* Dada una grabación con alguien de afuera que no cruzó ningún turno, entonces no se cuenta como venta.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [LLAMADAS-VERIFICAR-FATHOM] Cruce grabación ↔ turno con datos reales (P1)
-* [B-SEMBRAR-IDENTIDADES] / [1-1-SEMBRAR-Y-MEDIR] client_identities sigue vacía (P1)
-* [FATHOM-CRUCE-AGENDA-DESCONECTADO] El peldaño ""cruce con agenda"" del resolvedor nunca se activa (P2)
-
-*Para confirmar:*
-* Agustín: una grabación con un externo que el sistema no reconoce y no cruzó ningún turno, ¿queda sin clasificar o se cuenta como venta? La tarea deja la decisión abierta.
-
-Funcionalidad: F-VEN-22 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-22]",H-VEN-22,Ventas,P1,Alta,LLAMADAS-VERIFICAR-FATHOM B-SEMBRAR-IDENTIDADES FATHOM-CRUCE-AGENDA-DESCONECTADO,
-[H-VEN-23] Que el análisis profundo se haga sobre las llamadas de venta y a nombre de su closer,Story,High,historia,ventas,p1,sev-alta,,,"*Historia:* Como founder, quiero que cada llamada de venta tenga su análisis (puntaje por sección, objeciones, si vendió) a nombre del closer que la hizo, para evaluar a cada closer con sus propias llamadas y no gastar en analizar llamadas que no son de venta.
-
-*Criterios de aceptación:*
-* Dada una 1-1 de entrega de 10 minutos o más con un cliente, entonces no genera análisis de venta.
-* Dada una llamada de venta cruzada con el turno de un lead, entonces genera su análisis con el closer del turno.
-* El ranking del equipo en Métricas muestra el nombre del closer en vez de «Sin nombre».
-
-*Tareas técnicas (PENDIENTES.md):*
-* [FATHOM-DEEP-ANALISIS-ALCANCE] El análisis de venta corre sobre las llamadas equivocadas (P1)
-
-Funcionalidad: F-VEN-23 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-23]",H-VEN-23,Ventas,P1,Alta,FATHOM-DEEP-ANALISIS-ALCANCE,
-[H-VEN-25] Asignar a mano las grabaciones pendientes a un cliente,Story,High,historia,ventas,p1,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero asociar a un cliente las grabaciones que el sistema no pudo asignar y cargar desde el CRM los datos de mis clientes, para que cada llamada termine en la ficha correcta sin riesgo de mezclar datos con otra empresa.
-
-*Criterios de aceptación:*
-* Cuando asigno una grabación a uno de mis clientes, queda en su ficha como hoy.
-* Si alguien intenta asignar una grabación a un cliente de otra empresa, recibe un error y no se guarda nada en ninguna de las dos.
-* Llego a la pantalla de grabaciones pendientes desde la lista de Clientes, con la cantidad pendiente a la vista.
-* Se apretó «Cargar identidades desde el CRM» con la cuenta real y quedó anotado cuántas grabaciones pasaron a asignarse solas.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [B-SEMBRAR-IDENTIDADES] / [1-1-SEMBRAR-Y-MEDIR] client_identities sigue vacía (P1)
-* [CLIENTES-PENDING-CALLS-HUERFANA] «Llamadas sin asociar» no tiene link en la navegación *(nuevo)* (P1)
-
-*Para confirmar:*
-* Martín: es la misma pantalla que F-CLI-12 (Clientes); conviene decidir si se cargan como una sola historia.
-
-Funcionalidad: F-VEN-25 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-25]",H-VEN-25,Ventas,P1,Alta,B-SEMBRAR-IDENTIDADES CLIENTES-PENDING-CALLS-HUERFANA,
 [H-CLI-09] Editar una tarea del cliente ya creada,Story,Medium,historia,clientes,p2,para-confirmar,,,"*Historia:* Como miembro del equipo, quiero corregir el detalle de una tarea del cliente después de crearla, para no tener que borrarla y cargarla de nuevo cuando cambia lo acordado.
 
 *Criterios de aceptación:*
@@ -1417,6 +1386,20 @@ Funcionalidad: F-OPS-13 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * [NAV-1] Validar la notch nav con sesión real (P2)
 
 Funcionalidad: F-PLA-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-08]",H-PLA-08,Plataforma,P2,,NAV-PALETA-PERMISOS ADDONS-HOLDING NAV-1,
+[H-PLA-15] Ver en el Panel General números completos y propios,Story,Medium,historia,plataforma,p2,para-confirmar,,,"*Historia:* Como founder, quiero que el Panel General muestre mis KPIs, embudo, ingresos, ventas y ranking de closers con todos los datos de mi negocio, para tomar decisiones con números que no estén cortados.
+
+*Criterios de aceptación:*
+* Dado un negocio con más de 1.000 turnos, cuando abro el Panel, entonces las ventas, el ranking de closers y el embudo incluyen los turnos más recientes (los del mes coinciden con los que hay guardados).
+* Los números del Panel sólo incluyen turnos de mi organización, nunca de otra.
+* El embudo del Panel incluye el tramo de mensajes directos (conversaciones y respuestas), o deja claro que arranca en las llamadas.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [EMBUDO-PANEL-DMS] El embudo del panel no mide DMs (P2)
+
+*Para confirmar:*
+* Agustín: ¿el embudo del Panel tiene que contar los mensajes directos de la bandeja nueva, o alcanza con que arranque en las llamadas?
+
+Funcionalidad: F-PLA-15 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-15]",H-PLA-15,Plataforma,P2,,EMBUDO-PANEL-DMS,
 [H-PLA-16] Ver mis métricas propias en el Panel,Story,Medium,historia,plataforma,p2,para-confirmar,,,"*Historia:* Como founder, quiero ver en el Panel las métricas propias que armé, para seguir de un vistazo los números que me importan a mí.
 
 *Criterios de aceptación:*

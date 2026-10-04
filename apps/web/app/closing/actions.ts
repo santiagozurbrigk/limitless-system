@@ -21,6 +21,7 @@ import {
   uuidSchema,
 } from "@/lib/validations";
 import type { ClosingCall } from "@/types/closing";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 function mapDbError(msg: string): string {
   if (isMissingTableError(msg)) {
@@ -67,18 +68,29 @@ export async function listClosingCallsAction(): Promise<ClosingCall[]> {
       ? `ghl_appointment_id.is.null,ghl_calendar_id.in.(${activeGHLCalendarIds.join(",")})`
       : "ghl_appointment_id.is.null";
 
-  const { data, error } = await supabase
-    .from("closing_calls")
-    .select("*")
-    .or(calendarFilter)
-    .order("scheduled_at", { ascending: true });
+  // ⭐ SCRUM-4 · [CLOSING-LIST-1000]: PostgREST corta en 1.000 filas y el orden es
+  // ascendente, así que lo que quedaba afuera eran los turnos **más nuevos**, los
+  // que el closer necesita. Se pagina hasta traer todo (con `id` para que el orden
+  // entre páginas sea estable) y se filtra por la organización activa: antes
+  // dependía sólo de RLS, y un usuario de holding veía los turnos de todo el
+  // portfolio mezclados (1.455 en producción, por encima del corte).
+  const { rows, error } = await fetchAllRows<ClosingCallRow>((from, to) =>
+    supabase
+      .from("closing_calls")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .or(calendarFilter)
+      .order("scheduled_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
 
   if (error) {
-    console.error("[listClosingCalls]", error.message);
+    console.error("[listClosingCalls]", error);
     return [];
   }
 
-  return (data as ClosingCallRow[]).map(rowToClosingCall);
+  return rows.map(rowToClosingCall);
 }
 
 export async function updateClosingCallAction(

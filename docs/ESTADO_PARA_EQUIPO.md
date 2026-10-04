@@ -62,7 +62,7 @@ hace), riesgo, impacto y criterio de aceptación en el backlog.
    resuelta el 2026-09-29: equipo, configuración de la org y borrar clientes ya piden rol; queda el permiso
    por módulo.
 9. ~~**La pantalla de Llamadas de venta no muestra ninguna llamada** (`LLAMADAS-EMBED-ROTO`).~~ Resuelto el 2026-09-28.
-10. **Closing deja afuera los turnos más recientes cuando una organización pasa de 1.000** (`CLOSING-LIST-1000`).
+10. ~~Closing deja afuera los turnos más recientes cuando una organización pasa de 1.000~~ (resuelto 2026-10-04, SCRUM-4).
 11. ~~**La IA falla sin clave global confirmada** (`1A1-CLAVE-ANTHROPIC-ROTA`).~~ Resuelto el 2026-10-02 con otra regla: sin clave propia no hay IA, y la plataforma lo avisa (SCRUM-7).
 
 **Medio (1, resuelto):** ~~el link de vuelta del login (`AUTH-CALLBACK-NEXT`)~~. Resuelto el 2026-09-30.

@@ -63,7 +63,18 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | ID | Área | Severidad | Qué |
 |---|---|---|---|
 | `[PERMISOS-SERVER-ACTIONS]` | Plataforma | Alta | Los permisos por módulo no protegen datos, sólo pantallas |
-| `[CLOSING-LIST-1000]` | Ventas | Alta | El calendario y la lista de Closing pierden los turnos más recientes |
+| `[FATHOM-SYNC-CURSOR]` | Ventas | Alta | La sync de Fathom saltea para siempre una llamada que no se pudo guardar |
+| `[CLOSER-AMOUNT-CLOSED]` | Ventas | Media | La pestaña Equipo de Closing siempre sale vacía |
+| `[CALENDLY-CLOSER-SIN-LEAD]` | Ventas | Alta | Los turnos del Calendly de cada closer no entran al seguimiento |
+| `[CALENDLY-CRONS-SUPERPUESTOS]` | Ventas | Media | `calendly-sync` y `calendly-sync-closers` corren a la misma hora |
+| `[FATHOM-DEEP-ANALISIS-ALCANCE]` | Ventas | Alta | El análisis de venta corre sobre las llamadas equivocadas |
+| `[CLOSING-CIERRE-ATOMICO]` | Ventas | Crítica | Cerrar una venta son cinco escrituras encadenadas desde el navegador |
+| `[CLOSING-HOLDING-MEZCLA]` | Ventas | Alta | En modo holding, Closing mezcla turnos de varios negocios |
+| `[PERMISOS-SERVER-ACTIONS/ventas]` | Ventas | Alta | (parte Ventas) Las actions del área no miran el rol |
+| `[B-SEMBRAR-IDENTIDADES]` | Ventas | Alta | / [1-1-SEMBRAR-Y-MEDIR] `client_identities` sigue vacía |
+| `[LLAMADAS-VERIFICAR-FATHOM]` | Ventas | Media | Cruce grabación ↔ turno con datos reales |
+| `[COBROS-PROBAR]` | Ventas | Media | Cobros nunca se dibujó con una sesión real |
+| `[COBROS-AVISAR-PERMISOS]` | Ventas | Baja | Quien no tiene Ventas deja de ver montos en Clientes |
 | `[DR-BACKUPS-SUPABASE]` | Infraestructura, seguridad y tests (transversal) | Crítica | La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración |
 | `[PERMISOS-SERVER-ACTIONS/infra]` | Infraestructura, seguridad y tests (transversal) | Alta | Los roles no se hacen cumplir en la base ni en las actions (incluye AUD-SEG-1) |
 
@@ -73,8 +84,8 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|---|---|
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 33 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
-| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 1 | 12 | 17 | 8 |
-| [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 8 | 20 | 5 |
+| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 12 | 0 | 16 | 8 |
+| [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
@@ -785,18 +796,6 @@ Doc del área: [`docs/areas/ventas.md`](./docs/areas/ventas.md)
 
 ### Ventas · P0
 
-#### [CLOSING-LIST-1000] El calendario y la lista de Closing pierden los turnos más recientes
-- **Tipo:** bug
-- **Severidad:** Alta
-- **Estado verificado:** ítem nuevo (misma familia que el punto 5 de `[AUDITORIA-ABIERTOS]`). `listClosingCallsAction` (`app/closing/actions.ts:70-74`) hace `select("*")…order("scheduled_at", { ascending: true })` sin `.range()` ni `fetchAllRows`. PostgREST corta en 1.000 (lo documenta el propio `lead-actions.ts`). Producción tiene 1.455 `closing_calls`: si una org supera 1.000, quedan afuera los **más nuevos**, que son los que el closer necesita. Falta confirmar el conteo por organización.
-- **Riesgo:** Si una org (o un usuario holding, que ve el portfolio entero por RLS) supera 1.000 turnos visibles, entonces el calendario y la lista de Closing dejan afuera los más nuevos sin aviso; producción tiene 1.455 turnos en total y no se confirmó el reparto por org.
-- **Impacto:** Los closers de esa org no ven los turnos de hoy y de la semana y no pueden cargar su resultado desde la lista; las métricas que salen de esa lista del provider quedan cortadas.
-- **Qué hay que hacer:** paginar con `fetchAllRows` u ordenar descendente con un rango de fechas; agregar `.eq("organization_id", organizationId)` (hoy depende sólo de RLS, ver `[CLOSING-HOLDING-MEZCLA]`).
-- **Criterio de aceptación:** En una org con más de 1.000 turnos, el calendario y la lista de Closing muestran los turnos del mes actual en la misma cantidad que el count de la base para ese mes; la lectura filtra por la organización activa (un turno de otra org no aparece)
-- **Dónde:** `apps/web/app/closing/actions.ts`, `apps/web/providers/platform-data-provider.tsx`.
-
-### Ventas · P1
-
 #### [FATHOM-SYNC-CURSOR] La sync de Fathom saltea para siempre una llamada que no se pudo guardar
 - **Tipo:** bug
 - **Severidad:** Alta
@@ -862,7 +861,7 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 #### [CLOSING-HOLDING-MEZCLA] En modo holding, Closing mezcla turnos de varios negocios
 - **Tipo:** seguridad
 - **Severidad:** Alta
-- **Estado verificado:** ítem nuevo, a confirmar con una sesión holding. `listClosingCallsAction` no filtra por `organization_id`; la policy `holding_reads_portfolio_closing_calls` (`20260630100000_holding_portfolio_rls.sql:42`) deja leer los turnos de todos los negocios del portfolio, y `get_my_organization_id()` devuelve la org del perfil, no el negocio activo. Las escrituras (`updateClosingCallAction`, `lead-actions`) filtran por el negocio activo pero pasan por RLS de la org del perfil, así que probablemente fallan para el holding.
+- **Estado verificado:** ítem nuevo, a confirmar con una sesión holding. `listClosingCallsAction` no filtra por `organization_id`; la policy `holding_reads_portfolio_closing_calls` (`20260630100000_holding_portfolio_rls.sql:42`) deja leer los turnos de todos los negocios del portfolio, y `get_my_organization_id()` devuelve la org del perfil, no el negocio activo. Las escrituras (`updateClosingCallAction`, `lead-actions`) filtran por el negocio activo pero pasan por RLS de la org del perfil, así que probablemente fallan para el holding. **Avance 2026-10-04 (SCRUM-4):** `listClosingCallsAction` ya filtra por la organización activa; faltan `lead-actions` (Seguimiento) y las escrituras con la RLS de la org del perfil.
 - **Riesgo:** Si un usuario holding abre Closing con un negocio activo, entonces ve mezclados los turnos de todos los negocios del portfolio (la policy lo permite y la lectura no filtra por org) y probablemente no puede guardar resultados, porque la policy de update usa la org del perfil.
 - **Impacto:** Sólo usuarios holding: no es acceso indebido (el holding puede leer su portfolio) pero sí datos de Closing y Seguimiento atribuidos al negocio equivocado y escrituras que fallan. Cantidad de holdings en uso no medida.
 - **Qué hay que hacer:** filtrar explícitamente por `requireOrganizationId()` en todas las lecturas del área; probar Closing y Seguimiento con un holding.
@@ -945,12 +944,6 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 - **Estado verificado:** ítem nuevo. `processSingleFathomCall` llama `classifyRecording({ hasCalendarCrossing, calendarLeadId: null })` (`lib/fathom/process-call.ts:188-193`) y no pasa `calendarClientId`; el peldaño 4 de `resolveCounterparty` (`resolve-counterparty.ts:210`) exige uno de los dos. Además el peldaño 5 (nada resolvió) devuelve `purpose: "sales"`, así que cualquier externo desconocido cuenta como venta aunque no haya cruzado turno — contradice la regla "sólo es venta si cruza un turno".
 - **Qué hay que hacer:** pasar el `lead_id`/cliente del turno cruzado (`salesCall.appointmentId` → `closing_calls.lead_id`) y decidir si el peldaño 5 debe dejar `purpose` en null.
 - **Dónde:** `apps/web/lib/fathom/process-call.ts`, `apps/web/lib/fathom/resolve-counterparty.ts`.
-
-#### [FATHOM-PRIVACIDAD-LEAD] Una grabación vinculada a un lead sigue siendo privada
-- **Tipo:** decisión de negocio
-- **Estado verificado:** ítem nuevo. La policy de `fathom_calls` (`20260903100000_fathom_member_keys.sql:76-90`) sólo abre la fila si `client_id is not null`; el comentario dice "vinculada a un cliente **ni a un lead**". Una venta grabada por un closer con su key y cruzada a un lead no la ve el founder.
-- **Qué hay que hacer:** decidir si `counterparty_lead_id is not null` o `closing_call_id is not null` también la hace de la org, y ajustar la policy.
-- **Dónde:** migración nueva sobre `fathom_calls`.
 
 #### [METRICAS-SHOW-RATE] El show rate cuenta turnos cancelados en el denominador
 - **Tipo:** bug
@@ -1154,16 +1147,6 @@ Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
 - **Qué hay que hacer:** correr `/api/integrations/google-forms/sync?organizationId=` a mano y mirar el resultado; registrar errores por form.
 - **Criterio de aceptación:** Se ejecutó el paso V10 de verificacion-manual.md (sync manual de Google Forms con organizationId) con cuenta real y el resultado quedó anotado; los errores de la sync quedan registrados por form en vez de ignorarse; si falló, se abrió un ítem nuevo
 - **Dónde:** `apps/web/lib/google-forms/sync.ts`
-
-#### [AUDITORIA-ABIERTOS §6] Typeform y Google Forms pierden respuestas > 1000 y `external_response_id` es único global
-- **Tipo:** bug
-- **Severidad:** Crítica
-- **Estado verificado:** `lib/typeform/sync.ts:192` (`page_size=1000`, sin `before`/paginación) y `lib/google-forms/sync.ts:186` (`pageSize=1000`, ignora `nextPageToken`) avanzan `last_synced_at` igual. `form_responses.external_response_id text not null unique` y los upserts `onConflict: "external_response_id"`: dos orgs con el mismo form se pisan (el upsert reescribe `organization_id`).
-- **Riesgo:** Si dos orgs sincronizan el mismo formulario, entonces el upsert por external_response_id reescribe organization_id y la respuesta se muda de una org a la otra; si un form recibe más de 1000 respuestas entre syncs, las que sobran se pierden para siempre porque last_synced_at avanza igual. Lo primero requiere un form compartido (raro, posible en holding o agencia); lo segundo, un form con volumen alto.
-- **Impacto:** Pérdida de respuestas y datos de una org que terminan en otra (con nombre, email y respuestas del lead). Hoy form_responses tiene 0 filas, así que no hay daño registrado todavía.
-- **Qué hay que hacer:** paginar; índice único `(organization_id, external_response_id)` y `onConflict` acorde.
-- **Criterio de aceptación:** Un form de Typeform o Google Forms con más de 1000 respuestas nuevas se sincroniza completo (form_responses tiene todas); dos orgs con el mismo form y el mismo external_response_id conservan cada una su respuesta sin pisarse (índice único (organization_id, external_response_id)); hay un test o prueba anotada que cubre la paginación
-- **Dónde:** `apps/web/lib/typeform/sync.ts`, `apps/web/lib/google-forms/sync.ts`, migración nueva
 
 #### [ZERNIO-WEBHOOK-SIN-EVENTOS] El webhook de Zernio no registró nada
 - **Tipo:** verificación manual
