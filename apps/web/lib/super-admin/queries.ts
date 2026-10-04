@@ -1134,6 +1134,8 @@ export async function getSignedFileUrl(
   storagePath: string,
   expiresIn = 3600
 ): Promise<string | null> {
+  await requireSuperAdmin();
+
   const admin = createAdminClient();
   const path = storagePath.replace(/^ai-brain-documents\//, "");
   const { data, error } = await admin.storage

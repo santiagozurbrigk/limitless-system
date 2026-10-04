@@ -64,7 +64,7 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 
 Guard doble: `app/(super-admin)/super-admin/layout.tsx` (redirect) y `requireSuperAdmin()` dentro de
 cada query/acción (incluidas las de sólo lectura, vía `lib/super-admin/queries.ts`, `org-health.ts` y
-`onboarding-progress.ts`, que lo suma desde SCRUM-111).
+`onboarding-progress.ts` y `getSignedFileUrl`, que lo suman desde SCRUM-111).
 
 ## Modelo de datos
 
