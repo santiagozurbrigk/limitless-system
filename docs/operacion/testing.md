@@ -66,7 +66,7 @@ Qué no testear en Vitest: componentes React, actions que sólo hacen `select`, 
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **123 archivos, ~1.401 casos** (recontado el 2026-10-02). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **127 archivos, ~1.413 casos** (recontado el 2026-10-04). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -81,7 +81,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/ghl` | 4 | 40 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook |
 | `lib/sales` | 2 | 37 | opciones de seguimiento, hilo del lead |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
-| `lib/super-admin` | 2 | 30 | plan de bajas, progreso de onboarding |
+| `lib/super-admin` | 3 | 33 | plan de bajas, progreso de onboarding y su chequeo de super admin |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
 | `lib/sops` | 2 | 25 | marcadores de adjuntos, chunks de audio |
 | `lib/integrations` | 1 | 23 | `health.ts` y completitud del registro |

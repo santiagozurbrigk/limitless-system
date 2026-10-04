@@ -82,7 +82,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 33 | 17 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 32 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 12 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 20 | 5 |
@@ -311,12 +311,6 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Estado verificado:** la migración `20260831130000_organizations_drop_unit_defaults.sql` sacó los defaults de `organizations.currency/timezone/language` para que un null signifique "nadie lo eligió" y el gate lo pregunte. Pero `getOnboardingGateDefaultsAction` (`apps/web/app/onboarding/actions.ts:42-72`) rellena el null con `USD` / `America/Argentina/Buenos_Aires` / `es`, y los `<select>` de `components/onboarding/onboarding-gate.tsx:237-266` no tienen opción vacía: el founder ve USD y Buenos Aires preseleccionados y puede avanzar sin elegir (la validación de la línea 91 sólo mira que haya valor). Es el mismo problema que la migración quiso cerrar, movido a la UI.
 - **Qué hay que hacer:** que el default del gate sea vacío cuando la columna está en null (opción "Elegí…" sin valor) y que el botón no avance hasta elegir.
 - **Dónde:** `apps/web/app/onboarding/actions.ts`, `apps/web/components/onboarding/onboarding-gate.tsx`. Paso 2 del bloque 2 de `docs/operacion/verificacion-manual.md` § Plataforma.
-
-#### [SUPERADMIN-ONBOARDING-SIN-GUARD] `loadOnboardingProgress` no llama a `requireSuperAdmin` (nuevo)
-- **Tipo:** seguridad
-- **Estado verificado:** `lib/super-admin/onboarding-progress.ts:24` llama la RPC `onboarding_org_progress` con `createAdminClient()` sin `requireSuperAdmin()`. Todas las demás lecturas del panel (`queries.ts`, `org-health.ts`, `client-health.ts`, `waitlist-queries.ts`, `holding-queries.ts`, `holdings-admin.ts`) sí lo llaman. Hoy sólo la protege el redirect de `app/(super-admin)/super-admin/layout.tsx`; es `server-only` y su único llamador es `app/(super-admin)/super-admin/onboarding/page.tsx`, así que no es explotable hoy, pero rompe la regla de guard doble.
-- **Qué hay que hacer:** agregar `await requireSuperAdmin()` al principio de `loadOnboardingProgress`.
-- **Dónde:** `apps/web/lib/super-admin/onboarding-progress.ts`.
 
 #### [NOTIFICACIONES-EMAIL-SIN-ENVIO] (nuevo) Las preferencias de notificación no mandan nada
 - **Tipo:** bug

@@ -63,9 +63,8 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 | `/super-admin/ai-brain/*` | `app/super-admin/actions.ts` | "Cerebro de IA general": documentos globales, import desde Drive del super admin, batch de resúmenes |
 
 Guard doble: `app/(super-admin)/super-admin/layout.tsx` (redirect) y `requireSuperAdmin()` dentro de
-cada query/acción (incluidas las de sólo lectura, vía `lib/super-admin/queries.ts` y `org-health.ts`).
-Excepción: `loadOnboardingProgress()` (`lib/super-admin/onboarding-progress.ts`) no llama a
-`requireSuperAdmin()`; sólo la protege el layout (`[SUPERADMIN-ONBOARDING-SIN-GUARD]`).
+cada query/acción (incluidas las de sólo lectura, vía `lib/super-admin/queries.ts`, `org-health.ts` y
+`onboarding-progress.ts`, que lo suma desde SCRUM-111).
 
 ## Modelo de datos
 

@@ -1421,15 +1421,6 @@ Fuente: PENDIENTES.md [BAJA-ORG-SIN-RESPALDO] · Doc del área: docs/areas/plata
 *Dónde:* {{apps/web/app/onboarding/actions.ts}}, {{apps/web/components/onboarding/onboarding-gate.tsx}}. Paso 2 del bloque 2 de {{docs/operacion/verificacion-manual.md}} § Plataforma.
 
 Fuente: PENDIENTES.md [ONBOARDING-GATE-DEFAULTS-PRESELECCIONADOS] · Doc del área: docs/areas/plataforma.md",ONBOARDING-GATE-DEFAULTS-PRESELECCIONADOS,Plataforma,P2,,bug
-[SUPERADMIN-ONBOARDING-SIN-GUARD] loadOnboardingProgress no llama a requireSuperAdmin (nuevo),Bug,Medium,plataforma,p2,seguridad,,,,"*Tipo:* seguridad
-
-*Estado verificado:* {{lib/super-admin/onboarding-progress.ts:24}} llama la RPC {{onboarding_org_progress}} con {{createAdminClient()}} sin {{requireSuperAdmin()}}. Todas las demás lecturas del panel ({{queries.ts}}, {{org-health.ts}}, {{client-health.ts}}, {{waitlist-queries.ts}}, {{holding-queries.ts}}, {{holdings-admin.ts}}) sí lo llaman. Hoy sólo la protege el redirect de {{app/(super-admin)/super-admin/layout.tsx}}; es {{server-only}} y su único llamador es {{app/(super-admin)/super-admin/onboarding/page.tsx}}, así que no es explotable hoy, pero rompe la regla de guard doble.
-
-*Qué hay que hacer:* agregar {{await requireSuperAdmin()}} al principio de {{loadOnboardingProgress}}.
-
-*Dónde:* {{apps/web/lib/super-admin/onboarding-progress.ts}}.
-
-Fuente: PENDIENTES.md [SUPERADMIN-ONBOARDING-SIN-GUARD] · Doc del área: docs/areas/plataforma.md",SUPERADMIN-ONBOARDING-SIN-GUARD,Plataforma,P2,,seguridad
 [NOTIFICACIONES-EMAIL-SIN-ENVIO] (nuevo) Las preferencias de notificación no mandan nada,Bug,Medium,plataforma,p2,bug,,,,"*Tipo:* bug
 
 *Estado verificado:* Ajustes guarda 9 switches (5 de mail y 4 en la app) en {{notification_preferences}}, pero sólo {{app/settings/actions.ts}} lee esa tabla; ningún proceso manda mails según ellos. {{sendWelcomeEmail}} (Resend) no tiene llamador, aunque {{docs/areas/plataforma.md}} lista mails de bienvenida. *Escondido para el release de octubre (SCRUM-490, 2026-10-02)*: la pieza no se muestra; volver a mostrarla es una bandera en {{apps/web/lib/release/escondido.ts}}. El pendiente sigue abierto.

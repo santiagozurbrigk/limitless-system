@@ -1,5 +1,6 @@
 import "server-only";
 
+import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
@@ -20,9 +21,14 @@ export type {
  * Las que no tienen usuarios quedan afuera a propósito: son negocios creados
  * desde un holding donde todavía no entra nadie, y una organización sin gente
  * no puede estar trabada.
+ *
+ * Lee con el service role, así que pide ser super admin acá mismo y no sólo en
+ * el layout del panel (SCRUM-111), como las demás lecturas de `lib/super-admin`.
  */
 export async function loadOnboardingProgress(): Promise<OrgOnboardingProgress[]> {
   if (!isSupabaseConfigured()) return [];
+
+  await requireSuperAdmin();
 
   const { data, error } = await createAdminClient().rpc("onboarding_org_progress");
 
