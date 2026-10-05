@@ -285,13 +285,22 @@ export class ZernioTimeoutError extends Error {
 
 /**
  * Tiempo máximo de un pedido que pasa por `zernioFetchJson`, incluida la lectura
- * de la respuesta. 15 s: las respuestas de Zernio son JSON chicos (un post, una
- * página de posts, una URL firmada) y un pedido que tarda más está colgado. Con
- * este tope el cron de métricas, que pide su lote de 50 en paralelo, termina la
- * fase de pedidos en 15 s y le queda margen para escribir dentro de los 60 s del
- * worker (`/api/queue/process-cron-sync-metrics`, `maxDuration = 60`).
+ * de la respuesta. 15 s para las lecturas puntuales (analytics de un post,
+ * comentarios, una URL firmada): Zernio responde con datos que ya tiene, así que
+ * un pedido que tarda más está colgado. Con este tope el cron de métricas, que
+ * pide su lote de 50 en paralelo, termina la fase de pedidos en 15 s y le queda
+ * margen para escribir dentro de los 60 s del worker
+ * (`/api/queue/process-cron-sync-metrics`, `maxDuration = 60`).
  */
 export const ZERNIO_TIMEOUT_MS = 15_000;
+
+/**
+ * Tope para los pedidos que hacen trabajo en el servidor de Zernio contra Meta
+ * (sincronizar posts o historias, listar todos los anuncios): su demora depende
+ * de esa consulta, no del tamaño de la respuesta, así que tienen más margen.
+ * Queda por debajo de los 60 s de las funciones que los llaman.
+ */
+export const ZERNIO_TIMEOUT_TRABAJO_MS = 30_000;
 
 export function createZernioClient(
   apiKey: string,
@@ -303,7 +312,8 @@ export function createZernioClient(
   async function zernioFetchJson<T>(
     label: string,
     url: string,
-    init?: RequestInit
+    init?: RequestInit,
+    limiteMs: number = timeoutMs
   ): Promise<T> {
     let res: Response;
     let bodyText: string;
@@ -311,13 +321,13 @@ export function createZernioClient(
       res = await fetch(url, {
         ...init,
         cache: "no-store",
-        signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
+        signal: init?.signal ?? AbortSignal.timeout(limiteMs),
       });
       bodyText = await res.text();
     } catch (err) {
       if (err instanceof Error && err.name === "TimeoutError") {
-        console.error(`[Zernio] ${label} timeout`, { url, timeoutMs });
-        throw new ZernioTimeoutError(label, timeoutMs);
+        console.error(`[Zernio] ${label} timeout`, { url, timeoutMs: limiteMs });
+        throw new ZernioTimeoutError(label, limiteMs);
       }
       throw err;
     }
@@ -487,9 +497,12 @@ export function createZernioClient(
       if (params?.fromDate) url.searchParams.set("fromDate", params.fromDate);
       if (params?.toDate) url.searchParams.set("toDate", params.toDate);
 
-      return zernioFetchJson<ZernioAdsResponse>("listAds", url.toString(), {
-        headers: headers(),
-      });
+      return zernioFetchJson<ZernioAdsResponse>(
+        "listAds",
+        url.toString(),
+        { headers: headers() },
+        Math.max(timeoutMs, ZERNIO_TIMEOUT_TRABAJO_MS)
+      );
     },
 
     async replyToComment(
@@ -595,11 +608,12 @@ export function createZernioClient(
         const data = await zernioFetchJson<{
           posts?: ZernioPost[];
           stories?: ZernioPost[];
-        }>("syncExternalStories", `${ZERNIO_API_BASE}/posts/sync-stories`, {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify({ accountId }),
-        });
+        }>(
+          "syncExternalStories",
+          `${ZERNIO_API_BASE}/posts/sync-stories`,
+          { method: "POST", headers: headers(), body: JSON.stringify({ accountId }) },
+          Math.max(timeoutMs, ZERNIO_TIMEOUT_TRABAJO_MS)
+        );
         const posts = data.posts ?? data.stories ?? [];
         return { posts };
       } catch (err) {
@@ -621,11 +635,12 @@ export function createZernioClient(
           postsSynced?: number;
           skipped?: boolean;
         };
-      }>("syncExternalPosts", `${ZERNIO_API_BASE}/posts/sync-external`, {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify({ accountId }),
-      });
+      }>(
+        "syncExternalPosts",
+        `${ZERNIO_API_BASE}/posts/sync-external`,
+        { method: "POST", headers: headers(), body: JSON.stringify({ accountId }) },
+        Math.max(timeoutMs, ZERNIO_TIMEOUT_TRABAJO_MS)
+      );
 
       return { posts: data.posts ?? [], synced: data.synced };
     },

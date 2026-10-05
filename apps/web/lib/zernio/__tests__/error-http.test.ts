@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createZernioClient, ZernioHttpError, ZernioTimeoutError, ZERNIO_TIMEOUT_MS } from "../client";
+import {
+  createZernioClient,
+  ZernioHttpError,
+  ZernioTimeoutError,
+  ZERNIO_TIMEOUT_MS,
+  ZERNIO_TIMEOUT_TRABAJO_MS,
+} from "../client";
 
 /**
  * SCRUM-172: una respuesta no exitosa de Zernio lleva su status, para que el
@@ -77,5 +83,37 @@ describe("zernioFetchJson · timeout", () => {
     const init = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0][1];
     expect(init.signal).toBeInstanceOf(AbortSignal);
     expect(ZERNIO_TIMEOUT_MS).toBe(15_000);
+  });
+});
+
+describe("tiempo máximo por tipo de pedido", () => {
+  function limitesUsados() {
+    const limites: number[] = [];
+    const original = AbortSignal.timeout.bind(AbortSignal);
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+      limites.push(ms);
+      return original(ms);
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response('{"posts":[],"ads":[]}', { status: 200, headers: { "content-type": "application/json" } }))
+    );
+    return limites;
+  }
+
+  it("⭐ los pedidos que hacen trabajo contra Meta (sync de posts e historias, listar anuncios) tienen 30 s", async () => {
+    const limites = limitesUsados();
+    const zernio = createZernioClient("sk_prueba");
+    await zernio.syncExternalPosts("acc-1");
+    await zernio.syncExternalStories("acc-1");
+    await zernio.listAds();
+    expect(limites).toEqual([ZERNIO_TIMEOUT_TRABAJO_MS, ZERNIO_TIMEOUT_TRABAJO_MS, ZERNIO_TIMEOUT_TRABAJO_MS]);
+    expect(ZERNIO_TIMEOUT_TRABAJO_MS).toBe(30_000);
+  });
+
+  it("una lectura puntual (analytics de un post) sigue con 15 s", async () => {
+    const limites = limitesUsados();
+    await createZernioClient("sk_prueba").getPostAnalytics("ig-1").catch(() => undefined);
+    expect(limites).toEqual([ZERNIO_TIMEOUT_MS]);
   });
 });

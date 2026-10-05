@@ -244,8 +244,9 @@ como JSON.
      piezas con métricas esperando (si sobran lugares, los ocupan).
   - Sin dato, la pieza suma `metrics_intentos_sin_dato` y espera 1, 2, 4, 8 y después 16 días. Con métricas,
     vuelve a 0 y sin espera. Un error permanente de Zernio (4xx distinto de 401, 403, 408 y 429, por ejemplo 404 de
-    un post borrado) cuenta como sin dato. Un error pasajero (408, 429, 5xx, red o el timeout de 15 s de
-    `zernioFetchJson`) marca el intento pero no suma espera. 401 y 403 tampoco cuentan como sin dato.
+    un post borrado) cuenta como sin dato. Un error pasajero (408, 429, 5xx, red o el timeout de
+    `zernioFetchJson`: 15 s en las lecturas puntuales, 30 s en sync de posts e historias y en `listAds`) marca el
+    intento pero no suma espera. 401 y 403 tampoco cuentan como sin dato.
     El status sale de `ZernioHttpError` (`lib/zernio/client.ts`). Un 401 o 403 es de toda la org (clave
     revocada o sin plan): el cron pide todo el lote antes de escribir y, si aparece, corta la corrida de la org
     sin tocar ninguna fila y lo reporta a Sentry.
