@@ -34,6 +34,57 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · Fix-pack de SCRUM-36: reintentos medidos desde la primera falla, 429 sin perder lo leído
+
+**Rama:** `fix/SCRUM-36-fathom-cursor`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Ventas → Llamadas / Integraciones → Fathom. `lib/fathom/cursor.ts`, `lib/fathom/leer-ventana.ts`,
+`lib/fathom/api.ts`, `lib/fathom/sync.ts`, `lib/fathom/member-sync.ts`, nuevo `lib/fathom/fallas-de-sync.ts`, migración
+`20261005120000_fathom_sync_fallas.sql` (**sin aplicar en producción**; el SQL está listo aparte) y su test de RLS
+`supabase/ci/tests/70_fathom_sync_fallas.sql`.
+
+**Qué se hizo** (los cuatro MENOR de la revisión adversarial y su observación):
+- **M-1, reintentos:** el plazo de 24 h se medía desde el `created_at` de la reunión. Después de una caída de más
+  de un día todo lo atrasado ya estaba "vencido" y se descartaba con uno o cero reintentos. Ahora cada falla se
+  anota en la tabla nueva `fathom_sync_fallas` (una fila por reunión y por conexión: `user_id` nulo es la de la
+  org) con la primera falla y los intentos. Se deja de reintentar con **24 h desde la primera falla y al menos 6
+  intentos** (`debeDescartarse`); entonces se marca `descartada_at` y va a Sentry con cómo recuperarla. Al
+  guardarse, la fila se borra; una descartada que vuelve (cursor rebobinado) arranca de cero. Si la tabla no se
+  puede leer o escribir, la reunión frena el cursor y no se descarta. RLS activa sin políticas y sin grants para
+  `anon`/`authenticated`; índices únicos parciales por conexión. Recuperación documentada en
+  `docs/areas/ventas.md` ("Cómo recuperar una reunión descartada") y enlazada desde `docs/operacion/incidentes.md`.
+- **M-2, 429 en la puesta al día:** si Fathom corta con 429 o 5xx después de algún tramo completo,
+  `leerVentanaDeFathom` devuelve lo leído como lectura cortada con `completaHasta` y el cursor avanza hasta ahí.
+  Un 429 con `Retry-After` de hasta 10 s se espera y se reintenta una vez por corrida (`FathomApiError` trae
+  `retryAfterSeconds`, `leerRetryAfter` acepta segundos o fecha HTTP). Como mucho 4 tramos cerrados por corrida:
+  con el límite reducido de Fathom (5 pedidos pesados por minuto) una corrida normal no pasa de 5 pedidos, y la
+  puesta al día sigue a 24 h por corrida. Sin ningún tramo completo, o con un 401, la falla se propaga como antes.
+- **M-3:** tests de `leerVentanaDeFathom` que matan las dos mutaciones que sobrevivían: el presupuesto restante por
+  tramo (cantidad exacta de pedidos) y la reunión que cae en el segundo de solape entre tramos.
+- **M-4:** `[FATHOM-SYNC-CURSOR]` tachado como resuelto en `docs/auditoria/plan-de-remediacion.md`.
+- **Solape de 2 h** (antes 30 min): cubre reuniones que Fathom lista un rato después de su `created_at` (el
+  transcript de una llamada larga tarda; el retraso no está documentado). Releer cuesta poco porque el guardado
+  no reanaliza una llamada procesada, y el pedido abierto ya relee como mucho 12 h.
+- Tests: `cursor.test.ts` (30), `sync-corridas.test.ts` (10, suma la reunión que falla siempre para la org y el
+  miembro, con la recuperación por rebobinado), `leer-ventana.test.ts` (12, nuevo: presupuesto, borde, tope de
+  tramos, 429 al sexto pedido, 5xx, `Retry-After` corto y largo, una sola espera, sin tramo cerrado, 401) y
+  `fallas-de-sync.test.ts` (6, nuevo: errores de la tabla y reinicio de la cuenta). Control negativo: 13
+  mutaciones del código y 2 de la migración, todas detectadas.
+
+**Por qué / finalidad:** sin esto, la recuperación después de una caída (el momento en que más fallan los guardados)
+podía descartar llamadas de venta recuperables, y un 429 durante la puesta al día dejaba la sync sin avanzar.
+
+**Decisiones de diseño relevantes:** se eligió una tabla en vez de columnas en las integraciones porque las fallas son
+por reunión y la org y cada miembro tienen su propia cuenta. Los 6 intentos cubren que el cron haya estado parado (24 h
+sin corridas no alcanzan para descartar); las 24 h cubren que alguien apriete "Sincronizar" muchas veces seguidas. La
+espera por `Retry-After` se acota a 10 s porque el cron tiene 60 s para todas las organizaciones.
+
+**Riesgos / deuda técnica pendiente:** la migración se aplica **antes** del deploy, con
+`sql-produccion/scrum-36/` (precheck, migración en transacción, verificación de una fila). Si el código llegara
+antes, nada se rompe: sin tabla, una reunión que falla frena el cursor y no se descarta nunca.
+
+---
+
 ### 2026-10-05 · La sync de Fathom ya no saltea una llamada que no se pudo guardar (SCRUM-36)
 
 **Rama:** `fix/SCRUM-36-fathom-cursor`

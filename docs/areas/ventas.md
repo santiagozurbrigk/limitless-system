@@ -53,6 +53,7 @@ Superficies de Ventas que viven en otras pantallas:
 | `metrics_snapshots` | 1 | `category = 'sales'`, `period_start`, `metrics` (JSONB) | Métricas importadas de Excel; fallback de `/sales/metrics` |
 | `calendly_integrations` | 3 | `access_token`, `refresh_token`, `webhook_signing_key` | Tokens en texto plano (RLS cerrado, sólo service role) |
 | `fathom_integrations` | 7 | `api_key`, `webhook_secret`, `connected_at`, `last_sync_at` | Key de la org, en texto plano |
+| `fathom_sync_fallas` | 0 (nueva) | `organization_id`, `user_id` (nulo = conexión de la org), `fathom_call_id`, `fathom_created_at`, `primera_falla_at`, `intentos`, `descartada_at` | Reuniones que la sync no pudo guardar; decide cuándo dejar de reintentar (SCRUM-36). Sólo service role |
 
 **Legacy (tablas vivas en la base, sin uso real):** `conversations` (0 filas), `manychat_events` (0),
 `instagram_threads`/`instagram_messages` (0), `manychat_integrations` (4), `unipile_integrations` (6),
@@ -182,25 +183,61 @@ acá: llevan la misma key que el negocio y harían privadas de quien conectó to
 - **Ventana de sync:** desde `last_sync_at`, pero nunca antes de `connected_at` (el historial no se trae)
   (`lib/fathom/sync-window.ts`). Excepción: si no hay ninguna de las dos fechas, trae todo.
 - **Cursor de la sync** (`lib/fathom/cursor.ts`, SCRUM-36), igual para la org y para el miembro. `last_sync_at`
-  ya no es la hora del servidor: es el `created_at` de Fathom de lo leído y guardado, menos un solape de 30 min.
+  ya no es la hora del servidor: es el `created_at` de Fathom de lo leído y guardado, menos un solape de 2 h.
+  - **Solape de 2 h:** cubre las reuniones que Fathom lista un rato después de su `created_at` (el transcript de
+    una llamada larga tarda en estar listo; el retraso no está documentado). Volver a leer cuesta poco: el
+    guardado no vuelve a mandar a análisis una llamada ya procesada (ver el último punto).
   - Una grabación que falla al guardarse frena el cursor en su `created_at`: la corrida siguiente la vuelve a pedir.
-    Si sigue fallando, se reintenta en cada corrida mientras tenga menos de 24 h; pasado eso, y si ya venía
-    frenando el cursor, se deja de reintentar, se reporta a Sentry (`reportarFalla`, con el `recording_id`) y la
-    sync sigue. Una que falla sin ninguna fecha no puede frenar el cursor: se reporta.
+    Cada falla se anota en `fathom_sync_fallas` (una fila por reunión y por conexión, con la primera falla y los
+    intentos; `lib/fathom/fallas-de-sync.ts`). Se deja de reintentar cuando pasaron **24 h desde su primera
+    falla y falló por lo menos 6 veces**: ahí se marca `descartada_at`, se reporta a Sentry (`reportarFalla`, con
+    el `recording_id`, su `created_at` y cómo recuperarla) y la sync sigue sin ella. Se mide desde la primera
+    falla y no desde el `created_at` porque, después de una caída, todo lo atrasado ya es "viejo" y se habría
+    descartado sin reintentos. Cuando la reunión se guarda, su fila se borra. Si la tabla no se puede leer o
+    escribir, la reunión frena el cursor y no se descarta. Una que falla sin ninguna fecha no puede frenar el
+    cursor: se reporta.
   - `listFathomMeetings` avisa si se cortó en el tope de páginas (20 la org, 5 el miembro). Fathom devuelve primero
     lo más nuevo, así que lo que queda sin leer es lo más viejo: el cursor no pasa de ahí. Si llegó en orden
     ascendente, avanza hasta lo último leído.
   - Si el cursor quedó atrasado más de 12 h, la lectura es por tramos cerrados de 6 h desde el más viejo
-    (`lib/fathom/leer-ventana.ts`), con el mismo presupuesto de páginas: cada tramo leído entero hace avanzar el
-    cursor aunque no haya traído nada. Así una caída de varios días se pone al día sola. Si un solo tramo tiene
-    más reuniones que el presupuesto (más de 200 en 6 h para la org, 50 para un miembro), el cursor no puede
-    avanzar y se reporta a Sentry en cada corrida.
+    (`lib/fathom/leer-ventana.ts`), como mucho **4 tramos por corrida** (cada pedido con transcript es "pesado"
+    para Fathom: 30 por minuto, que puede bajar a 5) y con el mismo presupuesto de páginas. Cada tramo leído
+    entero hace avanzar el cursor aunque no haya traído nada: una caída de varios días se pone al día sola, a
+    razón de 24 h por corrida. Si un solo tramo tiene más reuniones que el presupuesto (más de 200 en 6 h para la
+    org, 50 para un miembro), el cursor no puede avanzar y se reporta a Sentry en cada corrida.
+  - Si Fathom corta a mitad (429 o una falla de su lado) después de algún tramo completo, lo leído se guarda y el
+    cursor avanza hasta el último tramo completo. Si el 429 trae un `Retry-After` de hasta 10 s, se espera y se
+    reintenta el mismo tramo una vez por corrida. Sin ningún tramo completo, la falla se propaga como siempre.
   - Si no se guardó ni falló nada, el cursor queda donde estaba; nunca retrocede.
   - Si `created_at` falta o no se puede leer, se usa el inicio de la grabación, que nunca es posterior.
   - Volver a traer una llamada ya guardada (por el solape o por un reintento) actualiza sus datos de Fathom pero
     no vuelve a pasarla por el matcher por título si ya se procesó (`debeReasociarAlSincronizar` en
     `lib/fathom/sync.ts`): el matcher la devolvía a `pending` y se pagaba de nuevo el análisis, con entradas
     duplicadas en el timeline y en problemas del cliente.
+  - **Cómo recuperar una reunión descartada** (o una que el bug anterior a SCRUM-36 salteó): arregla primero la
+    causa (el error del guardado está en los logs `[Fathom:sync]` y en Sentry). Después rebobina el cursor de
+    esa conexión a un poco antes del `created_at` de la reunión, en el SQL Editor de Supabase:
+
+    ```sql
+    -- Conexión de la organización
+    update public.fathom_integrations
+       set last_sync_at = timestamptz '2026-10-03 09:00:00+00'  -- un rato antes del created_at
+     where organization_id = '<org>';
+
+    -- Conexión de un miembro
+    update public.team_member_integrations
+       set last_sync_at = timestamptz '2026-10-03 09:00:00+00'
+     where organization_id = '<org>' and user_id = '<miembro>' and integration_type = 'fathom';
+
+    -- Las descartadas de una org, con su created_at (user_id nulo = la conexión de la org)
+    select user_id, fathom_call_id, fathom_created_at, intentos, primera_falla_at, descartada_at
+      from public.fathom_sync_fallas
+     where organization_id = '<org>' and descartada_at is not null
+     order by fathom_created_at;
+    ```
+
+    El cursor nunca baja de `connected_at`. La corrida siguiente relee desde ahí por tramos (las ya guardadas
+    no se vuelven a analizar); si la reunión vuelve a fallar, su cuenta de intentos arranca de cero.
 - **Keys por miembro:** `app/fathom/member-actions.ts` valida la key, la cifra
   (`lib/fathom/member-key.ts`, atada a la org y al miembro; `ENCRYPTION_MASTER_KEY` obligatoria) y crea
   el webhook por API (`lib/fathom/webhooks.ts`). Conectar Fathom para la org (`connectFathomAction`)
