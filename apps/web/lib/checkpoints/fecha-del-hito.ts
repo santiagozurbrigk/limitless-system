@@ -1,27 +1,33 @@
 /**
  * La fecha de un hito (`client_checkpoint_events.reached_at`, `timestamptz`).
  *
- * ⭐ Una sola convención para ese campo (SCRUM-493). `reached_at` es un instante
- * y su día se lee en una zona: la de la organización en el servidor (revisión
- * semanal) y la del navegador en pantalla. Lo escriben:
+ * ⭐ Una sola convención para ese campo, en la zona de la organización
+ * (SCRUM-493). Un hito pertenece a la organización: su día es el mismo para
+ * todos los que lo miran, estén donde estén.
  *
- * - el diálogo de registrar hito, con `instanteDelHito`: el día elegido a las
- *   12:00 locales, que cualquier zona entre UTC-11 y UTC+11 lee con el mismo
- *   día; si es hoy y todavía no son las 12, un poco antes de ahora (la action
- *   rechaza un hito en el futuro);
- * - la action sin fecha y las propuestas aceptadas, con un instante real.
+ * - **Escribir.** El diálogo de registrar hito guarda el día elegido a las
+ *   12:00 de la zona de la org (`fechaAInstanteEnZona`). La action sin fecha y
+ *   las propuestas aceptadas guardan un instante real.
+ * - **Leer.** `fechaDelHitoEnZona` da el día del instante en la zona de la org:
+ *   en la revisión semanal, en la ficha y al editar.
+ * - **Validar.** "No futura" se decide **por día** en la zona de la org
+ *   (`hitoEsFuturo`), no por instante: el mediodía de hoy todavía no llegó a la
+ *   mañana, y registrar algo de hoy tiene que poder hacerse a cualquier hora.
  *
  * Hasta SCRUM-493 el diálogo guardaba el día elegido a las 12:00:00.000 UTC
  * exactas, y en UTC+12 o más ese instante ya es el día siguiente. Esas filas se
- * reconocen por esa hora exacta (un instante real casi nunca cae ahí al
- * milisegundo) y se leen con su fecha de UTC, que es la que se eligió.
+ * reconocen por esa hora exacta y se leen con su fecha de UTC, que es la que se
+ * eligió. Con la convención nueva una fila cae justo ahí sólo si la zona de la
+ * org está en UTC+0 en ese momento, y entonces su fecha de UTC es la elegida:
+ * la regla da el mismo día.
  *
  * Lógica pura: no toca base ni red.
  */
-import { diaLocal, fechaEnZona, fechaLocal } from "@/lib/fechas/calendario";
-
-/** Margen para que el reloj del navegador, un poco adelantado, no deje el hito en el futuro. */
-const MARGEN_MS = 5 * 60 * 1000;
+import {
+  fechaAInstanteEnZona,
+  fechaDeHoyEnZona,
+  fechaEnZona,
+} from "@/lib/fechas/calendario";
 
 function dosDigitos(n: number): string {
   return String(n).padStart(2, "0");
@@ -37,48 +43,40 @@ function esFechaDelDialogoViejo(instante: Date): boolean {
   );
 }
 
-function leerHito(reachedAt: string | null | undefined, fechaDelInstante: (i: Date) => string): string {
+/**
+ * El día de un hito en la zona de la organización (null o inválida = la de por
+ * defecto). `""` si no hay valor o no se entiende.
+ */
+export function fechaDelHitoEnZona(
+  reachedAt: string | null | undefined,
+  zona: string | null | undefined
+): string {
   if (!reachedAt) return "";
   const instante = new Date(reachedAt);
   if (Number.isNaN(instante.getTime())) return "";
   if (esFechaDelDialogoViejo(instante)) {
     return `${instante.getUTCFullYear()}-${dosDigitos(instante.getUTCMonth() + 1)}-${dosDigitos(instante.getUTCDate())}`;
   }
-  return fechaDelInstante(instante);
+  return fechaEnZona(instante, zona);
+}
+
+/** Lo que se guarda en `reached_at` para el día (`YYYY-MM-DD`) elegido en el diálogo. */
+export function instanteDelHito(fecha: string, zona: string | null | undefined): string {
+  return fechaAInstanteEnZona(fecha, zona);
 }
 
 /**
- * El día de un hito en una zona (la de la organización; null o inválida = la de
- * por defecto). `""` si no hay valor o no se entiende.
+ * ¿El hito es de un día que todavía no llegó en la organización? Es lo que
+ * rechaza la action: registrar algo que no ocurrió lo convierte en una
+ * intención. Se compara por día, así que ni el mediodía de hoy ni un reloj de
+ * navegador un poco adelantado hacen fallar un hito de hoy.
  */
-export function fechaDelHitoEnZona(
-  reachedAt: string | null | undefined,
-  zona: string | null | undefined
-): string {
-  return leerHito(reachedAt, (instante) => fechaEnZona(instante, zona));
-}
-
-/** El día de un hito en la zona del navegador, para mostrarlo o editarlo. */
-export function fechaDelHitoLocal(reachedAt: string | null | undefined): string {
-  return leerHito(reachedAt, fechaLocal);
-}
-
-/**
- * Lo que se guarda en `reached_at` para el día que se eligió en el diálogo.
- * `fecha` es `YYYY-MM-DD` y no puede ser futura (el campo tiene `max` y la
- * action lo rechaza).
- */
-export function instanteDelHito(fecha: string, ahora: Date = new Date()): string {
-  const mediodia = diaLocal(fecha);
-  if (fecha !== fechaLocal(ahora)) return mediodia.toISOString();
-  // Hoy: el mediodía, salvo que todavía no haya llegado; nunca antes de que
-  // empiece el día local.
-  const inicioDelDia = new Date(mediodia.getFullYear(), mediodia.getMonth(), mediodia.getDate());
-  const instante = Math.max(
-    inicioDelDia.getTime(),
-    Math.min(mediodia.getTime(), ahora.getTime() - MARGEN_MS)
-  );
-  return new Date(instante).toISOString();
+export function hitoEsFuturo(
+  reachedAt: string,
+  zona: string | null | undefined,
+  ahora: Date = new Date()
+): boolean {
+  return fechaDelHitoEnZona(reachedAt, zona) > fechaDeHoyEnZona(zona, ahora);
 }
 
 /**

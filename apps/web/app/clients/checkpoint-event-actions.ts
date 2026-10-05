@@ -38,6 +38,8 @@ import {
 } from "@/app/clients/checkpoint-actions";
 import { listFieldDefinitionsAction } from "@/app/clients/custom-field-actions";
 import { buildJourney } from "@/lib/checkpoints";
+import { hitoEsFuturo } from "@/lib/checkpoints/fecha-del-hito";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
@@ -46,7 +48,7 @@ import { paths } from "@/routes";
 const recordSchema = z.object({
   clientId: z.string().uuid(),
   checkpointId: z.string().uuid(),
-  /** Fecha en formato ISO. Puede ser pasada, nunca futura (se valida abajo). */
+  /** Instante ISO. Puede ser de hoy o de antes, nunca de un día futuro (se valida abajo). */
   reachedAt: z.string().datetime().optional(),
   metrics: z.record(z.string(), z.unknown()).default({}),
   note: z.string().trim().max(1000).nullable().default(null),
@@ -96,12 +98,19 @@ export async function getClientJourneyAction(clientId: string): Promise<{
   progress: CheckpointWithEvent[];
   checkpointFields: Awaited<ReturnType<typeof listFieldDefinitionsAction>>;
   journeyConfigured: boolean;
+  /**
+   * La zona horaria de la organización (null = la de por defecto). La fecha de
+   * cada hito se muestra, se edita y se guarda en esa zona
+   * (`lib/checkpoints/fecha-del-hito.ts`).
+   */
+  timezone: string | null;
 }> {
-  const [stages, checkpoints, events, fields] = await Promise.all([
+  const [stages, checkpoints, events, fields, timezone] = await Promise.all([
     listJourneyStagesAction(),
     listCheckpointsAction(),
     listCheckpointEventsAction(clientId),
     listFieldDefinitionsAction("checkpoint"),
+    zonaDeLaOrganizacion(),
   ]);
 
   const journey = buildJourney(stages, checkpoints);
@@ -109,7 +118,19 @@ export async function getClientJourneyAction(clientId: string): Promise<{
     progress: buildClientProgress(journey.stages, events),
     checkpointFields: fields,
     journeyConfigured: journey.stages.length > 0,
+    timezone,
   };
+}
+
+/** La zona de la organización activa; null si no eligió una o no se pudo leer. */
+async function zonaDeLaOrganizacion(): Promise<string | null> {
+  try {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+    return await leerZonaHorariaDeLaOrganizacion(supabase, organizationId);
+  } catch {
+    return null;
+  }
 }
 
 // ─── Escritura ──────────────────────────────────────────────────────────────
@@ -132,17 +153,21 @@ export async function recordCheckpointAction(
     if (!parsed.success) throw new Error(firstZodError(parsed.error));
     const values = parsed.data;
 
-    // Registrar algo que todavía no ocurrió lo convierte en una intención, y
-    // eso rompe todo lo que se mide después.
-    const reachedAt = values.reachedAt ?? new Date().toISOString();
-    if (new Date(reachedAt).getTime() > Date.now()) {
-      throw new Error("La fecha no puede ser futura: registrás algo que ya pasó.");
-    }
-
-    const [checkpoints, fields] = await Promise.all([
+    const supabase = await createClient();
+    const [checkpoints, fields, zona] = await Promise.all([
       listCheckpointsAction(),
       listFieldDefinitionsAction("checkpoint"),
+      leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
     ]);
+
+    // Registrar algo que todavía no ocurrió lo convierte en una intención, y
+    // eso rompe todo lo que se mide después. Se decide por día en la zona de la
+    // organización: el diálogo guarda el mediodía del día elegido, que a la
+    // mañana todavía no llegó y no por eso es futuro.
+    const reachedAt = values.reachedAt ?? new Date().toISOString();
+    if (hitoEsFuturo(reachedAt, zona)) {
+      throw new Error("La fecha no puede ser futura: registrás algo que ya pasó.");
+    }
     const checkpoint = checkpoints.find((c) => c.id === values.checkpointId);
     if (!checkpoint) throw new Error("El checkpoint no existe");
 
@@ -159,7 +184,6 @@ export async function recordCheckpointAction(
       throw new Error(Object.values(validation.errors)[0] ?? "Métricas inválidas");
     }
 
-    const supabase = await createClient();
     const { data, error } = await supabase
       .from("client_checkpoint_events")
       .upsert(
