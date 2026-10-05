@@ -10,12 +10,12 @@
  * se cambia acá: el modal de pago no deja cerrar con `paidAmount <= 0`
  * (`payment-modal.tsx`), así que esa rama no se usa en la práctica.
  *
- * `fechaDeHoyLocal` se mudó a `lib/fechas/calendario.ts` (SCRUM-493) y sus
- * casos, incluido el de las 22:00 de Argentina, están en
- * `lib/fechas/__tests__/calendario.test.ts`.
+ * Desde SCRUM-493 el "hoy" del pago es el de la zona de la organización
+ * (`fechaDeHoyEnZona`), que arma quien llama; sus casos, incluido el de las
+ * 22:00 de Argentina, están en `lib/fechas/__tests__/calendario.test.ts`.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { ClosePaymentPayload } from "@/types/closing";
 import {
   getPaidAmountFromClosePayload,
@@ -92,38 +92,41 @@ describe("getPaidAmountFromClosePayload", () => {
 });
 
 describe("getPaymentDateFromClosePayload", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+  /** El hoy de la organización, que arma quien llama (SCRUM-493). */
+  const HOY = "2026-10-02";
 
   it("⭐ si viene la fecha del pago, usa esa", () => {
-    expect(getPaymentDateFromClosePayload(payload({ paymentDate: "2026-09-15" }))).toBe("2026-09-15");
+    expect(getPaymentDateFromClosePayload(payload({ paymentDate: "2026-09-15" }), HOY)).toBe(
+      "2026-09-15"
+    );
     expect(
       getPaymentDateFromClosePayload(
-        payload({ paymentType: "installments", paymentDate: "2026-09-15", firstInstallmentDate: "2026-10-01" })
+        payload({ paymentType: "installments", paymentDate: "2026-09-15", firstInstallmentDate: "2026-10-01" }),
+        HOY
       )
     ).toBe("2026-09-15");
   });
 
   it("cuotas sin fecha de pago: usa la fecha de la primera cuota", () => {
     expect(
-      getPaymentDateFromClosePayload(payload({ paymentType: "installments", firstInstallmentDate: "2026-10-01" }))
+      getPaymentDateFromClosePayload(
+        payload({ paymentType: "installments", firstInstallmentDate: "2026-10-01" }),
+        HOY
+      )
     ).toBe("2026-10-01");
   });
 
   it("la primera cuota sólo se usa en pagos en cuotas", () => {
-    vi.setSystemTime(new Date(2026, 9, 2, 12, 0));
     expect(
-      getPaymentDateFromClosePayload(payload({ paymentType: "upfront", firstInstallmentDate: "2026-10-01" }))
+      getPaymentDateFromClosePayload(
+        payload({ paymentType: "upfront", firstInstallmentDate: "2026-10-01" }),
+        HOY
+      )
     ).toBe("2026-10-02");
   });
 
-  it("sin ninguna fecha: usa la fecha de hoy (YYYY-MM-DD)", () => {
-    vi.setSystemTime(new Date(2026, 9, 2, 12, 0));
-    expect(getPaymentDateFromClosePayload(payload())).toBe("2026-10-02");
+  it("sin ninguna fecha: usa el hoy de la organización que recibe", () => {
+    expect(getPaymentDateFromClosePayload(payload(), HOY)).toBe("2026-10-02");
   });
 });
 

@@ -52,6 +52,7 @@ import {
 import { paths } from "@/routes";
 import { RecordCheckpointDialog } from "@/components/clients/checkpoints/record-checkpoint-dialog";
 import { fechaDelHitoEnZona } from "@/lib/checkpoints/fecha-del-hito";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { diaLocal } from "@/lib/fechas/calendario";
 
 /**
@@ -75,7 +76,6 @@ const EMPTY: JourneyData = {
   progress: [],
   checkpointFields: [],
   journeyConfigured: false,
-  timezone: null,
 };
 
 export function ClientJourneySection({
@@ -123,7 +123,9 @@ export function ClientJourneySection({
   }>({ open: false, checkpoint: null, event: null });
   const [dialogError, setDialogError] = useState<string | null>(null);
 
-  const { progress, checkpointFields, journeyConfigured, timezone } = data;
+  const { progress, checkpointFields, journeyConfigured } = data;
+  // La zona de la org: las fechas de los hitos se muestran y se eligen en ella.
+  const timezone = useZonaDeLaOrganizacion();
   const summary = summarizeJourneyPosition(progress);
 
   // Mientras carga no se muestra nada. Si el recorrido no está configurado,

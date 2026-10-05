@@ -4,7 +4,7 @@ import { CalendarDays } from "lucide-react";
 import { cn } from "@ai-coo/ui";
 import { CampoFecha } from "@/components/shared/campo-fecha";
 import { fechaLocal } from "@/lib/fechas/calendario";
-import { useFechaDeHoyLocal } from "@/lib/hooks/use-fecha-de-hoy-local";
+import { useHoyDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 
 /** Las clases para que `CampoFecha` quede sin caja propia dentro del recuadro del rango. */
 const CLASE_CAMPO =
@@ -55,7 +55,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
   };
 
   // `null` en el render del servidor (UTC): el tope se pone con el día local.
-  const today = useFechaDeHoyLocal() ?? undefined;
+  const today = useHoyDeLaOrganizacion() ?? undefined;
 
   return (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>

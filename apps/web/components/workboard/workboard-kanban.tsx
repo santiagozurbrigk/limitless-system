@@ -16,7 +16,10 @@ import {
   DropdownMenuTrigger,
 } from "@ai-coo/ui";
 import { fechaVencida } from "@/lib/fechas/calendario";
-import { useFechaDeHoyLocal } from "@/lib/hooks/use-fecha-de-hoy-local";
+import {
+  useHoyDeLaOrganizacion,
+  useZonaDeLaOrganizacion,
+} from "@/providers/zona-de-la-organizacion-provider";
 import { TASK_AREA_LABELS } from "@/lib/workboard/constants";
 import { filterKanbanDoneTasks, filterWorkboardTasks, groupTasksIntoColumns } from "@/lib/workboard/group-tasks";
 import {
@@ -46,7 +49,7 @@ export function WorkboardKanban({
 }) {
   const { tasks, areaFilter, sprintFilterId, launchFilterId, assigneeFilterId, moveTask, deleteTask, setSelectedTask, kanbanDoneVisibleUntil } =
     useWorkboard();
-  const hoy = useFechaDeHoyLocal();
+  const hoy = useHoyDeLaOrganizacion();
   const [draggedTask, setDraggedTask] = useState<{
     task: WorkboardTask;
     status: TaskStatus;
@@ -62,7 +65,11 @@ export function WorkboardKanban({
     );
     return filterKanbanDoneTasks(base, kanbanDoneVisibleUntil);
   }, [tasks, areaFilter, sprintFilterId, launchFilterId, assigneeFilterId, kanbanDoneVisibleUntil]);
-  const columns = useMemo(() => groupTasksIntoColumns(filtered), [filtered]);
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const columns = useMemo(
+    () => groupTasksIntoColumns(filtered, zonaDeLaOrganizacion),
+    [filtered, zonaDeLaOrganizacion]
+  );
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();

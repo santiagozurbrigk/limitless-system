@@ -4,7 +4,9 @@
  *
  * Los tests corren en Node (sin DOM): el HTML se arma con `renderToStaticMarkup`
  * y el cambio se simula llamando al `onChange` del `Input` que devuelve el
- * componente, que no usa hooks. Los instantes se arman en UTC y la zona del
+ * componente. La zona de la organización sale del provider, que acá se simula
+ * (`sim.zona`); el provider real se prueba en
+ * `providers/__tests__/zona-de-la-organizacion-provider.test.ts`. Los instantes se arman en UTC y la zona del
  * proceso se fija, así que con el código viejo (`toISOString().slice(0, 10)`)
  * el caso de las 22:00 de Argentina falla en cualquier máquina.
  */
@@ -20,7 +22,15 @@ import {
 import { buildLeadThread, type LeadAttempt } from "@/lib/sales/lead-thread";
 import { CampoFecha, type CampoFechaProps } from "../campo-fecha";
 
-afterEach(restaurarZona);
+const sim = vi.hoisted(() => ({ zona: "America/Argentina/Buenos_Aires" as string | null }));
+vi.mock("@/providers/zona-de-la-organizacion-provider", () => ({
+  useZonaDeLaOrganizacion: () => sim.zona,
+}));
+
+afterEach(() => {
+  restaurarZona();
+  sim.zona = "America/Argentina/Buenos_Aires";
+});
 
 function html(props: CampoFechaProps): string {
   return renderToStaticMarkup(createElement(CampoFecha, props));
@@ -162,8 +172,11 @@ describe("⭐ CampoFecha con la zona de la organización", () => {
     );
   });
 
-  it("sin zona, lee en la del navegador (campos que no son de la organización)", () => {
+  it("⭐ sin zona, usa la de la organización: un miembro en Madrid ve el día de la org", () => {
     conZona("Europe/Madrid");
+    // 5-oct 22:00 ART: en Madrid ya es el 6 a las 03:00.
+    expect(valorMostrado({ value: "2026-10-06T01:00:00Z", onChange: () => {} })).toBe("2026-10-05");
+    sim.zona = "Europe/Madrid";
     expect(valorMostrado({ value: "2026-10-06T01:00:00Z", onChange: () => {} })).toBe("2026-10-06");
   });
 });

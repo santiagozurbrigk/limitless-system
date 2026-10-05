@@ -20,7 +20,8 @@ import {
 } from "@/components/sales/payment-receipt-dropzone";
 import { useFinanceData } from "@/providers";
 import type { ClosePaymentPayload } from "@/types/closing";
-import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import type { Plan } from "@/types/plans";
 import Link from "next/link";
 import { paths } from "@/routes";
@@ -63,6 +64,7 @@ export function PaymentModal({
   defaultName: string;
   onSubmit: (payload: ClosePaymentPayload) => Promise<void>;
 }) {
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const { paymentPlatforms } = useFinanceData();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -229,7 +231,7 @@ export function PaymentModal({
         paymentDate:
           paymentType === "installments" && firstDate
             ? firstDate
-            : fechaDeHoyLocal(),
+            : fechaDeHoyEnZona(zonaDeLaOrganizacion),
         proof: {
           storagePath: uploaded.storagePath,
           mimeType: uploaded.mimeType,

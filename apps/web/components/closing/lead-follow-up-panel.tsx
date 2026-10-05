@@ -19,6 +19,7 @@ import { CLOSING_CALL_STATUS_LABEL } from "@/lib/closing/call-status";
 import { CampoFecha } from "@/components/shared/campo-fecha";
 import { fechaAInstanteEnZona, formatearFechaGuardada } from "@/lib/fechas/calendario";
 import { fechaPropuestaDelProximoPaso } from "@/lib/sales/follow-up-options";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { useToast } from "@/providers/toast-provider";
 
 /**
@@ -91,7 +92,8 @@ function LeadRow({ lead }: { lead: LeadSummary }) {
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [action, setAction] = useState<NextAction | "">("");
-  const [date, setDate] = useState(() => fechaPropuestaDelProximoPaso(lead.timezone));
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const [date, setDate] = useState(() => fechaPropuestaDelProximoPaso(zonaDeLaOrganizacion));
   const [notes, setNotes] = useState("");
   const [resolved, setResolved] = useState(false);
 
@@ -108,7 +110,7 @@ function LeadRow({ lead }: { lead: LeadSummary }) {
         // al mediodía local: a medianoche UTC caía el día anterior en Argentina.
         // Sin fecha va null y el servidor responde que el paso la necesita.
         nextActionAt:
-          action === "lost" ? null : date ? fechaAInstanteEnZona(date, lead.timezone) : null,
+          action === "lost" ? null : date ? fechaAInstanteEnZona(date, zonaDeLaOrganizacion) : null,
         notes: notes.trim() || null,
       });
       if (!result.ok) {
@@ -191,7 +193,7 @@ function LeadRow({ lead }: { lead: LeadSummary }) {
                 {a.nextAction && (
                   <span className="text-muted-foreground">
                     → {NEXT_ACTION_LABEL[a.nextAction]}
-                    {a.nextActionAt ? ` · ${formatearFechaDelPaso(a.nextActionAt, lead.timezone)}` : ""}
+                    {a.nextActionAt ? ` · ${formatearFechaDelPaso(a.nextActionAt, zonaDeLaOrganizacion)}` : ""}
                   </span>
                 )}
               </div>

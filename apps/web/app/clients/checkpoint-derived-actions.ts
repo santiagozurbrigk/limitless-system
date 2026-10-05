@@ -44,6 +44,7 @@ import { recordCheckpointAction } from "@/app/clients/checkpoint-event-actions";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { paths } from "@/routes";
 
 // ─── El resumen para la lista de clientes ───────────────────────────────────
@@ -61,7 +62,7 @@ export async function getClientsJourneyStatusAction(): Promise<
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
-    const [stages, checkpoints, eventsResult, clientsResult] = await Promise.all([
+    const [stages, checkpoints, eventsResult, clientsResult, zona] = await Promise.all([
       listJourneyStagesAction(),
       listCheckpointsAction(),
       supabase
@@ -69,6 +70,8 @@ export async function getClientsJourneyStatusAction(): Promise<
         .select("*")
         .eq("organization_id", organizationId),
       supabase.from("clients").select("id").eq("organization_id", organizationId),
+      // "Vence el" y "trabado hace N días" se cuentan en días de la organización.
+      leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
     ]);
 
     if (eventsResult.error) {
@@ -89,7 +92,9 @@ export async function getClientsJourneyStatusAction(): Promise<
     const statuses = deriveJourneyStatuses(
       journey.stages,
       groupEventsByClient(events),
-      clientIds
+      clientIds,
+      new Date(),
+      zona
     );
 
     return Object.fromEntries(statuses);

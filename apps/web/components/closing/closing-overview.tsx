@@ -33,6 +33,7 @@ import { ClosersRanking } from "./closers-ranking";
 import { PaymentModal } from "./payment-modal";
 import { CallOutcomeModal, type CallOutcomeKind } from "./call-outcome-modal";
 import { LeadsTable } from "./leads-table";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { saveCallFollowUpAction } from "@/app/sales/lead-actions";
 import type { FollowUpCatalog, FollowUpOption } from "@/lib/sales/follow-up-options";
 import type { LeadTableResult } from "@/app/sales/lead-actions";
@@ -102,6 +103,7 @@ export function ClosingOverview({
   /** Equipo de la organización, para asignar el responsable del próximo paso. */
   teamMembers?: TeamMember[];
 }) {
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkCallId = searchParams.get("call");
@@ -453,7 +455,7 @@ export function ClosingOverview({
             onOpenChange={(open) => setOutcomeKind(open ? outcomeKind : null)}
             kind={outcomeKind ?? "not_closed"}
             leadName={selected.leadName}
-            zona={leadsTable.timezone}
+            zona={zonaDeLaOrganizacion}
             catalog={catalog}
             teamMembers={teamMembers}
             onCatalogChange={(option: FollowUpOption) =>

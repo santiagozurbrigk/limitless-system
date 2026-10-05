@@ -39,7 +39,8 @@ import { paths } from "@/routes";
 import type { LaunchDetail, LaunchStatus } from "@/types/launches";
 import { FilterPills } from "@/components/marketing/filter-pills";
 import { CampoFecha } from "@/components/shared/campo-fecha";
-import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 
 export function LaunchDetailContent({
   initialLaunch,
@@ -51,8 +52,9 @@ export function LaunchDetailContent({
   const [metricOpen, setMetricOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [generatingPostMortem, setGeneratingPostMortem] = useState(false);
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const [metricForm, setMetricForm] = useState({
-    date: fechaDeHoyLocal(),
+    date: fechaDeHoyEnZona(zonaDeLaOrganizacion),
     revenue: "",
     newClients: "",
     conversationsStarted: "",

@@ -65,11 +65,6 @@ export type LeadSummary = {
   thread: LeadThread;
   /** Cliente en que se convirtió, si compró. */
   clientId: string | null;
-  /**
-   * La zona horaria de la organización (null = la de por defecto): la fecha del
-   * próximo paso se propone, se guarda y se muestra en esa zona.
-   */
-  timezone: string | null;
 };
 
 // ─── La tabla ────────────────────────────────────────────────────────────────
@@ -136,12 +131,6 @@ export type LeadTableResult = {
    * una tabla incompleta como si fuera todo.
    */
   truncated: boolean;
-  /**
-   * La zona horaria de la organización (`organizations.timezone`; null = la de
-   * por defecto). El estado se deriva con ella, y la tabla la reusa para
-   * recalcular el estado en el navegador sin que dé otra cosa que el servidor.
-   */
-  timezone: string | null;
 };
 
 /** Techo de lectura. Ver `truncated`. */
@@ -223,7 +212,6 @@ export async function listLeadsTableAction(
       counts: { ...EMPTY_COUNTS },
       catalog,
       truncated: false,
-      timezone,
     };
   }
 
@@ -306,7 +294,6 @@ export async function listLeadsTableAction(
     counts,
     catalog,
     truncated,
-    timezone,
   };
 }
 
@@ -339,7 +326,6 @@ export async function getLeadThreadAction(
     name: (data.name as string) ?? "Sin nombre",
     email: (data.email as string | null) ?? null,
     clientId: (data.client_id as string | null) ?? null,
-    timezone,
     thread: buildLeadThread(
       attempts,
       new Date(),

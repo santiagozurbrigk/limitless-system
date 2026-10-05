@@ -7,9 +7,10 @@
  * día siguiente, y con eso una fecha propuesta salía corrida un día y una tarea
  * que vence hoy aparecía vencida (SCRUM-104, SCRUM-493). Por eso acá:
  *
- * - "hoy" en el navegador sale de los getters locales (`fechaDeHoyLocal`);
- * - "hoy" en el servidor, que corre en UTC, sale de la zona de la organización
- *   (`fechaDeHoyEnZona`, con `Intl.DateTimeFormat`);
+ * - "hoy" es el de la zona de la organización, en el servidor y en el
+ *   navegador (`fechaDeHoyEnZona`, con `Intl.DateTimeFormat`; en el cliente,
+ *   `useHoyDeLaOrganizacion`): un miembro en otra zona ve el mismo día que la
+ *   organización;
  * - sumar días se hace sobre el calendario, sin pasar por ningún huso, así que
  *   un cambio de horario de verano no corre el resultado;
  * - "vencida" compara dos fechas calendario como texto.
@@ -43,20 +44,13 @@ function dosDigitos(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/** La fecha calendario de un instante, en la zona horaria de quien mira. */
+/**
+ * La fecha calendario de un `Date` armado en el navegador (por ejemplo, los
+ * bordes de un rango de reporte). Para el "hoy" o el día de un dato de la
+ * organización se usa `fechaEnZona` / `fechaDeHoyEnZona` con su zona.
+ */
 export function fechaLocal(instante: Date): string {
   return `${instante.getFullYear()}-${dosDigitos(instante.getMonth() + 1)}-${dosDigitos(instante.getDate())}`;
-}
-
-/**
- * La fecha de hoy (`YYYY-MM-DD`) en la zona horaria del navegador.
- *
- * Sólo tiene sentido en el navegador: en el servidor (Vercel, UTC) daría la
- * fecha de UTC. En el servidor, `fechaDeHoyEnZona` con la zona de la
- * organización.
- */
-export function fechaDeHoyLocal(ahora: Date = new Date()): string {
-  return fechaLocal(ahora);
 }
 
 /**
@@ -137,7 +131,7 @@ export function fechaDeHoyEnZona(
  *
  * Sólo acepta fechas calendario (`YYYY-MM-DD`). Un instante no se corta a
  * mano (eso es quedarse con su día de UTC): quien tiene un `timestamptz` lo
- * convierte antes con `fechaDeValorGuardado` o `aFechaDeInput`. Lo que no es
+ * convierte antes con `fechaDeValorGuardado` o `fechaDeInstanteEnZona`. Lo que no es
  * una fecha calendario no vence: una fecha que no se entiende no es una fecha.
  */
 export function fechaVencida(fecha: string | null | undefined, hoy: string): boolean {
@@ -156,7 +150,7 @@ export function fechaVencida(fecha: string | null | undefined, hoy: string): boo
  */
 export function diaLocal(fecha: string): Date {
   // Sólo fechas calendario: un instante se convierte antes con
-  // `aFechaDeInput` o `fechaDeValorGuardado`, no cortando su texto.
+  // `fechaDeValorGuardado` o `fechaDeInstanteEnZona`, no cortando su texto.
   if (!esFechaCalendario(fecha)) {
     throw new RangeError(`"${fecha}" no es una fecha calendario (YYYY-MM-DD).`);
   }
@@ -166,21 +160,20 @@ export function diaLocal(fecha: string): Date {
 
 /**
  * Un valor guardado (columna `date` o `timestamptz` con una fecha elegida)
- * formateado para mostrar sólo la fecha. Con `zona`, el día se lee en esa zona
- * (`fechaDeValorGuardado`, la de la organización); sin `zona`, en la del
- * navegador (`aFechaDeInput`). Es el mismo día que muestra `CampoFecha` con la
- * misma `zona`. `null` si no hay valor o no se entiende, para que quien llama
- * elija qué mostrar en ese caso.
+ * formateado para mostrar sólo la fecha, con el día que lee
+ * `fechaDeValorGuardado` en `zona` (la de la organización): el mismo que
+ * muestra `CampoFecha`. `null` si no hay valor o no se entiende, para que quien
+ * llama elija qué mostrar en ese caso.
  */
 export function formatearFechaGuardada(
   valor: string | null | undefined,
   {
+    zona,
     opciones,
     idioma = "es-AR",
-    zona,
-  }: { opciones?: Intl.DateTimeFormatOptions; idioma?: string; zona?: string | null } = {}
+  }: { zona: string | null; opciones?: Intl.DateTimeFormatOptions; idioma?: string }
 ): string | null {
-  const fecha = zona === undefined ? aFechaDeInput(valor) : fechaDeValorGuardado(valor, zona);
+  const fecha = fechaDeValorGuardado(valor, zona);
   return fecha ? diaLocal(fecha).toLocaleDateString(idioma, opciones) : null;
 }
 
@@ -232,33 +225,71 @@ export function fechaAInstanteEnZona(fecha: string, zona: string | null | undefi
 }
 
 /**
- * El valor guardado (columna `date` o `timestamptz`) como `YYYY-MM-DD` para un
- * `<input type="date">`, sin correrlo de día. `""` si no hay valor o no se
- * entiende.
+ * El primer instante de una fecha en una zona (su 00:00, o la primera hora
+ * que existe si ese día el reloj salta a la medianoche, como en Santiago de
+ * Chile). Sirve para filtrar instantes por "el día de la organización".
+ */
+export function inicioDelDiaEnZona(fecha: string, zona: string | null | undefined): string {
+  if (!esFechaCalendario(fecha)) {
+    throw new RangeError(`"${fecha}" no es una fecha calendario (YYYY-MM-DD).`);
+  }
+  const zonaReal = resolverZonaHoraria(zona);
+  const [y, m, d] = fecha.split("-").map(Number) as [number, number, number];
+  const medianocheComoUtc = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+  const primera = medianocheComoUtc - desfaseDeZona(new Date(medianocheComoUtc), zonaReal);
+  const segunda = medianocheComoUtc - desfaseDeZona(new Date(primera), zonaReal);
+  // La más temprana de las dos que cae en esa fecha: si la medianoche no
+  // existe (salto de reloj), una de las dos pasadas queda en el día anterior.
+  const validas = [primera, segunda].filter(
+    (instante) => fechaEnZona(new Date(instante), zonaReal) === fecha
+  );
+  return new Date(Math.min(...(validas.length ? validas : [primera]))).toISOString();
+}
+
+/** Cuántos días calendario hay de `desde` a `hasta` (negativo si `hasta` es antes). */
+export function diasEntre(desde: string, hasta: string): number {
+  if (!esFechaCalendario(desde) || !esFechaCalendario(hasta)) {
+    throw new RangeError(`"${desde}" o "${hasta}" no es una fecha calendario (YYYY-MM-DD).`);
+  }
+  const ms = (fecha: string) => {
+    const [y, m, d] = fecha.split("-").map(Number) as [number, number, number];
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((ms(hasta) - ms(desde)) / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Un valor guardado (columna `date` o `timestamptz` con una fecha **elegida**)
+ * como `YYYY-MM-DD`, leído en una zona (la de la organización; null o inválida
+ * = la de por defecto), sin correrlo de día. Es lo que muestra `CampoFecha` y
+ * lo que usa el servidor para decidir, por ejemplo, si un próximo paso de
+ * Closing (`next_action_at`) vence hoy. `""` si no hay valor o no se entiende.
  *
  * - Una fecha sin hora (`2026-10-04`, de una columna `date`) se devuelve tal cual.
  * - Un instante a las 00:00:00 UTC exactas es una fecha sin hora guardada en una
  *   columna `timestamptz` (Postgres la guarda así, y así la guardaba el
  *   seguimiento del lead): se toma su fecha de UTC, que es la que se eligió.
- * - Cualquier otro instante se muestra con la fecha local de quien mira. Para un
- *   dato de la organización se usa `fechaDeValorGuardado` con su zona (y se
- *   guarda con `fechaAInstanteEnZona`), así todos los miembros ven el mismo día.
- */
-export function aFechaDeInput(valor: string | null | undefined): string {
-  return leerValorGuardado(valor, fechaLocal);
-}
-
-/**
- * Lo mismo que `aFechaDeInput`, pero leyendo el instante en una zona dada (la
- * de la organización) en vez de la del navegador. Es la lectura del servidor:
- * por ejemplo, para decidir si un próximo paso de Closing (`next_action_at`)
- * vence hoy. Zona nula o inválida: la de por defecto. `""` si no se entiende.
+ * - Cualquier otro instante se lee con su fecha en la zona; lo guardado con
+ *   `fechaAInstanteEnZona` en la misma zona vuelve con el mismo día.
  */
 export function fechaDeValorGuardado(
   valor: string | null | undefined,
   zona: string | null | undefined
 ): string {
-  return leerValorGuardado(valor, (instante) => fechaEnZona(instante, zona));
+  if (!valor) return "";
+  const texto = valor.trim();
+  if (FECHA_CALENDARIO.test(texto)) return esFechaCalendario(texto) ? texto : "";
+
+  const instante = new Date(texto);
+  if (Number.isNaN(instante.getTime())) return "";
+
+  const esMedianocheUtc =
+    instante.getUTCHours() === 0 &&
+    instante.getUTCMinutes() === 0 &&
+    instante.getUTCSeconds() === 0 &&
+    instante.getUTCMilliseconds() === 0;
+  if (esMedianocheUtc) return fechaUtc(instante);
+  return fechaEnZona(instante, zona);
 }
 
 /**
@@ -278,27 +309,6 @@ export function fechaDeInstanteEnZona(
   const instante = new Date(texto);
   if (Number.isNaN(instante.getTime())) return "";
   return fechaEnZona(instante, zona);
-}
-
-/** Las reglas comunes de `aFechaDeInput` y `fechaDeValorGuardado`. */
-function leerValorGuardado(
-  valor: string | null | undefined,
-  fechaDelInstante: (instante: Date) => string
-): string {
-  if (!valor) return "";
-  const texto = valor.trim();
-  if (FECHA_CALENDARIO.test(texto)) return esFechaCalendario(texto) ? texto : "";
-
-  const instante = new Date(texto);
-  if (Number.isNaN(instante.getTime())) return "";
-
-  const esMedianocheUtc =
-    instante.getUTCHours() === 0 &&
-    instante.getUTCMinutes() === 0 &&
-    instante.getUTCSeconds() === 0 &&
-    instante.getUTCMilliseconds() === 0;
-  if (esMedianocheUtc) return fechaUtc(instante);
-  return fechaDelInstante(instante);
 }
 
 /** La fecha de UTC de un instante. Sólo para las reglas de lectura de valores guardados. */

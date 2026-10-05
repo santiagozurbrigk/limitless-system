@@ -1,5 +1,4 @@
 import type { ClosePaymentPayload } from "@/types/closing";
-import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 
 export function getPaidAmountFromClosePayload(payment: ClosePaymentPayload): number {
   if (payment.paidAmount > 0) return payment.paidAmount;
@@ -14,12 +13,21 @@ export function getPaidAmountFromClosePayload(payment: ClosePaymentPayload): num
   return payment.upfrontAmount ?? 0;
 }
 
-export function getPaymentDateFromClosePayload(payment: ClosePaymentPayload): string {
+/**
+ * La fecha del pago que se registra. Sin fecha en el payload, `hoy`: el de la
+ * zona de la organización (`fechaDeHoyEnZona`), que arma quien llama. Antes
+ * era el del navegador (SCRUM-104); para quien está en la zona de la org da lo
+ * mismo, y así coincide para todos los miembros (SCRUM-493).
+ */
+export function getPaymentDateFromClosePayload(
+  payment: ClosePaymentPayload,
+  hoy: string
+): string {
   if (payment.paymentDate) return payment.paymentDate;
   if (payment.paymentType === "installments" && payment.firstInstallmentDate) {
     return payment.firstInstallmentDate;
   }
-  return fechaDeHoyLocal();
+  return hoy;
 }
 
 export function installmentNumberForClosePayload(

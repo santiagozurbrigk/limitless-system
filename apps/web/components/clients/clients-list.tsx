@@ -73,7 +73,7 @@ import {
 import { ACCION_DE_FILA } from "@/components/clients/ficha-section";
 import { FilterPills } from "@/components/marketing/filter-pills";
 import { isOverdue } from "@/lib/clients/next-task";
-import { useFechaDeHoyLocal } from "@/lib/hooks/use-fecha-de-hoy-local";
+import { useHoyDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import {
   formatPeriodShort,
   formatRevenue,
@@ -866,7 +866,7 @@ function NextTaskCell({
   canCheck: boolean;
   onCheck: () => void;
 }) {
-  const hoy = useFechaDeHoyLocal();
+  const hoy = useHoyDeLaOrganizacion();
 
   if (!task) {
     return <span className="text-xs text-muted-foreground">Sin tareas</span>;

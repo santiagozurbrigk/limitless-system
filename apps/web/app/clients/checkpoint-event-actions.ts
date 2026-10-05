@@ -98,19 +98,12 @@ export async function getClientJourneyAction(clientId: string): Promise<{
   progress: CheckpointWithEvent[];
   checkpointFields: Awaited<ReturnType<typeof listFieldDefinitionsAction>>;
   journeyConfigured: boolean;
-  /**
-   * La zona horaria de la organización (null = la de por defecto). La fecha de
-   * cada hito se muestra, se edita y se guarda en esa zona
-   * (`lib/checkpoints/fecha-del-hito.ts`).
-   */
-  timezone: string | null;
 }> {
-  const [stages, checkpoints, events, fields, timezone] = await Promise.all([
+  const [stages, checkpoints, events, fields] = await Promise.all([
     listJourneyStagesAction(),
     listCheckpointsAction(),
     listCheckpointEventsAction(clientId),
     listFieldDefinitionsAction("checkpoint"),
-    zonaDeLaOrganizacion(),
   ]);
 
   const journey = buildJourney(stages, checkpoints);
@@ -118,19 +111,7 @@ export async function getClientJourneyAction(clientId: string): Promise<{
     progress: buildClientProgress(journey.stages, events),
     checkpointFields: fields,
     journeyConfigured: journey.stages.length > 0,
-    timezone,
   };
-}
-
-/** La zona de la organización activa; null si no eligió una o no se pudo leer. */
-async function zonaDeLaOrganizacion(): Promise<string | null> {
-  try {
-    const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-    return await leerZonaHorariaDeLaOrganizacion(supabase, organizationId);
-  } catch {
-    return null;
-  }
 }
 
 // ─── Escritura ──────────────────────────────────────────────────────────────

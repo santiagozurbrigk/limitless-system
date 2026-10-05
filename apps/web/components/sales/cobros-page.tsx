@@ -34,6 +34,11 @@ import { assignClientPlanAction } from "@/app/clients/actions";
 import { listPlansAction } from "@/app/clients/plan-actions";
 import { getClientsTableEnrichmentAction } from "@/app/clients/plan-duration-actions";
 import { FilterPills } from "@/components/marketing/filter-pills";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import {
+  useHoyDeLaOrganizacion,
+  useZonaDeLaOrganizacion,
+} from "@/providers/zona-de-la-organizacion-provider";
 import { PlanManagerDialog } from "@/components/clients/plan-manager-dialog";
 import { ClientPaymentsSection } from "@/components/sales/client-payments-section";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -197,6 +202,10 @@ export function CobrosPage({
   }, [clients]);
 
   /** Plan, días restantes, cobrado y adeudado de cada cliente, en una pasada. */
+  // Hoy en la zona de la org (en el render del servidor, con la misma zona).
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const hoy = useHoyDeLaOrganizacion() ?? fechaDeHoyEnZona(zonaDeLaOrganizacion);
+
   const rows = useMemo(() => {
     return clients.map((client) => {
       const planName = getClientPlanName(client);
@@ -214,11 +223,11 @@ export function CobrosPage({
         client,
         planLabel: assignedPlan?.name ?? planName ?? "—",
         durationDays,
-        remainingDays: computeRemainingProgramDays(client.joinDate, durationDays),
+        remainingDays: computeRemainingProgramDays(client.joinDate, durationDays, hoy),
         owed: computeOutstandingBalance(client, paid),
       };
     });
-  }, [clients, plans, planDurations, paidByClientId]);
+  }, [clients, plans, planDurations, paidByClientId, hoy]);
 
   const planOptions = useMemo(() => {
     const names = new Set<string>();

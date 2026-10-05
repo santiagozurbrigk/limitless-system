@@ -17,19 +17,21 @@ export function buildMonthGrid(anchor: Date): Date[] {
   return cells;
 }
 
+/** Las tareas por día del calendario, con la zona de la organización (`zona`). */
 export function groupTasksByDateKey(
-  tasks: WorkboardTask[]
+  tasks: WorkboardTask[],
+  zona: string | null
 ): Map<string, WorkboardTask[]> {
   const map = new Map<string, WorkboardTask[]>();
   for (const task of tasks) {
-    const key = taskCalendarDate(task);
+    const key = taskCalendarDate(task, zona);
     if (!key) continue;
     const list = map.get(key) ?? [];
     list.push(task);
     map.set(key, list);
   }
   for (const [key, list] of map) {
-    map.set(key, sortWorkboardTasks(list));
+    map.set(key, sortWorkboardTasks(list, zona));
   }
   return map;
 }

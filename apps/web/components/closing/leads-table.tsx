@@ -51,6 +51,7 @@ import {
 import { CLOSING_CALL_STATUS_LABEL } from "@/lib/closing/call-status";
 import { fechaAInstanteEnZona } from "@/lib/fechas/calendario";
 import { CampoFecha } from "@/components/shared/campo-fecha";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import type { TeamMember } from "@/types/team";
 import { useToast } from "@/providers/toast-provider";
 import { FollowUpOptionPicker } from "./follow-up-option-picker";
@@ -130,6 +131,9 @@ export function LeadsTable({
   const { push } = useToast();
   const [isPending, startTransition] = useTransition();
 
+  // La zona de la org: la fecha del próximo paso se propone, guarda, muestra y
+  // vence en ella, igual que en el servidor.
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const [result, setResult] = useState<LeadTableResult>(initial);
   const [catalog, setCatalog] = useState<FollowUpCatalog>(initial.catalog);
   const [rows, setRows] = useState<LeadTableRow[]>(initial.rows);
@@ -191,7 +195,7 @@ export function LeadsTable({
         );
         // Con la zona de la organización, igual que el servidor: el próximo
         // paso vence por día en esa zona.
-        const thread = buildLeadThread(attempts, new Date(), result.timezone, closing);
+        const thread = buildLeadThread(attempts, new Date(), zonaDeLaOrganizacion, closing);
         const target =
           thread.actionableAttemptId ?? row.targetAttemptId ?? thread.attempts[0]?.id ?? null;
         const targetAttempt = thread.attempts.find((a) => a.id === target) ?? null;
@@ -227,7 +231,7 @@ export function LeadsTable({
     // lado queda lista para corregirla.
     const wantsDate = slug ? needsDate(catalog.nextActions, slug) : false;
     const nextActionAt = wantsDate
-      ? (row.nextActionAt ?? defaultNextActionAt(result.timezone))
+      ? (row.nextActionAt ?? defaultNextActionAt(zonaDeLaOrganizacion))
       : null;
 
     const previous = snapshot(row.leadId);
@@ -261,7 +265,7 @@ export function LeadsTable({
     }
     // Mediodía de la zona de la org: `CampoFecha` (con esa zona) lo vuelve a
     // mostrar como el mismo día, y el estado lo cuenta en ese día.
-    const iso = fechaAInstanteEnZona(value, result.timezone);
+    const iso = fechaAInstanteEnZona(value, zonaDeLaOrganizacion);
     const previous = snapshot(row.leadId);
     patchRow(row.leadId, { nextActionAt: iso });
 
@@ -583,7 +587,7 @@ export function LeadsTable({
                     <td className="px-3 py-1.5">
                       <CampoFecha
                         value={row.nextActionAt}
-                        zona={result.timezone}
+                        zona={zonaDeLaOrganizacion}
                         disabled={dateDisabled}
                         onChange={(fecha) => handleDate(row, fecha)}
                         className={cn(
@@ -678,7 +682,7 @@ export function LeadsTable({
         row={selected}
         catalog={catalog}
         teamMembers={teamMembers}
-        zona={result.timezone}
+        zona={zonaDeLaOrganizacion}
         onClose={() => setSelectedId(null)}
       />
 

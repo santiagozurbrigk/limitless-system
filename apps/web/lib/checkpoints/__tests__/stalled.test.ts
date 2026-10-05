@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { conZona, restaurarZona } from "@/lib/fechas/__tests__/zona";
 import { buildJourney } from "@/lib/checkpoints/journey";
 import { buildClientProgress } from "@/lib/checkpoints/progress";
 import {
@@ -11,6 +12,8 @@ import {
 import { checkpoint, event, stage } from "@/lib/checkpoints/__tests__/fixtures";
 
 const NOW = new Date("2026-09-03T12:00:00Z");
+/** La zona de la organización. */
+const ZONA = "America/Argentina/Buenos_Aires";
 const daysAgo = (n: number) =>
   new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000).toISOString();
 
@@ -26,7 +29,7 @@ const journey = buildJourney(
 ).stages;
 
 const statusFor = (events: Parameters<typeof buildClientProgress>[1]) =>
-  deriveClientJourneyStatus("cl1", buildClientProgress(journey, events), NOW);
+  deriveClientJourneyStatus("cl1", buildClientProgress(journey, events), NOW, ZONA);
 
 describe("trabado: el caso que el módulo viene a mostrar", () => {
   it("⭐ el próximo hito venció: trabado, con los días de atraso", () => {
@@ -74,7 +77,8 @@ describe("las tres razones por las que no se puede saber", () => {
     const s = deriveClientJourneyStatus(
       "cl1",
       buildClientProgress(sinPlazo, [event({ checkpointId: "a", reachedAt: daysAgo(900) })]),
-      NOW
+      NOW,
+      ZONA
     );
     expect(s.overdueDays).toBeNull();
     expect(s.stalled).toBe(false);
@@ -133,7 +137,8 @@ describe("todos los clientes en una pasada", () => {
       journey,
       groupEventsByClient(events),
       ["cl1", "cl2", "cl3"],
-      NOW
+      NOW,
+      ZONA
     );
     expect(statuses.get("cl1")?.stalled).toBe(true);
     expect(statuses.get("cl2")?.stalled).toBe(false);
@@ -264,7 +269,8 @@ describe("⭐ la fecha límite del próximo hito", () => {
     const s = deriveClientJourneyStatus(
       "cl1",
       buildClientProgress(sinPlazo, [event({ checkpointId: "a", reachedAt: daysAgo(900) })]),
-      NOW
+      NOW,
+      ZONA
     );
     expect(s.nextCheckpointDueAt).toBeNull();
   });
@@ -285,5 +291,33 @@ describe("cómo se lee la fecha límite", () => {
 
   it("no dice nada cuando no se puede saber", () => {
     expect(formatDueDate(statusFor([]))).toBeNull();
+  });
+});
+
+/**
+ * SCRUM-493: "vence el" del próximo hito y "trabado hace N días" se cuentan en
+ * días calendario de la zona de la organización. Antes la fecha límite era el
+ * instante del hito anterior más el plazo, cortado en UTC: un hito registrado
+ * a las 22:00 de Argentina corría un día el vencimiento.
+ */
+describe("⭐ fecha límite del próximo hito en la zona de la organización", () => {
+  afterEach(restaurarZona);
+
+  it("un hito alcanzado a las 22:00 de Argentina vence contando desde ese día", () => {
+    conZona("UTC");
+    // 'a' alcanzado el 20-ago a las 22:00 ART (21-ago 01:00 UTC, un instante real);
+    // 'b' tiene 14 días de plazo: vence el 3-sep.
+    const progress = buildClientProgress(journey, [
+      event({ checkpointId: "a", reachedAt: "2026-08-21T01:00:00.000Z" }),
+    ]);
+    // 3-sep 22:00 ART = 4-sep 01:00 UTC: vence hoy, todavía no está trabado.
+    const hoy = deriveClientJourneyStatus("cl1", progress, new Date("2026-09-04T01:00:00Z"), ZONA);
+    expect(hoy.nextCheckpointDueAt).toBe("2026-09-03");
+    expect(hoy.overdueDays).toBe(0);
+    expect(hoy.stalled).toBe(false);
+    // 4-sep a la tarde en Argentina: 1 día de atraso.
+    const manana = deriveClientJourneyStatus("cl1", progress, new Date("2026-09-04T18:00:00Z"), ZONA);
+    expect(manana.overdueDays).toBe(1);
+    expect(manana.stalled).toBe(true);
   });
 });

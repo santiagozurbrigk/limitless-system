@@ -1,3 +1,4 @@
+import { fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
 import { STATUS_LABELS, WORKBOARD_STATUSES } from "./constants";
 import type { TaskPriority, TaskStatus, WorkboardColumn, WorkboardTask } from "@/types/workboard";
 
@@ -8,34 +9,50 @@ const PRIORITY_SORT_ORDER: Record<TaskPriority, number> = {
   low: 2,
 };
 
-/** Fecha usada para ordenar: vencimiento si existe; si no, día de creación. */
-export function taskSortDateKey(task: WorkboardTask): string {
+/**
+ * Fecha usada para ordenar: vencimiento si existe; si no, día de creación en la
+ * zona de la organización (`zona`; null = la de por defecto). `created_at` es
+ * un instante: cortarlo en UTC pasaba al día siguiente una tarea creada de
+ * noche en Argentina (SCRUM-493).
+ */
+export function taskSortDateKey(task: WorkboardTask, zona: string | null): string {
   if (task.dueDate) return task.dueDate;
-  return task.createdAt.slice(0, 10);
+  return fechaDeInstanteEnZona(task.createdAt, zona);
 }
 
-export function compareWorkboardTasks(a: WorkboardTask, b: WorkboardTask): number {
+export function compareWorkboardTasks(
+  a: WorkboardTask,
+  b: WorkboardTask,
+  zona: string | null
+): number {
   const byPriority =
     PRIORITY_SORT_ORDER[a.priority] - PRIORITY_SORT_ORDER[b.priority];
   if (byPriority !== 0) return byPriority;
-  return taskSortDateKey(a).localeCompare(taskSortDateKey(b));
+  return taskSortDateKey(a, zona).localeCompare(taskSortDateKey(b, zona));
 }
 
-export function sortWorkboardTasks(tasks: WorkboardTask[]): WorkboardTask[] {
-  return [...tasks].sort(compareWorkboardTasks);
+export function sortWorkboardTasks(tasks: WorkboardTask[], zona: string | null): WorkboardTask[] {
+  return [...tasks].sort((a, b) => compareWorkboardTasks(a, b, zona));
 }
 
-export function groupTasksIntoColumns(tasks: WorkboardTask[]): WorkboardColumn[] {
+export function groupTasksIntoColumns(
+  tasks: WorkboardTask[],
+  zona: string | null
+): WorkboardColumn[] {
   return WORKBOARD_STATUSES.map((status) => ({
     id: status,
     title: STATUS_LABELS[status],
-    tasks: sortWorkboardTasks(tasks.filter((t) => t.status === status)),
+    tasks: sortWorkboardTasks(
+      tasks.filter((t) => t.status === status),
+      zona
+    ),
   }));
 }
 
-export function taskCalendarDate(task: WorkboardTask): string | null {
+/** El día del calendario de una tarea: su vencimiento o, si no tiene, el día en que se creó (en la zona de la org). */
+export function taskCalendarDate(task: WorkboardTask, zona: string | null): string | null {
   if (task.dueDate) return task.dueDate;
-  if (task.createdAt) return task.createdAt.slice(0, 10);
+  if (task.createdAt) return fechaDeInstanteEnZona(task.createdAt, zona) || null;
   return null;
 }
 

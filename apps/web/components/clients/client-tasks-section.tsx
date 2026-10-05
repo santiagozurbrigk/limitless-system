@@ -37,7 +37,11 @@ import {
 } from "@/types/client-tasks";
 import { CLIENT_TASKS_CHANGED, notifyClientTasksChanged } from "@/lib/clients/tasks-events";
 import { isOverdue, pickNextTask } from "@/lib/clients/next-task";
-import { useFechaDeHoyLocal } from "@/lib/hooks/use-fecha-de-hoy-local";
+import {
+  useHoyDeLaOrganizacion,
+  useZonaDeLaOrganizacion,
+} from "@/providers/zona-de-la-organizacion-provider";
+import { fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
 import { ACCION_DE_FILA, FichaSection } from "@/components/clients/ficha-section";
 import { useToast } from "@/providers/toast-provider";
 import { cn } from "@/lib/utils";
@@ -190,8 +194,11 @@ function Tarea({
   const { push } = useToast();
   const [busy, setBusy] = useState(false);
   const hecha = task.status === "done";
-  const hoy = useFechaDeHoyLocal();
+  const hoy = useHoyDeLaOrganizacion();
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const vencida = hoy !== null && isOverdue(task, hoy);
+  // El día de la 1-1 de la que salió, en la zona de la organización.
+  const diaDeLaLlamada = fechaDeInstanteEnZona(task.sourceCallAt, zonaDeLaOrganizacion);
 
   const tildar = async () => {
     setBusy(true);
@@ -271,9 +278,9 @@ function Tarea({
             </span>
           ) : null}
 
-          {task.source === "fathom_call" && task.sourceCallDate ? (
+          {task.source === "fathom_call" && diaDeLaLlamada ? (
             <Badge variant="outline" className="text-[11px] font-normal">
-              de la 1-1 del {formatearFecha(task.sourceCallDate)}
+              de la 1-1 del {formatearFecha(diaDeLaLlamada)}
             </Badge>
           ) : null}
 

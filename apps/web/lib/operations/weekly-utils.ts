@@ -43,8 +43,7 @@ export const DB_DEPARTMENT_LABELS: Record<DbWeeklyDepartment, string> = {
 /**
  * Lunes de la semana (ISO) de una fecha calendario, en YYYY-MM-DD.
  *
- * Recibe "hoy" ya armado (`fechaDeHoyLocal()` en el navegador, el de la
- * organización en el servidor). Antes tomaba el reloj del proceso: en el
+ * Recibe "hoy" ya armado: el de la zona de la organización. Antes tomaba el reloj del proceso: en el
  * servidor (UTC), el domingo de noche en Argentina ya era lunes y los inputs
  * caían en la semana siguiente; y la medianoche local pasada por
  * `toISOString` daba el domingo en zonas al este de UTC (SCRUM-493).

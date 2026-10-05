@@ -16,12 +16,13 @@ import {
 import { createSprintAction } from "@/app/workboard/actions";
 import { SPRINT_AREA_FOCUS_OPTIONS } from "@/lib/workboard/constants";
 import { CampoFecha } from "@/components/shared/campo-fecha";
-import { fechaDeHoyLocal, sumarDias } from "@/lib/fechas/calendario";
+import { fechaDeHoyEnZona, sumarDias } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import type { SprintAreaFocus, WorkboardSprint } from "@/types/workboard";
 
-/** Un sprint dura dos semanas por defecto: termina 14 días después de hoy. */
-function defaultEndDate(): string {
-  return sumarDias(fechaDeHoyLocal(), 14);
+/** Un sprint dura dos semanas por defecto: termina 14 días después de hoy (en la org). */
+function defaultEndDate(zona: string | null): string {
+  return sumarDias(fechaDeHoyEnZona(zona), 14);
 }
 
 export function CreateSprintModal({
@@ -36,16 +37,17 @@ export function CreateSprintModal({
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [areaFocus, setAreaFocus] = useState<SprintAreaFocus>("general");
-  const [startDate, setStartDate] = useState(fechaDeHoyLocal);
-  const [endDate, setEndDate] = useState(defaultEndDate);
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const [startDate, setStartDate] = useState(() => fechaDeHoyEnZona(zonaDeLaOrganizacion));
+  const [endDate, setEndDate] = useState(() => defaultEndDate(zonaDeLaOrganizacion));
   const [pending, startTransition] = useTransition();
 
   function resetForm() {
     setName("");
     setGoal("");
     setAreaFocus("general");
-    setStartDate(fechaDeHoyLocal());
-    setEndDate(defaultEndDate());
+    setStartDate(fechaDeHoyEnZona(zonaDeLaOrganizacion));
+    setEndDate(defaultEndDate(zonaDeLaOrganizacion));
   }
 
   function handleCreate() {

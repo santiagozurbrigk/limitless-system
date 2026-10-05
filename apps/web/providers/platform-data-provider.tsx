@@ -44,7 +44,8 @@ import {
   getPaymentDateFromClosePayload,
   installmentNumberForClosePayload,
 } from "@/lib/clients/payment-utils";
-import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { mockClosingCalls } from "@/mocks/closing";
 import { mockClients } from "@/mocks/clients";
 import { mockConversations } from "@/mocks/sales";
@@ -124,7 +125,9 @@ function buildClientFromPayment(
   callId: string,
   payment: ClosePaymentPayload,
   /** Mail del lead del turno: es lo que hila al lead con el cliente. */
-  leadEmail?: string | null
+  leadEmail: string | null | undefined,
+  /** Hoy en la zona de la organización: alta del cliente y fechas por defecto. */
+  hoy: string
 ): Omit<Client, "id"> {
   // Calcular ingresos totales:
   // Para cuotas, si hay montos manuales por cuota, sumar esos; si no, usar monto uniforme × N
@@ -142,8 +145,7 @@ function buildClientFromPayment(
       ? Array.from({ length: payment.installmentCount }, (_, i) => {
           const paidAt =
             i === 0
-              ? (payment.firstInstallmentDate ??
-                fechaDeHoyLocal())
+              ? (payment.firstInstallmentDate ?? hoy)
               : undefined;
           // Monto: usa el override manual si está disponible, si no el uniforme
           const amount =
@@ -174,7 +176,7 @@ function buildClientFromPayment(
     // ⭐ El mail viaja del turno al cliente. Sin esto, el hilo entre el lead y
     // el cliente en que se convirtió se corta justo en el momento del cierre.
     email: leadEmail ?? null,
-    joinDate: fechaDeHoyLocal(),
+    joinDate: hoy,
     paymentType: payment.paymentType,
     platform: "other",
     totalAmount: revenue,
@@ -203,7 +205,7 @@ function buildClientFromPayment(
           {
             id: `fc-${callId}`,
             title: `Llamada de cierre — ${payment.clientName}`,
-            date: fechaDeHoyLocal(),
+            date: hoy,
             duration: "—",
             url: payment.fathomUrl,
           },
@@ -215,6 +217,7 @@ function buildClientFromPayment(
 }
 
 export function PlatformDataProvider({ children }: { children: ReactNode }) {
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const [conversations, setConversations] = useState<Conversation[]>(() =>
     useSupabase ? [] : mockConversations.map((c) => ({ ...c }))
   );
@@ -637,7 +640,9 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
 
       await syncConversationTagForCall(call, "closeado");
 
-      const draft = buildClientFromPayment(callId, payment, call?.leadEmail);
+      // Un solo "hoy", el de la organización, para todo el cierre.
+      const hoy = fechaDeHoyEnZona(zonaDeLaOrganizacion);
+      const draft = buildClientFromPayment(callId, payment, call?.leadEmail, hoy);
       const client = await addClient(draft);
 
       // Cierra el ciclo lead → cliente. Sin esto el hilo se corta justo en el
@@ -652,7 +657,7 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
         const recordResult = await recordClientPaymentAction({
           clientId: client.id,
           amount: getPaidAmountFromClosePayload(payment),
-          paymentDate: getPaymentDateFromClosePayload(payment),
+          paymentDate: getPaymentDateFromClosePayload(payment, hoy),
           storagePath: payment.proof.storagePath,
           mimeType: payment.proof.mimeType,
           installmentNumber: installmentNumberForClosePayload(payment),
@@ -673,7 +678,14 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
 
       return client;
     },
-    [addClient, clients, closingCalls, syncConversationTagForCall, updateClosingCall]
+    [
+      addClient,
+      clients,
+      closingCalls,
+      syncConversationTagForCall,
+      updateClosingCall,
+      zonaDeLaOrganizacion,
+    ]
   );
 
   const markCallNotClosed = useCallback(

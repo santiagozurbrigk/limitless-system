@@ -24,7 +24,8 @@ import {
   Label,
 } from "@ai-coo/ui";
 import { CampoFecha } from "@/components/shared/campo-fecha";
-import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import type { ClientBaseline } from "@/types/wins";
 import type { ClientTracking } from "@/types/clients";
 
@@ -64,6 +65,7 @@ export function ClientBaselineDialog({
   onClose: () => void;
   onSubmit: (draft: BaselineDraft) => void;
 }) {
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const [draft, setDraft] = useState<BaselineDraft>({
     niche: "",
     metricKey: "",
@@ -155,7 +157,7 @@ export function ClientBaselineDialog({
               </Label>
               <CampoFecha
                 id="baseline-date"
-                max={fechaDeHoyLocal()}
+                max={fechaDeHoyEnZona(zonaDeLaOrganizacion)}
                 value={draft.capturedAt}
                 onChange={(fecha) => patch({ capturedAt: fecha ?? "" })}
               />

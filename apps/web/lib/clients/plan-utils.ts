@@ -1,3 +1,4 @@
+import { diasEntre, esFechaCalendario, sumarDias } from "@/lib/fechas/calendario";
 import type { Client } from "@/types/clients";
 import type { PlanDuration } from "@/types/plan-durations";
 
@@ -39,23 +40,22 @@ export function computeOutstandingBalance(
   return Math.max(0, client.totalAmount - paidTotal);
 }
 
+/**
+ * Días que le quedan al programa: desde `hoy` (el de la zona de la
+ * organización, `YYYY-MM-DD`) hasta el alta más la duración. Se cuentan días
+ * calendario; con el "hoy" del navegador, un miembro en otra zona veía otro
+ * número (SCRUM-493). `null` sin duración o con una fecha de alta que no se
+ * entiende.
+ */
 export function computeRemainingProgramDays(
   joinDate: string,
-  durationDays: number | null | undefined
+  durationDays: number | null | undefined,
+  hoy: string
 ): number | null {
   if (durationDays == null || durationDays <= 0) return null;
-
-  const start = new Date(`${joinDate}T00:00:00`);
-  if (Number.isNaN(start.getTime())) return null;
-
-  const end = new Date(start);
-  end.setDate(end.getDate() + durationDays);
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const diffMs = end.getTime() - today.getTime();
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const alta = joinDate.slice(0, 10);
+  if (!esFechaCalendario(alta)) return null;
+  return diasEntre(hoy, sumarDias(alta, durationDays));
 }
 
 export function formatRemainingDays(days: number | null): string {

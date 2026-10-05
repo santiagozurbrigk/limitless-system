@@ -40,7 +40,8 @@ import type { FieldDefinition } from "@/types/custom-fields";
 import { activeFields } from "@/lib/custom-fields";
 import { FieldValueInput } from "@/components/clients/custom-fields/field-value-input";
 import { CampoFecha } from "@/components/shared/campo-fecha";
-import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import {
   deleteWinAttachmentAction,
   finalizeWinAttachmentAction,
@@ -68,10 +69,11 @@ export type WinDraft = {
   needsScreenshot: boolean;
 };
 
-function draftFrom(win: ClientWin | null, defaultClientId?: string): WinDraft {
+/** `hoy`: el de la zona de la organización, fecha por defecto de un win nuevo. */
+function draftFrom(win: ClientWin | null, hoy: string, defaultClientId?: string): WinDraft {
   return {
     clientId: win?.clientId ?? defaultClientId ?? "",
-    winDate: win?.winDate ?? fechaDeHoyLocal(),
+    winDate: win?.winDate ?? hoy,
     achievement: win?.achievement ?? "",
     metricKey: win?.metric?.key ?? "",
     metricValue: win?.metric ? String(win.metric.value) : "",
@@ -108,7 +110,10 @@ export function WinFormModal({
   onClose: () => void;
   onSubmit: (draft: WinDraft, draftId: string | null) => void;
 }) {
-  const [draft, setDraft] = useState<WinDraft>(() => draftFrom(win, defaultClientId));
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const [draft, setDraft] = useState<WinDraft>(() =>
+    draftFrom(win, fechaDeHoyEnZona(zonaDeLaOrganizacion), defaultClientId)
+  );
   /** Agrupa las capturas subidas antes de que el win exista. */
   const draftIdRef = useRef<string | null>(null);
   const [attachments, setAttachments] = useState<WinAttachment[]>([]);
@@ -117,13 +122,13 @@ export function WinFormModal({
 
   useEffect(() => {
     if (!open) return;
-    setDraft(draftFrom(win, defaultClientId));
+    setDraft(draftFrom(win, fechaDeHoyEnZona(zonaDeLaOrganizacion), defaultClientId));
     setAttachments(win?.attachments ?? []);
     setUploadError(null);
     // Un win nuevo necesita un identificador temporal para agrupar sus
     // capturas; uno que ya existe no, porque se cuelgan de él directamente.
     draftIdRef.current = win ? null : crypto.randomUUID();
-  }, [open, win, defaultClientId]);
+  }, [open, win, defaultClientId, zonaDeLaOrganizacion]);
 
   const fields = activeFields(winFields);
 
@@ -221,7 +226,7 @@ export function WinFormModal({
               <Label htmlFor="win-date">Fecha</Label>
               <CampoFecha
                 id="win-date"
-                max={fechaDeHoyLocal()}
+                max={fechaDeHoyEnZona(zonaDeLaOrganizacion)}
                 value={draft.winDate}
                 onChange={(fecha) => patch({ winDate: fecha ?? "" })}
               />

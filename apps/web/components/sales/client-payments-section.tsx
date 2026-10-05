@@ -27,7 +27,8 @@ import { usePlatformData } from "@/providers";
 import { useFinanceData } from "@/providers/finance-data-provider";
 import { useToast } from "@/providers/toast-provider";
 import type { Client, ClientPayment } from "@/types/clients";
-import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 
 function formatMoney(amount: number) {
   return `$${amount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
@@ -299,8 +300,9 @@ function AddInstallmentPaymentDialog({
   onSuccess: (client: Client, payments: ClientPayment[]) => void;
 }) {
   const [amount, setAmount] = useState(String(defaultAmount));
-  const [paymentDate, setPaymentDate] = useState(
-    () => fechaDeHoyLocal()
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const [paymentDate, setPaymentDate] = useState(() =>
+    fechaDeHoyEnZona(zonaDeLaOrganizacion)
   );
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -309,11 +311,11 @@ function AddInstallmentPaymentDialog({
   useEffect(() => {
     if (open) {
       setAmount(String(defaultAmount));
-      setPaymentDate(fechaDeHoyLocal());
+      setPaymentDate(fechaDeHoyEnZona(zonaDeLaOrganizacion));
       setFile(null);
       setError(null);
     }
-  }, [open, defaultAmount]);
+  }, [open, defaultAmount, zonaDeLaOrganizacion]);
 
   function handleSubmit() {
     // ⭐ El comprobante es opcional: un cobro sin comprobante sigue siendo un
@@ -423,8 +425,9 @@ function AddGenericPaymentDialog({
   onSuccess: (payment: ClientPayment) => void;
 }) {
   const [amount, setAmount] = useState("");
-  const [paymentDate, setPaymentDate] = useState(
-    () => fechaDeHoyLocal()
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const [paymentDate, setPaymentDate] = useState(() =>
+    fechaDeHoyEnZona(zonaDeLaOrganizacion)
   );
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -433,11 +436,11 @@ function AddGenericPaymentDialog({
   useEffect(() => {
     if (open) {
       setAmount("");
-      setPaymentDate(fechaDeHoyLocal());
+      setPaymentDate(fechaDeHoyEnZona(zonaDeLaOrganizacion));
       setFile(null);
       setError(null);
     }
-  }, [open]);
+  }, [open, zonaDeLaOrganizacion]);
 
   function handleSubmit() {
     // ⭐ El comprobante es opcional: un cobro sin comprobante sigue siendo un

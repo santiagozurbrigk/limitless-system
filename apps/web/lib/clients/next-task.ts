@@ -52,7 +52,7 @@ function comparar(a: ClientTask, b: ClientTask): number {
  * está a tiempo.
  *
  * `hoy` es una fecha calendario (`YYYY-MM-DD`) que arma quien llama:
- * `fechaDeHoyLocal()` en el navegador y `fechaDeHoyEnZona(zona de la
+ * `useHoyDeLaOrganizacion()` en el navegador y `fechaDeHoyEnZona(zona de la
  * organización)` en el servidor. No hay default a propósito: el reloj del
  * proceso en el servidor es UTC, y de noche en Argentina ya es mañana
  * (SCRUM-493).

@@ -16,6 +16,8 @@ import {
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
+import { fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { firstZodError } from "@/lib/validations";
 import { createWorkboardTasksAction } from "@/app/agent/workboard-actions";
@@ -243,13 +245,14 @@ export async function sendClientTaskToBoardAction(input: {
     const task = rowToClientTask(existente as unknown as ClientTaskRow);
     if (task.workboardTaskId) return task;
 
-    const { data: client } = await supabase
-      .from("clients")
-      .select("name")
-      .eq("id", task.clientId)
-      .maybeSingle();
+    const [{ data: client }, zona] = await Promise.all([
+      supabase.from("clients").select("name").eq("id", task.clientId).maybeSingle(),
+      // El día de la 1-1 que se menciona es el de la zona de la organización.
+      leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
+    ]);
 
     const clientName = (client?.name as string | undefined) ?? "cliente";
+    const diaDeLaLlamada = fechaDeInstanteEnZona(task.sourceCallAt, zona);
 
     const created = await createWorkboardTasksAction({
       tasks: [
@@ -259,7 +262,7 @@ export async function sendClientTaskToBoardAction(input: {
           title: `${clientName}: ${task.title}`.slice(0, 120),
           description: [
             task.description,
-            task.sourceCallDate ? `Salió de la 1-1 del ${task.sourceCallDate}.` : null,
+            diaDeLaLlamada ? `Salió de la 1-1 del ${diaDeLaLlamada}.` : null,
           ]
             .filter(Boolean)
             .join("\n\n"),

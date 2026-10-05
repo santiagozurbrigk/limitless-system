@@ -5,6 +5,11 @@ import { deriveDashboardData } from "@/lib/metrics/derive-dashboard-data";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { useFinanceData } from "@/providers/finance-data-provider";
 import { usePlatformData } from "@/providers/platform-data-provider";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import {
+  useHoyDeLaOrganizacion,
+  useZonaDeLaOrganizacion,
+} from "@/providers/zona-de-la-organizacion-provider";
 import type { ZernioAnalyticsSummary } from "@/app/integrations/zernio/actions";
 import type { FrequentObjectionsResult } from "@/types/sales";
 import type { ComputedCustomMetric } from "@/lib/metrics/custom-metrics";
@@ -59,6 +64,12 @@ export function DashboardPageContent({
     };
   }, [salesMetrics, salesBaselineMetrics]);
 
+  // Hoy en la zona de la org; en el render del servidor (null) se calcula con
+  // la misma zona, así que da el mismo día salvo justo a la medianoche.
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const hoyDeLaOrganizacion =
+    useHoyDeLaOrganizacion() ?? fechaDeHoyEnZona(zonaDeLaOrganizacion);
+
   const data = useMemo(() => {
     const derived = deriveDashboardData(
       clients,
@@ -67,6 +78,7 @@ export function DashboardPageContent({
       expensesSummary,
       paymentPlatforms,
       effectiveSalesMetrics,
+      hoyDeLaOrganizacion,
       frequentObjections?.objections ?? [],
       clientPayments,
       financeSummary  // baseline-enriched desde el provider
@@ -91,6 +103,7 @@ export function DashboardPageContent({
     frequentObjections,
     clientPayments,
     financeSummary,
+    hoyDeLaOrganizacion,
   ]);
 
   if (loading) {
