@@ -7,7 +7,7 @@ import {
   deleteWeeklyInputAction,
   updateWeeklyInputAction,
 } from "@/app/operations/actions";
-import { correrMutacion } from "@/lib/operations/correr-accion";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import { useToast } from "@/providers/toast-provider";
 import type { Department } from "@/types/operations";
 

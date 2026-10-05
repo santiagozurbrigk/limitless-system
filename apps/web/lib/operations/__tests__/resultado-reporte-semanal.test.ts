@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { mensajeDelReporteSemanal, pasoDeOperaciones } from "../resultado-reporte-semanal";
+import { describe, expect, it, vi } from "vitest";
+import {
+  manejarReporteSemanal,
+  mensajeDelReporteSemanal,
+  pasoDeOperaciones,
+} from "../resultado-reporte-semanal";
 import { AVISO_ORG_NO_ACTIVA } from "@/lib/intelligence/organizaciones-activas";
 
 /**
@@ -37,5 +41,26 @@ describe("pasoDeOperaciones", () => {
     expect(pasoDeOperaciones({ success: false, error: "x", motivo: "sin-inputs" })).toBe("skipped");
     expect(pasoDeOperaciones({ success: false, error: "x", motivo: "org-no-activa" })).toBe("skipped");
     expect(pasoDeOperaciones({ success: false, error: "x", motivo: "falla" })).toBe("failed");
+  });
+});
+
+describe("manejarReporteSemanal (botón de Inputs semanales)", () => {
+  it("⭐ con éxito avisa y lleva a Operaciones", () => {
+    const avisar = vi.fn();
+    const irAOperaciones = vi.fn();
+    manejarReporteSemanal({ success: true, data: undefined }, { avisar, irAOperaciones });
+    expect(avisar).toHaveBeenCalledWith(expect.objectContaining({ title: "Reporte generado" }));
+    expect(irAOperaciones).toHaveBeenCalledTimes(1);
+  });
+
+  it("⭐ con un error devuelto muestra ese mensaje y no navega", () => {
+    const avisar = vi.fn();
+    const irAOperaciones = vi.fn();
+    manejarReporteSemanal(
+      { success: false, error: AVISO_ORG_NO_ACTIVA, motivo: "org-no-activa" },
+      { avisar, irAOperaciones }
+    );
+    expect(avisar).toHaveBeenCalledWith(expect.objectContaining({ description: AVISO_ORG_NO_ACTIVA }));
+    expect(irAOperaciones).not.toHaveBeenCalled();
   });
 });

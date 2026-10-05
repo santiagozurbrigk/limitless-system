@@ -2,9 +2,18 @@ import { isNextRouterError } from "next/dist/client/components/is-next-router-er
 import type { MutationResult } from "@/lib/server/action-result";
 
 /**
- * Texto fijo de la interfaz para un error inesperado de una server action. En
- * producción Next no le manda al cliente el mensaje de un error lanzado (sólo
- * un digest y un párrafo técnico en inglés): eso no se le muestra a nadie.
+ * Cómo un componente cliente corre una server action (de cualquier módulo).
+ *
+ * En producción Next no le manda al cliente el mensaje de un error lanzado por
+ * una server action: sólo un digest y un párrafo técnico en inglés. Por eso las
+ * acciones devuelven sus errores esperables como valor (`MutationResult` de
+ * `lib/server/action-result.ts`) y lo que lanzan es inesperado: acá se registra
+ * en la consola y se avisa con un texto fijo, nunca con el párrafo de Next.
+ */
+
+/**
+ * Texto fijo de la interfaz para un error inesperado de una server action.
+ * También es el texto de respaldo de `actionErrorMessage` en el servidor.
  */
 export const ERROR_INESPERADO = "Ocurrió un error inesperado. Intentá de nuevo.";
 
@@ -63,4 +72,28 @@ export function correrMutacion<T>(opciones: {
       else opciones.avisar({ title: opciones.tituloError, description: resultado.error, variant: "default" });
     },
   });
+}
+
+/**
+ * Para una capa que devuelve el dato o lanza, como `PlatformDataProvider`, cuyos
+ * llamadores muestran `error.message`. Con éxito devuelve el dato. Con un error
+ * esperable lanza un `Error` con ese mensaje: se lanza en el navegador, así que
+ * el mensaje llega entero. Si la acción lanzó en el servidor, lo registra con
+ * `etiqueta` y lanza el texto fijo. Un redirect o un notFound de Next se relanza
+ * tal cual para que Next navegue.
+ */
+export async function datoDeLaMutacion<T>(
+  accion: () => Promise<MutationResult<T>>,
+  etiqueta: string
+): Promise<T> {
+  let resultado: MutationResult<T>;
+  try {
+    resultado = await accion();
+  } catch (error) {
+    if (isNextRouterError(error)) throw error;
+    console.error(etiqueta, error);
+    throw new Error(ERROR_INESPERADO);
+  }
+  if (!resultado.success) throw new Error(resultado.error);
+  return resultado.data;
 }

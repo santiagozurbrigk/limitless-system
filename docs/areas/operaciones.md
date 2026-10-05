@@ -133,7 +133,7 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
   tus propios inputs.", `mapWeeklyError`); `generateWeeklyReportAction` devuelve `ResultadoReporteSemanal`
   (`lib/operations/resultado-reporte-semanal.ts`, con `motivo` `org-no-activa`, `sin-inputs` o `falla`; una org pausada
   no genera, SCRUM-210). Sólo lo inesperado (sin sesión) sigue lanzando. Los componentes las corren con
-  `correrAccion`/`correrMutacion` (`lib/operations/correr-accion.ts`): un error devuelto se muestra con su mensaje y uno
+  `correrAccion`/`correrMutacion` (`lib/client/correr-accion.ts`, módulo común de cliente): un error devuelto se muestra con su mensaje y uno
   lanzado se registra en consola y se avisa con "Ocurrió un error inesperado. Intentá de nuevo.".
 
 ### Equipo

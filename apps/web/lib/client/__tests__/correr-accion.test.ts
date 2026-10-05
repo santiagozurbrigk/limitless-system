@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getRedirectError } from "next/dist/client/components/redirect";
 import { RedirectType } from "next/dist/client/components/redirect-error";
 import { notFound } from "next/navigation";
-import { ERROR_INESPERADO, correrAccion, correrMutacion } from "../correr-accion";
-import { manejarReporteSemanal } from "../resultado-reporte-semanal";
-import { AVISO_ORG_NO_ACTIVA } from "@/lib/intelligence/organizaciones-activas";
+import { ERROR_INESPERADO, correrAccion, correrMutacion, datoDeLaMutacion } from "../correr-accion";
+import { actionErrorMessage } from "@/lib/server/action-result";
 
 /**
- * Cómo los componentes de Operaciones corren sus server actions: un error
- * esperable se muestra con su mensaje; uno inesperado se registra en consola
- * y se avisa con un texto fijo, nunca con el párrafo técnico de Next.
+ * Cómo los componentes corren sus server actions (módulo común de cliente): un
+ * error esperable se muestra con su mensaje; uno inesperado se registra en
+ * consola y se avisa con un texto fijo, nunca con el párrafo técnico de Next;
+ * un redirect o un notFound de Next no se muestra como error.
  */
 
 let consola: ReturnType<typeof vi.spyOn>;
@@ -79,6 +79,13 @@ describe("correrAccion", () => {
   it("el texto fijo está en voseo, como el resto de la interfaz", () => {
     expect(ERROR_INESPERADO).toBe("Ocurrió un error inesperado. Intentá de nuevo.");
   });
+
+  it("⭐ el respaldo del servidor (`actionErrorMessage`) usa el mismo texto fijo", () => {
+    // `runMutation` lo devuelve como `error` y el componente lo muestra tal cual.
+    expect(actionErrorMessage({ code: "sin-mensaje" })).toBe(ERROR_INESPERADO);
+    expect(actionErrorMessage(new Error(""))).toBe(ERROR_INESPERADO);
+    expect(actionErrorMessage(new Error("Cliente no encontrado"))).toBe("Cliente no encontrado");
+  });
 });
 
 describe("correrMutacion", () => {
@@ -115,23 +122,36 @@ describe("correrMutacion", () => {
   });
 });
 
-describe("manejarReporteSemanal (botón de Inputs semanales)", () => {
-  it("⭐ con éxito avisa y lleva a Operaciones", () => {
-    const avisar = vi.fn();
-    const irAOperaciones = vi.fn();
-    manejarReporteSemanal({ success: true, data: undefined }, { avisar, irAOperaciones });
-    expect(avisar).toHaveBeenCalledWith(expect.objectContaining({ title: "Reporte generado" }));
-    expect(irAOperaciones).toHaveBeenCalledTimes(1);
+describe("datoDeLaMutacion (capa que devuelve el dato o lanza, como PlatformDataProvider)", () => {
+  it("con éxito devuelve el dato", async () => {
+    await expect(datoDeLaMutacion(async () => ({ success: true, data: 7 }), "[test]")).resolves.toBe(7);
+    expect(consola).not.toHaveBeenCalled();
   });
 
-  it("⭐ con un error devuelto muestra ese mensaje y no navega", () => {
-    const avisar = vi.fn();
-    const irAOperaciones = vi.fn();
-    manejarReporteSemanal(
-      { success: false, error: AVISO_ORG_NO_ACTIVA, motivo: "org-no-activa" },
-      { avisar, irAOperaciones }
-    );
-    expect(avisar).toHaveBeenCalledWith(expect.objectContaining({ description: AVISO_ORG_NO_ACTIVA }));
-    expect(irAOperaciones).not.toHaveBeenCalled();
+  it("⭐ un error esperable devuelto se lanza en el cliente con su mensaje", async () => {
+    await expect(
+      datoDeLaMutacion(async () => ({ success: false, error: "Cliente no encontrado" }), "[test]")
+    ).rejects.toThrow(new Error("Cliente no encontrado"));
+    expect(consola).not.toHaveBeenCalled();
+  });
+
+  it("⭐ un error inesperado se registra y se lanza con el texto fijo, nunca el párrafo de Next", async () => {
+    const error = new Error(PARRAFO_DE_NEXT);
+    await expect(
+      datoDeLaMutacion(async () => {
+        throw error;
+      }, "[test]")
+    ).rejects.toThrow(new Error(ERROR_INESPERADO));
+    expect(consola).toHaveBeenCalledWith("[test]", error);
+  });
+
+  it("⭐ un redirect de Next se relanza tal cual y no se registra", async () => {
+    const redirect = getRedirectError("/auth/login", RedirectType.replace);
+    await expect(
+      datoDeLaMutacion(async () => {
+        throw redirect;
+      }, "[test]")
+    ).rejects.toBe(redirect);
+    expect(consola).not.toHaveBeenCalled();
   });
 });
