@@ -2578,9 +2578,6 @@ Prioridad sugerida P2: no hay una filtración conocida; el procedimiento se nece
   - Hitos: la fecha límite del próximo hito es el instante del anterior más su plazo, cortado en UTC
     (`lib/checkpoints/stalled.ts:135`). Cambiarlo toca la regla de "trabado", que se mide en días de 24 horas. (La
     lectura y escritura de la fecha del hito ya tienen una sola convención: `lib/checkpoints/fecha-del-hito.ts`.)
-  - Fathom: la primera y la última 1-1 de un cliente son el día de UTC de cada llamada
-    (`lib/fathom/one-on-one-types.ts:39-42` y `:104-105`, `lib/fathom/one-on-ones.ts:71`). "Hace cuántos días" ya
-    cuenta desde el hoy de la organización, pero una 1-1 de las 22:00 en Argentina figura con fecha de mañana.
   - ClickUp: la fecha de alta importada se corta en UTC y además no entiende los timestamps en milisegundos que
     manda ClickUp (`app/integrations/clickup/import-actions.ts:230`).
 - **Qué hay que hacer:** pasar cada uno a `lib/fechas` con la zona que corresponda (la de la organización; en

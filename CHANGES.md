@@ -34,6 +34,43 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · Segundo fix-pack de SCRUM-493: hitos, Fathom y Closing, todo en la zona de la organización
+
+**Rama:** `fix/SCRUM-493-fechas-utc`
+**Commit(s):** `c151b82d` (Closing y utilidad), `32b08266` (hitos), `0e430114` (Fathom) y este (docs)
+**Módulo(s) afectado(s):** `lib/fechas/calendario.ts`, `components/shared/campo-fecha.tsx`, Closing (tabla, cajón,
+panel, modal de resultado, `app/sales/lead-actions.ts`, `lib/sales/follow-up-options.ts`), Clientes
+(`lib/checkpoints/fecha-del-hito.ts`, `app/clients/checkpoint-event-actions.ts`, diálogo y recorrido de la ficha) y
+Fathom (`one-on-one-types.ts`, `one-on-ones.ts`, `deep-call-analysis.ts`).
+
+**Qué se hizo:**
+- **MENOR-A, hitos:** `recordCheckpointAction` rechaza un hito de un **día** futuro en la zona de la org
+  (`hitoEsFuturo`), no un instante futuro. Con eso se borró el atajo de "cinco minutos antes de ahora" del diálogo,
+  que guarda siempre el mediodía de la zona de la org. La ficha, el diálogo y la revisión semanal leen `reached_at` en
+  esa zona (`getClientJourneyAction` devuelve `timezone`).
+- **MENOR-C, Fathom:** el día de cada llamada es el de la zona de la org (`fechaDeInstanteEnZona`, sin la regla de
+  medianoche UTC, que es para fechas elegidas): primera y última 1-1, "hace cuántos días" y la fecha que se guarda en
+  `linked_calls`. Una lectura de la zona por pedido. Sale la línea de Fathom de `[FECHAS-UTC-RESTO]`.
+- **MENOR-B, Closing:** la fecha del próximo paso se propone (hoy de la org más dos días), se guarda (mediodía de la
+  zona de la org, `fechaAInstanteEnZona`), se muestra (`CampoFecha` con `zona`, `formatearFechaGuardada` con `zona`) y
+  vence en la zona de la org. Se borró `fechaAInstanteLocal`, que quedó sin uso.
+- Tests: hito en Auckland entre las 00:00 y las 00:05, Argentina leído desde Ciudad de México, reloj adelantado y
+  mañana rechazado; 1-1 de las 22:00 mirada al día siguiente (función y llamador real con la base simulada); llamada
+  de las 21:00 en punto; Closing con el navegador en Madrid y en Tokio. Control negativo de cada arreglo
+  (`control-negativo-fixpack-2.txt` en la evidencia). La suite pasa también con `TZ=Pacific/Auckland`.
+
+**Por qué / finalidad:** la segunda pasada de la revisión adversarial encontró un atajo en el diálogo de hitos (que
+corría un día un hito cargado a la medianoche de Auckland y dependía del reloj del navegador), el día de UTC de las
+llamadas en Fathom y una diferencia de zonas entre la fecha que se ve en Closing y el estado del lead.
+
+**Decisiones de diseño relevantes:** un dato de la organización (próximo paso, hito) tiene una sola zona, la de la
+org, para todos los miembros. Los contadores del servidor la necesitan, así que "cada uno ve su día" no cierra. Los
+instantes reales (llamadas) se leen sin la regla de medianoche UTC.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Siguen `[FECHAS-UTC-RESTO]` (sin Fathom) y `[CAMPO-FECHA-MIGRAR]`.
+
+---
+
 ### 2026-10-05 · Fix-pack de la revisión adversarial de SCRUM-493: el próximo paso de Closing vence por día
 
 **Rama:** `fix/SCRUM-493-fechas-utc`

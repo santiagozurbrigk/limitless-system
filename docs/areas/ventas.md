@@ -268,10 +268,13 @@ Orden sugerido: (1) sacar `conversations` del provider y de métricas/embudo, (2
 - **Fecha por defecto:** un próximo paso que pide fecha sin fecha se guarda a pasado mañana (deliberado),
   contado desde el día local de quien lo carga (`fechaPropuestaDelProximoPaso` en
   `lib/sales/follow-up-options.ts`, la misma para el modal de resultado, el seguimiento del lead y la tabla).
-- **`next_action_at` es `timestamptz` pero se elige una fecha:** se guarda ese día a las 12:00 locales
-  (`fechaAInstanteLocal`) y la celda de la tabla lo lee con `CampoFecha`, que lo muestra con el mismo día. Las
-  filas que el seguimiento del lead guardó a medianoche UTC (antes de SCRUM-493) se leen con su día de UTC.
-  El cajón del lead y el panel de seguimiento muestran sólo la fecha, leída igual que la celda.
+- **`next_action_at` es `timestamptz` pero se elige una fecha, y la fecha es de la organización:** se propone
+  (pasado mañana desde el hoy de la org), se guarda (ese día a las 12:00 de la zona de la org,
+  `fechaAInstanteEnZona`), se muestra (`CampoFecha` con `zona`, cajón y panel con `formatearFechaGuardada`) y
+  vence en la zona de la org (`organizations.timezone`), así todos los miembros ven el mismo día estén donde estén.
+  La zona viaja en `LeadTableResult.timezone` y `LeadSummary.timezone`; el modal de resultado la recibe de la
+  página. Las filas que el seguimiento del lead guardó a medianoche UTC (antes de SCRUM-493) se leen con su día
+  de UTC.
 - **El próximo paso vence por día, en la zona de la organización.** `buildLeadThread(intentos, ahora, zona)` lee
   `next_action_at` con `fechaDeValorGuardado` en `organizations.timezone`: lo que vence hoy es "Seguimiento
   agendado" todo el día y pasa a "Seguimiento vencido" al día siguiente. `listLeadsTableAction` lee la zona una vez
