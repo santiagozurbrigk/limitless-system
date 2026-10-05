@@ -5,7 +5,7 @@
 | Archivo | Uso |
 |--------|-----|
 | `index.ts` | Solo exports **sin** `"use client"`. ESLint prohíbe importarlo (`@/components/shared`) en todo `apps/web`: usá el import directo por archivo. |
-| `client.ts` | Solo exports con `"use client"` (`ModuleSubnav`, `HashTabLink`, `ToastViewport`). |
+| `client.ts` | Solo exports con `"use client"` (`ModuleSubnav`, `HashTabLink`, `ToastViewport`, `CampoFecha`). |
 | `@/components/shared/<archivo>` | Forma **recomendada** en componentes `"use client"`. |
 
 **Nunca** exportes un componente `"use client"` desde `index.ts`. Rompe el manifest de React Server Components y provoca:
@@ -23,3 +23,11 @@ En App Router, `<Link href="/ruta#tab">` en la **misma** ruta no dispara `hashch
 - `ModuleSubnav` (ya lo gestiona), o
 - `HashTabLink` desde `@/components/shared/client`, o
 - `pushHashTab(href)` en un `onClick` con `preventDefault`.
+
+## Campo de fecha (`CampoFecha`)
+
+Todo campo de fecha nuevo usa `CampoFecha` (`campo-fecha.tsx`), no un `<input type="date">` suelto. Recibe lo
+guardado tal como viene de la base (fecha `YYYY-MM-DD` de una columna `date` o instante de una `timestamptz`) y lo
+muestra con el día que se eligió; `onChange` emite la fecha elegida (`YYYY-MM-DD`) o `null`. Si va a una columna
+`timestamptz`, guardala con `fechaAInstanteLocal` (`lib/fechas/calendario.ts`). Acepta las props de `Input`.
+Los campos viejos se migran al tocar su pantalla (`[CAMPO-FECHA-MIGRAR]` en `PENDIENTES.md`).

@@ -1,20 +1,5 @@
 import type { ClosePaymentPayload } from "@/types/closing";
-
-/**
- * La fecha de hoy (YYYY-MM-DD) en la zona horaria de quien registra el pago.
- * `toISOString()` da la de UTC: de noche en Argentina ya es el día siguiente
- * y el pago quedaba registrado con fecha de mañana (SCRUM-104).
- *
- * Sólo tiene sentido en el navegador: en el servidor (Vercel, UTC) daría la
- * fecha de UTC. Si una server action necesita "hoy", que lo reciba armado
- * desde el cliente.
- */
-export function fechaDeHoyLocal(ahora: Date = new Date()): string {
-  const y = ahora.getFullYear();
-  const m = String(ahora.getMonth() + 1).padStart(2, "0");
-  const d = String(ahora.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 
 export function getPaidAmountFromClosePayload(payment: ClosePaymentPayload): number {
   if (payment.paidAmount > 0) return payment.paidAmount;

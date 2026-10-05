@@ -43,8 +43,8 @@ import {
   getPaidAmountFromClosePayload,
   getPaymentDateFromClosePayload,
   installmentNumberForClosePayload,
-  fechaDeHoyLocal,
 } from "@/lib/clients/payment-utils";
+import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 import { mockClosingCalls } from "@/mocks/closing";
 import { mockClients } from "@/mocks/clients";
 import { mockConversations } from "@/mocks/sales";

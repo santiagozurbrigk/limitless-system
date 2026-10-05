@@ -27,7 +27,7 @@ import { usePlatformData } from "@/providers";
 import { useFinanceData } from "@/providers/finance-data-provider";
 import { useToast } from "@/providers/toast-provider";
 import type { Client, ClientPayment } from "@/types/clients";
-import { fechaDeHoyLocal } from "@/lib/clients/payment-utils";
+import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 
 function formatMoney(amount: number) {
   return `$${amount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
@@ -298,7 +298,6 @@ function AddInstallmentPaymentDialog({
   installmentLabel: string;
   onSuccess: (client: Client, payments: ClientPayment[]) => void;
 }) {
-  const { push } = useToast();
   const [amount, setAmount] = useState(String(defaultAmount));
   const [paymentDate, setPaymentDate] = useState(
     () => fechaDeHoyLocal()

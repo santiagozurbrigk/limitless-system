@@ -5,10 +5,17 @@ import { fileURLToPath } from "node:url";
  * Configuración de tests unitarios de `@ai-coo/web`.
  *
  * Se corre con `pnpm test` (o `turbo test` desde la raíz del monorepo).
- * Entorno Node: cubre lógica pura, no componentes. Los flujos de UI van con
+ * Entorno Node: cubre lógica pura. Un componente sin hooks se puede probar
+ * renderizándolo con `renderToStaticMarkup` (sin DOM). Los flujos de UI van con
  * Playwright (`apps/web/e2e/`).
  */
 export default defineConfig({
+  // JSX con el runtime automático, como lo compila Next: sin esto, un test que
+  // importa un componente `.tsx` falla con "React is not defined" (SCRUM-493;
+  // el primero es `components/shared/__tests__/campo-fecha.test.ts`).
+  esbuild: {
+    jsx: "automatic",
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./", import.meta.url)),

@@ -20,7 +20,7 @@ import {
 } from "@/components/sales/payment-receipt-dropzone";
 import { useFinanceData } from "@/providers";
 import type { ClosePaymentPayload } from "@/types/closing";
-import { fechaDeHoyLocal } from "@/lib/clients/payment-utils";
+import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 import type { Plan } from "@/types/plans";
 import Link from "next/link";
 import { paths } from "@/routes";
