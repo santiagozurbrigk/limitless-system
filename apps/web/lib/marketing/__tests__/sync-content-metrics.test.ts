@@ -2,7 +2,7 @@
  * SCRUM-172 (reabierta): la cola del cron de métricas no se traba ni se diluye
  * con piezas cuyos analytics Zernio nunca reconoce. Las nuevas se miden primero,
  * las que tienen métricas se refrescan antes que los reintentos sin dato, una
- * pieza sin dato espera antes de volver y una historia vencida no vuelve más.
+ * pieza sin dato espera antes de volver y una historia se mide una sola vez.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,6 +27,8 @@ type Fila = Record<string, unknown>;
 const estado = vi.hoisted(() => ({
   piezas: [] as Array<Record<string, unknown>>,
   updates: [] as Array<{ id: string; cambios: Record<string, unknown> }>,
+  cierres: 0,
+  pedidos: [] as string[],
   analytics: {} as Record<string, unknown>,
   fallaUpdateDe: null as string | null,
 }));
@@ -39,7 +41,7 @@ function comparar(a: string, b: string): number {
   return a < b ? -1 : 1;
 }
 
-/** Condición de PostgREST `col.is.null` o `col.lte."valor"`. */
+/** Condición de PostgREST `col.is.null`, `col.lte."valor"` o `col.neq.valor`. */
 function condicion(texto: string): (fila: Fila) => boolean {
   const [columna, operador, ...resto] = texto.split(".");
   const valor = resto.join(".").replace(/^"|"$/g, "");
@@ -47,19 +49,64 @@ function condicion(texto: string): (fila: Fila) => boolean {
   if (operador === "lte") {
     return (fila) => fila[columna] !== null && comparar(fila[columna] as string, valor) <= 0;
   }
+  if (operador === "neq") return (fila) => fila[columna] !== null && fila[columna] !== valor;
   throw new Error(`condición no soportada en el falso: ${texto}`);
 }
 
-/** Supabase en memoria: filtra, ordena con NULLS FIRST/LAST y limita como Postgres. */
+/**
+ * Supabase en memoria: select y update con filtros (eq, neq, is, not, in, or),
+ * orden con NULLS FIRST/LAST y límite, como Postgres.
+ */
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: () => {
       const filtros: Array<(fila: Fila) => boolean> = [];
       const ordenes: Array<{ columna: string; asc: boolean; nullsFirst: boolean }> = [];
+      let limite: number | null = null;
+      let cambios: Record<string, unknown> | null = null;
+      let idDelUpdate: unknown = null;
+
+      const ejecutar = () => {
+        let filas = estado.piezas.filter((fila) => filtros.every((f) => f(fila)));
+        if (cambios) {
+          if (idDelUpdate !== null) {
+            if (estado.fallaUpdateDe === idDelUpdate) {
+              return { data: null, error: { message: "la base no respondió" } };
+            }
+            estado.updates.push({ id: idDelUpdate as string, cambios });
+          } else {
+            estado.cierres += filas.length;
+          }
+          for (const fila of filas) Object.assign(fila, cambios);
+          return { data: null, error: null };
+        }
+        for (const { columna, asc, nullsFirst } of [...ordenes].reverse()) {
+          filas = [...filas].sort((x, y) => {
+            const a = x[columna] as string | null;
+            const b = y[columna] as string | null;
+            if (a === null && b === null) return 0;
+            if (a === null) return nullsFirst ? -1 : 1;
+            if (b === null) return nullsFirst ? 1 : -1;
+            return asc ? comparar(a, b) : comparar(b, a);
+          });
+        }
+        if (limite !== null) filas = filas.slice(0, limite);
+        return { data: filas.map((f) => ({ ...f })), error: null };
+      };
+
       const consulta = {
         select: () => consulta,
+        update: (c: Record<string, unknown>) => {
+          cambios = c;
+          return consulta;
+        },
         eq: (columna: string, valor: unknown) => {
+          if (columna === "id") idDelUpdate = valor;
           filtros.push((fila) => fila[columna] === valor);
+          return consulta;
+        },
+        neq: (columna: string, valor: unknown) => {
+          filtros.push((fila) => fila[columna] !== null && fila[columna] !== valor);
           return consulta;
         },
         is: (columna: string, valor: unknown) => {
@@ -87,38 +134,16 @@ vi.mock("@/lib/supabase/admin", () => ({
           });
           return consulta;
         },
-        limit: async (n: number) => {
-          let filas = estado.piezas.filter((fila) => filtros.every((f) => f(fila)));
-          for (const { columna, asc, nullsFirst } of [...ordenes].reverse()) {
-            filas = [...filas].sort((x, y) => {
-              const a = x[columna] as string | null;
-              const b = y[columna] as string | null;
-              if (a === null && b === null) return 0;
-              if (a === null) return nullsFirst ? -1 : 1;
-              if (b === null) return nullsFirst ? 1 : -1;
-              return asc ? comparar(a, b) : comparar(b, a);
-            });
-          }
-          return { data: filas.slice(0, n).map((f) => ({ ...f })), error: null };
+        limit: (n: number) => {
+          limite = n;
+          return consulta;
         },
-        update: (cambios: Record<string, unknown>) => {
-          const filtrosUpdate: Array<[string, unknown]> = [];
-          const encadenado = {
-            eq: (columna: string, valor: unknown) => {
-              filtrosUpdate.push([columna, valor]);
-              if (filtrosUpdate.length < 2) return encadenado;
-              const id = filtrosUpdate.find(([c]) => c === "id")?.[1] as string;
-              if (estado.fallaUpdateDe === id) {
-                return Promise.resolve({ error: { message: "la base no respondió" } });
-              }
-              estado.updates.push({ id, cambios });
-              for (const fila of estado.piezas) {
-                if (filtrosUpdate.every(([c, v]) => fila[c] === v)) Object.assign(fila, cambios);
-              }
-              return Promise.resolve({ error: null });
-            },
-          };
-          return encadenado;
+        then: (resolver: (r: unknown) => unknown, rechazar?: (e: unknown) => unknown) => {
+          try {
+            return Promise.resolve(resolver(ejecutar()));
+          } catch (e) {
+            return rechazar ? Promise.resolve(rechazar(e)) : Promise.reject(e);
+          }
         },
       };
       return consulta;
@@ -130,6 +155,7 @@ vi.mock("@/lib/zernio/integration", () => ({
   getZernioIntegrationForOrg: async () => ({ id: "int-1" }),
   getZernioClientForOrganization: async () => ({
     getPostAnalytics: async (postId: string) => {
+      estado.pedidos.push(postId);
       const respuesta = estado.analytics[postId];
       if (respuesta instanceof Error) throw respuesta;
       return respuesta;
@@ -183,6 +209,12 @@ function medida(id: string, checkedAt: string, cambios: Partial<Pieza> = {}): Pi
   });
 }
 
+/** Una historia publicada hace `horas`, todavía sin pedir. */
+function historia(id: string, horas: number, cambios: Partial<Pieza> = {}): Pieza {
+  const publicada = hace(horas * HORA);
+  return pieza(id, { type: "story", published_at: publicada, created_at: publicada, ...cambios });
+}
+
 function buscar(id: string): Pieza {
   return estado.piezas.find((p) => p.id === id) as unknown as Pieza;
 }
@@ -191,17 +223,21 @@ function intentadas(): string[] {
   return estado.updates.map((u) => u.id);
 }
 
-/** Corre el cron en el día `d` (0 = primera corrida) y limpia el registro de updates. */
+/** Corre el cron en el día `d` (0 = primera corrida) y limpia los registros. */
 async function correrCron(d: number, ids?: string[]) {
   dia = d;
   vi.setSystemTime(new Date(ahora()));
   estado.updates = [];
+  estado.pedidos = [];
+  estado.cierres = 0;
   return syncContentMetricsForOrg("org-1", ids);
 }
 
 beforeEach(() => {
   estado.piezas = [];
   estado.updates = [];
+  estado.pedidos = [];
+  estado.cierres = 0;
   estado.analytics = {};
   estado.fallaUpdateDe = null;
   dia = 0;
@@ -211,15 +247,9 @@ beforeEach(() => {
 });
 
 describe("syncContentMetricsForOrg · la cola no se diluye", () => {
-  it("⭐ 100 historias muertas + 50 reels medidos: después de medir las nuevas, los reels se refrescan todos los días", async () => {
+  it("⭐ 100 historias viejas sin pedir + 50 reels: se cierran sin pedirlas y los reels se refrescan todos los días", async () => {
     for (let i = 0; i < 100; i++) {
-      estado.piezas.push(
-        pieza(`historia-${i}`, {
-          type: "story",
-          published_at: hace(10 * DIA),
-          created_at: `2026-09-${String(10 + (i % 20)).padStart(2, "0")}T00:00:00.000Z`,
-        })
-      );
+      estado.piezas.push(historia(`historia-${i}`, 10 * 24));
       estado.analytics[`ig-historia-${i}`] = {};
     }
     for (let i = 0; i < 50; i++) {
@@ -228,37 +258,137 @@ describe("syncContentMetricsForOrg · la cola no se diluye", () => {
     }
 
     const actualizadasPorDia: number[] = [];
+    const pedidosDeHistorias: number[] = [];
     for (let d = 0; d < 6; d++) {
       const r = await correrCron(d);
       actualizadasPorDia.push(r.updated);
+      pedidosDeHistorias.push(estado.pedidos.filter((p) => p.startsWith("ig-historia")).length);
     }
 
-    // Días 0 y 1: las 100 historias son nuevas y se miden primero (una vez).
-    // Desde el día 2, los 50 reels todos los días (antes: [0,0,50,0,0,50]).
-    expect(actualizadasPorDia).toEqual([0, 0, 50, 50, 50, 50]);
-    expect(estado.piezas.filter((p) => p.type === "story").every((p) => p.metrics_reintentar_desde === "infinity")).toBe(true);
+    expect(actualizadasPorDia).toEqual([50, 50, 50, 50, 50, 50]);
+    expect(pedidosDeHistorias).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(
+      estado.piezas.filter((p) => p.type === "story").every((p) => p.metrics_reintentar_desde === "infinity")
+    ).toBe(true);
   });
 
-  it("⭐ una historia de 30 h sin dato se reintenta antes de las 48 h; una de 50 h no se reintenta más", async () => {
-    estado.piezas = [
-      pieza("joven", { type: "story", published_at: hace(30 * HORA) }),
-      pieza("vencida", { type: "story", published_at: hace(50 * HORA) }),
-    ];
-    estado.analytics = { "ig-joven": {}, "ig-vencida": {} };
+  describe.each([5, 8, 15])("⭐ 40 días con 100 reels y %i historias por día", (porDia) => {
+    it("cada historia se pide una vez, los reels se refrescan a ritmo estable y la fila no crece", async () => {
+      for (let i = 0; i < 100; i++) {
+        estado.piezas.push(medida(`reel-${i}`, "2026-09-20T00:00:00.000Z"));
+        estado.analytics[`ig-reel-${i}`] = { likes: 1 + i };
+      }
+      // 5 reels que Zernio nunca mide (reintentos sin dato que no son historias).
+      for (let i = 0; i < 5; i++) {
+        estado.piezas.push(pieza(`muerto-${i}`));
+        estado.analytics[`ig-muerto-${i}`] = {};
+      }
+
+      const pedidosPorHistoria = new Map<string, number>();
+      const reelsPorDia: number[] = [];
+      const historiasPorDia: number[] = [];
+      const abiertasPorDia: number[] = [];
+      const intentosDeMuertos: number[] = [];
+      for (let d = 0; d < 40; d++) {
+        dia = d;
+        // Historias publicadas a lo largo de las 24 h antes de la corrida; peor
+        // caso: Zernio nunca manda sus métricas.
+        for (let i = 0; i < porDia; i++) {
+          const id = `h-${d}-${i}`;
+          estado.piezas.push(historia(id, ((i + 0.5) * 24) / porDia));
+          estado.analytics[`ig-${id}`] = {};
+        }
+        await correrCron(d);
+        reelsPorDia.push(estado.pedidos.filter((p) => p.startsWith("ig-reel")).length);
+        historiasPorDia.push(estado.pedidos.filter((p) => p.startsWith("ig-h-")).length);
+        for (const p of estado.pedidos.filter((x) => x.startsWith("ig-h-"))) {
+          pedidosPorHistoria.set(p, (pedidosPorHistoria.get(p) ?? 0) + 1);
+        }
+        abiertasPorDia.push(
+          estado.piezas.filter((p) => p.type === "story" && p.metrics_reintentar_desde !== "infinity").length
+        );
+        intentosDeMuertos.push(estado.pedidos.filter((p) => p.startsWith("ig-muerto")).length);
+      }
+
+      // Cada historia se pidió una sola vez: todas las que en la última corrida
+      // tenían 30 h o más, y ninguna más joven.
+      expect(Math.max(...pedidosPorHistoria.values())).toBe(1);
+      const listas = estado.piezas
+        .filter((p) => p.type === "story" && ahora() - new Date(p.published_at as string).getTime() >= 30 * HORA)
+        .map((p) => `ig-${p.id}`)
+        .sort();
+      expect([...pedidosPorHistoria.keys()].sort()).toEqual(listas);
+      // Desde el día 2 cada corrida pide exactamente las historias de un día y los
+      // reels usan el resto del lote (menos los muertos el día que les toca).
+      for (let d = 2; d < 40; d++) {
+        expect(historiasPorDia[d]).toBe(porDia);
+        expect(reelsPorDia[d]).toBe(50 - porDia - intentosDeMuertos[d]);
+      }
+      // La fila de historias abiertas no crece: son las de los últimos dos días.
+      expect(Math.max(...abiertasPorDia)).toBeLessThanOrEqual(2 * porDia);
+      // Los muertos se reintentan con su espera (días 0, 1, 3, 7, 15 y 31), sin demoras.
+      const diasConMuertos = intentosDeMuertos.flatMap((n, d) => (n > 0 ? [d] : []));
+      expect(diasConMuertos).toEqual([0, 1, 3, 7, 15, 31]);
+    });
+  });
+
+  it("⭐ una historia entra a la cola a las 30 h, se pide una sola vez y queda cerrada", async () => {
+    estado.piezas = [historia("joven", 20), historia("lista", 31)];
+    estado.analytics = { "ig-joven": {}, "ig-lista": { likes: 12, reach: 300 } };
 
     await correrCron(0);
-    expect(buscar("joven").metrics_reintentar_desde).toBe(
-      new Date(ahora() + 18 * HORA).toISOString()
-    );
-    expect(buscar("vencida").metrics_reintentar_desde).toBe("infinity");
+    expect(estado.pedidos).toEqual(["ig-lista"]);
+    expect(buscar("lista")).toMatchObject({
+      metrics: expect.objectContaining({ likes: 12 }),
+      metrics_reintentar_desde: "infinity",
+    });
 
-    // Al día siguiente la joven (ya con 54 h) se reintenta una última vez; la vencida no.
+    // Al día siguiente la joven tiene 44 h: se pide una vez, sin dato, y se cierra.
     await correrCron(1);
-    expect(intentadas()).toEqual(["joven"]);
-    expect(buscar("joven").metrics_reintentar_desde).toBe("infinity");
+    expect(estado.pedidos).toEqual(["ig-joven"]);
+    expect(buscar("joven")).toMatchObject({ metrics: null, metrics_reintentar_desde: "infinity" });
 
     await correrCron(2);
-    expect(intentadas()).toEqual([]);
+    expect(estado.pedidos).toEqual([]);
+  });
+
+  it("⭐ al empezar, cierra sin pedirlas las historias abiertas de más de 72 h o sin fecha", async () => {
+    estado.piezas = [
+      historia("vieja", 80),
+      historia("sin-fecha", 0, { published_at: null }),
+      historia("a-tiempo", 50),
+      historia("medida-vieja", 100, {
+        metrics: { likes: 3 },
+        metrics_updated_at: "2026-10-01T00:00:00.000Z",
+        metrics_checked_at: "2026-10-01T00:00:00.000Z",
+      }),
+    ];
+    estado.analytics = { "ig-vieja": {}, "ig-sin-fecha": {}, "ig-a-tiempo": {}, "ig-medida-vieja": { likes: 4 } };
+
+    await correrCron(0);
+
+    expect(estado.cierres).toBe(3);
+    expect(estado.pedidos).toEqual(["ig-a-tiempo"]);
+    for (const id of ["vieja", "sin-fecha", "medida-vieja", "a-tiempo"]) {
+      expect(buscar(id).metrics_reintentar_desde).toBe("infinity");
+    }
+    expect(buscar("medida-vieja").metrics).toEqual({ likes: 3 });
+  });
+
+  it("una historia con error pasajero no se marca: se vuelve a pedir y la cierra el corte de 72 h", async () => {
+    estado.piezas = [historia("con-429", 40)];
+    estado.analytics = { "ig-con-429": new Error("Zernio getPostAnalytics: HTTP 429") };
+
+    const r = await correrCron(0);
+    expect(r).toEqual({ attempted: 1, updated: 0, failed: 1 });
+    expect(buscar("con-429").metrics_checked_at).toBeNull();
+
+    await correrCron(1); // 64 h: se vuelve a pedir
+    expect(estado.pedidos).toEqual(["ig-con-429"]);
+
+    await correrCron(2); // 88 h: se cierra sin pedirla
+    expect(estado.pedidos).toEqual([]);
+    expect(buscar("con-429").metrics_reintentar_desde).toBe("infinity");
   });
 
   it("⭐ una pieza sin dato se reintenta recién cuando vence su espera (1, 2, 4 días)", async () => {
@@ -275,37 +405,6 @@ describe("syncContentMetricsForOrg · la cola no se diluye", () => {
     expect(intentosPorDia).toEqual([true, true, false, true, false, false, false, true]);
     expect(buscar("vacia").metrics_intentos_sin_dato).toBe(4);
     expect(buscar("vacia").metrics).toBeNull();
-  });
-
-  it("⭐ una historia con métricas medida pasadas las 48 h no vuelve a ocupar lugares del lote", async () => {
-    estado.piezas = [
-      medida("historia-vieja", "2026-10-01T00:00:00.000Z", { type: "story", published_at: hace(5 * 24 * HORA) }),
-      medida("historia-joven", "2026-10-04T20:00:00.000Z", { type: "story", published_at: hace(20 * HORA) }),
-      medida("reel", "2026-10-02T00:00:00.000Z"),
-    ];
-    estado.analytics = {
-      "ig-historia-vieja": { likes: 30 },
-      "ig-historia-joven": { likes: 5 },
-      "ig-reel": { likes: 9 },
-    };
-
-    await correrCron(0);
-    expect(intentadas().sort()).toEqual(["historia-joven", "historia-vieja", "reel"]);
-    expect(buscar("historia-vieja")).toMatchObject({
-      metrics: expect.objectContaining({ likes: 30 }),
-      metrics_reintentar_desde: "infinity",
-    });
-    expect(buscar("historia-joven").metrics_reintentar_desde).toBeNull();
-
-    // Al día siguiente la joven (ya con 44 h) se refresca; la vieja no vuelve.
-    await correrCron(1);
-    expect(intentadas().sort()).toEqual(["historia-joven", "reel"]);
-
-    // Y cuando la joven se mide pasadas las 48 h, tampoco vuelve.
-    await correrCron(2);
-    expect(buscar("historia-joven").metrics_reintentar_desde).toBe("infinity");
-    await correrCron(3);
-    expect(intentadas()).toEqual(["reel"]);
   });
 
   it("cuando por fin llegan métricas, se guardan y la pieza vuelve a la cola normal", async () => {
@@ -420,15 +519,6 @@ describe("syncContentMetricsForOrg · cada intento", () => {
     expect(buscar("ok").metrics).toMatchObject({ likes: 2 });
   });
 
-  it("si getPostAnalytics lanza con una historia vencida sin métricas, no se reintenta más", async () => {
-    estado.piezas = [pieza("historia", { type: "story", published_at: hace(3 * DIA) })];
-    estado.analytics = { "ig-historia": new Error("Zernio 429") };
-
-    await correrCron(0);
-
-    expect(buscar("historia").metrics_reintentar_desde).toBe("infinity");
-  });
-
   it("si falla el update de una pieza, cuenta como fallo, se loguea y sigue con el resto", async () => {
     estado.piezas = [pieza("a"), pieza("b")];
     estado.analytics = { "ig-a": { likes: 1 }, "ig-b": { likes: 2 } };
@@ -444,10 +534,10 @@ describe("syncContentMetricsForOrg · cada intento", () => {
     );
   });
 
-  it("con contentPieceIds intenta esas piezas aunque estén esperando", async () => {
+  it("con contentPieceIds intenta esas piezas aunque estén esperando o cerradas", async () => {
     estado.piezas = [
       pieza("a"),
-      pieza("b", { metrics_checked_at: hace(HORA), metrics_reintentar_desde: "infinity" }),
+      historia("b", 100, { metrics_checked_at: hace(HORA), metrics_reintentar_desde: "infinity" }),
       pieza("c"),
     ];
     estado.analytics = { "ig-a": { likes: 1 }, "ig-b": { likes: 2 }, "ig-c": { likes: 3 } };
@@ -457,6 +547,7 @@ describe("syncContentMetricsForOrg · cada intento", () => {
     expect(r).toEqual({ attempted: 1, updated: 1, failed: 0 });
     expect(intentadas()).toEqual(["b"]);
     expect(buscar("a").metrics_checked_at).toBeNull();
+    expect(estado.cierres).toBe(0);
   });
 
   it("la sync de contenido no toca las columnas de la cola: una pieza nueva entra sin medir", () => {

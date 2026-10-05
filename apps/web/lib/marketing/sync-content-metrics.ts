@@ -7,7 +7,8 @@ import { resolvePostAnalytics } from "@/lib/zernio/resolve-analytics";
 import type { ContentMetrics } from "@/types/content";
 import {
   armarLote,
-  esHistoriaVencida,
+  historiasACerrarHasta,
+  historiasListasHasta,
   NUNCA,
   proximoIntento,
   TAMANO_DEL_LOTE,
@@ -70,10 +71,13 @@ async function elegirPiezas(
     );
   }
 
-  // 1. Nuevas: nunca intentadas, por orden de llegada.
+  // 1. Nuevas: nunca intentadas ni cerradas, por orden de llegada. Una historia
+  // recién entra a las 30 h de publicada, cuando ya tiene sus números finales.
   const nuevas = await leer(
     base()
       .is("metrics_checked_at", null)
+      .is("metrics_reintentar_desde", null)
+      .or(`type.neq.story,published_at.lte."${historiasListasHasta(ahora)}"`)
       .order("created_at", { ascending: true })
       .limit(METRICS_BATCH_LIMIT)
   );
@@ -81,8 +85,8 @@ async function elegirPiezas(
   if (lugares <= 0) return nuevas;
 
   // 2 y 3. Con métricas y reintentos sin dato, las dos sólo si venció su espera
-  // (`metrics_reintentar_desde` null o pasada). Las historias vencidas tienen
-  // `infinity` y no entran nunca.
+  // (`metrics_reintentar_desde` null o pasada). Las historias cerradas tienen
+  // `infinity` y no entran nunca; y nunca son reintentos: se miden una vez.
   const esperaVencida = `metrics_reintentar_desde.is.null,metrics_reintentar_desde.lte."${ahora.toISOString()}"`;
   const [conMetricas, reintentos] = await Promise.all([
     leer(
@@ -97,6 +101,7 @@ async function elegirPiezas(
       base()
         .not("metrics_checked_at", "is", null)
         .is("metrics_updated_at", null)
+        .neq("type", "story")
         .or(esperaVencida)
         .order("metrics_checked_at", { ascending: true })
         .limit(lugares)
@@ -104,6 +109,32 @@ async function elegirPiezas(
   ]);
 
   return [...nuevas, ...armarLote(conMetricas, reintentos, lugares)];
+}
+
+/**
+ * Cierra, en una sola consulta y sin pedirle nada a Zernio, las historias que
+ * siguen abiertas pasadas las 72 h (o sin fecha de publicación): ya no se van a
+ * pedir. Si falla se loguea y la corrida sigue.
+ */
+async function cerrarHistoriasVencidas(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  ahora: Date
+): Promise<void> {
+  const { error } = await admin
+    .from("content_pieces")
+    .update({ metrics_reintentar_desde: NUNCA })
+    .eq("organization_id", organizationId)
+    .eq("source", "zernio")
+    .eq("type", "story")
+    .is("metrics_reintentar_desde", null)
+    .or(`published_at.is.null,published_at.lte."${historiasACerrarHasta(ahora)}"`);
+  if (error) {
+    console.warn("[syncContentMetrics] no se pudieron cerrar las historias vencidas", {
+      organizationId,
+      error: error.message,
+    });
+  }
 }
 
 /**
@@ -129,7 +160,11 @@ export async function syncContentMetricsForOrg(
   if (!integration) return empty;
 
   const admin = createAdminClient();
-  const pieces = await elegirPiezas(admin, organizationId, new Date(), contentPieceIds);
+  const inicio = new Date();
+  if (!contentPieceIds || contentPieceIds.length === 0) {
+    await cerrarHistoriasVencidas(admin, organizationId, inicio);
+  }
+  const pieces = await elegirPiezas(admin, organizationId, inicio, contentPieceIds);
   if (pieces.length === 0) return empty;
 
   const client = await getZernioClientForOrganization(organizationId);
@@ -161,8 +196,8 @@ export async function syncContentMetricsForOrg(
             metrics,
             metrics_updated_at: lastUpdated ?? ahora,
             metrics_intentos_sin_dato: 0,
-            // Una historia vencida ya tiene sus números finales: no vuelve a la cola.
-            metrics_reintentar_desde: esHistoriaVencida(piece, momento) ? NUNCA : null,
+            // Una historia se mide una vez: con sus números finales, queda cerrada.
+            metrics_reintentar_desde: piece.type === "story" ? NUNCA : null,
           };
         } else {
           const intentos = (piece.metrics_intentos_sin_dato ?? 0) + 1;
@@ -174,12 +209,11 @@ export async function syncContentMetricsForOrg(
           motivoSinDato = `analytics sin datos reconocibles para ${postId}`;
         }
       } catch (err) {
-        // Un error del pedido (429, red) no es "sin dato": no suma intento. Pero
-        // una historia vencida que nunca tuvo métricas no se reintenta más.
-        if (!piece.metrics_updated_at && esHistoriaVencida(piece, momento)) {
-          cambios = { ...cambios, metrics_reintentar_desde: NUNCA };
-        }
+        // Un error del pedido (429, red) no es "sin dato": no suma intento.
         motivoSinDato = err instanceof Error ? err.message : String(err);
+        // Una historia con error pasajero no se marca: sigue como estaba y se
+        // vuelve a pedir en la próxima corrida, hasta el cierre de las 72 h.
+        if (piece.type === "story") throw new Error(motivoSinDato);
       }
 
       const { error: updateError } = await admin

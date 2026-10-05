@@ -77,8 +77,9 @@ persistidas porque las URLs del CDN de Instagram vencen en 1–2 h; `lib/marketi
             └─ void syncContentMetricsForOrg
 cron 06:00 UTC /api/cron/sync-content-metrics
   └─ con QStash: fan-out a /api/queue/process-cron-sync-metrics por org; sin QStash: secuencial
-       └─ lib/marketing/sync-content-metrics.ts: lote de 50 piezas source=zernio (lib/marketing/cola-de-metricas.ts):
-            nuevas → con métricas → reintentos sin dato con la espera vencida (cupo 10);
+       └─ lib/marketing/sync-content-metrics.ts: cierra sin pedirlas las historias abiertas de más de 72 h;
+            lote de 50 piezas source=zernio (lib/marketing/cola-de-metricas.ts):
+            nuevas (historias desde las 30 h) → con métricas → reintentos sin dato con la espera vencida (cupo 10);
             GET /analytics?postId= → resolvePostAnalytics; un update por pieza: siempre metrics_checked_at = now;
             con dato metrics + metrics_updated_at; sin dato intentos + 1 y metrics_reintentar_desde
 ```
@@ -236,16 +237,19 @@ como JSON.
 - **La cola del cron de métricas no se traba ni se diluye con piezas sin dato** (SCRUM-172, reabierta;
   reglas en `lib/marketing/cola-de-metricas.ts`). `metrics_checked_at` es la fecha del último intento de medir la
   pieza, con o sin dato; `metrics_updated_at`, la de las métricas guardadas. El lote diario de 50 se arma así:
-  1. Piezas nuevas (`metrics_checked_at` null): se miden primero.
+  1. Piezas nuevas (`metrics_checked_at` null): se miden primero. Una historia recién entra a las 30 h.
   2. Piezas con métricas: se refrescan, la que hace más tiempo que no se intenta primero.
-  3. Piezas ya intentadas sin dato: sólo si venció `metrics_reintentar_desde`, y a lo sumo 10 lugares si hay
+  3. Piezas ya intentadas sin dato (nunca historias): sólo si venció `metrics_reintentar_desde`, y a lo sumo 10 lugares si hay
      piezas con métricas esperando (si sobran lugares, los ocupan).
   - Sin dato, la pieza suma `metrics_intentos_sin_dato` y espera 1, 2, 4, 8 y después 16 días. Con métricas,
     vuelve a 0 y sin espera. Un error del pedido (429, red) marca el intento pero no suma espera.
-  - Una historia sin métricas con más de 48 h de publicada no se reintenta más (`metrics_reintentar_desde =
-    infinity`): Meta sólo expone historias vigentes (24 h) y Zernio guarda sus métricas con el webhook
-    `story_insights` al vencer (`lib/zernio/client.ts`). Por lo mismo, una historia que se mide pasadas las 48 h
-    ya tiene sus números finales y tampoco vuelve a la cola.
+  - **Una historia se mide una sola vez.** Meta sólo expone historias vigentes (24 h) y Zernio guarda sus
+    métricas con el webhook `story_insights` al vencer (`lib/zernio/client.ts`): antes no hay números finales y
+    después no cambian. La historia entra a la cola a las 30 h (6 h de margen para el webhook), se pide una vez y,
+    con o sin dato, queda con `metrics_reintentar_desde = infinity`. Un error pasajero no la marca y se vuelve a
+    pedir al día siguiente. Al empezar cada corrida, una sola consulta cierra sin pedirlas las historias abiertas
+    de más de 72 h o sin `published_at`. Costo: un pedido por historia; con 100 reels y 8 historias por día cada
+    reel se refresca cada 2,4 días.
   - El refresco manual de piezas puntuales (`contentPieceIds`) no mira esperas.
   - La sync de contenido y la de YouTube no tocan estas columnas: una pieza nueva entra con null y el cron la
     mide primero.
@@ -315,7 +319,7 @@ Detalle y prioridades: `PENDIENTES.md` (entregado al integrador del backlog).
 | Qué | Archivo |
 |---|---|
 | Mapeo y dedupe de la foto diaria de anuncios | `apps/web/lib/marketing/__tests__/ad-metrics-snapshot.test.ts` |
-| Cola del cron de métricas: nuevas primero, piezas medidas antes que reintentos, espera creciente, historias vencidas | `apps/web/lib/marketing/__tests__/sync-content-metrics.test.ts`, `cola-de-metricas.test.ts` |
+| Cola del cron de métricas: nuevas primero, piezas medidas antes que reintentos, espera creciente, historias una sola vez, simulación de 40 días con 5, 8 y 15 historias por día | `apps/web/lib/marketing/__tests__/sync-content-metrics.test.ts`, `cola-de-metricas.test.ts` |
 | Lectores sin ceros inventados: promedios, ranking y prompt de patrones | `apps/web/lib/marketing/__tests__/metricas-medidas.test.ts`, `ranking-de-contenido.test.ts`, `patrones-de-contenido.test.ts`, `orden-de-piezas.test.ts`, `apps/web/app/marketing/content/__tests__/top-performing-content.test.ts` |
 | Tools del agente con piezas sin métricas | `apps/web/lib/agent/__tests__/contenido-sin-metricas.test.ts`, `top-contenido-tool.test.ts` |
 | Triggers de comentarios Zernio (Embudos) | `apps/web/lib/zernio/__tests__/triggers.test.ts` |

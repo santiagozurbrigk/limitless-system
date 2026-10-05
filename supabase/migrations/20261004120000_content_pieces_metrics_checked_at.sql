@@ -15,7 +15,7 @@
 --   datos reconocibles. Vuelve a 0 cuando llegan métricas.
 -- - `metrics_reintentar_desde`: desde cuándo se puede volver a intentar una
 --   pieza que quedó sin dato (espera de 1, 2, 4, 8 y 16 días). `infinity` en una
---   historia vencida: no se reintenta más. Null: sin espera.
+--   historia ya pedida o vencida: no se pide más. Null: sin espera.
 -- La sync de contenido no toca ninguna: una pieza nueva entra con null y el
 -- cron la mide primero. `metrics_updated_at` sigue siendo la fecha de las
 -- métricas guardadas.
@@ -37,7 +37,7 @@ comment on column public.content_pieces.metrics_checked_at is
 comment on column public.content_pieces.metrics_intentos_sin_dato is
   'Intentos seguidos del cron de métricas sin datos reconocibles. Vuelve a 0 cuando llegan métricas.';
 comment on column public.content_pieces.metrics_reintentar_desde is
-  'Desde cuándo el cron puede volver a intentar una pieza que quedó sin dato. infinity: no se reintenta más (historia vencida). Null: sin espera.';
+  'Desde cuándo el cron puede volver a intentar una pieza que quedó sin dato. infinity: no se pide más (historia ya pedida o vencida). Null: sin espera.';
 
 update public.content_pieces
   set metrics_checked_at = metrics_updated_at

@@ -2,20 +2,26 @@
  * Reglas de la cola del cron de métricas de contenido (SCRUM-172, reabierta).
  *
  * Prioridades del lote diario de cada org:
- * 1. Piezas nuevas (`metrics_checked_at` null): se miden primero.
+ * 1. Piezas nuevas (`metrics_checked_at` null): se miden primero. Una historia
+ *    nueva recién entra cuando venció (ver abajo).
  * 2. Piezas con métricas: se refrescan, la que hace más tiempo que no se intenta primero.
- * 3. Piezas ya intentadas que siguen sin dato: sólo cuando venció su espera
- *    (`metrics_reintentar_desde`), y con un cupo: no pueden ocupar el lugar de las
- *    piezas con métricas, pero tampoco se quedan sin turno si sobran.
+ * 3. Piezas ya intentadas que siguen sin dato (nunca historias): sólo cuando venció
+ *    su espera (`metrics_reintentar_desde`), y con un cupo: no pueden ocupar el
+ *    lugar de las piezas con métricas, pero tampoco se quedan sin turno si sobran.
  *
  * ⭐ Una pieza sin dato no vuelve a la cola al día siguiente: espera 1, 2, 4, 8 y
- * después 16 días entre intentos. Y una historia sin métricas con más de 48 h de
- * publicada no se reintenta más (`NUNCA`): Meta sólo expone las historias vigentes,
- * 24 h, y Zernio guarda sus métricas con el webhook `story_insights` al vencer
+ * después 16 días entre intentos.
+ *
+ * ⭐ Las historias se miden UNA vez. Meta sólo expone las historias vigentes (24 h)
+ * y Zernio guarda sus métricas con el webhook `story_insights` al vencer
  * (`lib/zernio/client.ts`: `ZernioInstagramStory`, `listInstagramStories` y
- * `syncExternalStories`). Si a las 48 h no llegaron, no van a llegar. Por lo mismo,
- * una historia que se mide pasadas las 48 h ya tiene sus números finales y
- * tampoco vuelve a la cola.
+ * `syncExternalStories`): antes de vencer no hay números finales que pedir, y
+ * después no cambian. Por eso una historia entra a la cola a las 30 h de publicada
+ * (24 h de vida + 6 h de margen para el webhook), se pide una sola vez, y con o sin
+ * dato queda cerrada (`metrics_reintentar_desde = infinity`). Al empezar cada
+ * corrida se cierran sin pedirle nada a Zernio las historias que pasaron las 72 h
+ * sin cerrarse (o que no tienen fecha de publicación): la ventana de 30 a 72 h
+ * (42 h) alcanza para que el cron diario la tome al menos una vez.
  */
 
 export const TAMANO_DEL_LOTE = 50;
@@ -24,7 +30,7 @@ export const TAMANO_DEL_LOTE = 50;
  * Lugares del lote para reintentos de piezas sin dato cuando hay piezas con
  * métricas esperando: deja 40 para refrescar las medidas. Con la espera creciente
  * la demanda de reintentos es chica (50 piezas muertas en la espera máxima son
- * unos 3 pedidos por día).
+ * unos 3 pedidos por día). Las historias no usan este cupo: no se reintentan.
  */
 export const CUPO_DE_REINTENTOS = 10;
 
@@ -36,8 +42,11 @@ export const CUPO_DE_REINTENTOS = 10;
  */
 export const ESPERA_MAXIMA_DIAS = 16;
 
-/** Vida de una historia: 24 h vigente + margen para el webhook `story_insights`. */
-export const VIDA_DE_HISTORIA_HORAS = 48;
+/** Una historia entra a la cola a las 30 h: 24 h vigente + 6 h para `story_insights`. */
+export const HISTORIA_LISTA_HORAS = 30;
+
+/** A las 72 h una historia que no se cerró se cierra sin pedirla. */
+export const HISTORIA_CIERRE_HORAS = 72;
 
 /** Fecha de reintento de una pieza que no se vuelve a intentar sola. */
 export const NUNCA = "infinity";
@@ -45,16 +54,14 @@ export const NUNCA = "infinity";
 const HORA_MS = 60 * 60 * 1000;
 const DIA_MS = 24 * HORA_MS;
 
-type PiezaParaReintento = {
-  type?: string | null;
-  published_at?: string | null;
-};
+/** Las historias publicadas hasta esta fecha ya se pueden medir. */
+export function historiasListasHasta(ahora: Date): string {
+  return new Date(ahora.getTime() - HISTORIA_LISTA_HORAS * HORA_MS).toISOString();
+}
 
-/** Una historia con más de 48 h de publicada (o sin fecha): ya no va a tener métricas. */
-export function esHistoriaVencida(pieza: PiezaParaReintento, ahora: Date): boolean {
-  if (pieza.type !== "story") return false;
-  if (!pieza.published_at) return true;
-  return ahora.getTime() - new Date(pieza.published_at).getTime() >= VIDA_DE_HISTORIA_HORAS * HORA_MS;
+/** Las historias publicadas hasta esta fecha que sigan abiertas se cierran sin pedirlas. */
+export function historiasACerrarHasta(ahora: Date): string {
+  return new Date(ahora.getTime() - HISTORIA_CIERRE_HORAS * HORA_MS).toISOString();
 }
 
 /** Días de espera después del intento sin dato número `intentosSinDato` (1, 2, 4, 8, 16, 16…). */
@@ -65,20 +72,15 @@ export function diasDeEspera(intentosSinDato: number): number {
 
 /**
  * Desde cuándo se puede volver a intentar una pieza que acaba de quedar sin dato
- * por `intentosSinDato`-ésima vez. Una historia joven se reintenta, a más tardar,
- * cuando cumple 48 h; una historia vencida, nunca.
+ * por `intentosSinDato`-ésima vez. Una historia, nunca: se mide una sola vez.
  */
 export function proximoIntento(
-  pieza: PiezaParaReintento,
+  pieza: { type?: string | null },
   intentosSinDato: number,
   ahora: Date
 ): string {
-  if (esHistoriaVencida(pieza, ahora)) return NUNCA;
-  let proximo = ahora.getTime() + diasDeEspera(intentosSinDato) * DIA_MS;
-  if (pieza.type === "story" && pieza.published_at) {
-    proximo = Math.min(proximo, new Date(pieza.published_at).getTime() + VIDA_DE_HISTORIA_HORAS * HORA_MS);
-  }
-  return new Date(proximo).toISOString();
+  if (pieza.type === "story") return NUNCA;
+  return new Date(ahora.getTime() + diasDeEspera(intentosSinDato) * DIA_MS).toISOString();
 }
 
 /**

@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   armarLote,
   diasDeEspera,
-  esHistoriaVencida,
+  historiasACerrarHasta,
+  historiasListasHasta,
   NUNCA,
   proximoIntento,
 } from "../cola-de-metricas";
 
 /**
  * SCRUM-172 (reabierta): reglas de la cola del cron de métricas. Espera
- * creciente para las piezas sin dato y fin de reintentos para historias vencidas.
+ * creciente para las piezas sin dato; las historias se miden una sola vez.
  */
 
 const AHORA = new Date("2026-10-05T03:00:00.000Z");
@@ -25,16 +26,10 @@ describe("diasDeEspera", () => {
   });
 });
 
-describe("esHistoriaVencida", () => {
-  it("⭐ una historia vence a las 48 h de publicada", () => {
-    expect(esHistoriaVencida({ type: "story", published_at: haceHoras(30) }, AHORA)).toBe(false);
-    expect(esHistoriaVencida({ type: "story", published_at: haceHoras(48) }, AHORA)).toBe(true);
-    expect(esHistoriaVencida({ type: "story", published_at: haceHoras(50) }, AHORA)).toBe(true);
-  });
-
-  it("una historia sin fecha de publicación se da por vencida; un reel nunca vence", () => {
-    expect(esHistoriaVencida({ type: "story", published_at: null }, AHORA)).toBe(true);
-    expect(esHistoriaVencida({ type: "reel", published_at: haceHoras(5000) }, AHORA)).toBe(false);
+describe("ventana de las historias", () => {
+  it("⭐ una historia se puede medir desde las 30 h y se cierra sin pedirla a las 72 h", () => {
+    expect(historiasListasHasta(AHORA)).toBe(haceHoras(30));
+    expect(historiasACerrarHasta(AHORA)).toBe(haceHoras(72));
   });
 });
 
@@ -44,14 +39,8 @@ describe("proximoIntento", () => {
     expect(proximoIntento({ type: "reel" }, 3, AHORA)).toBe("2026-10-09T03:00:00.000Z");
   });
 
-  it("⭐ una historia joven se reintenta a más tardar al cumplir 48 h; una vencida, nunca", () => {
-    expect(proximoIntento({ type: "story", published_at: haceHoras(30) }, 1, AHORA)).toBe(
-      new Date(AHORA.getTime() + 18 * HORA).toISOString()
-    );
-    expect(proximoIntento({ type: "story", published_at: haceHoras(10) }, 1, AHORA)).toBe(
-      new Date(AHORA.getTime() + 24 * HORA).toISOString()
-    );
-    expect(proximoIntento({ type: "story", published_at: haceHoras(50) }, 1, AHORA)).toBe(NUNCA);
+  it("⭐ una historia no se reintenta nunca: se mide una sola vez", () => {
+    expect(proximoIntento({ type: "story" }, 1, AHORA)).toBe(NUNCA);
   });
 });
 
