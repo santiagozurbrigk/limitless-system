@@ -13,10 +13,13 @@ const sim = vi.hoisted(() => ({
   inputs: [] as Array<Record<string, unknown>>,
   errorInputs: null as { message: string } | null,
   updates: [] as Array<Record<string, unknown>>,
+  upserts: [] as Array<Record<string, unknown>>,
+  errorAlMarcarGenerating: null as { message: string } | null,
+  configurado: true,
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
+vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => sim.configurado }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from() {
@@ -40,7 +43,13 @@ vi.mock("@/lib/auth/require-auth", () => ({
           eq: () => builder,
           gte: () => builder,
           lt: () => builder,
-          upsert: async () => ({ error: null }),
+          upsert: async (fila: Record<string, unknown>) => {
+            sim.upserts.push(fila);
+            if (fila.status === "generating" && sim.errorAlMarcarGenerating) {
+              return { error: sim.errorAlMarcarGenerating };
+            }
+            return { error: null };
+          },
           update(cambios: Record<string, unknown>) {
             sim.updates.push(cambios);
             return builder;
@@ -74,7 +83,11 @@ beforeEach(() => {
   sim.inputs = [];
   sim.errorInputs = null;
   sim.updates = [];
-  ia.callClaudeJson.mockClear();
+  sim.upserts = [];
+  sim.errorAlMarcarGenerating = null;
+  sim.configurado = true;
+  ia.callClaudeJson.mockReset();
+  ia.callClaudeJson.mockImplementation(async () => null);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -119,5 +132,40 @@ describe("generateWeeklyReportAction", () => {
     });
     expect(ia.callClaudeJson).toHaveBeenCalledTimes(1);
     expect(sim.updates).toContainEqual({ status: "error" });
+  });
+
+  it("⭐ con un JSON válido de la IA devuelve éxito y guarda el reporte como ready", async () => {
+    sim.inputs = [{ department: "sales", rating: 4, content: "bien" }];
+    ia.callClaudeJson.mockImplementation(async () => ({
+      executive_summary: "Semana estable.",
+      risks: [],
+      bottlenecks: [],
+      recommendations: [],
+    }));
+    await expect(generateWeeklyReportAction()).resolves.toEqual({ success: true, data: undefined });
+    expect(sim.upserts.map((u) => u.status)).toEqual(["generating", "ready"]);
+    expect(sim.upserts[1]).toMatchObject({ executive_summary: "Semana estable.", organization_id: "org-1" });
+    expect(sim.updates).toEqual([]);
+  });
+
+  it("⭐ si falla marcar el reporte como generating, vuelve como falla (no sin-inputs) sin llamar a la IA", async () => {
+    sim.inputs = [{ department: "sales", rating: 4, content: "bien" }];
+    sim.errorAlMarcarGenerating = { message: "timeout" };
+    await expect(generateWeeklyReportAction()).resolves.toEqual({
+      success: false,
+      error: "timeout",
+      motivo: "falla",
+    });
+    expect(ia.callClaudeJson).not.toHaveBeenCalled();
+  });
+
+  it("sin Supabase configurado devuelve el motivo como valor, sin tocar nada", async () => {
+    sim.configurado = false;
+    await expect(generateWeeklyReportAction()).resolves.toEqual({
+      success: false,
+      error: "Supabase no configurado.",
+      motivo: "falla",
+    });
+    expect(sim.tablas).toEqual([]);
   });
 });
