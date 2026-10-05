@@ -17,7 +17,7 @@ import {
 } from "@/lib/sales/lead-thread";
 import { CLOSING_CALL_STATUS_LABEL } from "@/lib/closing/call-status";
 import { CampoFecha } from "@/components/shared/campo-fecha";
-import { fechaAInstanteLocal } from "@/lib/fechas/calendario";
+import { fechaAInstanteLocal, formatearFechaGuardada } from "@/lib/fechas/calendario";
 import { fechaPropuestaDelProximoPaso } from "@/lib/sales/follow-up-options";
 import { useToast } from "@/providers/toast-provider";
 
@@ -72,6 +72,14 @@ function formatDate(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/**
+ * La fecha del próximo paso, sin hora: es una fecha elegida (ver
+ * `lead-detail-drawer.tsx`). Se lee igual que la celda de la tabla.
+ */
+function formatearFechaDelPaso(valor: string | null): string {
+  return formatearFechaGuardada(valor, { day: "2-digit", month: "short" }) ?? "—";
 }
 
 function LeadRow({ lead }: { lead: LeadSummary }) {
@@ -179,7 +187,7 @@ function LeadRow({ lead }: { lead: LeadSummary }) {
                 {a.nextAction && (
                   <span className="text-muted-foreground">
                     → {NEXT_ACTION_LABEL[a.nextAction]}
-                    {a.nextActionAt ? ` · ${formatDate(a.nextActionAt)}` : ""}
+                    {a.nextActionAt ? ` · ${formatearFechaDelPaso(a.nextActionAt)}` : ""}
                   </span>
                 )}
               </div>

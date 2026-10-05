@@ -188,7 +188,9 @@ export function LeadsTable({
         const attempts = row.attempts.map((a) =>
           a.id === row.targetAttemptId ? { ...a, ...patch } : a
         );
-        const thread = buildLeadThread(attempts, new Date(), closing);
+        // Con la zona de la organización, igual que el servidor: el próximo
+        // paso vence por día en esa zona.
+        const thread = buildLeadThread(attempts, new Date(), result.timezone, closing);
         const target =
           thread.actionableAttemptId ?? row.targetAttemptId ?? thread.attempts[0]?.id ?? null;
         const targetAttempt = thread.attempts.find((a) => a.id === target) ?? null;

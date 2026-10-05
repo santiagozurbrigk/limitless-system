@@ -21,6 +21,7 @@ import {
   type FollowUpCatalog,
 } from "@/lib/sales/follow-up-options";
 import { getFollowUpCatalogAction } from "@/app/sales/follow-up-options-actions";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import type { ClosingCallStatus } from "@/types/closing";
 import { paths } from "@/routes";
 
@@ -130,6 +131,12 @@ export type LeadTableResult = {
    * una tabla incompleta como si fuera todo.
    */
   truncated: boolean;
+  /**
+   * La zona horaria de la organización (`organizations.timezone`; null = la de
+   * por defecto). El estado se deriva con ella, y la tabla la reusa para
+   * recalcular el estado en el navegador sin que dé otra cosa que el servidor.
+   */
+  timezone: string | null;
 };
 
 /** Techo de lectura. Ver `truncated`. */
@@ -182,7 +189,12 @@ export async function listLeadsTableAction(
   const sort = params.sort ?? "urgency";
   const search = (params.search ?? "").trim().toLowerCase();
 
-  const catalog = await getFollowUpCatalogAction();
+  // La zona se lee una vez por pedido, no por lead: el vencimiento del próximo
+  // paso se cuenta en el día de la organización (SCRUM-493).
+  const [catalog, timezone] = await Promise.all([
+    getFollowUpCatalogAction(),
+    leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
+  ]);
   const closing = closingActionSlugs(catalog.nextActions);
 
   // Paginado: PostgREST corta en 1000 filas sin avisar, así que el `.limit(2001)`
@@ -206,6 +218,7 @@ export async function listLeadsTableAction(
       counts: { ...EMPTY_COUNTS },
       catalog,
       truncated: false,
+      timezone,
     };
   }
 
@@ -221,7 +234,7 @@ export async function listLeadsTableAction(
     // Un lead sin turnos no es trabajo pendiente: todavía no pasó nada.
     if (attempts.length === 0) continue;
 
-    const thread = buildLeadThread(attempts, now, closing);
+    const thread = buildLeadThread(attempts, now, timezone, closing);
     counts[thread.state] += 1;
 
     const target =
@@ -288,6 +301,7 @@ export async function listLeadsTableAction(
     counts,
     catalog,
     truncated,
+    timezone,
   };
 }
 
@@ -298,8 +312,9 @@ export async function getLeadThreadAction(
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
-  const [catalog, { data, error }] = await Promise.all([
+  const [catalog, timezone, { data, error }] = await Promise.all([
     getFollowUpCatalogAction(),
+    leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
     supabase
       .from("sales_leads")
       .select(`id, name, email, client_id, closing_calls(${ATTEMPT_COLUMNS})`)
@@ -322,6 +337,7 @@ export async function getLeadThreadAction(
     thread: buildLeadThread(
       attempts,
       new Date(),
+      timezone,
       closingActionSlugs(catalog.nextActions)
     ),
   };

@@ -16,6 +16,7 @@ import {
 import type { LeadTableRow } from "@/app/sales/lead-actions";
 import type { TeamMember } from "@/types/team";
 import { paths } from "@/routes";
+import { formatearFechaGuardada } from "@/lib/fechas/calendario";
 import { FollowUpChip } from "./follow-up-option-picker";
 
 /**
@@ -50,6 +51,17 @@ function formatDate(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/**
+ * La fecha del próximo paso, sin hora: es una fecha elegida, y la hora con que
+ * quedó guardada (12:00, o 21:00 en filas viejas) nadie la eligió. Se lee igual
+ * que la celda de la tabla (`CampoFecha`), para que las dos digan el mismo día.
+ */
+function formatearFechaDelPaso(valor: string | null): string {
+  return (
+    formatearFechaGuardada(valor, { day: "2-digit", month: "short", year: "numeric" }) ?? "—"
+  );
 }
 
 export function LeadDetailDrawer({
@@ -136,7 +148,7 @@ export function LeadDetailDrawer({
                       />
                       {attempt.nextActionAt && (
                         <span className="text-muted-foreground">
-                          {formatDate(attempt.nextActionAt)}
+                          {formatearFechaDelPaso(attempt.nextActionAt)}
                         </span>
                       )}
                       {owner && <span className="text-muted-foreground">· {owner}</span>}
