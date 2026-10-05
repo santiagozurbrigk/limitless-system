@@ -42,7 +42,7 @@ Los conteos de filas en prod son al 2026-09-22/23.
 
 | Tabla | Columnas clave | Notas |
 |---|---|---|
-| `content_pieces` | `type` (`reel`,`story`,`post`,`carousel`,`youtube`,`brief`), `source` (`zernio`,`manual`,`ai_generated`,`google`), `platform`, `platform_post_id`, `metrics` JSONB, `metrics_updated_at`, `metrics_checked_at`, `analysis` JSONB, `format_type`/`hook_type`/`cta_type`, `drive_file_id/name/url`, `transcript`, `variants_of` (FK a sí misma), `brief` JSONB, `sales_attributed` JSONB, `status` | Tabla central. Índice **único común** `(organization_id, platform_post_id)` (`20260922110000`) e índice parcial `content_pieces_metrics_cola_idx` para la cola del cron de métricas (`20261004120000`). Trigger `set_updated_at`. RLS por `get_my_organization_id()`. 150 filas en prod |
+| `content_pieces` | `type` (`reel`,`story`,`post`,`carousel`,`youtube`,`brief`), `source` (`zernio`,`manual`,`ai_generated`,`google`), `platform`, `platform_post_id`, `metrics` JSONB, `metrics_updated_at`, `metrics_checked_at`, `metrics_intentos_sin_dato`, `metrics_reintentar_desde`, `analysis` JSONB, `format_type`/`hook_type`/`cta_type`, `drive_file_id/name/url`, `transcript`, `variants_of` (FK a sí misma), `brief` JSONB, `sales_attributed` JSONB, `status` | Tabla central. Índice **único común** `(organization_id, platform_post_id)` (`20260922110000`) e índice parcial `content_pieces_metrics_cola_idx` para la cola del cron de métricas (`20261004120000`). Trigger `set_updated_at`. RLS por `get_my_organization_id()`. 150 filas en prod |
 | `content_pattern_reports` | `organization_id`, reporte JSON | Uno nuevo por cada "generar" (`pattern-report-actions.ts`) |
 | `reel_variation_jobs` | `source_piece_id`, `status` (`pending`,`processing`,`preview_ready`,`publishing`,`done`,`failed`), `delay_hours` (0–72, default 2), `variations` JSONB[], `error_message` | Trial Reels (`20260810120000`, realtime en `20260810200000`). Cada variación: `type`, `storage_path`, `preview_url`, `description`, `hashtags`, `included`, `status`, `zernio_post_id`, `error` |
 | `organizations.reel_music_path` | path en bucket `trial-reels` | Música propia de la org para la variante V3 (`20260811120000`) |
@@ -77,9 +77,10 @@ persistidas porque las URLs del CDN de Instagram vencen en 1–2 h; `lib/marketi
             └─ void syncContentMetricsForOrg
 cron 06:00 UTC /api/cron/sync-content-metrics
   └─ con QStash: fan-out a /api/queue/process-cron-sync-metrics por org; sin QStash: secuencial
-       └─ lib/marketing/sync-content-metrics.ts: 50 piezas source=zernio, las de metrics_checked_at más viejo
-            primero (null primero), GET /analytics?postId= → resolvePostAnalytics; un update por pieza:
-            siempre metrics_checked_at = now; metrics y metrics_updated_at sólo si recognized=true
+       └─ lib/marketing/sync-content-metrics.ts: lote de 50 piezas source=zernio (lib/marketing/cola-de-metricas.ts):
+            nuevas → con métricas → reintentos sin dato con la espera vencida (cupo 10);
+            GET /analytics?postId= → resolvePostAnalytics; un update por pieza: siempre metrics_checked_at = now;
+            con dato metrics + metrics_updated_at; sin dato intentos + 1 y metrics_reintentar_desde
 ```
 
 - **YouTube** va por otro camino: `lib/google/sync-youtube.ts` upsertea `content_pieces` con
@@ -232,13 +233,21 @@ como JSON.
   suyas (`lib/zernio/metricas-para-guardar.ts`, SCRUM-172). Lo mismo con la sync de YouTube por Google: si YouTube
   no devuelve el detalle de un video (cuota o token), la pieza nueva queda con `metrics` en null y la existente conserva
   las suyas (`metricasDeVideoParaGuardar`, `lib/youtube/video-metrics.ts`). Ojo: `views` cae a `impressions || reach` si Zernio no manda `views`.
-- **La cola del cron de métricas ordena por el último intento, no por el último dato.** `metrics_checked_at` es
-  la fecha del último intento de medir la pieza, con o sin dato; `metrics_updated_at` es la fecha de las
-  métricas guardadas. El cron toma las 50 piezas con `metrics_checked_at` más viejo (las nunca intentadas
-  primero) y a cada una le escribe `metrics_checked_at`, aunque Zernio no mande datos reconocibles o el pedido
-  falle. Así una pieza que nunca se puede medir (por ejemplo, una historia que Zernio trae sin analytics) pasa al
-  final de la cola y no tapa a las demás. La sync de contenido y la de YouTube no tocan `metrics_checked_at`:
-  una pieza nueva entra con null y el cron la mide primero (SCRUM-172, reabierta).
+- **La cola del cron de métricas no se traba ni se diluye con piezas sin dato** (SCRUM-172, reabierta;
+  reglas en `lib/marketing/cola-de-metricas.ts`). `metrics_checked_at` es la fecha del último intento de medir la
+  pieza, con o sin dato; `metrics_updated_at`, la de las métricas guardadas. El lote diario de 50 se arma así:
+  1. Piezas nuevas (`metrics_checked_at` null): se miden primero.
+  2. Piezas con métricas: se refrescan, la que hace más tiempo que no se intenta primero.
+  3. Piezas ya intentadas sin dato: sólo si venció `metrics_reintentar_desde`, y a lo sumo 10 lugares si hay
+     piezas con métricas esperando (si sobran lugares, los ocupan).
+  - Sin dato, la pieza suma `metrics_intentos_sin_dato` y espera 1, 2, 4, 8 y después 16 días. Con métricas,
+    vuelve a 0 y sin espera. Un error del pedido (429, red) marca el intento pero no suma espera.
+  - Una historia sin métricas con más de 48 h de publicada no se reintenta más (`metrics_reintentar_desde =
+    infinity`): Meta sólo expone historias vigentes (24 h) y Zernio guarda sus métricas con el webhook
+    `story_insights` al vencer (`lib/zernio/client.ts`).
+  - El refresco manual de piezas puntuales (`contentPieceIds`) no mira esperas.
+  - La sync de contenido y la de YouTube no tocan estas columnas: una pieza nueva entra con null y el cron la
+    mide primero.
 - **Quien lee `metrics` no trata "sin dato" como cero.** Una pieza con `metrics` en null no se midió. El ranking
   de la tool `get_top_performing_content` la deja afuera y devuelve `piezas_sin_metricas`
   (`lib/marketing/ranking-de-contenido.ts`); el reporte de patrones promedia sólo sobre piezas medidas y le dice
@@ -305,7 +314,7 @@ Detalle y prioridades: `PENDIENTES.md` (entregado al integrador del backlog).
 | Qué | Archivo |
 |---|---|
 | Mapeo y dedupe de la foto diaria de anuncios | `apps/web/lib/marketing/__tests__/ad-metrics-snapshot.test.ts` |
-| Cola del cron de métricas: piezas sin dato no la traban, todo intento queda con `metrics_checked_at` | `apps/web/lib/marketing/__tests__/sync-content-metrics.test.ts` |
+| Cola del cron de métricas: nuevas primero, piezas medidas antes que reintentos, espera creciente, historias vencidas | `apps/web/lib/marketing/__tests__/sync-content-metrics.test.ts`, `cola-de-metricas.test.ts` |
 | Lectores sin ceros inventados: promedios, ranking y prompt de patrones | `apps/web/lib/marketing/__tests__/metricas-medidas.test.ts`, `ranking-de-contenido.test.ts`, `patrones-de-contenido.test.ts`, `orden-de-piezas.test.ts`, `apps/web/app/marketing/content/__tests__/top-performing-content.test.ts` |
 | Tools del agente con piezas sin métricas | `apps/web/lib/agent/__tests__/contenido-sin-metricas.test.ts`, `top-contenido-tool.test.ts` |
 | Triggers de comentarios Zernio (Embudos) | `apps/web/lib/zernio/__tests__/triggers.test.ts` |

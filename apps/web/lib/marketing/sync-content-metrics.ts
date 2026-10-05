@@ -5,8 +5,15 @@ import {
 } from "@/lib/zernio/integration";
 import { resolvePostAnalytics } from "@/lib/zernio/resolve-analytics";
 import type { ContentMetrics } from "@/types/content";
+import {
+  armarLote,
+  esHistoriaVencida,
+  NUNCA,
+  proximoIntento,
+  TAMANO_DEL_LOTE,
+} from "./cola-de-metricas";
 
-const METRICS_BATCH_LIMIT = 50;
+const METRICS_BATCH_LIMIT = TAMANO_DEL_LOTE;
 
 export type SyncContentMetricsResult = {
   attempted: number;
@@ -14,17 +21,103 @@ export type SyncContentMetricsResult = {
   failed: number;
 };
 
+type PiezaDeLaCola = {
+  id: string;
+  platform_post_id: string;
+  type: string | null;
+  published_at: string | null;
+  metrics_updated_at: string | null;
+  metrics_intentos_sin_dato: number | null;
+};
+
+const COLUMNAS_DE_LA_COLA =
+  "id, platform_post_id, type, published_at, metrics_updated_at, metrics_intentos_sin_dato";
+
+/**
+ * Elige las piezas a medir. Con `contentPieceIds` (refresco manual) toma esas,
+ * sin mirar esperas. Si no, arma el lote del cron con las prioridades de
+ * `lib/marketing/cola-de-metricas.ts`: nuevas, después las que tienen métricas
+ * y, con cupo, los reintentos sin dato cuya espera venció.
+ */
+async function elegirPiezas(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  ahora: Date,
+  contentPieceIds?: string[]
+): Promise<PiezaDeLaCola[]> {
+  const base = () =>
+    admin
+      .from("content_pieces")
+      .select(COLUMNAS_DE_LA_COLA)
+      .eq("organization_id", organizationId)
+      .eq("source", "zernio")
+      .not("platform_post_id", "is", null);
+
+  const leer = async (
+    consulta: PromiseLike<{ data: unknown; error: { message: string } | null }>
+  ): Promise<PiezaDeLaCola[]> => {
+    const { data, error } = await consulta;
+    if (error) throw new Error(error.message);
+    return (data ?? []) as PiezaDeLaCola[];
+  };
+
+  if (contentPieceIds && contentPieceIds.length > 0) {
+    return leer(
+      base()
+        .in("id", contentPieceIds)
+        .order("metrics_checked_at", { ascending: true, nullsFirst: true })
+        .limit(METRICS_BATCH_LIMIT)
+    );
+  }
+
+  // 1. Nuevas: nunca intentadas, por orden de llegada.
+  const nuevas = await leer(
+    base()
+      .is("metrics_checked_at", null)
+      .order("created_at", { ascending: true })
+      .limit(METRICS_BATCH_LIMIT)
+  );
+  const lugares = METRICS_BATCH_LIMIT - nuevas.length;
+  if (lugares <= 0) return nuevas;
+
+  // 2 y 3. Con métricas y reintentos sin dato, las dos sólo si venció su espera
+  // (`metrics_reintentar_desde` null o pasada). Las historias vencidas tienen
+  // `infinity` y no entran nunca.
+  const esperaVencida = `metrics_reintentar_desde.is.null,metrics_reintentar_desde.lte."${ahora.toISOString()}"`;
+  const [conMetricas, reintentos] = await Promise.all([
+    leer(
+      base()
+        .not("metrics_checked_at", "is", null)
+        .not("metrics_updated_at", "is", null)
+        .or(esperaVencida)
+        .order("metrics_checked_at", { ascending: true })
+        .limit(lugares)
+    ),
+    leer(
+      base()
+        .not("metrics_checked_at", "is", null)
+        .is("metrics_updated_at", null)
+        .or(esperaVencida)
+        .order("metrics_checked_at", { ascending: true })
+        .limit(lugares)
+    ),
+  ]);
+
+  return [...nuevas, ...armarLote(conMetricas, reintentos, lugares)];
+}
+
 /**
  * Sincroniza métricas de Zernio para piezas de contenido de una organización.
  * Usa el admin client para poder ejecutarse desde crons (sin sesión de usuario).
  *
- * ⭐ La cola se ordena por `metrics_checked_at` (último intento, con o sin dato),
- * no por `metrics_updated_at`: cada pieza intentada queda marcada y pasa al final,
- * así una pieza que Zernio nunca reconoce (por ejemplo, una historia sin
- * analytics) no tapa a las demás (SCRUM-172).
+ * ⭐ Cada pieza intentada queda con `metrics_checked_at`, con o sin dato. Si
+ * Zernio no manda datos reconocibles, la pieza suma un intento sin dato y espera
+ * (`metrics_reintentar_desde`) antes de volver a la cola; una historia vencida no
+ * se reintenta más. Así las piezas que no se pueden medir no tapan ni diluyen la
+ * cola de las que sí (SCRUM-172). Reglas en `lib/marketing/cola-de-metricas.ts`.
  *
- * @param contentPieceIds - opcional; si se omite, sincroniza todas las piezas
- *   con platform_post_id de la org (hasta METRICS_BATCH_LIMIT).
+ * @param contentPieceIds - opcional; si se omite, arma el lote del cron
+ *   (hasta METRICS_BATCH_LIMIT piezas).
  */
 export async function syncContentMetricsForOrg(
   organizationId: string,
@@ -36,40 +129,26 @@ export async function syncContentMetricsForOrg(
   if (!integration) return empty;
 
   const admin = createAdminClient();
-
-  let query = admin
-    .from("content_pieces")
-    .select("id, platform_post_id")
-    .eq("organization_id", organizationId)
-    .eq("source", "zernio")
-    .not("platform_post_id", "is", null);
-
-  if (contentPieceIds && contentPieceIds.length > 0) {
-    query = query.in("id", contentPieceIds);
-  }
-
-  // Las más viejas primero: sin orden, cada corrida tomaba las mismas 50 piezas
-  // y el resto de una org grande no se actualizaba nunca.
-  const { data: pieces, error } = await query
-    .order("metrics_checked_at", { ascending: true, nullsFirst: true })
-    .limit(METRICS_BATCH_LIMIT);
-  if (error) throw new Error(error.message);
-  if (!pieces || pieces.length === 0) return empty;
+  const pieces = await elegirPiezas(admin, organizationId, new Date(), contentPieceIds);
+  if (pieces.length === 0) return empty;
 
   const client = await getZernioClientForOrganization(organizationId);
 
   const results = await Promise.allSettled(
     pieces.map(async (piece) => {
-      const postId = piece.platform_post_id as string;
-      const ahora = new Date().toISOString();
+      const postId = piece.platform_post_id;
+      const momento = new Date();
+      const ahora = momento.toISOString();
 
-      // Un solo update por pieza: siempre marca el intento y, si Zernio mandó
-      // números reconocibles, guarda también las métricas. Si no, no se tocan
-      // `metrics` ni `metrics_updated_at` (un cero que nadie midió no es un dato).
+      // Un solo update por pieza: siempre marca el intento. Con métricas
+      // reconocibles las guarda y limpia la espera; sin dato no toca `metrics`
+      // ni `metrics_updated_at` (un cero que nadie midió no es un dato).
       let cambios: {
         metrics_checked_at: string;
         metrics?: ContentMetrics;
         metrics_updated_at?: string;
+        metrics_intentos_sin_dato?: number;
+        metrics_reintentar_desde?: string | null;
       } = { metrics_checked_at: ahora };
       let motivoSinDato: string | null = null;
 
@@ -77,18 +156,35 @@ export async function syncContentMetricsForOrg(
         const analytics = await client.getPostAnalytics(postId);
         const { metrics, lastUpdated, recognized } = resolvePostAnalytics(analytics);
         if (recognized) {
-          cambios = { ...cambios, metrics, metrics_updated_at: lastUpdated ?? ahora };
+          cambios = {
+            ...cambios,
+            metrics,
+            metrics_updated_at: lastUpdated ?? ahora,
+            metrics_intentos_sin_dato: 0,
+            metrics_reintentar_desde: null,
+          };
         } else {
+          const intentos = (piece.metrics_intentos_sin_dato ?? 0) + 1;
+          cambios = {
+            ...cambios,
+            metrics_intentos_sin_dato: intentos,
+            metrics_reintentar_desde: proximoIntento(piece, intentos, momento),
+          };
           motivoSinDato = `analytics sin datos reconocibles para ${postId}`;
         }
       } catch (err) {
+        // Un error del pedido (429, red) no es "sin dato": no suma intento. Pero
+        // una historia vencida que nunca tuvo métricas no se reintenta más.
+        if (!piece.metrics_updated_at && esHistoriaVencida(piece, momento)) {
+          cambios = { ...cambios, metrics_reintentar_desde: NUNCA };
+        }
         motivoSinDato = err instanceof Error ? err.message : String(err);
       }
 
       const { error: updateError } = await admin
         .from("content_pieces")
         .update(cambios)
-        .eq("id", piece.id as string)
+        .eq("id", piece.id)
         .eq("organization_id", organizationId);
 
       if (updateError) {
@@ -101,7 +197,7 @@ export async function syncContentMetricsForOrg(
         throw new Error(updateError.message);
       }
       if (motivoSinDato) throw new Error(motivoSinDato);
-      return piece.id as string;
+      return piece.id;
     })
   );
 
