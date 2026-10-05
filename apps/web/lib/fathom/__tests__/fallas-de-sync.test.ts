@@ -22,7 +22,7 @@ const CONEXION = { organizationId: "org-1", userId: null };
 function adminQueFalla(falla: { lectura?: boolean; escritura?: boolean; filas?: unknown[] }): Admin {
   const builder = (op: string) => {
     const b: Record<string, unknown> = {};
-    for (const m of ["select", "eq", "is", "in", "update", "delete"]) b[m] = () => b;
+    for (const m of ["select", "eq", "is", "in", "lt", "update", "delete"]) b[m] = () => b;
     b.then = (resolve: (v: unknown) => void) => {
       if (op === "select") {
         resolve(falla.lectura ? { data: null, error: { message: "sin tabla" } } : { data: falla.filas ?? [], error: null });
@@ -81,15 +81,32 @@ describe("registrarFallasDeSync", () => {
     expect(salida[0].falla).toEqual({ primeraFallaAt: "2026-10-01T00:00:00Z", intentos: 3 });
   });
 
-  it("una descartada que vuelve (cursor rebobinado) arranca la cuenta de cero", async () => {
+  it("⭐ una descartada que vuelve sigue descartada: no suma intentos ni escribe", async () => {
     const filas = [{ id: "f1", fathom_call_id: "1", primera_falla_at: "2026-10-01T00:00:00Z", intentos: 6, descartada_at: "2026-10-02T00:00:00Z" }];
-    const salida = await registrarFallasDeSync(adminQueFalla({ filas }), CONEXION, [{ meeting: reunion("1"), guardada: false }], AHORA);
-    expect(salida[0].falla).toEqual({ primeraFallaAt: AHORA.toISOString(), intentos: 1 });
+    // Si intentara escribir, este admin devolvería error y la reunión quedaría sin `falla`.
+    const salida = await registrarFallasDeSync(
+      adminQueFalla({ filas, escritura: true }),
+      CONEXION,
+      [{ meeting: reunion("1"), guardada: false }],
+      AHORA
+    );
+    expect(salida[0].falla).toEqual({ primeraFallaAt: "2026-10-01T00:00:00Z", intentos: 6, descartada: true });
   });
 
-  it("sin resultados no consulta nada", async () => {
-    const admin = { from: vi.fn() } as unknown as Admin;
+  it("sin resultados sólo limpia las filas viejas de la conexión", async () => {
+    const tablas: string[] = [];
+    const ops: string[] = [];
+    const b: Record<string, unknown> = {};
+    for (const m of ["eq", "is", "lt"]) b[m] = () => b;
+    b.then = (resolve: (v: unknown) => void) => resolve({ error: null });
+    const admin = {
+      from: (t: string) => {
+        tablas.push(t);
+        return { delete: () => (ops.push("delete"), b) };
+      },
+    } as unknown as Admin;
     expect(await registrarFallasDeSync(admin, CONEXION, [], AHORA)).toEqual([]);
-    expect((admin as unknown as { from: ReturnType<typeof vi.fn> }).from).not.toHaveBeenCalled();
+    expect(tablas).toEqual(["fathom_sync_fallas"]);
+    expect(ops).toEqual(["delete"]);
   });
 });

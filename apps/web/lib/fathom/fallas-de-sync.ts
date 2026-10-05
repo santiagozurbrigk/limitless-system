@@ -6,6 +6,12 @@
  *
  * Si la tabla no se puede leer o escribir, la reunión que falló queda sin
  * registro: frena el cursor y no se descarta. Ante la duda se reintenta.
+ *
+ * Una descartada sigue descartada aunque vuelva a llegar (por el solape, o
+ * porque el cursor no pudo avanzar en la corrida del descarte): no frena el
+ * cursor, no suma intentos y no se reporta de nuevo. Para reintentarla hay que
+ * borrar su fila y rebobinar el cursor (docs/areas/ventas.md, "Cómo recuperar
+ * una reunión descartada"). Así no hay que adivinar si volvió por un rebobinado.
  */
 import type { ResultadoDeReunion } from "@/lib/fathom/cursor";
 import type { FathomMeetingRecord } from "@/lib/fathom/api";
@@ -24,6 +30,15 @@ type FilaDeFalla = {
   descartada_at: string | null;
 };
 
+/**
+ * Cuánto se guarda una fila sin fallas nuevas: 30 días. Cubre las que ya no se
+ * van a volver a leer (una falla sin fecha, que no frena el cursor; una reunión
+ * borrada en Fathom mientras fallaba) y las descartadas, que en ese plazo se
+ * pueden recuperar. Una reunión que sigue frenando el cursor se vuelve a leer en
+ * cada corrida y su `ultima_falla_at` se renueva, así que nunca llega a vencer.
+ */
+export const RETENCION_DE_FALLAS_MS = 30 * 24 * 60 * 60 * 1000;
+
 /** La misma clave con la que se guarda la llamada (`fathom_calls.fathom_call_id`). */
 export function claveDeReunion(meeting: FathomMeetingRecord): string {
   return String(meeting.recording_id ?? meeting.id);
@@ -41,6 +56,7 @@ export async function registrarFallasDeSync(
   resultados: ResultadoDeReunion[],
   ahora: Date
 ): Promise<ResultadoDeReunion[]> {
+  await limpiarFallasViejas(admin, conexion, ahora);
   if (!resultados.length) return resultados;
   const claves = resultados.map((r) => claveDeReunion(r.meeting));
 
@@ -77,9 +93,20 @@ export async function registrarFallasDeSync(
       continue;
     }
 
-    // Una ya descartada que vuelve a llegar es porque alguien rebobinó el cursor
-    // para recuperarla: la cuenta arranca de cero.
-    if (existente && !existente.descartada_at) {
+    // Descartada: queda así (ver el encabezado). No se toca la fila.
+    if (existente?.descartada_at) {
+      salida.push({
+        ...resultado,
+        falla: {
+          primeraFallaAt: existente.primera_falla_at,
+          intentos: existente.intentos,
+          descartada: true,
+        },
+      });
+      continue;
+    }
+
+    if (existente) {
       const intentos = existente.intentos + 1;
       const { error: errorUpdate } = await admin
         .from("fathom_sync_fallas")
@@ -94,21 +121,15 @@ export async function registrarFallasDeSync(
       continue;
     }
 
-    const nueva = {
+    const { error: errorEscritura } = await admin.from("fathom_sync_fallas").insert({
+      organization_id: conexion.organizationId,
+      user_id: conexion.userId,
+      fathom_call_id: clave,
+      fathom_created_at: resultado.meeting.created_at ?? null,
       primera_falla_at: momento,
       ultima_falla_at: momento,
       intentos: 1,
-      descartada_at: null,
-      fathom_created_at: resultado.meeting.created_at ?? null,
-    };
-    const { error: errorEscritura } = existente
-      ? await admin.from("fathom_sync_fallas").update(nueva).eq("id", existente.id)
-      : await admin.from("fathom_sync_fallas").insert({
-          ...nueva,
-          organization_id: conexion.organizationId,
-          user_id: conexion.userId,
-          fathom_call_id: clave,
-        });
+    });
     if (errorEscritura) {
       console.error("[Fathom:sync] fathom_sync_fallas: no se pudo registrar:", errorEscritura.message);
       salida.push(resultado);
@@ -129,6 +150,26 @@ export async function registrarFallasDeSync(
   }
 
   return salida;
+}
+
+/** Borra las filas de la conexión sin fallas nuevas en `RETENCION_DE_FALLAS_MS`. */
+export async function limpiarFallasViejas(
+  admin: Admin,
+  conexion: ConexionDeSync,
+  ahora: Date
+): Promise<void> {
+  let borrado = admin
+    .from("fathom_sync_fallas")
+    .delete()
+    .eq("organization_id", conexion.organizationId)
+    .lt("ultima_falla_at", new Date(ahora.getTime() - RETENCION_DE_FALLAS_MS).toISOString());
+  borrado =
+    conexion.userId === null ? borrado.is("user_id", null) : borrado.eq("user_id", conexion.userId);
+  const { error } = await borrado;
+  if (error) {
+    // Una fila vieja de más no cambia ninguna decisión: se reintenta la próxima corrida.
+    console.error("[Fathom:sync] fathom_sync_fallas: no se pudo limpiar:", error.message);
+  }
 }
 
 /** Marca las reuniones que se dejan de reintentar. Quedan para rastrearlas. */

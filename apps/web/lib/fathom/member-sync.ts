@@ -11,6 +11,7 @@
 import { resolverVentanaDeSync } from "@/lib/fathom/sync-window";
 import { calcularNuevoCursor, type ResultadoDeReunion } from "@/lib/fathom/cursor";
 import { leerVentanaDeFathom, reportarDecisionDeCursor } from "@/lib/fathom/leer-ventana";
+import { quedaTiempo, rotar } from "@/lib/fathom/plazo-del-cron";
 import { marcarDescartadas, registrarFallasDeSync } from "@/lib/fathom/fallas-de-sync";
 import { mensajeDeFathom } from "@/lib/fathom/api";
 import { upsertFathomCallFromMeeting } from "@/lib/fathom/sync";
@@ -54,7 +55,9 @@ export async function sincronizarMiembroFathom(
   fila: Pick<
     FilaMiembroFathom,
     "organization_id" | "user_id" | "encrypted_api_key" | "last_sync_at" | "connected_at"
-  >
+  >,
+  /** Plazo de la corrida del cron (`lib/fathom/plazo-del-cron.ts`). El botón no lo pasa. */
+  plazo?: number
 ): Promise<{ synced: number; fallidas: number }> {
   if (!fila.encrypted_api_key) throw new Error("No tenés Fathom conectado");
 
@@ -69,6 +72,7 @@ export async function sincronizarMiembroFathom(
       desde: ventana.desde,
       ahora,
       maxPages: 5,
+      plazo,
     });
   } catch (fallo) {
     throw new Error(mensajeDeFathom(fallo));
@@ -120,11 +124,20 @@ export async function sincronizarMiembroFathom(
   return { synced, fallidas };
 }
 
-/** Todas las conexiones por miembro, una por una. Una que falla no corta las demás. */
-export async function sincronizarTodosLosMiembrosFathom(): Promise<{
+/**
+ * Todas las conexiones por miembro, una por una. Una que falla no corta las
+ * demás. Con `plazo`, pasado ese momento no se arranca ninguna más; con
+ * `corrida`, el orden rota para que ningún miembro quede siempre último.
+ */
+export async function sincronizarTodosLosMiembrosFathom(options?: {
+  plazo?: number;
+  corrida?: number;
+}): Promise<{
   miembros: number;
   ingested: number;
   fallidos: number;
+  /** Los que no se empezaron por falta de tiempo; van en la próxima corrida. */
+  postergados: number;
 }> {
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -136,13 +149,21 @@ export async function sincronizarTodosLosMiembrosFathom(): Promise<{
 
   if (error) throw new Error(error.message);
 
-  const filas = miembrosParaSincronizar((data ?? []) as FilaMiembroFathom[]);
+  const filas = rotar(
+    miembrosParaSincronizar((data ?? []) as FilaMiembroFathom[]),
+    options?.corrida ?? 0
+  );
   let ingested = 0;
   let fallidos = 0;
+  let postergados = 0;
 
   for (const fila of filas) {
+    if (!quedaTiempo(options?.plazo)) {
+      postergados += 1;
+      continue;
+    }
     try {
-      const resultado = await sincronizarMiembroFathom(admin, fila);
+      const resultado = await sincronizarMiembroFathom(admin, fila, options?.plazo);
       ingested += resultado.synced;
       if (resultado.fallidas > 0) fallidos += 1;
       await admin
@@ -168,5 +189,8 @@ export async function sincronizarTodosLosMiembrosFathom(): Promise<{
     }
   }
 
-  return { miembros: filas.length, ingested, fallidos };
+  if (postergados) {
+    console.warn("[Fathom:member-sync] Sin tiempo en esta corrida; quedan para la próxima:", postergados);
+  }
+  return { miembros: filas.length, ingested, fallidos, postergados };
 }

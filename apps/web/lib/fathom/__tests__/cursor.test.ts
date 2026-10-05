@@ -285,6 +285,36 @@ describe("calcularNuevoCursor", () => {
       expect(decision.cursor).toBe(menosSolape(vieja.created_at!));
     });
 
+    it("⭐ O-2: una ya descartada que vuelve a llegar no frena el cursor ni se reporta otra vez", () => {
+      const decision = calcularNuevoCursor({
+        cursorAnterior: "2026-10-03T00:00:00.000Z",
+        lectura: COMPLETA,
+        resultados: [
+          {
+            meeting: vieja,
+            guardada: false,
+            falla: { primeraFallaAt: HACE_25_H, intentos: INTENTOS_MINIMOS, descartada: true },
+          },
+          { meeting: R2, guardada: true },
+        ],
+        ahora: AHORA,
+      });
+      expect(decision.descartadas).toEqual([]);
+      expect(decision.cursor).toBe(menosSolape(R2.created_at!));
+    });
+
+    it("una ya descartada sin fecha tampoco se reporta otra vez", () => {
+      const decision = calcularNuevoCursor({
+        cursorAnterior: ANTERIOR,
+        lectura: COMPLETA,
+        resultados: [
+          { meeting: reunion("x"), guardada: false, falla: { primeraFallaAt: HACE_25_H, intentos: 6, descartada: true } },
+        ],
+        ahora: AHORA,
+      });
+      expect(decision.sinFecha).toEqual([]);
+    });
+
     it("debeDescartarse: bordes exactos y fecha ilegible", () => {
       const justo = new Date(AHORA.getTime() - PLAZO_DE_REINTENTOS_MS).toISOString();
       expect(debeDescartarse({ primeraFallaAt: justo, intentos: INTENTOS_MINIMOS }, AHORA)).toBe(true);

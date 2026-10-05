@@ -17,6 +17,7 @@ import {
   type ListFathomMeetingsOptions,
 } from "@/lib/fathom/api";
 import { reportarFalla } from "@/lib/observability/reportar-falla";
+import { cabeLaEspera, quedaTiempo } from "@/lib/fathom/plazo-del-cron";
 
 /**
  * Tramos cerrados por corrida, como mucho. Cada pedido con transcript es
@@ -64,8 +65,14 @@ export async function leerVentanaDeFathom(
     maxPages: number;
     opciones?: Omit<
       ListFathomMeetingsOptions,
-      "createdAfter" | "createdBefore" | "maxPages"
+      "createdAfter" | "createdBefore" | "maxPages" | "plazo"
     >;
+    /**
+     * Plazo de la corrida del cron (ms). Pasado, no se pide otro tramo ni otra
+     * página, y un `Retry-After` sólo se espera si cabe antes. Sin plazo
+     * (sincronización manual), no hay límite de tiempo.
+     */
+    plazo?: number;
     /** Para los tests. */
     esperar?: (ms: number) => Promise<void>;
   }
@@ -88,6 +95,10 @@ export async function leerVentanaDeFathom(
     if (tramo.hasta && tramosCerrados >= TRAMOS_CERRADOS_POR_CORRIDA) {
       return { meetings, cortada: true, completaHasta, tramoCortado: [] };
     }
+    // Se acabó el tiempo de la corrida: lo que falta, en la próxima.
+    if (completaHasta !== null && !quedaTiempo(params.plazo)) {
+      return { meetings, cortada: true, completaHasta, tramoCortado: [] };
+    }
 
     let listado;
     try {
@@ -96,13 +107,19 @@ export async function leerVentanaDeFathom(
         createdAfter: tramo.desde ?? undefined,
         createdBefore: tramo.hasta ?? undefined,
         maxPages: restantes,
+        plazo: params.plazo,
       });
     } catch (fallo) {
       if (!esFallaPasajera(fallo)) throw fallo;
       // El pedido que falló también gasta presupuesto.
       restantes -= 1;
       const espera = (fallo.retryAfterSeconds ?? Number.POSITIVE_INFINITY) * 1000;
-      if (fallo.status === 429 && !yaEspero && espera <= ESPERA_MAXIMA_MS) {
+      if (
+        fallo.status === 429 &&
+        !yaEspero &&
+        espera <= ESPERA_MAXIMA_MS &&
+        cabeLaEspera(params.plazo, espera)
+      ) {
         yaEspero = true;
         await esperar(espera);
         continue;
@@ -165,7 +182,7 @@ export function reportarDecisionDeCursor(
           recording_id: meeting.recording_id ?? meeting.id,
           created_at: meeting.created_at ?? null,
           como_recuperarla:
-            "Arreglar la causa y rebobinar last_sync_at de la conexión a antes de created_at (docs/areas/ventas.md, Cursor de la sync)",
+            "Arreglar la causa, borrar su fila de fathom_sync_fallas y rebobinar last_sync_at de la conexión a antes de created_at (docs/areas/ventas.md, Cómo recuperar una reunión descartada)",
         },
       }
     );

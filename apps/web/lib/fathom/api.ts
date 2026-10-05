@@ -419,6 +419,12 @@ export type ListFathomMeetingsOptions = {
   /** ⭐ De acá sale `matched_speaker_display_name`: el alias, gratis. */
   includeCrmMatches?: boolean;
   maxPages?: number;
+  /**
+   * Momento (ms) desde el cual no se pide otra página: la lectura vuelve como
+   * cortada (`truncated`) y el resto queda para la corrida siguiente. Lo pone
+   * el cron (`lib/fathom/plazo-del-cron.ts`).
+   */
+  plazo?: number;
   /** Loguea status, headers, respuesta cruda y shape de paginación (cron/debug). */
   debug?: boolean;
   debugContext?: string;
@@ -546,7 +552,7 @@ export async function listFathomMeetings(
     );
 
     if (!nextCursor) break;
-    if (page === maxPages - 1) {
+    if (page === maxPages - 1 || (options.plazo !== undefined && Date.now() >= options.plazo)) {
       truncated = true;
       break;
     }
@@ -558,7 +564,7 @@ export async function listFathomMeetings(
   }
   if (truncated) {
     console.warn(
-      `[Fathom:${context}] Lectura cortada en el tope de ${maxPages} páginas: Fathom tenía más.`
+      `[Fathom:${context}] Lectura cortada (tope de ${maxPages} páginas o plazo del cron): Fathom tenía más.`
     );
   }
 

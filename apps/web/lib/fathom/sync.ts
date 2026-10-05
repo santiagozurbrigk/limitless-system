@@ -3,6 +3,7 @@ import { isManualFathomLink } from "@/lib/fathom/client-matcher";
 import { resolverVentanaDeSync } from "@/lib/fathom/sync-window";
 import { calcularNuevoCursor, type ResultadoDeReunion } from "@/lib/fathom/cursor";
 import { leerVentanaDeFathom, reportarDecisionDeCursor } from "@/lib/fathom/leer-ventana";
+import { quedaTiempo, rotar } from "@/lib/fathom/plazo-del-cron";
 import { marcarDescartadas, registrarFallasDeSync } from "@/lib/fathom/fallas-de-sync";
 import {
   FathomApiError,
@@ -211,7 +212,11 @@ export async function upsertFathomCallFromMeeting(
 
 export async function syncFathomMeetingsForOrganization(
   organizationId: string,
-  options?: { debug?: boolean }
+  options?: {
+    debug?: boolean;
+    /** Plazo de la corrida del cron (`lib/fathom/plazo-del-cron.ts`). */
+    plazo?: number;
+  }
 ): Promise<number> {
   console.log("[Fathom] syncFathomMeetingsForOrganization start:", organizationId);
 
@@ -283,6 +288,7 @@ export async function syncFathomMeetingsForOrganization(
       desde: ventana.desde,
       ahora,
       maxPages: 20,
+      plazo: options?.plazo,
       opciones: {
         includeTranscript: true,
         debug: options?.debug,
@@ -367,10 +373,16 @@ export async function syncFathomMeetingsForOrganization(
 
 export async function syncAllFathomIntegrations(options?: {
   debug?: boolean;
+  /** Plazo de la corrida: pasado, no se arranca ninguna org más. */
+  plazo?: number;
+  /** Número de corrida: rota el orden para que ninguna org quede siempre última. */
+  corrida?: number;
 }): Promise<{
   organizations: number;
   ingested: number;
   skippedOrgs: string[];
+  /** Las que no se empezaron por falta de tiempo; van en la próxima corrida. */
+  postergadas: string[];
   orgResults: Array<{
     organizationId: string;
     ingested: number;
@@ -387,7 +399,10 @@ export async function syncAllFathomIntegrations(options?: {
   const orgs = diagnostics.rows.filter(
     (r) => r.status === "connected" && r.has_key
   );
-  const organizationIds = orgs.map((r) => r.organization_id);
+  const organizationIds = rotar(
+    orgs.map((r) => r.organization_id),
+    options?.corrida ?? 0
+  );
 
   console.log(
     "[Fathom:sync] Orgs from DB:",
@@ -397,11 +412,12 @@ export async function syncAllFathomIntegrations(options?: {
 
   if (organizationIds.length === 0) {
     console.log("[Fathom:sync] Early return: zero eligible orgs, skipping all fetches");
-    return { organizations: 0, ingested: 0, skippedOrgs: [], orgResults: [] };
+    return { organizations: 0, ingested: 0, skippedOrgs: [], postergadas: [], orgResults: [] };
   }
 
   let ingested = 0;
   const skippedOrgs: string[] = [];
+  const postergadas: string[] = [];
   const orgResults: Array<{
     organizationId: string;
     ingested: number;
@@ -409,10 +425,15 @@ export async function syncAllFathomIntegrations(options?: {
   }> = [];
 
   for (const organizationId of organizationIds) {
+    if (!quedaTiempo(options?.plazo)) {
+      postergadas.push(organizationId);
+      continue;
+    }
     console.log("[Fathom:sync] Processing org:", organizationId);
     try {
       const orgIngested = await syncFathomMeetingsForOrganization(organizationId, {
         debug: options?.debug,
+        plazo: options?.plazo,
       });
       ingested += orgIngested;
       orgResults.push({ organizationId, ingested: orgIngested });
@@ -433,8 +454,12 @@ export async function syncAllFathomIntegrations(options?: {
     organizations: organizationIds.length,
     ingested,
     skippedOrgs,
+    postergadas,
     orgResults,
   };
+  if (postergadas.length) {
+    console.warn("[Fathom:sync] Sin tiempo en esta corrida; quedan para la próxima:", postergadas);
+  }
   console.log("[Fathom:sync] syncAllFathomIntegrations done:", JSON.stringify(result));
   return result;
 }

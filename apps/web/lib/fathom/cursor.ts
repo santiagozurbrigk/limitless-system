@@ -138,7 +138,16 @@ export type ResultadoDeReunion = {
    * (`fathom_sync_fallas`), ya contando la de esta corrida. Sin registro (no se
    * pudo leer ni escribir) la reunión frena el cursor y no se descarta.
    */
-  falla?: { primeraFallaAt: string; intentos: number };
+  falla?: {
+    primeraFallaAt: string;
+    intentos: number;
+    /**
+     * Ya se había descartado en una corrida anterior y volvió a llegar (por el
+     * solape o porque el cursor no pudo avanzar). No frena el cursor ni se
+     * reporta de nuevo.
+     */
+    descartada?: boolean;
+  };
 };
 
 export type OrdenDeLlegada = "ascendente" | "descendente" | "desconocido";
@@ -257,6 +266,7 @@ export function calcularNuevoCursor(params: {
   let limiteDeFallas: number | null = null;
   for (const { meeting, guardada, falla } of resultados) {
     if (guardada) continue;
+    if (falla?.descartada) continue;
     const fecha = fechaDeCreacion(meeting);
     if (fecha === null) {
       sinFecha.push(meeting);

@@ -210,3 +210,79 @@ describe("leerRetryAfter", () => {
     expect(leerRetryAfter("pronto")).toBeUndefined();
   });
 });
+
+describe("leerVentanaDeFathom: plazo de la corrida del cron (N-1)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(AHORA);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("⭐ un Retry-After que no entra antes del plazo no se espera: corta con lo completo", async () => {
+    sim.fallas.set(2, { status: 429, retryAfter: "5" });
+    const esperar = vi.fn(async () => {});
+    // Quedan 12 s: 5 de espera más el margen de 8 no entran.
+    const lectura = await leerVentanaDeFathom("key", {
+      desde: DESDE,
+      ahora: AHORA,
+      maxPages: 20,
+      esperar,
+      plazo: Date.now() + 12_000,
+    });
+    expect(esperar).not.toHaveBeenCalled();
+    expect(lectura).toMatchObject({ cortada: true, completaHasta: en(6) });
+  });
+
+  it("el mismo Retry-After sí se espera si entra", async () => {
+    sim.fallas.set(2, { status: 429, retryAfter: "5" });
+    const esperar = vi.fn(async () => {});
+    await leerVentanaDeFathom("key", {
+      desde: DESDE,
+      ahora: AHORA,
+      maxPages: 20,
+      esperar,
+      plazo: Date.now() + 13_000,
+    });
+    expect(esperar).toHaveBeenCalledWith(5000);
+  });
+
+  it("⭐ pasado el plazo no se pide otro tramo", async () => {
+    // Cada pedido "tarda" 30 s; el plazo vence durante el primero.
+    vi.mocked(fetch).mockImplementation((input) => {
+      vi.setSystemTime(Date.now() + 30_000);
+      return fathomFetch(input as string);
+    });
+    const lectura = await leerVentanaDeFathom("key", {
+      desde: DESDE,
+      ahora: AHORA,
+      maxPages: 20,
+      plazo: Date.now() + 20_000,
+    });
+    expect(sim.pedidos).toHaveLength(1);
+    expect(lectura).toMatchObject({ cortada: true, completaHasta: en(6) });
+  });
+
+  it("⭐ pasado el plazo no se pide otra página: la lectura vuelve cortada", async () => {
+    sim.tamanoDePagina = 1;
+    const desde = new Date(AHORA.getTime() - 2 * HORA).toISOString();
+    sim.reuniones = [1, 2, 3].map((m) => ({
+      recording_id: m,
+      created_at: new Date(AHORA.getTime() - m * 60_000).toISOString(),
+    }));
+    vi.mocked(fetch).mockImplementation((input) => {
+      vi.setSystemTime(Date.now() + 30_000);
+      return fathomFetch(input as string);
+    });
+    const lectura = await leerVentanaDeFathom("key", {
+      desde,
+      ahora: AHORA,
+      maxPages: 20,
+      plazo: Date.now() + 20_000,
+    });
+    expect(sim.pedidos).toHaveLength(1);
+    expect(lectura.cortada).toBe(true);
+    expect(lectura.tramoCortado).toHaveLength(1);
+  });
+});
