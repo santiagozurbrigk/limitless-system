@@ -1602,11 +1602,11 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 - **Qué hay que hacer:** replicar el `if (result === "failed") → 500` en esos dos workers.
 - **Dónde:** `apps/web/app/api/queue/process-cron-intelligence-snapshot/route.ts`, `process-cron-founder-tone/route.ts`.
 
-#### [CRONS-ORGS-INACTIVAS] (nuevo) Los crons de IA corren sobre orgs dadas de baja
-- **Tipo:** bug
-- **Estado verificado:** `listActiveOrganizationIds()` (`lib/intelligence/generate-snapshot.ts:215`, duplicada en `lib/founder-tone/analyze-tone.ts:108`) filtra sólo `account_type = 'founder'`, no `status`. Snapshot 2×/día + reportes + tono con Sonnet por cada una.
-- **Qué hay que hacer:** filtrar `status = 'active'` (o equivalente) y unificar la función.
-- **Dónde:** esos dos archivos.
+#### [CRONS-IA-ORGS-PAUSADAS-RESTO] (nuevo) Otros procesos con IA siguen corriendo para orgs pausadas
+- **Tipo:** decisión de negocio
+- **Estado verificado:** desde SCRUM-210, inteligencia, reportes ejecutivos y tono del founder sólo corren para orgs `status = 'active'` (`lib/intelligence/organizaciones-activas.ts`). Pero otros procesos con IA no miran `organizations.status`: `/api/integrations/fathom/process` (cada 10 min; analiza las llamadas que trae `fathom/sync` con Claude e indexa en RAG), `/api/cron/daily-signals` (Haiku para clasificar Discord y proponer hitos; elige orgs en `route.ts:86-104`) y el inbox de Instagram (`instagram/poll` + `process-message`, `lib/manychat/score-conversation.ts`). Desde SCRUM-7 el costo va a la clave de Claude de cada org, no a la de Limitless. La pausa tampoco corta el acceso a la app (`lib/auth/bootstrap.ts` no mira `status`).
+- **Qué hay que hacer:** decidir si pausar una org detiene todos sus procesos automáticos. Si sí, filtrar `status = 'active'` en esos tres caminos (reusar `listActiveOrganizationIds` o un chequeo por org).
+- **Dónde:** `apps/web/app/api/integrations/fathom/process/route.ts`, `apps/web/app/api/cron/daily-signals/route.ts`, `apps/web/app/api/instagram/`.
 
 #### [IA-COSTOS-INCOMPLETOS] (nuevo) Costos de IA subestimados
 - **Tipo:** deuda técnica

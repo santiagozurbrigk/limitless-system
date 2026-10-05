@@ -702,12 +702,11 @@ Funcionalidad: F-IA-13 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlo
 * [INTELIGENCIA-FUENTES-LEGACY] (nuevo) Inteligencia y reportes leen tablas legacy (P1)
 * [INTELIGENCIA-SIN-REINTENTO] (nuevo) Snapshot y tono no reintentan (P2)
 * [REPORTES-DUPLICADOS] (nuevo) Reintentos duplican reportes y snapshots (P2)
-* [CRONS-ORGS-INACTIVAS] (nuevo) Los crons de IA corren sobre orgs dadas de baja (P2)
 
 *Para confirmar:*
 * Agustín: cuánto tiempo guardar los informes viejos (hoy se guardan dos por día para siempre).
 
-Funcionalidad: F-IA-18 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-18]",H-IA-18,Agente de negocio e IA,P1,Alta,INTELIGENCIA-FUENTES-LEGACY INTELIGENCIA-SIN-REINTENTO REPORTES-DUPLICADOS CRONS-ORGS-INACTIVAS,
+Funcionalidad: F-IA-18 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-18]",H-IA-18,Agente de negocio e IA,P1,Alta,INTELIGENCIA-FUENTES-LEGACY INTELIGENCIA-SIN-REINTENTO REPORTES-DUPLICADOS,
 [H-IA-19] Recibir un pulso diario que hable sólo del día,Story,High,historia,agente-de-negocio-e-ia,p1,sev-alta,,,"*Historia:* Como founder, quiero que el pulso diario de cada mañana resuma lo que pasó en el último día con todos los datos del negocio, para reaccionar a lo de hoy y no a problemas de hace dos semanas.
 
 *Criterios de aceptación:*
@@ -755,9 +754,8 @@ Funcionalidad: F-IA-21 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlo
 *Tareas técnicas (PENDIENTES.md):*
 * [INTELIGENCIA-FUENTES-LEGACY] (nuevo) Inteligencia y reportes leen tablas legacy (P1)
 * [INTELIGENCIA-SIN-REINTENTO] (nuevo) Snapshot y tono no reintentan (P2)
-* [CRONS-ORGS-INACTIVAS] (nuevo) Los crons de IA corren sobre orgs dadas de baja (P2)
 
-Funcionalidad: F-IA-24 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-24]",H-IA-24,Agente de negocio e IA,P1,Alta,INTELIGENCIA-FUENTES-LEGACY INTELIGENCIA-SIN-REINTENTO CRONS-ORGS-INACTIVAS,
+Funcionalidad: F-IA-24 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-IA-24]",H-IA-24,Agente de negocio e IA,P1,Alta,INTELIGENCIA-FUENTES-LEGACY INTELIGENCIA-SIN-REINTENTO,
 [H-IA-25] Cargar mi clave de Claude y enterarme si deja de andar,Story,High,historia,agente-de-negocio-e-ia,p1,sev-alta,,,"*Historia:* Como founder, quiero cargar la clave de Claude de mi empresa, que sólo yo pueda cambiarla y que el sistema me avise si deja de funcionar o se queda sin créditos, para que la IA de mi organización no se corte sin que me entere.
 
 *Criterios de aceptación:*

@@ -1,6 +1,7 @@
 import { callClaudeText, getClientForOrg, getModelForTask } from "@/lib/ai/anthropic";
 import { wrapUntrustedContent } from "@/lib/ai/wrap-untrusted-content";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { listActiveOrganizationIds } from "@/lib/intelligence/organizaciones-activas";
 import {
   collectFounderToneSources,
   formatToneSourcesForPrompt,
@@ -103,20 +104,6 @@ export async function saveFounderTone(
   if (error) {
     throw new Error(error.message);
   }
-}
-
-async function listActiveOrganizationIds(): Promise<string[]> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("organizations")
-    .select("id")
-    .eq("account_type", "founder");
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((row) => String(row.id));
 }
 
 export async function generateAndSaveFounderTone(
