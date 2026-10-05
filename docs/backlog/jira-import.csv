@@ -1502,15 +1502,6 @@ Fuente: PENDIENTES.md [EMBUDO-PANEL-DMS] · Doc del área: docs/areas/plataforma
 *Dónde:* {{apps/web/lib/super-admin/org-health.ts}}, {{client-health.ts}}.
 
 Fuente: PENDIENTES.md [CLIENT-HEALTH-LEGACY] · Doc del área: docs/areas/plataforma.md",CLIENT-HEALTH-LEGACY,Plataforma,P2,,bug
-[PERMISOS-LOG] console.log de permisos en cada render (nuevo),Task,Medium,plataforma,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
-
-*Estado verificado:* {{lib/auth/get-current-permissions.ts}} loguea userId, rol y mapa de módulos para todo member en cada request de plataforma.
-
-*Qué hay que hacer:* borrar el log.
-
-*Dónde:* {{apps/web/lib/auth/get-current-permissions.ts}}.
-
-Fuente: PENDIENTES.md [PERMISOS-LOG] · Doc del área: docs/areas/plataforma.md",PERMISOS-LOG,Plataforma,P2,,deuda técnica
 [GLASS-TOKENS-PISADOS] globals.css pisa los tokens glass de tokens.css (nuevo),Bug,Medium,plataforma,p2,bug,verificacion-manual,,,"*Tipo:* bug (visual) / verificación manual
 
 *Estado verificado:* {{globals.css}} redefine {{--glass-bg: rgba(255,255,255,0.03)}}, {{--glass-border}}, {{--glass-blur}} en {{:root}} dentro de {{@layer base}}, emitido después de {{tokens.css}} y con igual especificidad que {{.dark}}. {{.glass}} usa {{var(--glass-bg)}}.
