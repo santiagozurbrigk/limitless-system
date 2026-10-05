@@ -442,6 +442,8 @@ export type FathomMeetingsListing = {
   truncated: boolean;
   /** Páginas pedidas. La lectura por tramos lo descuenta de su presupuesto. */
   pages: number;
+  /** `true` si el corte fue por el plazo de la corrida y no por el tope de páginas. */
+  cortadaPorPlazo: boolean;
 };
 
 export async function listFathomMeetings(
@@ -451,6 +453,7 @@ export async function listFathomMeetings(
   const meetings: FathomMeetingRecord[] = [];
   let cursor: string | undefined;
   let truncated = false;
+  let cortadaPorPlazo = false;
   let pages = 0;
   const maxPages = options.maxPages ?? 20;
   const debug = options.debug ?? false;
@@ -552,8 +555,13 @@ export async function listFathomMeetings(
     );
 
     if (!nextCursor) break;
-    if (page === maxPages - 1 || (options.plazo !== undefined && Date.now() >= options.plazo)) {
+    if (page === maxPages - 1) {
       truncated = true;
+      break;
+    }
+    if (options.plazo !== undefined && Date.now() >= options.plazo) {
+      truncated = true;
+      cortadaPorPlazo = true;
       break;
     }
     cursor = nextCursor;
@@ -568,7 +576,7 @@ export async function listFathomMeetings(
     );
   }
 
-  return { meetings, truncated, pages };
+  return { meetings, truncated, pages, cortadaPorPlazo };
 }
 
 export async function fetchFathomMeetingTitle(

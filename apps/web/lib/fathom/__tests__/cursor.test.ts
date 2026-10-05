@@ -38,7 +38,7 @@ function menosSolape(iso: string): string {
   return new Date(new Date(iso).getTime() - SOLAPE_MS).toISOString();
 }
 
-const COMPLETA: Pick<LecturaDeVentana, "cortada" | "completaHasta" | "tramoCortado"> = {
+const COMPLETA: Pick<LecturaDeVentana, "cortada" | "completaHasta" | "tramoCortado" | "motivoDeCorte"> = {
   cortada: false,
   completaHasta: null,
   tramoCortado: [],
@@ -147,6 +147,20 @@ describe("calcularNuevoCursor", () => {
       expect(decision.avanza).toBe(false);
       expect(decision.cursor).toBe(ANTERIOR);
       expect(decision.trabada).toBe(true);
+    });
+
+    it("⭐ N-3: sólo el corte por tope de páginas cuenta como sync trabada", () => {
+      const resultados = [{ meeting: R3, guardada: true }];
+      const base = { completaHasta: null, tramoCortado: [R3, R2] };
+      for (const motivoDeCorte of ["plazo", "tramos", "fathom"] as const) {
+        const decision = decidir(resultados, { cortada: true, motivoDeCorte, ...base });
+        expect(decision.avanza).toBe(false);
+        expect(decision.trabada).toBe(false);
+        expect(decision.motivo).toContain(motivoDeCorte);
+      }
+      expect(decidir(resultados, { cortada: true, motivoDeCorte: "tope", ...base }).trabada).toBe(true);
+      // Sin motivo (lecturas viejas) se trata como tope.
+      expect(decidir(resultados, { cortada: true, ...base }).trabada).toBe(true);
     });
 
     it("orden ascendente: avanza hasta lo último leído, no más", () => {

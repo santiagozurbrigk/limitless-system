@@ -85,6 +85,7 @@ describe("leerVentanaDeFathom: presupuesto y bordes", () => {
     // 2 páginas del tramo 1 y la única que quedaba para el tramo 2.
     expect(sim.pedidos).toHaveLength(3);
     expect(lectura.cortada).toBe(true);
+    expect(lectura.motivoDeCorte).toBe("tope");
     expect(lectura.completaHasta).toBe(en(6));
     expect(lectura.tramoCortado).toHaveLength(1);
   });
@@ -109,6 +110,7 @@ describe("leerVentanaDeFathom: presupuesto y bordes", () => {
     const lectura = await leer();
     expect(sim.pedidos).toHaveLength(TRAMOS_CERRADOS_POR_CORRIDA);
     expect(lectura.cortada).toBe(true);
+    expect(lectura.motivoDeCorte).toBe("tramos");
     expect(Date.parse(lectura.completaHasta!)).toBeGreaterThan(Date.parse(en(23)));
   });
 
@@ -143,6 +145,7 @@ describe("leerVentanaDeFathom: Fathom corta a mitad de la lectura", () => {
 
     expect(sim.pedidos).toHaveLength(6);
     expect(lectura.cortada).toBe(true);
+    expect(lectura.motivoDeCorte).toBe("fathom");
     // El fin del tramo 2: 6 h más 6 h, menos el segundo de solape del arranque del tramo 2.
     expect(lectura.completaHasta).toBe(en(12, -1000));
     expect(lectura.meetings.map((m) => m.recording_id).sort()).toEqual(["0", "1", "10", "11", "2"]);
@@ -261,7 +264,7 @@ describe("leerVentanaDeFathom: plazo de la corrida del cron (N-1)", () => {
       plazo: Date.now() + 20_000,
     });
     expect(sim.pedidos).toHaveLength(1);
-    expect(lectura).toMatchObject({ cortada: true, completaHasta: en(6) });
+    expect(lectura).toMatchObject({ cortada: true, motivoDeCorte: "plazo", completaHasta: en(6) });
   });
 
   it("⭐ pasado el plazo no se pide otra página: la lectura vuelve cortada", async () => {
@@ -283,6 +286,7 @@ describe("leerVentanaDeFathom: plazo de la corrida del cron (N-1)", () => {
     });
     expect(sim.pedidos).toHaveLength(1);
     expect(lectura.cortada).toBe(true);
+    expect(lectura.motivoDeCorte).toBe("plazo");
     expect(lectura.tramoCortado).toHaveLength(1);
   });
 });

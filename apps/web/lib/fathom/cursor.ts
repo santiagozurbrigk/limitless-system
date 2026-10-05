@@ -116,11 +116,23 @@ export function inicioDelTramoSiguiente(hasta: string): string {
 }
 
 /** Cómo terminó la lectura de la ventana. */
+/**
+ * Por qué se cortó una lectura:
+ * - `tope`: se gastó el presupuesto de páginas. Si el cursor no puede avanzar,
+ *   la sync está trabada (un tramo con más reuniones que el presupuesto).
+ * - `plazo`: se acabó el tiempo de la corrida del cron. Sigue en la próxima.
+ * - `tramos`: se leyeron los tramos cerrados permitidos por corrida.
+ * - `fathom`: Fathom respondió 429 o una falla de su lado a mitad de la lectura.
+ */
+export type MotivoDeCorte = "tope" | "plazo" | "tramos" | "fathom";
+
 export type LecturaDeVentana = {
   /** Todo lo leído, sin repetidas, en el orden en que llegó. */
   meetings: FathomMeetingRecord[];
-  /** `true` si se cortó por el tope de páginas y quedaron reuniones sin leer. */
+  /** `true` si se cortó antes de leer todo y quedaron reuniones sin leer. */
   cortada: boolean;
+  /** Por qué se cortó. Sólo cuando `cortada`; sin dato se trata como `tope`. */
+  motivoDeCorte?: MotivoDeCorte;
   /**
    * Fin del último tramo cerrado que se leyó entero: todo lo creado antes ya se
    * pidió. `null` si no se cerró ningún tramo.
@@ -200,8 +212,10 @@ export type DecisionDeCursor = {
   /** Fallaron y no tienen fecha: no hay dónde frenar el cursor. Se reportan. */
   sinFecha: FathomMeetingRecord[];
   /**
-   * La lectura se cortó y el cursor no se pudo mover: la próxima corrida pide lo
-   * mismo. Se reporta, porque si se repite la sync está trabada.
+   * La lectura se cortó por el tope de páginas y el cursor no se pudo mover: la
+   * próxima corrida pide lo mismo. Se reporta, porque si se repite la sync está
+   * trabada. Un corte por el plazo del cron, por el límite de tramos o por
+   * Fathom no es una sync trabada: no cuenta.
    */
   trabada: boolean;
   /** Para el log. */
@@ -240,13 +254,14 @@ function maximo(fechas: Array<number | null>): number | null {
  */
 export function calcularNuevoCursor(params: {
   cursorAnterior: string | null;
-  lectura: Pick<LecturaDeVentana, "cortada" | "completaHasta" | "tramoCortado">;
+  lectura: Pick<LecturaDeVentana, "cortada" | "completaHasta" | "tramoCortado" | "motivoDeCorte">;
   resultados: ResultadoDeReunion[];
   ahora: Date;
 }): DecisionDeCursor {
   const { lectura, resultados } = params;
   const anterior = aMs(params.cursorAnterior);
   const completaHasta = aMs(lectura.completaHasta);
+  const motivoDeCorte: MotivoDeCorte = lectura.motivoDeCorte ?? "tope";
 
   let techo: number | null;
   let motivo: string;
@@ -255,10 +270,10 @@ export function calcularNuevoCursor(params: {
     motivo = "lectura completa";
   } else if (ordenDeLlegada(lectura.tramoCortado) === "ascendente") {
     techo = maximo([completaHasta, ...lectura.tramoCortado.map(fechaDeCreacion)]);
-    motivo = "lectura cortada (orden ascendente): hasta lo último leído";
+    motivo = `lectura cortada (${motivoDeCorte}, orden ascendente): hasta lo último leído`;
   } else {
     techo = completaHasta;
-    motivo = "lectura cortada: hasta el último tramo completo";
+    motivo = `lectura cortada (${motivoDeCorte}): hasta el último tramo completo`;
   }
 
   const descartadas: FathomMeetingRecord[] = [];
@@ -302,7 +317,7 @@ export function calcularNuevoCursor(params: {
     avanza,
     descartadas,
     sinFecha,
-    trabada: lectura.cortada && !avanza,
+    trabada: lectura.cortada && motivoDeCorte === "tope" && !avanza,
     motivo,
   };
 }

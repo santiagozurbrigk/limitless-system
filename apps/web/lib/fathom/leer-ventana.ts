@@ -88,16 +88,16 @@ export async function leerVentanaDeFathom(
 
   for (;;) {
     if (restantes <= 0) {
-      return { meetings, cortada: true, completaHasta, tramoCortado: [] };
+      return { meetings, cortada: true, motivoDeCorte: "tope", completaHasta, tramoCortado: [] };
     }
 
     const tramo = siguienteTramo(desde, params.ahora);
     if (tramo.hasta && tramosCerrados >= TRAMOS_CERRADOS_POR_CORRIDA) {
-      return { meetings, cortada: true, completaHasta, tramoCortado: [] };
+      return { meetings, cortada: true, motivoDeCorte: "tramos", completaHasta, tramoCortado: [] };
     }
     // Se acabó el tiempo de la corrida: lo que falta, en la próxima.
     if (completaHasta !== null && !quedaTiempo(params.plazo)) {
-      return { meetings, cortada: true, completaHasta, tramoCortado: [] };
+      return { meetings, cortada: true, motivoDeCorte: "plazo", completaHasta, tramoCortado: [] };
     }
 
     let listado;
@@ -129,7 +129,7 @@ export async function leerVentanaDeFathom(
         status: fallo.status,
         completaHasta,
       });
-      return { meetings, cortada: true, completaHasta, tramoCortado: [] };
+      return { meetings, cortada: true, motivoDeCorte: "fathom", completaHasta, tramoCortado: [] };
     }
     restantes -= listado.pages;
 
@@ -142,7 +142,13 @@ export async function leerVentanaDeFathom(
     }
 
     if (listado.truncated) {
-      return { meetings, cortada: true, completaHasta, tramoCortado: listado.meetings };
+      return {
+        meetings,
+        cortada: true,
+        motivoDeCorte: listado.cortadaPorPlazo ? "plazo" : "tope",
+        completaHasta,
+        tramoCortado: listado.meetings,
+      };
     }
     if (!tramo.hasta) {
       return { meetings, cortada: false, completaHasta, tramoCortado: [] };

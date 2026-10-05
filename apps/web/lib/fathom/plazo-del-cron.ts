@@ -66,6 +66,19 @@ export function rotar<T>(items: T[], corrida: number): T[] {
   return [...items.slice(inicio), ...items.slice(0, inicio)];
 }
 
+/**
+ * El orden de una tanda (orgs o miembros) en la corrida.
+ *
+ * ⭐ Rota con `corrida / 2`, no con `corrida`: la alternancia de tandas ya usa la
+ * paridad de la corrida (`miembrosPrimero`), y rotar con el mismo número hacía
+ * que, con una cantidad par de conexiones, en las corridas en que una tanda va
+ * primero arrancara siempre una de índice par. Así cada conexión arranca primera
+ * de toda la corrida una vez cada `2 × n` horas.
+ */
+export function ordenDeLaTanda<T>(items: T[], corrida: number): T[] {
+  return rotar(items, Math.floor(corrida / 2));
+}
+
 /** Los dos grupos del cron se alternan: en las corridas impares van primero los miembros. */
 export function miembrosPrimero(corrida: number): boolean {
   return corrida % 2 !== 0;

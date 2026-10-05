@@ -3,7 +3,7 @@ import { isManualFathomLink } from "@/lib/fathom/client-matcher";
 import { resolverVentanaDeSync } from "@/lib/fathom/sync-window";
 import { calcularNuevoCursor, type ResultadoDeReunion } from "@/lib/fathom/cursor";
 import { leerVentanaDeFathom, reportarDecisionDeCursor } from "@/lib/fathom/leer-ventana";
-import { quedaTiempo, rotar } from "@/lib/fathom/plazo-del-cron";
+import { ordenDeLaTanda, quedaTiempo } from "@/lib/fathom/plazo-del-cron";
 import { marcarDescartadas, registrarFallasDeSync } from "@/lib/fathom/fallas-de-sync";
 import {
   FathomApiError,
@@ -304,6 +304,7 @@ export async function syncFathomMeetingsForOrganization(
   const meetings = lectura.meetings;
   console.log("[Fathom:sync] Meetings received:", meetings.length, {
     cortada: lectura.cortada,
+    motivoDeCorte: lectura.motivoDeCorte,
     completaHasta: lectura.completaHasta,
   });
 
@@ -399,7 +400,7 @@ export async function syncAllFathomIntegrations(options?: {
   const orgs = diagnostics.rows.filter(
     (r) => r.status === "connected" && r.has_key
   );
-  const organizationIds = rotar(
+  const organizationIds = ordenDeLaTanda(
     orgs.map((r) => r.organization_id),
     options?.corrida ?? 0
   );

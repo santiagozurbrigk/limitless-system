@@ -11,7 +11,7 @@
 import { resolverVentanaDeSync } from "@/lib/fathom/sync-window";
 import { calcularNuevoCursor, type ResultadoDeReunion } from "@/lib/fathom/cursor";
 import { leerVentanaDeFathom, reportarDecisionDeCursor } from "@/lib/fathom/leer-ventana";
-import { quedaTiempo, rotar } from "@/lib/fathom/plazo-del-cron";
+import { ordenDeLaTanda, quedaTiempo } from "@/lib/fathom/plazo-del-cron";
 import { marcarDescartadas, registrarFallasDeSync } from "@/lib/fathom/fallas-de-sync";
 import { mensajeDeFathom } from "@/lib/fathom/api";
 import { upsertFathomCallFromMeeting } from "@/lib/fathom/sync";
@@ -149,7 +149,7 @@ export async function sincronizarTodosLosMiembrosFathom(options?: {
 
   if (error) throw new Error(error.message);
 
-  const filas = rotar(
+  const filas = ordenDeLaTanda(
     miembrosParaSincronizar((data ?? []) as FilaMiembroFathom[]),
     options?.corrida ?? 0
   );

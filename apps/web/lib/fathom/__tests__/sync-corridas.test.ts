@@ -608,7 +608,8 @@ describe("N-1 · el cron de Fathom respeta el plazo de la corrida", () => {
     const { syncAllFathomIntegrations } = await import("@/lib/fathom/sync");
     sim.avancePorPedidoMs = 20_000;
     const atendidas = new Set<string>();
-    for (const corrida of [0, 3]) {
+    // Corridas 0 y 6: las dos con las orgs primero, rotadas 0 y 3 lugares.
+    for (const corrida of [0, 6]) {
       const resultado = await syncAllFathomIntegrations({ plazo: Date.now() + 45_000, corrida });
       for (const r of resultado.orgResults) atendidas.add(r.organizationId);
     }
@@ -670,9 +671,41 @@ describe("N-1 · el cron de Fathom respeta el plazo de la corrida", () => {
     expect(atendidos()).toEqual(["tmi-u1", "tmi-u2"]);
 
     sim.consultas = [];
-    const segunda = await sincronizarTodosLosMiembrosFathom({ plazo: Date.now() + 45_000, corrida: 2 });
+    // Corrida 4: el orden rota 2 lugares (`corrida / 2`).
+    const segunda = await sincronizarTodosLosMiembrosFathom({ plazo: Date.now() + 45_000, corrida: 4 });
     expect(segunda.postergados).toBe(1);
     // El que quedó afuera va primero.
     expect(atendidos()).toEqual(["tmi-u3", "tmi-u1"]);
+  });
+});
+
+describe("N-3 · un corte por el plazo del cron no es una sync trabada", () => {
+  beforeEach(() => {
+    sim.tablas.fathom_integrations = [
+      { organization_id: ORG, api_key: "key-org", status: "connected", last_sync_at: null, connected_at: CONEXION },
+    ];
+  });
+
+  it("⭐ cortada por el plazo, más nuevas primero: el cursor no se mueve y no va a Sentry", async () => {
+    const { syncFathomMeetingsForOrganization } = await import("@/lib/fathom/sync");
+    sim.tamanoDePagina = 1;
+    sim.avancePorPedidoMs = 30_000;
+    await syncFathomMeetingsForOrganization(ORG, { plazo: Date.now() + 20_000 });
+    expect(sim.pedidos).toHaveLength(1);
+    expect(sim.tablas.fathom_integrations[0].last_sync_at).toBeNull();
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("cortada por el tope de páginas en el mismo caso: sí va a Sentry como trabada", async () => {
+    const { syncFathomMeetingsForOrganization } = await import("@/lib/fathom/sync");
+    sim.tamanoDePagina = 1;
+    sim.reuniones = Array.from({ length: 25 }, (_, i) => ({
+      recording_id: 500 + i,
+      created_at: new Date(Date.parse("2026-10-05T06:30:00Z") + i * 60_000).toISOString(),
+      title: `R${i}`,
+    }));
+    await syncFathomMeetingsForOrganization(ORG, { plazo: Date.now() + 10 * 60_000 });
+    expect(sim.reportes).toHaveLength(1);
+    expect(String((sim.reportes[0].error as Error).message)).toContain("tope de páginas");
   });
 });

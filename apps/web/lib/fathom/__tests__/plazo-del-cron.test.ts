@@ -5,6 +5,7 @@ import {
   cabeLaEspera,
   miembrosPrimero,
   numeroDeCorrida,
+  ordenDeLaTanda,
   plazoDeLaCorrida,
   quedaTiempo,
   rotar,
@@ -61,5 +62,36 @@ describe("orden rotativo", () => {
     const corrida = numeroDeCorrida(Date.parse("2026-10-05T10:00:00Z"));
     expect(numeroDeCorrida(Date.parse("2026-10-05T10:59:59Z"))).toBe(corrida);
     expect(miembrosPrimero(corrida)).not.toBe(miembrosPrimero(corrida + 1));
+  });
+});
+
+describe("ordenDeLaTanda (N-2)", () => {
+  /** Quién arranca primero de toda la corrida, en las corridas en que va primero esa tanda. */
+  function primerasDeLaTanda(n: number, tandaPrimera: (corrida: number) => boolean) {
+    const conexiones = Array.from({ length: n }, (_, i) => `c${i}`);
+    const primeras = new Set<string>();
+    // Un ciclo acotado: 2 × n corridas alcanzan.
+    for (let corrida = 0; corrida < 2 * n; corrida++) {
+      if (tandaPrimera(corrida)) primeras.add(ordenDeLaTanda(conexiones, corrida)[0]);
+    }
+    return { conexiones, primeras };
+  }
+
+  for (const n of [1, 2, 3, 4, 5, 6]) {
+    it(`⭐ con ${n} orgs, cada una arranca primera de la corrida dentro de ${2 * n} horas`, () => {
+      const { conexiones, primeras } = primerasDeLaTanda(n, (c) => !miembrosPrimero(c));
+      expect([...primeras].sort()).toEqual(conexiones);
+    });
+
+    it(`⭐ con ${n} miembros, cada uno arranca primero de la corrida dentro de ${2 * n} horas`, () => {
+      const { conexiones, primeras } = primerasDeLaTanda(n, (c) => miembrosPrimero(c));
+      expect([...primeras].sort()).toEqual(conexiones);
+    });
+  }
+
+  it("el defecto que corrige: rotar con la misma paridad deja afuera a la de índice impar", () => {
+    const arrancan = new Set<string>();
+    for (let corrida = 0; corrida < 48; corrida += 2) arrancan.add(rotar(["A", "B"], corrida)[0]);
+    expect([...arrancan]).toEqual(["A"]);
   });
 });
