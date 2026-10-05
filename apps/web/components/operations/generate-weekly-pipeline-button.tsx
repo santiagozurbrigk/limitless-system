@@ -7,6 +7,7 @@ import { Button } from "@ai-coo/ui";
 import { triggerWeeklyPipelineAction } from "@/app/executive-reports/report-generation-actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { mensajeDelPipeline } from "@/lib/executive-reports/mensaje-del-pipeline";
+import { correrAccion } from "@/lib/operations/correr-accion";
 import { useToast } from "@/providers/toast-provider";
 
 export function GenerateWeeklyPipelineButton({
@@ -27,18 +28,16 @@ export function GenerateWeeklyPipelineButton({
 
   function handleGenerate() {
     startTransition(async () => {
-      try {
-        const result = await triggerWeeklyPipelineAction();
-        push(mensajeDelPipeline(result));
-        router.refresh();
-      } catch (error) {
-        push({
-          title: "No se pudo generar",
-          description:
-            error instanceof Error ? error.message : "Error al generar reportes.",
-          variant: "default",
-        });
-      }
+      await correrAccion({
+        accion: triggerWeeklyPipelineAction,
+        avisar: push,
+        tituloError: "No se pudo generar",
+        etiqueta: "[GenerateWeeklyPipelineButton]",
+        alTerminar: (result) => {
+          push(mensajeDelPipeline(result));
+          router.refresh();
+        },
+      });
     });
   }
 

@@ -49,3 +49,15 @@ export function pasoDeOperaciones(
   if (resultado.success) return "generated";
   return resultado.motivo === "falla" ? "failed" : "skipped";
 }
+
+/**
+ * Qué hace el botón de Inputs semanales con el resultado: muestra el mensaje
+ * (`mensajeDelReporteSemanal`) y sólo con éxito lleva a Operaciones.
+ */
+export function manejarReporteSemanal(
+  resultado: ResultadoReporteSemanal,
+  acciones: { avisar: (mensaje: MensajeReporteSemanal) => void; irAOperaciones: () => void }
+): void {
+  acciones.avisar(mensajeDelReporteSemanal(resultado));
+  if (resultado.success) acciones.irAOperaciones();
+}
