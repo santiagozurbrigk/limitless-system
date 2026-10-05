@@ -23,6 +23,8 @@ import type {
 } from "@/types/content";
 import { paths } from "@/routes";
 import { computeSalesAttributionForOrg } from "@/lib/marketing/content-sales-attribution";
+import { metricScore, rankearPiezas } from "@/lib/marketing/ranking-de-contenido";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { getZernioClientForOrganization, getZernioIntegrationForOrg } from "@/lib/zernio/integration";
 import { downloadDriveFileAction } from "./drive-actions";
 
@@ -453,33 +455,15 @@ export type TopPerformingContentResult = {
   score: number;
 };
 
-function salesScore(attribution?: ContentSalesAttributed | null): number {
-  if (!attribution) return 0;
-  return attribution.total_revenue || attribution.closed_count * 1000;
-}
-
-function engagementTotalScore(metrics: ContentMetrics): number {
-  return (
-    (metrics.likes ?? 0) +
-    (metrics.comments ?? 0) * 2 +
-    (metrics.saves ?? 0) * 3 +
-    (metrics.shares ?? 0) * 2
-  );
-}
-
-function metricScore(
-  metric: string,
-  metrics: ContentMetrics,
-  salesAttributed?: ContentSalesAttributed | null
-): number {
-  if (metric === "engagement_total") {
-    return engagementTotalScore(metrics);
-  }
-  if (metric === "sales") {
-    return salesScore(salesAttributed);
-  }
-  return metrics[metric as keyof ContentMetrics] ?? 0;
-}
+/**
+ * Ranking de contenido y cuántas piezas quedaron afuera por no tener métricas
+ * (SCRUM-172): un ranking por métrica no puede incluir piezas que no se midieron,
+ * pero quien lo lee tiene que saber que existen.
+ */
+export type TopPerformingContentResponse = {
+  piezas: TopPerformingContentResult[];
+  sinMetricas: number;
+};
 
 export async function updateSalesAttributionAction(
   contentPieceIds?: string[]
@@ -521,7 +505,7 @@ export async function getTopPerformingContentAction({
   metric: string;
   limit?: number;
   typeFilter?: string;
-}): Promise<TopPerformingContentResult[]> {
+}): Promise<TopPerformingContentResponse> {
   const organizationId = await requireProfileOrganizationId();
   const supabase = await createClient();
 
@@ -529,32 +513,39 @@ export async function getTopPerformingContentAction({
     await updateSalesAttributionAction();
   }
 
-  let query = supabase
-    .from("content_pieces")
-    .select(
-      "id, type, title, caption, thumbnail_url, platform_post_url, metrics, published_at, analysis, sales_attributed"
-    )
-    .eq("organization_id", organizationId)
-    .eq("source", "zernio")
-    .is("variants_of", null);
+  // ⭐ El ranking se calcula sobre TODAS las piezas de la org (antes `.limit(100)`
+  // sin orden: 100 piezas cualquiera). Se ordena en JS porque `engagement_total`
+  // pondera varias claves del jsonb y `sales` sale de otra columna; ordenar en
+  // SQL pediría una RPC. Primero se traen sólo las columnas del puntaje,
+  // paginando, y después el detalle de las ganadoras.
+  type PiezaRankeable = {
+    id: string;
+    metrics: ContentMetrics | null;
+    sales_attributed: ContentSalesAttributed | null;
+  };
 
-  if (metric !== "sales") {
-    query = query.not("metrics", "is", null);
-  }
-
-  if (typeFilter !== "all") {
-    query = query.eq("type", typeFilter);
-  }
-
-  const { data: pieces, error } = await query.limit(100);
+  const { rows, error } = await fetchAllRows<PiezaRankeable>((from, to) => {
+    let query = supabase
+      .from("content_pieces")
+      .select("id, metrics, sales_attributed")
+      .eq("organization_id", organizationId)
+      .eq("source", "zernio")
+      .is("variants_of", null);
+    if (typeFilter !== "all") {
+      query = query.eq("type", typeFilter);
+    }
+    return query.order("id", { ascending: true }).range(from, to);
+  });
   if (error) {
-    throw new Error(error.message);
-  }
-  if (!pieces?.length) {
-    return [];
+    throw new Error(error);
   }
 
-  type RankedPiece = {
+  const ranking = rankearPiezas(rows, metric, limit);
+  if (ranking.piezas.length === 0) {
+    return { piezas: [], sinMetricas: ranking.sinMetricas };
+  }
+
+  type DetallePieza = {
     id: string;
     type: string;
     title?: string | null;
@@ -562,39 +553,52 @@ export async function getTopPerformingContentAction({
     platform_post_url?: string | null;
     published_at?: string | null;
     analysis?: ContentAnalysis | null;
-    metrics?: ContentMetrics | null;
-    sales_attributed?: ContentSalesAttributed | null;
   };
 
-  const sorted = [...(pieces as RankedPiece[])].sort((a, b) => {
-    const scoreA = metricScore(metric, a.metrics ?? {}, a.sales_attributed);
-    const scoreB = metricScore(metric, b.metrics ?? {}, b.sales_attributed);
-    return scoreB - scoreA;
-  });
+  const { data: detalles, error: detalleError } = await supabase
+    .from("content_pieces")
+    .select("id, type, title, caption, platform_post_url, published_at, analysis")
+    .eq("organization_id", organizationId)
+    .in(
+      "id",
+      ranking.piezas.map((p) => p.id)
+    );
+  if (detalleError) {
+    throw new Error(detalleError.message);
+  }
+  const detallePorId = new Map(
+    ((detalles ?? []) as DetallePieza[]).map((d) => [d.id, d])
+  );
 
-  return sorted.slice(0, limit).map((piece) => {
+  const piezas = ranking.piezas.flatMap((piece) => {
+    const detalle = detallePorId.get(piece.id);
+    if (!detalle) return [];
     const metrics = piece.metrics ?? undefined;
-    const analysis = piece.analysis ?? undefined;
+    const analysis = detalle.analysis ?? undefined;
     const salesAttributed = piece.sales_attributed ?? undefined;
 
-    return {
-      id: piece.id,
-      type: piece.type,
-      title: piece.title ?? piece.caption?.slice(0, 60) ?? undefined,
-      platform_post_url: piece.platform_post_url ?? undefined,
-      published_at: piece.published_at ?? undefined,
-      metrics,
-      sales_attributed: salesAttributed,
-      analysis_summary: analysis
-        ? {
-            formato: analysis.formato?.name,
-            dolor: analysis.dolor?.name,
-            angulo: analysis.angulo?.name,
-          }
-        : null,
-      score: metricScore(metric, metrics ?? {}, salesAttributed),
-    };
+    return [
+      {
+        id: piece.id,
+        type: detalle.type,
+        title: detalle.title ?? detalle.caption?.slice(0, 60) ?? undefined,
+        platform_post_url: detalle.platform_post_url ?? undefined,
+        published_at: detalle.published_at ?? undefined,
+        metrics,
+        sales_attributed: salesAttributed,
+        analysis_summary: analysis
+          ? {
+              formato: analysis.formato?.name,
+              dolor: analysis.dolor?.name,
+              angulo: analysis.angulo?.name,
+            }
+          : null,
+        score: metricScore(metric, metrics ?? {}, salesAttributed),
+      },
+    ];
   });
+
+  return { piezas, sinMetricas: ranking.sinMetricas };
 }
 
 export async function generateVariantCaptionAction(

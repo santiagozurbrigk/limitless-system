@@ -9,6 +9,7 @@ import {
   PROPOSAL_TOOL_NAMES,
 } from "@/lib/agent/graph-proposal-tools";
 import { DATA_READER_TOOL_NAMES } from "@/lib/agent/data-reader-tools";
+import { avisoDePiezasSinMetricas } from "@/lib/marketing/ranking-de-contenido";
 import {
   handleGetBusinessSnapshot,
   handleGetClientsData,
@@ -286,17 +287,19 @@ export function createAgentToolHandler(ctx: AgentToolHandlerContext) {
         const { getTopPerformingContentAction } = await import(
           "@/app/marketing/content/actions"
         );
-        const results = await getTopPerformingContentAction({
-          metric,
-          limit,
-          typeFilter,
-        });
+        const { piezas: results, sinMetricas } =
+          await getTopPerformingContentAction({
+            metric,
+            limit,
+            typeFilter,
+          });
 
         if (results.length === 0) {
           return JSON.stringify({
             success: true,
             results: [],
             count: 0,
+            ...avisoDePiezasSinMetricas(sinMetricas),
             message: `No hay piezas de contenido${
               typeFilter !== "all" ? ` del tipo "${typeFilter}"` : ""
             } con datos para la métrica "${metric}".`,
@@ -309,6 +312,7 @@ export function createAgentToolHandler(ctx: AgentToolHandlerContext) {
           success: true,
           results,
           count: results.length,
+          ...avisoDePiezasSinMetricas(sinMetricas),
         });
       } catch (err) {
         return JSON.stringify({

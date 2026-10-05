@@ -597,10 +597,10 @@ con una sesión real.
 ### V3. Métricas: un analytics vacío no es un cero ⭐
 **Prerrequisitos:** org con Zernio y piezas con métricas.
 1. `curl -X POST "$APP_URL/api/cron/sync-content-metrics?organizationId=<org>" -H "Authorization: Bearer $CRON_SECRET"`.
-2. Mirar `attempted`, `updated`, `failed` y el `metrics_updated_at` de las piezas.
-3. Repetir: las piezas actualizadas pasan al final de la cola (orden por `metrics_updated_at`).
+2. Mirar `attempted`, `updated`, `failed` y, en las piezas, `metrics_updated_at` y `metrics_checked_at`.
+3. Repetir: todas las piezas intentadas, con o sin dato, pasan al final de la cola (orden por `metrics_checked_at`, null primero). Con más de 50 piezas, la segunda corrida toma otras.
 
-**Esperado:** piezas con analytics no reconocido quedan en `failed` y conservan sus métricas. Lo mismo con la sync manual de contenido (SCRUM-172): comparar una pieza antes y después de abrir `/marketing/content`; si Zernio no manda números, conserva los que tenía.
+**Esperado:** piezas con analytics no reconocido quedan en `failed`, conservan sus métricas y `metrics_updated_at`, y su `metrics_checked_at` queda con la hora de la corrida. Una org con 50 o más historias sin analytics igual refresca sus reels y posts en las corridas siguientes (SCRUM-172, reabierta). Lo mismo con la sync manual de contenido (SCRUM-172): comparar una pieza antes y después de abrir `/marketing/content`; si Zernio no manda números, conserva los que tenía.
 
 ### V4. Trial Reels de punta a punta ⚠️
 **Prerrequisitos:** Google conectado con Drive, Zernio con Instagram, `REEL_WORKER_URL`, `QSTASH_TOKEN`, `WORKER_AUTH_SECRET` en Vercel y Fly; una pieza con video de Drive vinculado (< 500 MB).

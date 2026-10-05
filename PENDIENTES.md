@@ -1166,8 +1166,8 @@ Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
 #### [ZERNIO-METRICAS-429] El cron de métricas choca con el límite de pedidos de Zernio todos los días
 - **Tipo:** bug
 - **Severidad:** Media
-- **Estado verificado:** `syncContentMetricsForOrg` lanza hasta 50 `getPostAnalytics` en paralelo (`lib/marketing/sync-content-metrics.ts:8,56-77`); `zernioFetchJson` (`lib/zernio/client.ts:268-284`) no reintenta. Zernio responde 429 con `limit: 6` y `retryAfterSeconds: 1`: 849 rechazos en `/api/queue/process-cron-sync-metrics` en 7 días (agregado de Vercel, 2026-09-23).
-- **Riesgo:** Si una org tiene más de ~6 piezas, entonces la mayoría no se actualiza, y como el orden es "más viejas primero", las mismas vuelven a chocar al día siguiente. Lo mismo pasa con las piezas cuyo analytics nunca se reconoce (por ejemplo, historias que Zernio trae sin analytics): quedan con `metrics_updated_at` en null o viejo, el cron las toma primero cada día y, si son 50 o más, el resto de la org no se actualiza. Hace falta registrar el último intento fallido o un tope de reintentos.
+- **Estado verificado:** `syncContentMetricsForOrg` lanza hasta 50 `getPostAnalytics` en paralelo (`lib/marketing/sync-content-metrics.ts:9,61-106`); `zernioFetchJson` (`lib/zernio/client.ts:268-284`) no reintenta. Zernio responde 429 con `limit: 6` y `retryAfterSeconds: 1`: 849 rechazos en `/api/queue/process-cron-sync-metrics` en 7 días (agregado de Vercel, 2026-09-23).
+- **Riesgo:** Si una org tiene más de ~6 piezas, entonces la mayoría de cada lote falla con 429 y no se actualiza. El intento queda anotado en `metrics_checked_at` y la pieza pasa al final de la cola, así que no se traba, pero no se reintenta hasta que le vuelve a tocar.
 - **Impacto:** Métricas de contenido desactualizadas en Marketing para las orgs con más publicaciones (3 afectadas en la ventana).
 - **Qué hay que hacer:** limitar la concurrencia (p. ej. 4 pedidos a la vez) y, ante 429, esperar `retryAfterSeconds` y reintentar una o dos veces dentro de `zernioFetchJson`.
 - **Dónde:** `apps/web/lib/marketing/sync-content-metrics.ts`, `apps/web/lib/zernio/client.ts`.
