@@ -34,6 +34,25 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-04 — La sync de contenido de Zernio no pisa las métricas con ceros (SCRUM-172)
+
+**Rama:** `fix/SCRUM-172-metricas-zernio`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Marketing, `app/marketing/content/sync-actions.ts`, `lib/zernio/metricas-para-guardar.ts` (nuevo), `lib/zernio/filas-de-contenido.ts` (nuevo), `lib/google/sync-youtube.ts`, `lib/youtube/video-metrics.ts`
+
+**Qué se hizo:** la sync de contenido (al entrar a `/marketing/content` o con el botón) usa `metricasParaGuardar`: si `resolvePostAnalytics` no reconoce los analytics de un post, una pieza nueva se inserta con `metrics` y `metrics_updated_at` en null, y en una pieza existente el update no incluye esos campos, así conserva las métricas que tenía. Test nuevo `lib/zernio/__tests__/metricas-para-guardar.test.ts`.
+- Fix-pack de la revisión adversarial:
+  - La conversión de un post en fila (insert) y los campos del update pasan a `lib/zernio/filas-de-contenido.ts` (`mapExternalPostToRow`, `cambiosParaActualizar`), con tests (`filas-de-contenido.test.ts`), para que las dos vías de la sync queden cubiertas y no sólo el helper.
+  - La sync de YouTube por Google (`lib/google/sync-youtube.ts`) tenía el mismo problema: si YouTube no devolvía el detalle de un video (cuota agotada o token vencido), guardaba ceros. Ahora usa `metricasDeVideoParaGuardar` (`lib/youtube/video-metrics.ts`) y en ese caso no toca las métricas. Test `lib/youtube/__tests__/metricas-de-video.test.ts`.
+
+**Por qué / finalidad:** cierra `[AUDITORIA §3 confiabilidad 11]`. Antes, si Zernio devolvía analytics vacíos o en un formato desconocido, la sync guardaba ceros encima de los números reales. El cron de métricas ya respetaba `recognized` desde la auditoría de backend (commit d1a35ccb); faltaban esta vía y la de YouTube.
+
+**Decisiones de diseño relevantes:** null y no cero, porque un cero que nadie midió no es un dato (regla del repo). Las pantallas ya tratan `metrics` null como "sin métricas" (`content-piece-grid.tsx`, `content-piece-detail.tsx`, `getZernioAnalyticsAction`), y el cron de las 03:00 toma primero las piezas con `metrics_updated_at` en null. Un cero medido sí se guarda (en el formato plano; un cero en el formato anidado se trata como no reconocido, como antes). Los tests se comprobaron rompiendo cada chequeo: fallan los casos que lo cubren.
+
+**Riesgos / deuda técnica pendiente:** las piezas cuyo analytics nunca se reconoce siguen al frente de la cola del cron de métricas; quedó anotado en `[ZERNIO-METRICAS-429]`.
+
+---
+
 ### 2026-10-04 — Inteligencia, reportes ejecutivos y tono ya no corren para organizaciones pausadas o dadas de baja (SCRUM-210)
 
 **Rama:** `fix/SCRUM-210-crons-orgs-inactivas`
