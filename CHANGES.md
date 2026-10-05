@@ -69,6 +69,16 @@ Los informes de origen son las pruebas integrales del 4-oct (SCRUM-111, 121 y 21
 
 **Riesgos / deuda técnica pendiente:** ninguno nuevo. Que una función de `lib/super-admin` rechace con `throw` (500 en vez de redirect) sigue igual; hoy es inalcanzable porque el layout redirige antes.
 
+#### 3. SCRUM-43 y SCRUM-75: los tests comprueban el filtro por organización de forma directa
+
+**Qué se hizo:** `lib/fathom/__tests__/cliente-de-la-org.test.ts` y `lib/team/__tests__/rol-de-la-org.test.ts` tienen un mock nuevo de la base que registra la tabla y cada `.eq` de la consulta y responde aplicando sólo los filtros pedidos. Casos nuevos: la consulta filtra por el id y por el `organization_id` pedido (en `clients` y `team_roles`), y el cliente o rol de otra org se rechaza con el filtro de organización presente; en roles, sin rol no se consulta la base.
+
+**Por qué / finalidad:** el mock viejo era una cadena fija `.eq().eq()`: al quitar el filtro por organización el test fallaba con un `TypeError` del mock (`maybeSingle` no existía), no con una aserción de negocio.
+
+**Decisiones de diseño relevantes:** el mock aplica los filtros que llegaron en vez de filtrar siempre por los dos, así que sin el filtro de organización devuelve el cliente o rol ajeno y el rechazo no ocurre. Controles negativos: quitar el `.eq("organization_id", ...)` hace fallar 2 casos por aserción en cada archivo ("expected [['id', …]] to deep equally contain ['organization_id', 'org-a']"); filtrar `organization_id` por otro valor hace fallar 3 por aserción.
+
+**Riesgos / deuda técnica pendiente:** ninguno.
+
 ---
 
 ### 2026-10-04 — La sync de contenido de Zernio no pisa las métricas con ceros (SCRUM-172)
