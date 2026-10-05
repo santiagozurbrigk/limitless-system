@@ -261,6 +261,13 @@ export type FathomMeetingRecord = {
   recording_start_time?: string;
   scheduled_start_time?: string;
   recording_end_time?: string;
+  /**
+   * Cuándo Fathom registró la reunión. Es el campo por el que filtran
+   * `created_after` y `created_before`, así que el cursor de la sync se arma
+   * con este, no con la hora de grabación. Requerido en el schema; puede
+   * faltar igual, y la sync lo tolera (`lib/fathom/cursor.ts`).
+   */
+  created_at?: string;
   url?: string;
   /** Invitados del calendario, con mail y si son externos. Puede venir vacío. */
   calendar_invitees: FathomInvitee[];
@@ -374,6 +381,7 @@ export function mapFathomMeeting(raw: unknown): FathomMeetingRecord | null {
     recording_start_time: recordingStart,
     scheduled_start_time: scheduledStart,
     recording_end_time: recordingEnd,
+    created_at: pickString(obj, ["created_at"]),
     url: pickString(obj, ["url", "share_url", "record_url", "recording_url"]),
     // ⭐ Estos tres venían en la respuesta desde siempre y el parser los tiraba.
     // Son la señal con la que se identifica y clasifica una llamada; el título,
@@ -386,6 +394,8 @@ export function mapFathomMeeting(raw: unknown): FathomMeetingRecord | null {
 
 export type ListFathomMeetingsOptions = {
   createdAfter?: string;
+  /** Tope superior de `created_at`. Lo usa la lectura por tramos (`lib/fathom/leer-ventana.ts`). */
+  createdBefore?: string;
   includeTranscript?: boolean;
   /** El resumen ya escrito por Fathom. */
   includeSummary?: boolean;
@@ -399,12 +409,28 @@ export type ListFathomMeetingsOptions = {
   debugContext?: string;
 };
 
+export type FathomMeetingsListing = {
+  /** Las reuniones mapeadas, en el orden en que las devolvió Fathom. */
+  meetings: FathomMeetingRecord[];
+  /**
+   * ⭐ `true` si la lectura se cortó en el tope de páginas y Fathom todavía
+   * tenía más. Antes no se informaba, y la sync avanzaba el cursor como si
+   * hubiera leído todo: las reuniones que quedaban del otro lado del corte no
+   * se pedían nunca más.
+   */
+  truncated: boolean;
+  /** Páginas pedidas. La lectura por tramos lo descuenta de su presupuesto. */
+  pages: number;
+};
+
 export async function listFathomMeetings(
   apiKey: string,
   options: ListFathomMeetingsOptions = {}
-): Promise<FathomMeetingRecord[]> {
+): Promise<FathomMeetingsListing> {
   const meetings: FathomMeetingRecord[] = [];
   let cursor: string | undefined;
+  let truncated = false;
+  let pages = 0;
   const maxPages = options.maxPages ?? 20;
   const debug = options.debug ?? false;
   const context = options.debugContext ?? "list";
@@ -414,6 +440,9 @@ export async function listFathomMeetings(
     if (cursor) url.searchParams.set("cursor", cursor);
     if (options.createdAfter) {
       url.searchParams.set("created_after", options.createdAfter);
+    }
+    if (options.createdBefore) {
+      url.searchParams.set("created_before", options.createdBefore);
     }
     if (options.includeTranscript !== false) {
       url.searchParams.set("include_transcript", "true");
@@ -449,6 +478,7 @@ export async function listFathomMeetings(
       `${context}:page${page}`,
       debug || page === 0
     );
+    pages++;
 
     if (res.status === 401 || res.status === 403) {
       throw new FathomApiError(
@@ -500,14 +530,23 @@ export async function listFathomMeetings(
     );
 
     if (!nextCursor) break;
+    if (page === maxPages - 1) {
+      truncated = true;
+      break;
+    }
     cursor = nextCursor;
   }
 
   if (debug) {
     console.log(`[Fathom:${context}] Total meetings mapped:`, meetings.length);
   }
+  if (truncated) {
+    console.warn(
+      `[Fathom:${context}] Lectura cortada en el tope de ${maxPages} páginas: Fathom tenía más.`
+    );
+  }
 
-  return meetings;
+  return { meetings, truncated, pages };
 }
 
 export async function fetchFathomMeetingTitle(
