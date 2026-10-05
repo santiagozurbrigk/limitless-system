@@ -22,6 +22,8 @@
  * vocabulario a nadie.
  */
 
+import { fechaDeHoyLocal, sumarDias } from "@/lib/fechas/calendario";
+
 export type FollowUpKind = "next_action" | "qualification";
 
 /**
@@ -258,6 +260,19 @@ export function needsDate(
 ): boolean {
   if (!slug) return false;
   return findOption(options, slug)?.behavior !== "closes_thread";
+}
+
+/** Cuántos días después de hoy se propone un próximo paso nuevo: pasado mañana. */
+export const DIAS_HASTA_EL_PROXIMO_PASO = 2;
+
+/**
+ * La fecha que se propone para un próximo paso nuevo (`YYYY-MM-DD`): hoy, en la
+ * zona de quien lo carga, más `DIAS_HASTA_EL_PROXIMO_PASO`. La usan el modal de
+ * resultado de la llamada, el seguimiento del lead y la tabla de leads, para
+ * que las tres propongan el mismo día.
+ */
+export function fechaPropuestaDelProximoPaso(ahora: Date = new Date()): string {
+  return sumarDias(fechaDeHoyLocal(ahora), DIAS_HASTA_EL_PROXIMO_PASO);
 }
 
 /** Los slugs que cierran el hilo, para el motor de estados. */

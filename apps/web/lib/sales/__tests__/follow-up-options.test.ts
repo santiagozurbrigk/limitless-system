@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { conZona, restaurarZona } from "@/lib/fechas/__tests__/zona";
+import { aFechaDeInput, fechaAInstanteLocal } from "@/lib/fechas/calendario";
 import {
   BUILT_IN_CATALOG,
+  DIAS_HASTA_EL_PROXIMO_PASO,
+  fechaPropuestaDelProximoPaso,
   buildFollowUpCatalog,
   closesThread,
   closingActionSlugs,
@@ -125,5 +129,37 @@ describe("el slug que sale de lo que escribe el usuario", () => {
     const slug = slugifyOptionLabel("🔥");
     expect(slug).not.toBe("");
     expect(slug.startsWith("valor_")).toBe(true);
+  });
+});
+
+/**
+ * SCRUM-493: la fecha que proponen el modal de resultado de la llamada, el
+ * seguimiento del lead y la tabla de leads. A las 22:00 de Argentina UTC ya es
+ * el día siguiente: con `toISOString()` la propuesta salía un día corrida.
+ */
+describe("⭐ fecha propuesta del próximo paso", () => {
+  /** 1-oct-2026, 22:00 en Buenos Aires = 2-oct, 01:00 UTC. */
+  const lasVeintidos = new Date("2026-10-02T01:00:00Z");
+
+  afterEach(restaurarZona);
+
+  it("a las 22:00 de Argentina es ese día más los días del paso", () => {
+    conZona("America/Argentina/Buenos_Aires");
+    expect(DIAS_HASTA_EL_PROXIMO_PASO).toBe(2);
+    expect(fechaPropuestaDelProximoPaso(lasVeintidos)).toBe("2026-10-03");
+  });
+
+  it("cruza fin de mes y de año", () => {
+    conZona("America/Argentina/Buenos_Aires");
+    // 30-dic 22:00 en Buenos Aires = 31-dic 01:00 UTC.
+    expect(fechaPropuestaDelProximoPaso(new Date("2026-12-31T01:00:00Z"))).toBe("2027-01-01");
+    // 30-sep 23:30 en Buenos Aires = 1-oct 02:30 UTC.
+    expect(fechaPropuestaDelProximoPaso(new Date("2026-10-01T02:30:00Z"))).toBe("2026-10-02");
+  });
+
+  it("guardada como timestamptz, la tabla de leads la muestra igual", () => {
+    conZona("America/Argentina/Buenos_Aires");
+    const propuesta = fechaPropuestaDelProximoPaso(lasVeintidos);
+    expect(aFechaDeInput(fechaAInstanteLocal(propuesta))).toBe(propuesta);
   });
 });

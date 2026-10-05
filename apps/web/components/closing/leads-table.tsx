@@ -42,12 +42,15 @@ import {
 } from "@/lib/sales/lead-thread";
 import {
   closingActionSlugs,
+  fechaPropuestaDelProximoPaso,
   findOption,
   needsDate,
   type FollowUpCatalog,
   type FollowUpOption,
 } from "@/lib/sales/follow-up-options";
 import { CLOSING_CALL_STATUS_LABEL } from "@/lib/closing/call-status";
+import { fechaAInstanteLocal } from "@/lib/fechas/calendario";
+import { CampoFecha } from "@/components/shared/campo-fecha";
 import type { TeamMember } from "@/types/team";
 import { useToast } from "@/providers/toast-provider";
 import { FollowUpOptionPicker } from "./follow-up-option-picker";
@@ -108,17 +111,12 @@ function formatDate(iso: string | null): string {
   });
 }
 
-/** Fecha por defecto de un próximo paso nuevo: pasado mañana. */
+/**
+ * Fecha por defecto de un próximo paso nuevo: pasado mañana, guardada al
+ * mediodía local para que la celda de fecha la muestre igual.
+ */
 function defaultNextActionAt(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 2);
-  return d.toISOString();
-}
-
-function toDateInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+  return fechaAInstanteLocal(fechaPropuestaDelProximoPaso());
 }
 
 export function LeadsTable({
@@ -249,7 +247,7 @@ export function LeadsTable({
     });
   }
 
-  function handleDate(row: LeadTableRow, value: string) {
+  function handleDate(row: LeadTableRow, value: string | null) {
     if (!row.targetAttemptId || !row.nextAction) return;
     if (!value) {
       push({
@@ -258,7 +256,8 @@ export function LeadsTable({
       });
       return;
     }
-    const iso = new Date(`${value}T12:00:00`).toISOString();
+    // Mediodía local: `CampoFecha` lo vuelve a mostrar como el mismo día.
+    const iso = fechaAInstanteLocal(value);
     const previous = snapshot(row.leadId);
     patchRow(row.leadId, { nextActionAt: iso });
 
@@ -578,15 +577,14 @@ export function LeadsTable({
                     </td>
 
                     <td className="px-3 py-1.5">
-                      <input
-                        type="date"
-                        value={toDateInput(row.nextActionAt)}
+                      <CampoFecha
+                        value={row.nextActionAt}
                         disabled={dateDisabled}
-                        onChange={(e) => handleDate(row, e.target.value)}
+                        onChange={(fecha) => handleDate(row, fecha)}
                         className={cn(
-                          "h-7 rounded-md border border-transparent bg-transparent px-1 text-xs",
-                          !dateDisabled && "hover:border-border focus:border-border",
-                          dateDisabled && "cursor-not-allowed opacity-40"
+                          "h-7 w-auto rounded-md border-transparent bg-transparent px-1 py-0 text-xs dark:border-transparent dark:bg-transparent",
+                          !dateDisabled && "hover:border-border focus:border-border focus-visible:border-border",
+                          dateDisabled && "cursor-not-allowed opacity-40 disabled:opacity-40"
                         )}
                       />
                     </td>

@@ -16,6 +16,9 @@ import {
   type NextAction,
 } from "@/lib/sales/lead-thread";
 import { CLOSING_CALL_STATUS_LABEL } from "@/lib/closing/call-status";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaAInstanteLocal } from "@/lib/fechas/calendario";
+import { fechaPropuestaDelProximoPaso } from "@/lib/sales/follow-up-options";
 import { useToast } from "@/providers/toast-provider";
 
 /**
@@ -71,20 +74,13 @@ function formatDate(iso: string | null): string {
   });
 }
 
-/** Fecha de hoy en el formato que espera un input date. */
-function todayPlus(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 function LeadRow({ lead }: { lead: LeadSummary }) {
   const router = useRouter();
   const { push } = useToast();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [action, setAction] = useState<NextAction | "">("");
-  const [date, setDate] = useState(todayPlus(2));
+  const [date, setDate] = useState(fechaPropuestaDelProximoPaso);
   const [notes, setNotes] = useState("");
   const [resolved, setResolved] = useState(false);
 
@@ -97,8 +93,10 @@ function LeadRow({ lead }: { lead: LeadSummary }) {
       const result = await setNextActionAction({
         callId: target,
         nextAction: action,
-        // `lost` cierra el hilo, así que no necesita fecha.
-        nextActionAt: action === "lost" ? null : new Date(date).toISOString(),
+        // `lost` cierra el hilo, así que no necesita fecha. La fecha se guarda
+        // al mediodía local: a medianoche UTC caía el día anterior en Argentina.
+        // Sin fecha va null y el servidor responde que el paso la necesita.
+        nextActionAt: action === "lost" ? null : date ? fechaAInstanteLocal(date) : null,
         notes: notes.trim() || null,
       });
       if (!result.ok) {
@@ -243,11 +241,10 @@ function LeadRow({ lead }: { lead: LeadSummary }) {
                   <label className="flex items-center gap-2 text-xs">
                     <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="text-muted-foreground">Para el</span>
-                    <input
-                      type="date"
+                    <CampoFecha
                       value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+                      onChange={(fecha) => setDate(fecha ?? "")}
+                      className="h-8 w-auto rounded-md border-border bg-background px-2 py-0 text-xs"
                     />
                   </label>
                 )}

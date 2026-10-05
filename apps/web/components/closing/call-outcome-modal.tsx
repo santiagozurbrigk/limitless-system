@@ -18,7 +18,10 @@ import {
   FormField,
   Textarea,
 } from "@ai-coo/ui";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaAInstanteLocal } from "@/lib/fechas/calendario";
 import {
+  fechaPropuestaDelProximoPaso,
   needsDate,
   type FollowUpCatalog,
   type FollowUpOption,
@@ -72,13 +75,6 @@ const TITLE: Record<CallOutcomeKind, string> = {
   no_show: "El lead no se presentó",
 };
 
-/** Fecha por defecto del próximo paso: pasado mañana. */
-function todayPlus(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 export function CallOutcomeModal({
   open,
   onOpenChange,
@@ -103,7 +99,7 @@ export function CallOutcomeModal({
   const [notes, setNotes] = useState("");
   const [qualification, setQualification] = useState<string | null>(null);
   const [nextAction, setNextAction] = useState<string | null>(null);
-  const [date, setDate] = useState(todayPlus(2));
+  const [date, setDate] = useState(fechaPropuestaDelProximoPaso);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [nextActionNotes, setNextActionNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +113,7 @@ export function CallOutcomeModal({
     setNotes("");
     setQualification(null);
     setNextAction(null);
-    setDate(todayPlus(2));
+    setDate(fechaPropuestaDelProximoPaso());
     setOwnerId(null);
     setNextActionNotes("");
     setError(null);
@@ -142,7 +138,7 @@ export function CallOutcomeModal({
         notes: notes.trim() || undefined,
         qualification,
         nextAction,
-        nextActionAt: wantsDate ? new Date(`${date}T12:00:00`).toISOString() : null,
+        nextActionAt: wantsDate ? fechaAInstanteLocal(date) : null,
         ownerId,
         nextActionNotes: nextActionNotes.trim() || null,
       });
@@ -229,11 +225,10 @@ export function CallOutcomeModal({
               <label className="flex items-center gap-2 text-xs">
                 <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-muted-foreground">Para el</span>
-                <input
-                  type="date"
+                <CampoFecha
                   value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+                  onChange={(fecha) => setDate(fecha ?? "")}
+                  className="h-8 w-auto rounded-md border-border bg-background px-2 py-0 text-xs"
                 />
               </label>
             )}
