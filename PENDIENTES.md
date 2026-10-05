@@ -85,7 +85,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 31 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 12 | 0 | 16 | 8 |
-| [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 20 | 5 |
+| [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 19 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
@@ -1171,12 +1171,6 @@ Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
 - **Impacto:** Métricas de contenido desactualizadas en Marketing para las orgs con más publicaciones (3 afectadas en la ventana).
 - **Qué hay que hacer:** limitar la concurrencia (p. ej. 4 pedidos a la vez) y, ante 429, esperar `retryAfterSeconds` y reintentar una o dos veces dentro de `zernioFetchJson`.
 - **Dónde:** `apps/web/lib/marketing/sync-content-metrics.ts`, `apps/web/lib/zernio/client.ts`.
-
-#### [AUDITORIA §3 confiabilidad 11] La sync de contenido escribe ceros si el analytics no se reconoce
-- **Tipo:** bug
-- **Estado verificado:** `mapExternalPostToRow` usa `resolvePostAnalytics(post.analytics).metrics` sin mirar `recognized`, y el update de existentes pisa `metrics` y `metrics_updated_at`.
-- **Qué hay que hacer:** si `recognized=false`, no incluir `metrics` en el update (y en el insert, dejar `null`).
-- **Dónde:** `apps/web/app/marketing/content/sync-actions.ts`
 
 #### [TRIAL-CLEANUP-LOOP] `cleanup-trial-reels` reprocesa los mismos jobs siempre
 - **Tipo:** deuda técnica

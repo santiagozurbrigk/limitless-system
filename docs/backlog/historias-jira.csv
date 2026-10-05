@@ -778,12 +778,11 @@ Funcionalidad: F-IA-25 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlo
 *Tareas técnicas (PENDIENTES.md):*
 * [MKT-CONTENT-LIMITE-50] La biblioteca muestra sólo 50 piezas (P2)
 * [MKT-HOLDING-ORG] Contenido, Drive y Trial Reels ignoran el negocio activo del holding (P1)
-* [AUDITORIA §3 confiabilidad 11] La sync de contenido escribe ceros si el analytics no se reconoce (P2)
 
 *Para confirmar:*
 * Martín: la solución de las 150 piezas puede ser paginar o filtrar por tipo y fecha; que Agustín elija cuál prefiere ver en pantalla.
 
-Funcionalidad: F-MKT-01 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-01]",H-MKT-01,Marketing,P1,Media,MKT-CONTENT-LIMITE-50 MKT-HOLDING-ORG AUDITORIA §3 confiabilidad 11,
+Funcionalidad: F-MKT-01 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-01]",H-MKT-01,Marketing,P1,Media,MKT-CONTENT-LIMITE-50 MKT-HOLDING-ORG,
 [H-MKT-04] Comparar una publicación con el promedio de todo mi contenido,Story,High,historia,marketing,p1,sev-media,,,"*Historia:* Como founder, quiero abrir una publicación y ver sus números comparados con el promedio de todo mi contenido, para saber si le fue mejor o peor que de costumbre.
 
 *Criterios de aceptación:*

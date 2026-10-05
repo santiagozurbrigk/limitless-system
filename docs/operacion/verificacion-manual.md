@@ -600,7 +600,7 @@ con una sesión real.
 2. Mirar `attempted`, `updated`, `failed` y el `metrics_updated_at` de las piezas.
 3. Repetir: las piezas actualizadas pasan al final de la cola (orden por `metrics_updated_at`).
 
-**Esperado:** piezas con analytics no reconocido quedan en `failed` y conservan sus métricas. ⚠️ La sync manual de contenido todavía puede escribir ceros (`[AUDITORIA §3 confiabilidad 11]`): comparar una pieza antes y después de abrir `/marketing/content`.
+**Esperado:** piezas con analytics no reconocido quedan en `failed` y conservan sus métricas. Lo mismo con la sync manual de contenido (SCRUM-172): comparar una pieza antes y después de abrir `/marketing/content`; si Zernio no manda números, conserva los que tenía.
 
 ### V4. Trial Reels de punta a punta ⚠️
 **Prerrequisitos:** Google conectado con Drive, Zernio con Instagram, `REEL_WORKER_URL`, `QSTASH_TOKEN`, `WORKER_AUTH_SECRET` en Vercel y Fly; una pieza con video de Drive vinculado (< 500 MB).

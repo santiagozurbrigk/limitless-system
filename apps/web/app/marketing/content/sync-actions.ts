@@ -7,6 +7,10 @@ import {
 } from "@/lib/zernio/client";
 import { getZernioClientForOrganization, getZernioIntegrationForOrg } from "@/lib/zernio/integration";
 import { resolvePostAnalytics } from "@/lib/zernio/resolve-analytics";
+import {
+  camposDeMetricasParaActualizar,
+  metricasParaGuardar,
+} from "@/lib/zernio/metricas-para-guardar";
 import { syncContentMetricsForOrg } from "@/lib/marketing/sync-content-metrics";
 import {
   persistContentThumbnail,
@@ -34,8 +38,8 @@ type ContentPieceSyncRow = {
   thumbnail_url: string | null;
   published_at: string | null;
   status: ContentPieceStatus;
-  metrics: ContentMetrics;
-  metrics_updated_at: string;
+  metrics: ContentMetrics | null;
+  metrics_updated_at: string | null;
 };
 
 function mapZernioType(
@@ -95,7 +99,8 @@ function mapExternalPostToRow(
 
   const postType = post.postType?.trim();
   const mediaType = post.mediaType?.trim();
-  const { metrics, lastUpdated } = resolvePostAnalytics(post.analytics);
+  // Sin números reconocibles quedan en null: no se inventa un cero (SCRUM-172).
+  const { metrics, metrics_updated_at } = metricasParaGuardar(post.analytics, metricsUpdatedAt);
 
   return {
     organization_id: organizationId,
@@ -111,7 +116,7 @@ function mapExternalPostToRow(
     published_at: post.publishedAt ?? post.createdAt ?? null,
     status: "published",
     metrics,
-    metrics_updated_at: lastUpdated ?? metricsUpdatedAt,
+    metrics_updated_at,
   };
 }
 
@@ -410,8 +415,8 @@ export async function syncZernioContentAction(): Promise<{ synced: number }> {
           thumbnail_url: thumbnailUrl,
           published_at: row.published_at,
           status: row.status,
-          metrics: row.metrics,
-          metrics_updated_at: row.metrics_updated_at,
+          // Si Zernio no mandó números reconocibles, las métricas guardadas no se tocan.
+          ...camposDeMetricasParaActualizar(row),
         })
         .eq("id", id)
         .eq("organization_id", organizationId);
