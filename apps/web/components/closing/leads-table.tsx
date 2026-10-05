@@ -49,7 +49,7 @@ import {
   type FollowUpOption,
 } from "@/lib/sales/follow-up-options";
 import { CLOSING_CALL_STATUS_LABEL } from "@/lib/closing/call-status";
-import { fechaAInstanteLocal } from "@/lib/fechas/calendario";
+import { fechaAInstanteEnZona } from "@/lib/fechas/calendario";
 import { CampoFecha } from "@/components/shared/campo-fecha";
 import type { TeamMember } from "@/types/team";
 import { useToast } from "@/providers/toast-provider";
@@ -112,11 +112,12 @@ function formatDate(iso: string | null): string {
 }
 
 /**
- * Fecha por defecto de un próximo paso nuevo: pasado mañana, guardada al
- * mediodía local para que la celda de fecha la muestre igual.
+ * Fecha por defecto de un próximo paso nuevo: pasado mañana en la zona de la
+ * organización, guardada al mediodía de esa zona para que la celda la muestre
+ * igual a todos los miembros.
  */
-function defaultNextActionAt(): string {
-  return fechaAInstanteLocal(fechaPropuestaDelProximoPaso());
+function defaultNextActionAt(zona: string | null): string {
+  return fechaAInstanteEnZona(fechaPropuestaDelProximoPaso(zona), zona);
 }
 
 export function LeadsTable({
@@ -226,7 +227,7 @@ export function LeadsTable({
     // lado queda lista para corregirla.
     const wantsDate = slug ? needsDate(catalog.nextActions, slug) : false;
     const nextActionAt = wantsDate
-      ? (row.nextActionAt ?? defaultNextActionAt())
+      ? (row.nextActionAt ?? defaultNextActionAt(result.timezone))
       : null;
 
     const previous = snapshot(row.leadId);
@@ -258,8 +259,9 @@ export function LeadsTable({
       });
       return;
     }
-    // Mediodía local: `CampoFecha` lo vuelve a mostrar como el mismo día.
-    const iso = fechaAInstanteLocal(value);
+    // Mediodía de la zona de la org: `CampoFecha` (con esa zona) lo vuelve a
+    // mostrar como el mismo día, y el estado lo cuenta en ese día.
+    const iso = fechaAInstanteEnZona(value, result.timezone);
     const previous = snapshot(row.leadId);
     patchRow(row.leadId, { nextActionAt: iso });
 
@@ -581,6 +583,7 @@ export function LeadsTable({
                     <td className="px-3 py-1.5">
                       <CampoFecha
                         value={row.nextActionAt}
+                        zona={result.timezone}
                         disabled={dateDisabled}
                         onChange={(fecha) => handleDate(row, fecha)}
                         className={cn(
@@ -675,6 +678,7 @@ export function LeadsTable({
         row={selected}
         catalog={catalog}
         teamMembers={teamMembers}
+        zona={result.timezone}
         onClose={() => setSelectedId(null)}
       />
 

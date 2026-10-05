@@ -58,9 +58,12 @@ function formatDate(iso: string | null): string {
  * quedó guardada (12:00, o 21:00 en filas viejas) nadie la eligió. Se lee igual
  * que la celda de la tabla (`CampoFecha`), para que las dos digan el mismo día.
  */
-function formatearFechaDelPaso(valor: string | null): string {
+function formatearFechaDelPaso(valor: string | null, zona: string | null): string {
   return (
-    formatearFechaGuardada(valor, { day: "2-digit", month: "short", year: "numeric" }) ?? "—"
+    formatearFechaGuardada(valor, {
+      opciones: { day: "2-digit", month: "short", year: "numeric" },
+      zona,
+    }) ?? "—"
   );
 }
 
@@ -68,9 +71,12 @@ export function LeadDetailDrawer({
   row,
   catalog,
   teamMembers,
+  zona,
   onClose,
 }: {
   row: LeadTableRow | null;
+  /** La zona de la organización: la fecha del próximo paso se muestra en ese día. */
+  zona: string | null;
   catalog: FollowUpCatalog;
   teamMembers: TeamMember[];
   onClose: () => void;
@@ -148,7 +154,7 @@ export function LeadDetailDrawer({
                       />
                       {attempt.nextActionAt && (
                         <span className="text-muted-foreground">
-                          {formatearFechaDelPaso(attempt.nextActionAt)}
+                          {formatearFechaDelPaso(attempt.nextActionAt, zona)}
                         </span>
                       )}
                       {owner && <span className="text-muted-foreground">· {owner}</span>}

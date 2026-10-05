@@ -16,8 +16,9 @@ import {
   aFechaDeInput,
   diaLocal,
   esFechaCalendario,
-  fechaAInstanteLocal,
+  fechaAInstanteEnZona,
   fechaDeHoyEnZona,
+  fechaDeInstanteEnZona,
   fechaDeValorGuardado,
   fechaDeHoyLocal,
   fechaEnZona,
@@ -168,7 +169,7 @@ describe("fechaVencida", () => {
   });
 });
 
-describe("aFechaDeInput y fechaAInstanteLocal (ida y vuelta)", () => {
+describe("aFechaDeInput (lectura en el navegador)", () => {
   it("una fecha sin hora (columna date) pasa tal cual, en cualquier zona", () => {
     for (const zona of ["UTC", "America/Argentina/Buenos_Aires", "Asia/Tokyo"]) {
       conZona(zona);
@@ -183,7 +184,7 @@ describe("aFechaDeInput y fechaAInstanteLocal (ida y vuelta)", () => {
     expect(aFechaDeInput("2026-10-06T01:00:00+00:00")).toBe("2026-10-05");
   });
 
-  it("⭐ la fecha guardada vuelve igual, en cualquier zona", () => {
+  it("⭐ lo guardado al mediodía de la zona de quien mira vuelve igual, en cualquier zona", () => {
     for (const zona of [
       "UTC",
       "America/Argentina/Buenos_Aires",
@@ -194,7 +195,7 @@ describe("aFechaDeInput y fechaAInstanteLocal (ida y vuelta)", () => {
     ]) {
       conZona(zona);
       for (const fecha of ["2026-10-05", "2026-12-31", "2027-01-01", "2026-03-08", "2026-11-01"]) {
-        expect(aFechaDeInput(fechaAInstanteLocal(fecha)), `${fecha} en ${zona}`).toBe(fecha);
+        expect(aFechaDeInput(fechaAInstanteEnZona(fecha, zona)), `${fecha} en ${zona}`).toBe(fecha);
       }
     }
   });
@@ -213,11 +214,6 @@ describe("aFechaDeInput y fechaAInstanteLocal (ida y vuelta)", () => {
     expect(aFechaDeInput("")).toBe("");
     expect(aFechaDeInput("mañana")).toBe("");
     expect(aFechaDeInput("2026-02-31")).toBe("");
-  });
-
-  it("fechaAInstanteLocal guarda el mediodía local", () => {
-    conZona("America/Argentina/Buenos_Aires");
-    expect(fechaAInstanteLocal("2026-10-05")).toBe("2026-10-05T15:00:00.000Z");
   });
 });
 
@@ -245,9 +241,9 @@ describe("fechaDeValorGuardado (lectura en la zona de la organización)", () => 
     expect(fechaDeValorGuardado("2026-10-06T01:00:00Z", null)).toBe("2026-10-05");
   });
 
-  it("lo guardado al mediodía local en Argentina se lee igual en la zona de la org", () => {
-    conZona("America/Argentina/Buenos_Aires");
-    const guardado = fechaAInstanteLocal("2026-10-05");
+  it("lo guardado al mediodía de la org se lee igual en la zona de la org", () => {
+    conZona("Asia/Tokyo");
+    const guardado = fechaAInstanteEnZona("2026-10-05", "America/Argentina/Buenos_Aires");
     conZona("UTC");
     expect(fechaDeValorGuardado(guardado, "America/Argentina/Buenos_Aires")).toBe("2026-10-05");
   });
@@ -258,12 +254,72 @@ describe("formatearFechaGuardada", () => {
     conZona("America/Argentina/Buenos_Aires");
     const opciones = { day: "2-digit", month: "2-digit", year: "numeric" } as const;
     // 5-oct 22:00 en Argentina: con toLocaleString de un instante salía la hora.
-    expect(formatearFechaGuardada("2026-10-06T01:00:00Z", opciones)).toBe("05/10/2026");
+    expect(formatearFechaGuardada("2026-10-06T01:00:00Z", { opciones })).toBe("05/10/2026");
     // Fila vieja del seguimiento del lead, a medianoche UTC.
-    expect(formatearFechaGuardada("2026-10-05T00:00:00+00:00", opciones)).toBe("05/10/2026");
-    expect(formatearFechaGuardada("2026-10-05", opciones)).toBe("05/10/2026");
-    expect(formatearFechaGuardada(null, opciones)).toBeNull();
-    expect(formatearFechaGuardada("mañana", opciones)).toBeNull();
+    expect(formatearFechaGuardada("2026-10-05T00:00:00+00:00", { opciones })).toBe("05/10/2026");
+    expect(formatearFechaGuardada("2026-10-05", { opciones })).toBe("05/10/2026");
+    expect(formatearFechaGuardada(null, { opciones })).toBeNull();
+    expect(formatearFechaGuardada("mañana", { opciones })).toBeNull();
+  });
+
+  it("⭐ con la zona de la organización, el día es el mismo en cualquier navegador", () => {
+    const opciones = { day: "2-digit", month: "2-digit", year: "numeric" } as const;
+    const zona = "America/Argentina/Buenos_Aires";
+    for (const zonaDelNavegador of ["Europe/Madrid", "Asia/Tokyo", zona]) {
+      conZona(zonaDelNavegador);
+      // 5-oct 22:00 ART: en Madrid y en Tokio ya es el 6.
+      expect(formatearFechaGuardada("2026-10-06T01:00:00Z", { opciones, zona })).toBe("05/10/2026");
+    }
+  });
+});
+
+describe("fechaAInstanteEnZona", () => {
+  it("⭐ guarda el mediodía de la zona pedida, sin importar la del proceso", () => {
+    for (const zonaDelProceso of ["UTC", "Europe/Madrid", "Asia/Tokyo"]) {
+      conZona(zonaDelProceso);
+      expect(fechaAInstanteEnZona("2026-10-05", "America/Argentina/Buenos_Aires")).toBe(
+        "2026-10-05T15:00:00.000Z"
+      );
+      expect(fechaAInstanteEnZona("2026-10-05", "Asia/Tokyo")).toBe("2026-10-05T03:00:00.000Z");
+    }
+  });
+
+  it("respeta el horario de verano de la zona", () => {
+    conZona("UTC");
+    // Madrid: verano UTC+2 (julio), invierno UTC+1 (enero). Nueva York: el día del cambio.
+    expect(fechaAInstanteEnZona("2026-07-15", "Europe/Madrid")).toBe("2026-07-15T10:00:00.000Z");
+    expect(fechaAInstanteEnZona("2026-01-15", "Europe/Madrid")).toBe("2026-01-15T11:00:00.000Z");
+    expect(fechaAInstanteEnZona("2026-03-08", "America/New_York")).toBe("2026-03-08T16:00:00.000Z");
+    expect(fechaAInstanteEnZona("2026-11-01", "America/New_York")).toBe("2026-11-01T17:00:00.000Z");
+  });
+
+  it("ida y vuelta con fechaDeValorGuardado en la misma zona, en zonas de -11 a +14", () => {
+    conZona("Europe/Madrid");
+    for (const zona of ["Pacific/Pago_Pago", "America/Mexico_City", "Pacific/Auckland", "Pacific/Kiritimati"]) {
+      for (const fecha of ["2026-01-01", "2026-07-16", "2026-12-31"]) {
+        expect(fechaDeValorGuardado(fechaAInstanteEnZona(fecha, zona), zona), `${fecha} ${zona}`).toBe(fecha);
+      }
+    }
+  });
+
+  it("zona nula o inválida: la de por defecto; fecha inválida: error", () => {
+    expect(fechaAInstanteEnZona("2026-10-05", null)).toBe("2026-10-05T15:00:00.000Z");
+    expect(fechaAInstanteEnZona("2026-10-05", "Marte/Olimpo")).toBe("2026-10-05T15:00:00.000Z");
+    expect(() => fechaAInstanteEnZona("2026-02-31", null)).toThrow(RangeError);
+  });
+});
+
+describe("fechaDeInstanteEnZona (instantes reales)", () => {
+  it("una llamada a las 00:00:00 UTC en punto es de las 21:00 en Argentina: el día anterior", () => {
+    expect(fechaDeInstanteEnZona("2026-10-02T00:00:00Z", "America/Argentina/Buenos_Aires")).toBe(
+      "2026-10-01"
+    );
+    // En cambio, como fecha elegida (fechaDeValorGuardado) es el 2.
+    expect(fechaDeValorGuardado("2026-10-02T00:00:00Z", "America/Argentina/Buenos_Aires")).toBe(
+      "2026-10-02"
+    );
+    expect(fechaDeInstanteEnZona("2026-10-02", "America/Argentina/Buenos_Aires")).toBe("2026-10-02");
+    expect(fechaDeInstanteEnZona("ayer", null)).toBe("");
   });
 });
 

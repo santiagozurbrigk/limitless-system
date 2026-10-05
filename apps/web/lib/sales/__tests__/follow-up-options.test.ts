@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { conZona, restaurarZona } from "@/lib/fechas/__tests__/zona";
-import { aFechaDeInput, fechaAInstanteLocal } from "@/lib/fechas/calendario";
+import { fechaAInstanteEnZona, fechaDeValorGuardado } from "@/lib/fechas/calendario";
 import {
   BUILT_IN_CATALOG,
   DIAS_HASTA_EL_PROXIMO_PASO,
@@ -140,26 +140,42 @@ describe("el slug que sale de lo que escribe el usuario", () => {
 describe("⭐ fecha propuesta del próximo paso", () => {
   /** 1-oct-2026, 22:00 en Buenos Aires = 2-oct, 01:00 UTC. */
   const lasVeintidos = new Date("2026-10-02T01:00:00Z");
+  const argentina = "America/Argentina/Buenos_Aires";
 
   afterEach(restaurarZona);
 
-  it("a las 22:00 de Argentina es ese día más los días del paso", () => {
-    conZona("America/Argentina/Buenos_Aires");
+  it("a las 22:00 de Argentina es ese día más los días del paso, en cualquier navegador", () => {
     expect(DIAS_HASTA_EL_PROXIMO_PASO).toBe(2);
-    expect(fechaPropuestaDelProximoPaso(lasVeintidos)).toBe("2026-10-03");
+    for (const zonaDelNavegador of [argentina, "UTC", "Europe/Madrid", "Asia/Tokyo"]) {
+      conZona(zonaDelNavegador);
+      expect(fechaPropuestaDelProximoPaso(argentina, lasVeintidos), zonaDelNavegador).toBe(
+        "2026-10-03"
+      );
+    }
   });
 
   it("cruza fin de mes y de año", () => {
-    conZona("America/Argentina/Buenos_Aires");
+    conZona("UTC");
     // 30-dic 22:00 en Buenos Aires = 31-dic 01:00 UTC.
-    expect(fechaPropuestaDelProximoPaso(new Date("2026-12-31T01:00:00Z"))).toBe("2027-01-01");
+    expect(fechaPropuestaDelProximoPaso(argentina, new Date("2026-12-31T01:00:00Z"))).toBe(
+      "2027-01-01"
+    );
     // 30-sep 23:30 en Buenos Aires = 1-oct 02:30 UTC.
-    expect(fechaPropuestaDelProximoPaso(new Date("2026-10-01T02:30:00Z"))).toBe("2026-10-02");
+    expect(fechaPropuestaDelProximoPaso(argentina, new Date("2026-10-01T02:30:00Z"))).toBe(
+      "2026-10-02"
+    );
+  });
+
+  it("organización sin zona: la de por defecto", () => {
+    conZona("UTC");
+    expect(fechaPropuestaDelProximoPaso(null, lasVeintidos)).toBe("2026-10-03");
   });
 
   it("guardada como timestamptz, la tabla de leads la muestra igual", () => {
-    conZona("America/Argentina/Buenos_Aires");
-    const propuesta = fechaPropuestaDelProximoPaso(lasVeintidos);
-    expect(aFechaDeInput(fechaAInstanteLocal(propuesta))).toBe(propuesta);
+    conZona("Asia/Tokyo");
+    const propuesta = fechaPropuestaDelProximoPaso(argentina, lasVeintidos);
+    expect(fechaDeValorGuardado(fechaAInstanteEnZona(propuesta, argentina), argentina)).toBe(
+      propuesta
+    );
   });
 });

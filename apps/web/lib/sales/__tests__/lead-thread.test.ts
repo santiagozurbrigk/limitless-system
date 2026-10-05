@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { conZona, restaurarZona } from "@/lib/fechas/__tests__/zona";
-import { fechaAInstanteLocal } from "@/lib/fechas/calendario";
+import { fechaAInstanteEnZona } from "@/lib/fechas/calendario";
 import {
   buildLeadThread,
   isActionable,
@@ -299,8 +299,8 @@ describe("⭐ el próximo paso vence por día, en la zona de la organización", 
   afterEach(restaurarZona);
 
   function guardadoEnArgentina(fecha: string): string {
-    conZona(argentina);
-    const valor = fechaAInstanteLocal(fecha);
+    // Lo que guardan la tabla, el modal y el panel: el mediodía de la zona de la org.
+    const valor = fechaAInstanteEnZona(fecha, argentina);
     conZona("UTC");
     return valor;
   }

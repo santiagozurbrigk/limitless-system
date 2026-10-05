@@ -65,6 +65,11 @@ export type LeadSummary = {
   thread: LeadThread;
   /** Cliente en que se convirtió, si compró. */
   clientId: string | null;
+  /**
+   * La zona horaria de la organización (null = la de por defecto): la fecha del
+   * próximo paso se propone, se guarda y se muestra en esa zona.
+   */
+  timezone: string | null;
 };
 
 // ─── La tabla ────────────────────────────────────────────────────────────────
@@ -334,6 +339,7 @@ export async function getLeadThreadAction(
     name: (data.name as string) ?? "Sin nombre",
     email: (data.email as string | null) ?? null,
     clientId: (data.client_id as string | null) ?? null,
+    timezone,
     thread: buildLeadThread(
       attempts,
       new Date(),

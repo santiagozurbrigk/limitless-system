@@ -19,7 +19,7 @@ import {
   Textarea,
 } from "@ai-coo/ui";
 import { CampoFecha } from "@/components/shared/campo-fecha";
-import { fechaAInstanteLocal } from "@/lib/fechas/calendario";
+import { fechaAInstanteEnZona } from "@/lib/fechas/calendario";
 import {
   fechaPropuestaDelProximoPaso,
   needsDate,
@@ -84,6 +84,7 @@ export function CallOutcomeModal({
   teamMembers,
   onCatalogChange,
   onSubmit,
+  zona,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -94,12 +95,18 @@ export function CallOutcomeModal({
   /** Un valor creado desde acá tiene que quedar disponible en el resto de la UI. */
   onCatalogChange?: (option: FollowUpOption) => void;
   onSubmit: (payload: CallOutcomePayload) => Promise<void>;
+  /**
+   * La zona horaria de la organización (null = la de por defecto). La fecha del
+   * próximo paso se propone, se muestra y se guarda en esa zona, igual que en
+   * la tabla de leads.
+   */
+  zona: string | null;
 }) {
   const [reason, setReason] = useState<NoCloseReasonId>("price");
   const [notes, setNotes] = useState("");
   const [qualification, setQualification] = useState<string | null>(null);
   const [nextAction, setNextAction] = useState<string | null>(null);
-  const [date, setDate] = useState(fechaPropuestaDelProximoPaso);
+  const [date, setDate] = useState(() => fechaPropuestaDelProximoPaso(zona));
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [nextActionNotes, setNextActionNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -113,12 +120,12 @@ export function CallOutcomeModal({
     setNotes("");
     setQualification(null);
     setNextAction(null);
-    setDate(fechaPropuestaDelProximoPaso());
+    setDate(fechaPropuestaDelProximoPaso(zona));
     setOwnerId(null);
     setNextActionNotes("");
     setError(null);
     setSaving(false);
-  }, [open]);
+  }, [open, zona]);
 
   const wantsDate = nextAction ? needsDate(catalog.nextActions, nextAction) : false;
   const owner = ownerId ? teamMembers.find((m) => m.id === ownerId) : null;
@@ -138,7 +145,7 @@ export function CallOutcomeModal({
         notes: notes.trim() || undefined,
         qualification,
         nextAction,
-        nextActionAt: wantsDate ? fechaAInstanteLocal(date) : null,
+        nextActionAt: wantsDate ? fechaAInstanteEnZona(date, zona) : null,
         ownerId,
         nextActionNotes: nextActionNotes.trim() || null,
       });

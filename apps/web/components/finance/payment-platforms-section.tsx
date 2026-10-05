@@ -26,7 +26,7 @@ import type { PaymentPlatformConfig } from "@/types/finance";
  * medianoche de UTC y en Argentina se mostraba como el día anterior.
  */
 function formatearUltimaTransaccion(valor: string): string {
-  return formatearFechaGuardada(valor, undefined, "es-ES") ?? valor;
+  return formatearFechaGuardada(valor, { idioma: "es-ES" }) ?? valor;
 }
 
 const selectClass =

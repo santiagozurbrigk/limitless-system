@@ -17,7 +17,7 @@ import {
 } from "@/lib/sales/lead-thread";
 import { CLOSING_CALL_STATUS_LABEL } from "@/lib/closing/call-status";
 import { CampoFecha } from "@/components/shared/campo-fecha";
-import { fechaAInstanteLocal, formatearFechaGuardada } from "@/lib/fechas/calendario";
+import { fechaAInstanteEnZona, formatearFechaGuardada } from "@/lib/fechas/calendario";
 import { fechaPropuestaDelProximoPaso } from "@/lib/sales/follow-up-options";
 import { useToast } from "@/providers/toast-provider";
 
@@ -76,10 +76,13 @@ function formatDate(iso: string | null): string {
 
 /**
  * La fecha del próximo paso, sin hora: es una fecha elegida (ver
- * `lead-detail-drawer.tsx`). Se lee igual que la celda de la tabla.
+ * `lead-detail-drawer.tsx`). Se lee en la zona de la organización, igual que
+ * la celda de la tabla.
  */
-function formatearFechaDelPaso(valor: string | null): string {
-  return formatearFechaGuardada(valor, { day: "2-digit", month: "short" }) ?? "—";
+function formatearFechaDelPaso(valor: string | null, zona: string | null): string {
+  return (
+    formatearFechaGuardada(valor, { opciones: { day: "2-digit", month: "short" }, zona }) ?? "—"
+  );
 }
 
 function LeadRow({ lead }: { lead: LeadSummary }) {
@@ -88,7 +91,7 @@ function LeadRow({ lead }: { lead: LeadSummary }) {
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [action, setAction] = useState<NextAction | "">("");
-  const [date, setDate] = useState(fechaPropuestaDelProximoPaso);
+  const [date, setDate] = useState(() => fechaPropuestaDelProximoPaso(lead.timezone));
   const [notes, setNotes] = useState("");
   const [resolved, setResolved] = useState(false);
 
@@ -104,7 +107,8 @@ function LeadRow({ lead }: { lead: LeadSummary }) {
         // `lost` cierra el hilo, así que no necesita fecha. La fecha se guarda
         // al mediodía local: a medianoche UTC caía el día anterior en Argentina.
         // Sin fecha va null y el servidor responde que el paso la necesita.
-        nextActionAt: action === "lost" ? null : date ? fechaAInstanteLocal(date) : null,
+        nextActionAt:
+          action === "lost" ? null : date ? fechaAInstanteEnZona(date, lead.timezone) : null,
         notes: notes.trim() || null,
       });
       if (!result.ok) {
@@ -187,7 +191,7 @@ function LeadRow({ lead }: { lead: LeadSummary }) {
                 {a.nextAction && (
                   <span className="text-muted-foreground">
                     → {NEXT_ACTION_LABEL[a.nextAction]}
-                    {a.nextActionAt ? ` · ${formatearFechaDelPaso(a.nextActionAt)}` : ""}
+                    {a.nextActionAt ? ` · ${formatearFechaDelPaso(a.nextActionAt, lead.timezone)}` : ""}
                   </span>
                 )}
               </div>

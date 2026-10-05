@@ -29,5 +29,6 @@ En App Router, `<Link href="/ruta#tab">` en la **misma** ruta no dispara `hashch
 Todo campo de fecha nuevo usa `CampoFecha` (`campo-fecha.tsx`), no un `<input type="date">` suelto. Recibe lo
 guardado tal como viene de la base (fecha `YYYY-MM-DD` de una columna `date` o instante de una `timestamptz`) y lo
 muestra con el día que se eligió; `onChange` emite la fecha elegida (`YYYY-MM-DD`) o `null`. Si va a una columna
-`timestamptz`, guardala con `fechaAInstanteLocal` (`lib/fechas/calendario.ts`). Acepta las props de `Input`.
+`timestamptz`, pasale la `zona` de la organización y guardala con `fechaAInstanteEnZona` en esa zona
+(`lib/fechas/calendario.ts`): así todos los miembros ven el mismo día. Acepta las props de `Input`.
 Los campos viejos se migran al tocar su pantalla (`[CAMPO-FECHA-MIGRAR]` en `PENDIENTES.md`).

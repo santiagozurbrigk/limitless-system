@@ -453,6 +453,7 @@ export function ClosingOverview({
             onOpenChange={(open) => setOutcomeKind(open ? outcomeKind : null)}
             kind={outcomeKind ?? "not_closed"}
             leadName={selected.leadName}
+            zona={leadsTable.timezone}
             catalog={catalog}
             teamMembers={teamMembers}
             onCatalogChange={(option: FollowUpOption) =>

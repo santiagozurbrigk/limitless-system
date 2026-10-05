@@ -166,26 +166,69 @@ export function diaLocal(fecha: string): Date {
 
 /**
  * Un valor guardado (columna `date` o `timestamptz` con una fecha elegida)
- * formateado para mostrar sólo la fecha, con el día que lee `aFechaDeInput`
- * (el mismo que muestra `CampoFecha`). `null` si no hay valor o no se entiende,
- * para que quien llama elija qué mostrar en ese caso.
+ * formateado para mostrar sólo la fecha. Con `zona`, el día se lee en esa zona
+ * (`fechaDeValorGuardado`, la de la organización); sin `zona`, en la del
+ * navegador (`aFechaDeInput`). Es el mismo día que muestra `CampoFecha` con la
+ * misma `zona`. `null` si no hay valor o no se entiende, para que quien llama
+ * elija qué mostrar en ese caso.
  */
 export function formatearFechaGuardada(
   valor: string | null | undefined,
-  opciones?: Intl.DateTimeFormatOptions,
-  idioma = "es-AR"
+  {
+    opciones,
+    idioma = "es-AR",
+    zona,
+  }: { opciones?: Intl.DateTimeFormatOptions; idioma?: string; zona?: string | null } = {}
 ): string | null {
-  const fecha = aFechaDeInput(valor);
+  const fecha = zona === undefined ? aFechaDeInput(valor) : fechaDeValorGuardado(valor, zona);
   return fecha ? diaLocal(fecha).toLocaleDateString(idioma, opciones) : null;
 }
 
+const formateadoresConHora = new Map<string, Intl.DateTimeFormat>();
+
+/** Desfase de una zona con UTC en un instante, en milisegundos (reloj de la zona menos UTC). */
+function desfaseDeZona(instante: Date, zona: string): number {
+  let formateador = formateadoresConHora.get(zona);
+  if (!formateador) {
+    formateador = new Intl.DateTimeFormat("en-US", {
+      timeZone: zona,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    formateadoresConHora.set(zona, formateador);
+  }
+  const partes = formateador.formatToParts(instante);
+  const n = (tipo: Intl.DateTimeFormatPartTypes) =>
+    Number(partes.find((p) => p.type === tipo)?.value);
+  const reloj = Date.UTC(n("year"), n("month") - 1, n("day"), n("hour"), n("minute"), n("second"));
+  return reloj - Math.floor(instante.getTime() / 1000) * 1000;
+}
+
 /**
- * Lo que se guarda en una columna `timestamptz` cuando el usuario eligió sólo
- * una fecha: ese día a las 12:00 locales, como instante ISO. `aFechaDeInput`
- * lo vuelve a leer como el mismo día (ida y vuelta).
+ * Lo que se guarda en una columna `timestamptz` cuando se eligió sólo una
+ * fecha y el dato pertenece a la organización: ese día a las 12:00 **de la
+ * zona de la organización** (null o inválida = la de por defecto), como
+ * instante ISO. `fechaDeValorGuardado(…, zona)` lo vuelve a leer como el mismo
+ * día, lo mire quien lo mire y desde donde sea (SCRUM-493).
+ *
+ * El mediodía nunca cae en un cambio de horario (se hacen de madrugada), así
+ * que con dos pasadas de desfase alcanza.
  */
-export function fechaAInstanteLocal(fecha: string): string {
-  return diaLocal(fecha).toISOString();
+export function fechaAInstanteEnZona(fecha: string, zona: string | null | undefined): string {
+  if (!esFechaCalendario(fecha)) {
+    throw new RangeError(`"${fecha}" no es una fecha calendario (YYYY-MM-DD).`);
+  }
+  const zonaReal = resolverZonaHoraria(zona);
+  const [y, m, d] = fecha.split("-").map(Number) as [number, number, number];
+  const mediodiaComoUtc = Date.UTC(y, m - 1, d, 12, 0, 0, 0);
+  let instante = mediodiaComoUtc - desfaseDeZona(new Date(mediodiaComoUtc), zonaReal);
+  instante = mediodiaComoUtc - desfaseDeZona(new Date(instante), zonaReal);
+  return new Date(instante).toISOString();
 }
 
 /**
@@ -197,8 +240,9 @@ export function fechaAInstanteLocal(fecha: string): string {
  * - Un instante a las 00:00:00 UTC exactas es una fecha sin hora guardada en una
  *   columna `timestamptz` (Postgres la guarda así, y así la guardaba el
  *   seguimiento del lead): se toma su fecha de UTC, que es la que se eligió.
- * - Cualquier otro instante se muestra con la fecha local de quien mira, que es
- *   la que se eligió si se guardó con `fechaAInstanteLocal`.
+ * - Cualquier otro instante se muestra con la fecha local de quien mira. Para un
+ *   dato de la organización se usa `fechaDeValorGuardado` con su zona (y se
+ *   guarda con `fechaAInstanteEnZona`), así todos los miembros ven el mismo día.
  */
 export function aFechaDeInput(valor: string | null | undefined): string {
   return leerValorGuardado(valor, fechaLocal);
@@ -215,6 +259,25 @@ export function fechaDeValorGuardado(
   zona: string | null | undefined
 ): string {
   return leerValorGuardado(valor, (instante) => fechaEnZona(instante, zona));
+}
+
+/**
+ * El día de un **instante real** (no de una fecha elegida) en una zona: una
+ * llamada, un mensaje, un alta. A diferencia de `fechaDeValorGuardado`, no
+ * aplica la regla de medianoche UTC: una llamada que empezó a las 00:00:00 UTC
+ * en punto es una llamada de las 21:00 en Argentina, no una fecha sin hora. Un
+ * `YYYY-MM-DD` se devuelve tal cual. `""` si no se entiende.
+ */
+export function fechaDeInstanteEnZona(
+  valor: string | null | undefined,
+  zona: string | null | undefined
+): string {
+  if (!valor) return "";
+  const texto = valor.trim();
+  if (FECHA_CALENDARIO.test(texto)) return esFechaCalendario(texto) ? texto : "";
+  const instante = new Date(texto);
+  if (Number.isNaN(instante.getTime())) return "";
+  return fechaEnZona(instante, zona);
 }
 
 /** Las reglas comunes de `aFechaDeInput` y `fechaDeValorGuardado`. */

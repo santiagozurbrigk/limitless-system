@@ -13,7 +13,11 @@ import { createElement, type ChangeEvent, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { conZona, restaurarZona } from "@/lib/fechas/__tests__/zona";
-import { fechaAInstanteLocal } from "@/lib/fechas/calendario";
+import {
+  fechaAInstanteEnZona,
+  formatearFechaGuardada,
+} from "@/lib/fechas/calendario";
+import { buildLeadThread, type LeadAttempt } from "@/lib/sales/lead-thread";
 import { CampoFecha, type CampoFechaProps } from "../campo-fecha";
 
 afterEach(restaurarZona);
@@ -59,11 +63,12 @@ describe("⭐ CampoFecha a las 22:00 de Argentina", () => {
     );
   });
 
-  it("lo guardado con fechaAInstanteLocal vuelve igual (ida y vuelta)", () => {
-    conZona("America/Argentina/Buenos_Aires");
-    expect(valorMostrado({ value: fechaAInstanteLocal("2026-10-05"), onChange: () => {} })).toBe(
-      "2026-10-05"
-    );
+  it("lo guardado con fechaAInstanteEnZona vuelve igual con la misma zona (ida y vuelta)", () => {
+    conZona("Europe/Madrid");
+    const zona = "America/Argentina/Buenos_Aires";
+    expect(
+      valorMostrado({ value: fechaAInstanteEnZona("2026-10-05", zona), onChange: () => {}, zona })
+    ).toBe("2026-10-05");
   });
 
   it("emite exactamente la fecha elegida", () => {
@@ -96,5 +101,69 @@ describe("CampoFecha", () => {
     expect(salida).toContain('max="2026-10-31"');
     expect(salida).toContain("disabled");
     expect(salida).toContain("mi-clase");
+  });
+});
+
+/**
+ * SCRUM-493 (segunda pasada): el próximo paso de Closing es un dato de la
+ * organización. Con `zona`, la celda, el cajón y el estado del lead dicen el
+ * mismo día para todos los miembros, estén donde estén.
+ */
+describe("⭐ CampoFecha con la zona de la organización", () => {
+  const argentina = "America/Argentina/Buenos_Aires";
+
+  it("org en Argentina, navegador en Madrid: la celda, el cajón y el estado dicen el mismo día", () => {
+    conZona("Europe/Madrid");
+    // 5-oct 22:00 ART (por ejemplo, una fila del default viejo "ahora + 2 días").
+    const valor = "2026-10-06T01:00:00Z";
+    expect(valorMostrado({ value: valor, onChange: () => {}, zona: argentina })).toBe("2026-10-05");
+    expect(
+      formatearFechaGuardada(valor, {
+        opciones: { day: "2-digit", month: "2-digit", year: "numeric" },
+        zona: argentina,
+      })
+    ).toBe("05/10/2026");
+    // El 5 a las 23:00 ART todavía está a tiempo; el 6 a las 12:00 ART, vencido.
+    const intento: LeadAttempt = {
+      id: "a1",
+      scheduledAt: "2026-10-01T15:00:00Z",
+      status: "not_closed",
+      nextAction: "follow_up",
+      nextActionAt: valor,
+      preCallQualification: null,
+      postCallQualification: null,
+    };
+    expect(buildLeadThread([intento], new Date("2026-10-06T02:00:00Z"), argentina).state).toBe(
+      "follow_up_planned"
+    );
+    expect(buildLeadThread([intento], new Date("2026-10-06T15:00:00Z"), argentina).state).toBe(
+      "follow_up_due"
+    );
+  });
+
+  it("un miembro en Tokio elige el 6: se guarda el 6 de la org y todos lo ven y lo vencen el 6", () => {
+    conZona("Asia/Tokyo");
+    const guardado = fechaAInstanteEnZona("2026-10-06", argentina);
+    expect(valorMostrado({ value: guardado, onChange: () => {}, zona: argentina })).toBe("2026-10-06");
+    conZona(argentina);
+    expect(valorMostrado({ value: guardado, onChange: () => {}, zona: argentina })).toBe("2026-10-06");
+    const intento: LeadAttempt = {
+      id: "a1",
+      scheduledAt: "2026-10-01T15:00:00Z",
+      status: "not_closed",
+      nextAction: "follow_up",
+      nextActionAt: guardado,
+      preCallQualification: null,
+      postCallQualification: null,
+    };
+    // 6-oct 12:00 ART: vence hoy, todavía a tiempo.
+    expect(buildLeadThread([intento], new Date("2026-10-06T15:00:00Z"), argentina).state).toBe(
+      "follow_up_planned"
+    );
+  });
+
+  it("sin zona, lee en la del navegador (campos que no son de la organización)", () => {
+    conZona("Europe/Madrid");
+    expect(valorMostrado({ value: "2026-10-06T01:00:00Z", onChange: () => {} })).toBe("2026-10-06");
   });
 });
