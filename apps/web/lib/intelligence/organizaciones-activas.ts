@@ -26,8 +26,10 @@ export async function listActiveOrganizationIds(): Promise<string[]> {
 }
 
 /**
- * El mismo criterio que `listActiveOrganizationIds`, pero para una sola org y
- * en el momento de procesarla: founder y `status = 'active'`.
+ * Si una org sigue activa (`status = 'active'`) en el momento de procesarla.
+ * Mira sólo el estado: el filtro por `account_type = 'founder'` es del listado
+ * de los crons, no del procesamiento. Así una holding activa puede seguir
+ * generando a pedido y una pausada o dada de baja (founder u holding) no.
  *
  * La lista se arma al encolar; entre que el trabajo entra en QStash (o en sus
  * reintentos) y que el worker lo procesa, la org puede haberse pausado. Lo
@@ -43,7 +45,7 @@ export async function organizacionSigueActiva(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("organizations")
-    .select("account_type, status")
+    .select("status")
     .eq("id", organizationId)
     .maybeSingle();
 
@@ -51,5 +53,5 @@ export async function organizacionSigueActiva(
     throw new Error(error.message);
   }
 
-  return data?.account_type === "founder" && data?.status === ACTIVA;
+  return data?.status === ACTIVA;
 }

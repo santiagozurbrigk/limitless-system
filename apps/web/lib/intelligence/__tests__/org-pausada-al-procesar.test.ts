@@ -148,7 +148,7 @@ beforeEach(() => {
 });
 
 describe("organizacionSigueActiva", () => {
-  it("⭐ consulta la org por su id y sólo una founder activa sigue activa", async () => {
+  it("⭐ consulta la org por su id y sólo una org activa sigue activa", async () => {
     await expect(organizacionSigueActiva(ORG)).resolves.toBe(true);
     expect(sim.consultasDeOrg).toEqual([[["id", ORG]]]);
 
@@ -158,8 +158,10 @@ describe("organizacionSigueActiva", () => {
     }
   });
 
-  it("una holding activa no cuenta, igual que al listar", async () => {
+  it("⭐ mira sólo el estado: una holding activa sigue activa y una pausada no", async () => {
     conStatus("active", "holding");
+    await expect(organizacionSigueActiva(ORG)).resolves.toBe(true);
+    conStatus("paused", "holding");
     await expect(organizacionSigueActiva(ORG)).resolves.toBe(false);
   });
 
@@ -191,6 +193,17 @@ describe.each(GENERADORES)("generador de %s", (_nombre, generar) => {
   it("con la org activa sigue hasta la IA", async () => {
     await generar(ORG);
     expect(ia.getClientForOrg).toHaveBeenCalledWith(ORG);
+  });
+
+  it("⭐ una holding activa sigue generando (como antes) y una holding pausada no", async () => {
+    conStatus("active", "holding");
+    await generar(ORG);
+    expect(ia.getClientForOrg).toHaveBeenCalledWith(ORG);
+
+    ia.getClientForOrg.mockClear();
+    conStatus("paused", "holding");
+    await expect(generar(ORG)).resolves.toBe("skipped");
+    expect(ia.getClientForOrg).not.toHaveBeenCalled();
   });
 
   it("⭐ si la base falla al comprobar, lanza y no procesa la org", async () => {

@@ -105,7 +105,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/storage` | 1 | 3 | validación de rutas por org |
 | `lib/queue` | 1 | 3 | aviso cuando falla un trabajo de QStash |
 | `lib/unipile` | 1 | 3 | secreto del webhook |
-| `lib/intelligence` | 2 | 14 | organizaciones sobre las que corren los crons de IA y el chequeo de la org al procesarla (generadores, workers, modo en serie) |
+| `lib/intelligence` | 2 | 15 | organizaciones sobre las que corren los crons de IA y el chequeo de la org al procesarla (generadores, workers, modo en serie) |
 | `lib/youtube` | 1 | 2 | métricas de video que se guardan |
 | `lib/team` | 1 | 6 | rol de la org (filtro por organización) |
 | `app/__tests__` | 1 | 3 | los catch de páginas y layouts relanzan los errores de Next (`unstable_rethrow`) |
