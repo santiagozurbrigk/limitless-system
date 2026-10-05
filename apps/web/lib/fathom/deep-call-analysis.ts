@@ -1,7 +1,7 @@
 import { callClaudeJson } from "@/lib/ai/anthropic";
 import { buildOrgContextText, getOrgContext } from "@/lib/ai/org-context";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fechaDeHoyEnZona, fechaDeValorGuardado } from "@/lib/fechas/calendario";
+import { fechaDeHoyEnZona, fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import type { DeepCallAnalysis } from "@/types/call-analysis";
 import type { ObjectionCategory } from "@/types/sales";
@@ -144,14 +144,15 @@ function formatDurationLabel(minutes?: number): string {
  * La fecha de la llamada (`YYYY-MM-DD`) que se guarda en `linked_calls`, en el
  * día de la organización. Sin fecha (o con una que no se entiende), hoy en la
  * organización. Antes las dos salían del día de UTC: una llamada de las 22:00
- * en Argentina quedaba con fecha de mañana (SCRUM-493).
+ * en Argentina quedaba con fecha de mañana (SCRUM-493). `callDate` es un
+ * instante real: se lee sin la regla de medianoche UTC de las fechas elegidas.
  */
 export function formatDateLabel(
   iso: string | null | undefined,
   zona: string | null,
   ahora: Date = new Date()
 ): string {
-  return fechaDeValorGuardado(iso, zona) || fechaDeHoyEnZona(zona, ahora);
+  return fechaDeInstanteEnZona(iso, zona) || fechaDeHoyEnZona(zona, ahora);
 }
 
 async function syncClientLinkedCalls(params: {

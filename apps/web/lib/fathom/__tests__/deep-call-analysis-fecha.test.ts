@@ -25,4 +25,11 @@ describe("⭐ formatDateLabel con la zona de la organización", () => {
     expect(formatDateLabel("2026-10-02T01:00:00Z", argentina)).toBe("2026-10-01");
     expect(formatDateLabel("2026-09-15", argentina)).toBe("2026-09-15");
   });
+
+  it("una llamada de las 21:00 en punto (00:00:00 UTC) es de ese día: es un instante, no una fecha sin hora", () => {
+    conZona("UTC");
+    // `call_date` sale de `recordingStart ?? scheduledStart`: un turno de las 21:00 ART.
+    expect(formatDateLabel("2026-10-02T00:00:00Z", argentina)).toBe("2026-10-01");
+    expect(formatDateLabel("2026-10-02T00:00:00.000Z", argentina)).toBe("2026-10-01");
+  });
 });
