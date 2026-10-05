@@ -34,7 +34,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
-### 2026-10-04 · Hallazgos de la revisión integral del 4-oct (SCRUM-210, SCRUM-111, SCRUM-43, SCRUM-75, tipos de estado de org y pantallas dinámicas)
+### 2026-10-04 — Hallazgos de la revisión integral del 4-oct (SCRUM-210, SCRUM-111, SCRUM-43, SCRUM-75, tipos de estado de org y pantallas dinámicas)
 
 **Rama:** `fix/revision-integral-4-oct`
 **Commit(s):** uno por apartado (este y los siguientes de la rama)
