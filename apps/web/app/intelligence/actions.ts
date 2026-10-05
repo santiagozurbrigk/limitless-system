@@ -1,6 +1,7 @@
 "use server";
 
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import { exigirAccesoAlModulo } from "@/lib/auth/acceso-a-modulo";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type {
@@ -33,9 +34,18 @@ function parseJsonArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
+/**
+ * El último resumen de Inteligencia de la org. Lo muestran `/intelligence` y
+ * `/founder`, las dos bajo Operaciones.
+ *
+ * ⭐ Exige Operaciones aunque las dos pantallas ya lo exijan en el layout: es
+ * una Server Action exportada y se puede invocar a mano sin abrir ninguna de
+ * las dos (SCRUM-18).
+ */
 export async function getIntelligenceSnapshotAction(): Promise<IntelligenceSnapshotView> {
   if (!isSupabaseConfigured()) return EMPTY_SNAPSHOT;
 
+  await exigirAccesoAlModulo("operations");
   const organizationId = await requireOrganizationId();
 
   const supabase = await createClient();

@@ -9,7 +9,7 @@ import { OnboardingProvider } from "@/providers/onboarding-provider";
 import { TourRunner } from "@/components/onboarding/tour-runner";
 import { getCurrentOnboardingContext } from "@/lib/onboarding/current";
 import { headers } from "next/headers";
-import { permissionModuleForPath } from "@/lib/navigation/module-for-path";
+import { moduloBloqueadoParaRuta } from "@/lib/auth/acceso-a-modulo";
 import { getPermissionModuleLabel } from "@/constants/permission-modules";
 import { SinAcceso } from "@/components/platform/sin-acceso";
 import { AvisoClaveIa } from "@/components/platform/aviso-clave-ia";
@@ -38,20 +38,17 @@ export default async function PlatformRouteLayout({
    *
    * `x-pathname` lo pone el middleware. Antes de este chequeo, alguien sin
    * acceso a Finanzas que tipeaba `/finance` entraba igual: la pantalla se
-   * renderizaba entera y las Server Actions le respondían. Ahora el módulo no
-   * llega a renderizarse.
+   * renderizaba entera. Ahora el módulo no llega a renderizarse.
    *
-   * El fundador pasa siempre —`getCurrentUserPermissions` le da todo en
-   * `full`—, y las rutas sin módulo (onboarding, holding) devuelven `null`.
+   * La regla (founder siempre pasa, sin rol no se bloquea, rutas sin módulo
+   * libres) vive en `moduloBloqueadoParaRuta`. Toda pantalla mapeada en
+   * `module-for-path` tiene que colgar de este layout: el test de
+   * `module-for-path` recorre `app/` y falla si una queda afuera (SCRUM-18).
    */
-  const pathname = headerList.get("x-pathname") ?? "";
-  const moduleId = pathname ? permissionModuleForPath(pathname) : null;
-  const sinAcceso =
-    moduleId !== null &&
-    !permissions.isFounder &&
-    // Sin rol cargado no hay nada que hacer cumplir: ver `hasRoleConfigured`.
-    permissions.hasRoleConfigured &&
-    (permissions.modules[moduleId] ?? "none") === "none";
+  const moduloBloqueado = moduloBloqueadoParaRuta(
+    headerList.get("x-pathname") ?? "",
+    permissions
+  );
 
   return (
     <ZonaDeLaOrganizacionProvider zona={zona}>
@@ -69,9 +66,9 @@ export default async function PlatformRouteLayout({
                 */}
                   <AvisoClaveIa esFounder={permissions.isFounder} />
 
-                  {sinAcceso && moduleId ? (
+                  {moduloBloqueado ? (
                     <SinAcceso
-                      moduleLabel={getPermissionModuleLabel(moduleId)}
+                      moduleLabel={getPermissionModuleLabel(moduloBloqueado)}
                     />
                   ) : (
                     children
