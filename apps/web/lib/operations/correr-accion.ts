@@ -1,3 +1,4 @@
+import { isNextRouterError } from "next/dist/client/components/is-next-router-error";
 import type { MutationResult } from "@/lib/server/action-result";
 
 /**
@@ -30,6 +31,10 @@ export async function correrAccion<R>(opciones: {
   try {
     resultado = await opciones.accion();
   } catch (error) {
+    // Un redirect o un notFound de Next (p. ej. `requireAuthContext` manda a
+    // cambiar la contraseña) no es un error: Next ya navega. No se avisa ni se
+    // registra.
+    if (isNextRouterError(error)) return;
     console.error(opciones.etiqueta, error);
     opciones.avisar({ title: opciones.tituloError, description: ERROR_INESPERADO, variant: "default" });
     return;

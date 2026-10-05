@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getRedirectError } from "next/dist/client/components/redirect";
+import { RedirectType } from "next/dist/client/components/redirect-error";
+import { notFound } from "next/navigation";
 import { ERROR_INESPERADO, correrAccion, correrMutacion } from "../correr-accion";
 import { manejarReporteSemanal } from "../resultado-reporte-semanal";
 import { AVISO_ORG_NO_ACTIVA } from "@/lib/intelligence/organizaciones-activas";
@@ -40,6 +43,31 @@ describe("correrAccion", () => {
     expect(JSON.stringify(avisar.mock.calls)).not.toContain("Server Components");
     expect(consola).toHaveBeenCalledWith("[test]", error);
     expect(alTerminar).not.toHaveBeenCalled();
+  });
+
+  it("⭐ un redirect o un notFound de Next no se avisa ni se registra (Next ya navega)", async () => {
+    let errorDeNotFound: unknown;
+    try {
+      notFound();
+    } catch (e) {
+      errorDeNotFound = e;
+    }
+    for (const error of [getRedirectError("/auth/force-password-change", RedirectType.replace), errorDeNotFound]) {
+      const avisar = vi.fn();
+      const alTerminar = vi.fn();
+      await correrAccion({
+        accion: async () => {
+          throw error;
+        },
+        alTerminar,
+        avisar,
+        tituloError: "No se pudo guardar",
+        etiqueta: "[test]",
+      });
+      expect(avisar).not.toHaveBeenCalled();
+      expect(alTerminar).not.toHaveBeenCalled();
+    }
+    expect(consola).not.toHaveBeenCalled();
   });
 
   it("con un resultado se lo pasa a alTerminar", async () => {
