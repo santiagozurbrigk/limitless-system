@@ -22,7 +22,6 @@ import {
   fechaDeInstanteEnZona,
   fechaDeValorGuardado,
   fechaEnZona,
-  fechaLocal,
   fechaVencida,
   formatearFechaGuardada,
   resolverZonaHoraria,
@@ -34,24 +33,6 @@ import { conZona, restaurarZona } from "./zona";
 const LAS_22_EN_ARGENTINA = new Date("2026-10-02T01:00:00Z");
 
 afterEach(restaurarZona);
-
-describe("fechaLocal (un Date armado en el navegador)", () => {
-  it("⭐ en Argentina, a las 22:00 sigue siendo el mismo día", () => {
-    conZona("America/Argentina/Buenos_Aires");
-    expect(fechaLocal(LAS_22_EN_ARGENTINA)).toBe("2026-10-01");
-  });
-
-  it("completa con ceros el mes y el día", () => {
-    conZona("UTC");
-    expect(fechaLocal(new Date("2026-01-05T12:00:00Z"))).toBe("2026-01-05");
-  });
-
-  it("es la fecha local de quien mira, en cualquier zona", () => {
-    conZona("Asia/Tokyo");
-    // 2-oct 01:00 UTC = 2-oct 10:00 en Tokio.
-    expect(fechaLocal(LAS_22_EN_ARGENTINA)).toBe("2026-10-02");
-  });
-});
 
 describe("sumarDias", () => {
   it("cruza fin de mes", () => {

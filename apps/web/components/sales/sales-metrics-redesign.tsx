@@ -36,6 +36,7 @@ import { GaugeSideCard } from "./metrics/gauge-side-card";
 import { SummaryStrip } from "./metrics/summary-strip";
 import { useSalesMetrics } from "./metrics/use-sales-metrics";
 import type { DateRange } from "./metrics/date-range-picker";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import type { FrequentObjectionsResult } from "@/types/sales";
 import type { MetricsSnapshot } from "@/app/sales/metrics-actions";
 
@@ -48,7 +49,11 @@ export function SalesMetricsRedesign({
   frequentObjections?: FrequentObjectionsResult;
   importedSnapshots?: MetricsSnapshot[];
 }) {
-  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
+  // "Este mes" en la zona de la organización (SCRUM-493).
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const [dateRange, setDateRange] = useState<DateRange>(() =>
+    getDefaultDateRange(zonaDeLaOrganizacion)
+  );
 
   const {
     isLoading,

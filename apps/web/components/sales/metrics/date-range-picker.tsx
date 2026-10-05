@@ -3,24 +3,28 @@
 import { CalendarDays } from "lucide-react";
 import { cn } from "@ai-coo/ui";
 import { CampoFecha } from "@/components/shared/campo-fecha";
-import { fechaLocal } from "@/lib/fechas/calendario";
-import { useHoyDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
+import {
+  diasDelRango,
+  PRESETS_DE_RANGO,
+  rangoDeDias,
+  rangoDelPreset,
+  rangoPorDefecto,
+  type DateRange,
+} from "@/lib/sales/rango-de-metricas";
+import {
+  useHoyDeLaOrganizacion,
+  useZonaDeLaOrganizacion,
+} from "@/providers/zona-de-la-organizacion-provider";
 
 /** Las clases para que `CampoFecha` quede sin caja propia dentro del recuadro del rango. */
 const CLASE_CAMPO =
   "h-auto w-auto rounded-none border-0 bg-transparent p-0 text-sm tabular-nums shadow-none outline-none focus-visible:ring-0 dark:bg-transparent";
 
-export interface DateRange {
-  from: Date;
-  to: Date;
-}
+export type { DateRange };
 
-/** Retorna el rango "este mes" (día 1 hasta hoy) como valor inicial */
-export function getDefaultDateRange(): DateRange {
-  const from = new Date();
-  from.setDate(1);
-  from.setHours(0, 0, 0, 0);
-  return { from, to: new Date() };
+/** El rango "este mes" (del día 1 a hoy) en la zona de la organización, como valor inicial. */
+export function getDefaultDateRange(zona: string | null): DateRange {
+  return rangoPorDefecto(zona);
 }
 
 interface DateRangePickerProps {
@@ -35,26 +39,23 @@ interface DateRangePickerProps {
  * Usa inputs nativos del browser — sin dependencias externas.
  */
 export function DateRangePicker({ value, onChange, className }: DateRangePickerProps) {
-  // El rango son instantes locales (el "hasta" es a las 23:59:59): se muestran
-  // con su fecha local. Con `toISOString` el "hasta" salía corrido al día
-  // siguiente en Argentina (SCRUM-493).
+  // El rango se elige, se muestra y se filtra en días de la zona de la
+  // organización (`lib/sales/rango-de-metricas.ts`): "desde" empieza a las
+  // 00:00 de la org y "hasta" termina a las 23:59:59.999 de la org (SCRUM-493).
+  const zona = useZonaDeLaOrganizacion();
+  const { desde, hasta } = diasDelRango(value, zona);
+
   const handleFrom = (fecha: string | null) => {
-    if (!fecha) return;
-    const from = new Date(fecha + "T00:00:00");
-    if (!Number.isNaN(from.getTime()) && from <= value.to) {
-      onChange({ ...value, from });
-    }
+    if (!fecha || fecha > hasta) return;
+    onChange(rangoDeDias(fecha, hasta, zona));
   };
 
   const handleTo = (fecha: string | null) => {
-    if (!fecha) return;
-    const to = new Date(fecha + "T23:59:59");
-    if (!Number.isNaN(to.getTime()) && to >= value.from) {
-      onChange({ ...value, to });
-    }
+    if (!fecha || fecha < desde) return;
+    onChange(rangoDeDias(desde, fecha, zona));
   };
 
-  // `null` en el render del servidor (UTC): el tope se pone con el día local.
+  // El tope es el hoy de la org; `null` en el render del servidor (sin tope).
   const today = useHoyDeLaOrganizacion() ?? undefined;
 
   return (
@@ -62,14 +63,14 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
       <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 shadow-sm">
         <CalendarDays size={13} className="shrink-0 text-muted-foreground" />
         <CampoFecha
-          value={fechaLocal(value.from)}
+          value={desde}
           max={today}
           onChange={handleFrom}
           className={CLASE_CAMPO}
         />
         <span className="text-muted-foreground">—</span>
         <CampoFecha
-          value={fechaLocal(value.to)}
+          value={hasta}
           max={today}
           onChange={handleTo}
           className={CLASE_CAMPO}
@@ -84,36 +85,6 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
 
 // ─── Presets rápidos ─────────────────────────────────────────────────────────
 
-const PRESETS = [
-  {
-    label: "Este mes",
-    range: (): DateRange => {
-      const from = new Date();
-      from.setDate(1);
-      from.setHours(0, 0, 0, 0);
-      return { from, to: new Date() };
-    },
-  },
-  {
-    label: "Últimos 30 d",
-    range: (): DateRange => {
-      const from = new Date();
-      from.setDate(from.getDate() - 30);
-      from.setHours(0, 0, 0, 0);
-      return { from, to: new Date() };
-    },
-  },
-  {
-    label: "Últimos 90 d",
-    range: (): DateRange => {
-      const from = new Date();
-      from.setDate(from.getDate() - 90);
-      from.setHours(0, 0, 0, 0);
-      return { from, to: new Date() };
-    },
-  },
-] as const;
-
 function QuickPresets({
   value,
   onChange,
@@ -121,21 +92,20 @@ function QuickPresets({
   value: DateRange;
   onChange: (r: DateRange) => void;
 }) {
-  const isActive = (preset: (typeof PRESETS)[number]) => {
-    const r = preset.range();
-    return (
-      r.from.toDateString() === value.from.toDateString() &&
-      r.to.toDateString() === value.to.toDateString()
-    );
+  const zona = useZonaDeLaOrganizacion();
+  const actual = diasDelRango(value, zona);
+  const isActive = (preset: (typeof PRESETS_DE_RANGO)[number]) => {
+    const r = diasDelRango(rangoDelPreset(preset, zona), zona);
+    return r.desde === actual.desde && r.hasta === actual.hasta;
   };
 
   return (
     <div className="flex gap-1 rounded-lg border border-border bg-muted/30 p-0.5">
-      {PRESETS.map((p) => (
+      {PRESETS_DE_RANGO.map((p) => (
         <button
           key={p.label}
           type="button"
-          onClick={() => onChange(p.range())}
+          onClick={() => onChange(rangoDelPreset(p, zona))}
           className={cn(
             "rounded-md px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
             isActive(p)

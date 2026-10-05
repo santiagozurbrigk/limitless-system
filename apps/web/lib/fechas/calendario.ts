@@ -45,15 +45,6 @@ function dosDigitos(n: number): string {
 }
 
 /**
- * La fecha calendario de un `Date` armado en el navegador (por ejemplo, los
- * bordes de un rango de reporte). Para el "hoy" o el día de un dato de la
- * organización se usa `fechaEnZona` / `fechaDeHoyEnZona` con su zona.
- */
-export function fechaLocal(instante: Date): string {
-  return `${instante.getFullYear()}-${dosDigitos(instante.getMonth() + 1)}-${dosDigitos(instante.getDate())}`;
-}
-
-/**
  * Suma (o resta) días a una fecha calendario.
  *
  * Se cuenta sobre el calendario, no sobre milisegundos: un día en que se
