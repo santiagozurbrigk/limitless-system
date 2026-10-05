@@ -34,6 +34,64 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-04 · Fechas por defecto y vencimientos con el día local o de la organización, no el de UTC (SCRUM-493)
+
+**Rama:** `fix/SCRUM-493-fechas-utc`
+**Commit(s):** `942b88cb` (utilidad y `CampoFecha`), `433828c4` (Closing), `6d40761c` (Clientes), `e84fde89` (Operaciones),
+`e0a00f06` (Finanzas), `9b0a137f` (imports) y este (docs)
+**Módulo(s) afectado(s):** transversal. Nuevos `lib/fechas/calendario.ts`, `lib/fechas/organizacion.ts`,
+`lib/hooks/use-fecha-de-hoy-local.ts` y `components/shared/campo-fecha.tsx`; cambian Closing (modal de resultado,
+seguimiento del lead, tabla de leads), Clientes (tabla, tareas, revisión semanal, diálogos de alta, win, hito y
+baseline, alta desde onboarding), Workboard, Operaciones (inputs y reporte semanal, reporte ejecutivo semanal, tool
+del agente), Lanzamientos, Finanzas (plataformas de pago, filtro de facturación), Ventas (rango de métricas), Panel
+(gráfico de ingresos) e imports (Excel, ClickUp, GHL).
+
+**Qué se hizo:**
+- **Una sola fuente para las fechas calendario** (`lib/fechas/calendario.ts`): `fechaDeHoyLocal` (se mudó de
+  `lib/clients/payment-utils.ts`, sin re-export), `fechaDeHoyEnZona` y `fechaEnZona` con `Intl.DateTimeFormat` y
+  fallback a `America/Argentina/Buenos_Aires` si la zona es nula o no existe, `sumarDias` sobre el calendario (no lo
+  corre un cambio de horario de verano), `fechaVencida`, `aFechaDeInput` (lo guardado, `date` o `timestamptz`, como
+  `YYYY-MM-DD` sin correrlo de día) y `fechaAInstanteLocal` (una fecha elegida, guardada al mediodía local).
+- **Servidor:** `fechaDeHoyDeLaOrganizacion` lee `organizations.timezone` (sin default desde `20260831130000`, puede
+  ser null) con una consulta filtrada por el id de la org, una vez por pedido. La usan la revisión semanal, la semana
+  de Operaciones, el reporte ejecutivo semanal, `get_operations_summary`, Finanzas y los imports.
+- **`isOverdue(task, hoy)`** recibe el hoy como fecha calendario. En el navegador se arma con `useFechaDeHoyLocal`,
+  que da null en el render del servidor para no marcar "vencida" con el día de UTC en el HTML que se hidrata.
+- **`CampoFecha`:** `Input type="date"` que recibe lo guardado y emite la fecha elegida. Se usa en los 13 campos que
+  tenían el bug (11 archivos); los 14 restantes, que funcionan bien, quedan en `[CAMPO-FECHA-MIGRAR]`.
+- **Closing:** la fecha propuesta del próximo paso (`fechaPropuestaDelProximoPaso`) es hoy local más dos días en los
+  tres lugares; el seguimiento del lead guarda al mediodía local (antes a medianoche UTC, el día anterior a las 21 en
+  Argentina); la tabla de leads muestra y guarda lo mismo.
+- **Finanzas:** `rowToPaymentPlatform` ya no inventa el hoy de UTC; la última transacción se muestra con su día.
+- Tests nuevos: `lib/fechas` (2 archivos, 31 casos), `components/shared/__tests__/campo-fecha.test.ts` (7, primer
+  test de un componente: `vitest.config.ts` compila JSX con el runtime automático), `lib/hooks` (2), y casos en
+  `next-task`, `weekly-review`, `follow-up-options`, `weekly-utils`, `sync-contacts` de GHL, `derive-dashboard-data`
+  y los parsers de Excel. Todos arman el instante en UTC (las 22:00 de Argentina) y fijan la zona del proceso con
+  `conZona`, así fallan con el código viejo en cualquier máquina. Control negativo de cada arreglo en la evidencia.
+
+**Por qué / finalidad:** varias pantallas y procesos calculaban "hoy" con `toISOString().slice(0, 10)`, que es el día
+de UTC: después de las 21:00 en Argentina ya es mañana. Una fecha propuesta salía corrida un día, una tarea que vence
+hoy aparecía vencida, la tabla de leads podía mostrar y guardar otro día, los inputs del domingo a la noche caían en la
+semana siguiente y los imports daban de alta con fecha de mañana. Cierra `[OPS-SEMANA-UTC]`.
+
+**Decisiones de diseño relevantes:**
+- Una fecha elegida que va a una columna `timestamptz` (`next_action_at`) se guarda al mediodía local: es el punto
+  más lejos de los dos bordes del día. `aFechaDeInput` lee un instante a las 00:00:00 UTC exactas como una fecha sin
+  hora (así guarda Postgres un `YYYY-MM-DD` en `timestamptz`, y así lo guardaba el seguimiento del lead).
+- Sin defaults escondidos: `isOverdue`, `buildWeeklyReview`, `getCurrentWeekStart`, los parsers de Excel,
+  `newClientFromOnboarding` y `rowToPaymentPlatform` reciben el hoy de quien llama, para que nadie vuelva a usar el
+  reloj del proceso sin querer.
+- El tablero de Workboard ya calculaba bien (fin del día local); se pasó a la regla común igual, para que haya una.
+- Revisión completa de `apps/*` con la clasificación de cada lugar (bug del mismo tipo, instante correcto o fuera de
+  alcance) en la evidencia de SCRUM-493.
+
+**Riesgos / deuda técnica pendiente:** lo que se dejó afuera con motivo quedó en `[FECHAS-UTC-RESTO]` (ventanas de
+reportes y de anuncios, fecha límite de hitos, fechas de Fathom, fecha importada de ClickUp), `[EMBUDOS-TIMEZONE]` y
+`[FIN-MESES-UTC]`/`[AUD-CONF-10]`. Los campos de fecha que funcionan bien se migran a `CampoFecha` al tocar cada
+pantalla (`[CAMPO-FECHA-MIGRAR]`). Falta verlo en el navegador de noche: bloque `V-INFRA-14` de `docs/operacion/verificacion-manual.md`.
+
+---
+
 ### 2026-10-04 — La cola del cron de métricas ya no se traba ni se diluye con piezas sin dato (SCRUM-172, reabierta)
 
 **Rama:** `fix/SCRUM-172-cola-de-metricas`

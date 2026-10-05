@@ -43,11 +43,12 @@ PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres supabase/ci/check-migration
 | Regla | Detalle |
 |---|---|
 | Ubicación | `lib/<dominio>/__tests__/<archivo>.test.ts`, junto al código. `vitest.config.ts` incluye `**/*.test.ts` de toda la app (antes era sólo `lib/**` y un test afuera no corría sin avisar); excluye `e2e/**`, `.next`, `dist`, `node_modules` |
-| Entorno | `node`. Se testea **lógica pura**; componentes y flujos de UI van a Playwright |
+| Entorno | `node`. Se testea **lógica pura**; un componente sin hooks se puede probar renderizándolo con `renderToStaticMarkup` (`components/shared/__tests__/campo-fecha.test.ts`; `vitest.config.ts` compila JSX con el runtime automático). Los flujos de UI van a Playwright |
+| Fechas y zona horaria | Un test de fechas arma los instantes en UTC (`new Date("2026-10-02T01:00:00Z")` son las 22:00 de Argentina) y fija la zona del proceso con `conZona` (`lib/fechas/__tests__/zona.ts`), que comprueba que el cambio hizo efecto. Así falla con el código viejo en cualquier máquina. La suite tiene que pasar con `TZ=UTC` y con `TZ=America/Argentina/Buenos_Aires` |
 | Imports | explícitos (`import { describe, it, expect } from "vitest"`); `globals: false` |
 | Alias | `@/` → `apps/web/` |
 | Idioma | nombres de test en español |
-| IO | Hoy **ningún test mockea Supabase** (no hay `vi.mock` en todo el repo ni un helper de stub encadenable). Lo que depende de la base se testea extrayendo la parte pura |
+| IO | No hay un helper compartido de stub de Supabase: los pocos tests que lo necesitan arman un objeto encadenable en el mismo archivo (`app/operations/__tests__`, `lib/fechas/__tests__/organizacion.test.ts`). Lo que depende de la base se testea, en lo posible, extrayendo la parte pura |
 | Fixtures | no importar del código que se testea (ej. `lib/funnels/__tests__/document-fixture.ts`) |
 | Validez | después de escribir un test, romper el código a propósito y confirmar que falla |
 | Hallazgos | si un test encuentra un bug, no arreglarlo en el mismo commit: `it.fails`/`it.skip` con comentario + ítem en `PENDIENTES.md` |
@@ -62,11 +63,11 @@ Prueban lo que la base deja hacer a cada usuario, que Vitest no puede ver porque
 - Validez, igual que en Vitest: sacar la migración que arregla el problema y confirmar que el test falla con `FALLA: ...`.
 - Para correrlos a mano: los mismos comandos de "Migraciones" más arriba.
 
-Qué no testear en Vitest: componentes React, actions que sólo hacen `select`, wrappers de SDKs externos, constantes sin lógica.
+Qué no testear en Vitest: componentes React con estado o efectos, actions que sólo hacen `select`, wrappers de SDKs externos, constantes sin lógica.
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **143 archivos, ~1.510 casos** (recontado el 2026-10-04, después de la revisión integral). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **162 archivos, ~1.640 casos** (recontado el 2026-10-04 con SCRUM-493). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -75,11 +76,12 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/checkpoints` | 6 | 94 | recorrido del cliente, etapas, propuestas, trabados |
 | `lib/custom-fields` | 7 | 85 | campos configurables: validación, merge, formato, alertas por fecha |
 | `lib/payments` | 5 | 85 | normalización Whop/Commas, firmas, agregados, retención |
-| `lib/clients` | 7 | 93 | próxima tarea, facturación, satisfacción, señales, sub-clientes, revisión semanal |
+| `lib/clients` | 8 | 97 | próxima tarea (vencida con el hoy local y el de la org), facturación, satisfacción, señales, sub-clientes, revisión semanal, fecha de alta por defecto del import de Excel |
+| `lib/fechas` | 2 | 31 | fechas calendario: hoy local y en una zona, suma de días (fin de mes, año y horario de verano), vencida, valor del campo de fecha (ida y vuelta), zona de la organización con fallback |
 | `lib/onboarding` | 4 | 61 | derivación, gate de routing, ítems, tours |
 | `lib/discord` | 5 | 60 | actividad, canales, clasificador, perfil, identidades |
-| `lib/ghl` | 4 | 42 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook |
-| `lib/sales` | 2 | 37 | opciones de seguimiento, hilo del lead |
+| `lib/ghl` | 5 | 45 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook, fecha de alta de un contacto en la zona de la org |
+| `lib/sales` | 2 | 40 | opciones de seguimiento (incluida la fecha propuesta del próximo paso), hilo del lead |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
 | `lib/super-admin` | 5 | 43 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role y estado de la org alineado con la base (incluido el desconocido) |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
@@ -87,7 +89,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/auth` | 6 | 33 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log, un solo chequeo de super admin por pedido |
 | `lib/integrations` | 2 | 28 | `health.ts` y completitud del registro |
 | `lib/vturb` | 2 | 23 | normalización de stats, período cerrado |
-| `lib/metrics` | 6 | 80 | etapas del embudo de ventas, match de closer, períodos y prorrateo, ingresos por fecha, resumen de Finanzas, serie de 6 meses (varias zonas horarias) |
+| `lib/metrics` | 8 | 83 | etapas del embudo de ventas, match de closer, períodos y prorrateo, ingresos por fecha, resumen de Finanzas, serie de 6 meses (varias zonas horarias), gráfico de ingresos del Panel, fechas por defecto del import de métricas |
 | `lib/closing` | 1 | 20 | estado de llamadas |
 | `constants` | 2 | 16 | módulos de permisos |
 | `lib/navigation` | 2 | 15 | módulo por path, metadata de página |
@@ -110,10 +112,12 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/team` | 1 | 6 | rol de la org (filtro por organización) |
 | `app/__tests__` | 1 | 3 | los catch de páginas y layouts relanzan los errores de Next (`unstable_rethrow`) |
 | `app/executive-reports`, `app/operations` | 4 | 35 | últimos reportes; el botón de reportes y el reporte de Operaciones no llaman a la IA para una org no activa; las acciones de Operaciones (reporte semanal e inputs) devuelven sus errores esperables como valor, relanzan lo inesperado (sin sesión o redirect) y filtran por organización |
-| `lib/operations` | 2 | 12 | mensaje del botón de Inputs semanales, cómo cuenta el pipeline el paso de Operaciones y cómo los componentes corren las acciones (texto fijo ante un error inesperado) |
+| `lib/operations` | 3 | 16 | mensaje del botón de Inputs semanales, cómo cuenta el pipeline el paso de Operaciones, cómo los componentes corren las acciones (texto fijo ante un error inesperado) y el lunes de la semana de la organización |
+| `lib/hooks` | 1 | 2 | aviso de cambio de día del "hoy" del navegador |
+| `components/shared` | 1 | 7 | `CampoFecha`: muestra lo guardado sin correrlo de día y emite la fecha elegida |
 | `lib/agent` | 2 | 7 | tools de contenido del agente con piezas sin métricas |
 
-**Sin ningún test:** `lib/agent` (compaction, JIT, streaming; sólo las tools de contenido tienen test), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`), los gastos y las métricas de ventas, y los parsers de import de clientes. Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`), las actions de reportes a pedido (`app/executive-reports/__tests__`, `app/operations/__tests__`) y las páginas de `app/__tests__`.
+**Sin ningún test:** `lib/agent` (compaction, JIT, streaming; sólo las tools de contenido tienen test), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`, salvo el gráfico de ingresos), los gastos y las métricas de ventas, y los parsers de import de clientes (salvo la fecha por defecto). Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`), las actions de reportes a pedido (`app/executive-reports/__tests__`, `app/operations/__tests__`) y las páginas de `app/__tests__`.
 
 ### E2E
 

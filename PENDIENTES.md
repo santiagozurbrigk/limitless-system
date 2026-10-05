@@ -88,8 +88,8 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 19 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
-| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 19 | 42 | 13 |
+| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 19 | 44 | 13 |
 
 ---
 
@@ -2027,13 +2027,6 @@ Doc del área: [`docs/areas/operaciones.md`](./docs/areas/operaciones.md)
 - **Qué hay que hacer:** decidir y alinear.
 - **Dónde:** `apps/web/app/team/actions.ts`.
 
-#### [OPS-SEMANA-UTC] La semana de los inputs se calcula en UTC [Operaciones y equipo]
-- **Tipo:** bug
-- **Estado verificado:** `getCurrentWeekStart` usa el reloj del servidor; el domingo después de las 21 h ART ya es
-  la semana siguiente.
-- **Qué hay que hacer:** calcular en la zona de la org.
-- **Dónde:** `apps/web/lib/operations/weekly-utils.ts`.
-
 ---
 
 ## Infraestructura, seguridad y tests (transversal)
@@ -2551,6 +2544,47 @@ Prioridad sugerida P2: no hay una filtración conocida; el procedimiento se nece
 - **Estado verificado:** `playwright.config.ts` tiene rama de CI; el workflow no lo invoca; necesita una cuenta de test y una base.
 - **Qué hay que hacer:** decidir cuenta/base de test (proyecto Supabase aparte) y agregar el job.
 - **Dónde:** `.github/workflows/ci.yml`.
+
+#### [CAMPO-FECHA-MIGRAR] 14 campos de fecha todavía no usan `CampoFecha`
+- **Tipo:** deuda técnica
+- **Estado verificado:** SCRUM-493 creó `CampoFecha` (`apps/web/components/shared/campo-fecha.tsx`), que muestra el
+  valor guardado (columna `date` o `timestamptz`) con el día que se eligió, y lo usa en los 13 campos que tenían el
+  bug de UTC (11 archivos). Quedan 14 campos `type="date"` en 11 archivos que hoy funcionan bien:
+  `client-onboarding/onboarding-form.tsx` (1), `clients/client-tasks-section.tsx` (1),
+  `clients/custom-fields/field-value-input.tsx` (1), `clients/wins/client-baseline-dialog.tsx` (1, fecha de egreso),
+  `closing/payment-modal.tsx` (1), `fathom/fathom-task-proposal-modal.tsx` (1),
+  `finance/facturacion-period-filter.tsx` (2, rango personalizado), `lanzamientos/create-launch-modal.tsx` (2),
+  `sales/client-payments-section.tsx` (2), `workboard/workboard-shell.tsx` (1) y
+  `workboard/workboard-task-detail-dialog.tsx` (1), todos bajo `apps/web/components/`.
+- **Qué hay que hacer:** pasarlos a `CampoFecha` al tocar cada pantalla (regla en
+  `docs/arquitectura/vision-general.md` § Convenciones), sin cambiar lo que guardan.
+- **Dónde:** los archivos citados.
+
+#### [FECHAS-UTC-RESTO] Fechas que todavía se cortan en UTC, fuera del alcance de SCRUM-493
+- **Tipo:** bug
+- **Estado verificado:** la revisión de SCRUM-493 arregló los "hoy", vencimientos y fechas por defecto que se
+  calculaban en UTC y dejó afuera, con motivo, lo que es otra decisión de cada área:
+  - Ventanas de reportes y de proveedores, que agrupan instantes por día de UTC: anuncios
+    (`components/marketing/ads-dashboard.tsx:101`, `app/(platform)/marketing/anuncios/page.tsx:10`,
+    `app/api/cron/capture-ad-metrics/route.ts:56`, `lib/marketing/ad-metrics-snapshot.ts:42`; el día lo define la
+    zona de la cuenta de Meta), reportes ejecutivos (`lib/executive-reports/generate-daily.ts:144`,
+    `compute-departments.ts:61`), contexto de inteligencia (`lib/intelligence/collect-context.ts:298`) y las
+    sparklines de conversaciones del Panel y de Ventas (`lib/metrics/derive-dashboard-data.ts:65`,
+    `derive-sales-metrics.ts:25`). Embudos, VTurb y Hyros ya están en `[EMBUDOS-TIMEZONE]`; los meses de Finanzas,
+    en `[FIN-MESES-UTC]` y `[AUD-CONF-10]`. Del mismo tipo: el mes actual de una oferta
+    (`lib/product/offer-metrics.ts:43,87`) y los períodos del panel de super admin (`lib/super-admin/period.ts`),
+    que se arman con el reloj del servidor; el de super admin cruza organizaciones, así que primero hay que decidir
+    en qué zona se corta.
+  - Hitos: la fecha límite del próximo hito es el instante del anterior más su plazo, cortado en UTC
+    (`lib/checkpoints/stalled.ts:135`), y el diálogo de registrar hito lee `reached_at.slice(0, 10)`. Cambiarlo
+    toca la regla de "trabado", que se mide en días de 24 horas.
+  - Fathom: las fechas de las llamadas salen del día de UTC (`lib/fathom/one-on-one-types.ts:87-93`,
+    `deep-call-analysis.ts:142`).
+  - ClickUp: la fecha de alta importada se corta en UTC y además no entiende los timestamps en milisegundos que
+    manda ClickUp (`app/integrations/clickup/import-actions.ts:230`).
+- **Qué hay que hacer:** pasar cada uno a `lib/fechas` con la zona que corresponda (la de la organización; en
+  anuncios, la de la cuenta publicitaria), decidiendo en cada área si su día se corta en la zona de la org.
+- **Dónde:** los archivos citados.
 
 ### Infraestructura, seguridad y tests (transversal) · P3
 

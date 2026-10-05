@@ -165,7 +165,10 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
   está vacía. Cualquier camino que escriba sólo `assignee_id` en una tarea que ya tiene lista queda invisible.
 - **Cualquier responsable cierra la tarea**; `completed_by` dice quién.
 - **Un sprint activo por org**: crear uno cierra el anterior sin preguntar.
-- **La semana es lunes-domingo calculada en el reloj del servidor** (`getCurrentWeekStart`, UTC en Vercel).
+- **La semana es lunes-domingo, en la zona horaria de la organización** (`organizations.timezone`; si está en
+  null, `America/Argentina/Buenos_Aires`). `getCurrentWeekStart(hoy)` recibe la fecha de hoy ya armada: las
+  actions y la pantalla de inputs la sacan con `fechaDeHoyDeLaOrganizacion`, igual que el reporte ejecutivo
+  semanal y la tool `get_operations_summary` del agente (SCRUM-493).
 - **SOP desde video**: el worker nunca reintenta la transcripción si ya existe (Whisper cobra por minuto); la
   regla "no inventar pasos" y "listar lo que el video no aclara" vive en `lib/sops/video-sop-prompt.ts`.
 - **SOPs es módulo propio**, fuera del add-on `operaciones` (si no, en orgs sin add-on no había cómo llegar).

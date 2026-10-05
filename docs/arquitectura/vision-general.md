@@ -123,6 +123,7 @@ En total hay 98 archivos `"use server"` en `app/`. La convención es `app/<domin
 | Paths | nunca hardcodeados: `paths` de `routes/paths.ts` | |
 | Navegación | notch nav (`components/navigation/notch-nav/`) derivada de `lib/navigation/sidebar-modules.ts` | |
 | Integraciones | registro único `lib/integrations/registry.ts` + salud en `health.ts` | ver `docs/integraciones/README.md` |
+| Fechas calendario | "hoy", "dentro de N días", "vencida" y el valor de un campo de fecha salen de `lib/fechas/calendario.ts`; nunca `toISOString().slice(0, 10)` ni `new Date("YYYY-MM-DD")` para mostrar. En el navegador, `fechaDeHoyLocal()` (o `useFechaDeHoyLocal()` si se renderiza en el servidor); en el servidor, `fechaDeHoyDeLaOrganizacion()` con la zona de la org. Los campos de fecha nuevos usan `CampoFecha` (`components/shared/campo-fecha.tsx`); los existentes se migran al tocar esa pantalla (`[CAMPO-FECHA-MIGRAR]`) | `lib/fechas/`, SCRUM-493 |
 | Iconos | `lucide-react`; sin emojis en JSX | |
 | Idioma | UI, commits y nombres de test en español rioplatense | |
 | Naming | action `xxxAction`; componente PascalCase en archivo kebab; helper camelCase; cron en `app/api/cron/<nombre>/route.ts` | |

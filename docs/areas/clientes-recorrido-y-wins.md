@@ -150,6 +150,8 @@ Ficha: acceptCheckpointProposalAction → recordCheckpointAction (mismas validac
 - **`used`/`unused` se derivan de `win_usages`**; sólo `reserved` se declara.
 - **Revisión semanal:** «en riesgo» exige **dos** señales de tres (trabado, ≥30 días sin win ni hito, cuota vencida en
   `clients.installments`). Un cliente sin dato para una lista no aparece en ella; no se inventa el motivo.
+- **El "hoy" de la revisión semanal es el de la organización** (`organizations.timezone`, una consulta por pedido):
+  una cuota que vence hoy no es pago atrasado y la fecha de cada hito se cuenta en esa zona (SCRUM-493).
 - **Fechas `YYYY-MM-DD` se formatean partiendo el string**, no con `new Date()`: en UTC-3 se corre un día.
 
 ## Limitaciones conocidas y deuda
@@ -176,7 +178,7 @@ Vitest, lógica pura (entorno `node`):
 | `lib/custom-fields/__tests__/` | key, validate, merge, resolve, format, date-alert, onboarding-config | ~85 |
 | `lib/checkpoints/__tests__/` | journey, progress, stalled, effective-stage, metric-schema, match-proposal | ~94 |
 | `lib/wins/__tests__/` | derive-case, consent | ~34 |
-| `lib/clients/__tests__/weekly-review.test.ts` | revisión semanal | ~22 |
+| `lib/clients/__tests__/weekly-review.test.ts` | revisión semanal, incluido el hoy de la organización | ~24 |
 
 No cubierto: server actions (upsert de eventos, `applyClientStatus`, aceptar propuesta), `propose-from-texts.ts` (IO),
 `usage-state.ts`, flujo de capturas, ninguna pantalla (sin Playwright).
