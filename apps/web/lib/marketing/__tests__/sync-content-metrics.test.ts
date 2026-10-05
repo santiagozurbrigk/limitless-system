@@ -464,6 +464,20 @@ describe("syncContentMetricsForOrg · la cola no se diluye", () => {
     });
   });
 
+  it("⭐ con 55 historias listas, entran las 50 más viejas", async () => {
+    // Publicadas hace 31 h (h-0) a 31 + 54 h (h-54): las más viejas son las de índice alto.
+    for (let i = 0; i < 55; i++) {
+      estado.piezas.push(historia(`h-${String(i).padStart(2, "0")}`, 31 + i));
+      estado.analytics[`ig-h-${String(i).padStart(2, "0")}`] = {};
+    }
+
+    const r = await correrCron(0);
+
+    expect(r.attempted).toBe(50);
+    const fuera = estado.piezas.filter((p) => !estado.pedidos.includes(`ig-${p.id}`)).map((p) => p.id);
+    expect(fuera).toEqual(["h-00", "h-01", "h-02", "h-03", "h-04"]);
+  });
+
   it("⭐ con 200 piezas nuevas, las historias listas entran primero", async () => {
     for (let i = 0; i < 200; i++) {
       estado.piezas.push(pieza(`nueva-${i}`, { created_at: `2026-09-${String(1 + (i % 28)).padStart(2, "0")}T00:00:00.000Z` }));
