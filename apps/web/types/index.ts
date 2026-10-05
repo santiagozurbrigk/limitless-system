@@ -42,4 +42,4 @@ export type {
   MemoryChunk,
 } from "./intelligence";
 export type { TeamMember, RoleDefinition } from "./team";
-export type { AdminOrganization, AdminUsageRow } from "./super-admin";
+export type { AdminOrganization } from "./super-admin";

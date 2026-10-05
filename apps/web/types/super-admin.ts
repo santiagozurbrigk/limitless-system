@@ -250,26 +250,6 @@ export type CreateFounderResult = {
 };
 
 /** @deprecated */
-export type AdminUsageRow = {
-  orgId: string;
-  orgName: string;
-  haikuTokens: number;
-  sonnetTokens: number;
-  opusTokens: number;
-  totalCost: string;
-};
-
-/** @deprecated */
-export type AdminFounder = {
-  id: string;
-  name: string;
-  email: string;
-  organization: string;
-  mrr: string;
-  status: "active" | "trial";
-};
-
-/** @deprecated */
 export type AdminTeamAccount = {
   id: string;
   name: string;
