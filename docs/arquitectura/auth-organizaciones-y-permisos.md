@@ -137,8 +137,14 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
   rol, "sin acceso a todo" dejaría la cuenta inutilizable.
 - La regla (founder pasa siempre, sin rol no se bloquea, con rol entra si el módulo no está en `none`) vive
   en `lib/auth/acceso-a-modulo.ts`: `moduloBloqueadoParaRuta` la usa el layout de `(platform)` y
-  `exigirAccesoAlModulo` la aplica en una Server Action (hoy, `getIntelligenceSnapshotAction`, que exige
-  `operations` desde SCRUM-18).
+  `rechazoPorModulo` la aplica en una Server Action (hoy, `getIntelligenceSnapshotAction`, que exige
+  `operations` desde SCRUM-18). El rechazo vuelve como valor (`RechazoPorModulo`: la forma del error de
+  `MutationResult` más `motivo: "sin-acceso"` y `moduleId`), no como excepción: así `/founder` e
+  `/intelligence` dibujan `SinAcceso` también cuando se llega con una navegación del cliente, donde el layout
+  no se vuelve a ejecutar y la página sí.
+- El layout decide qué se dibuja, no qué se ejecuta: Next ejecuta la página del segmento aunque el layout
+  muestre `SinAcceso`. Por eso una lectura que no tiene que llegarle a alguien sin el módulo chequea el permiso
+  por su cuenta.
 - Mapeo ruta → módulo: tabla explícita `MODULE_BY_PREFIX` en `lib/navigation/module-for-path.ts`, gana el
   prefijo más largo. `/product`, `/sops`, `/intelligence`, `/executive-reports`, `/founder` → `operations`;
   `/lanzamientos` → `funnels`; `/comentarios` → `marketing`. Libres: `/onboarding`, `/holding`,
@@ -160,7 +166,7 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
 | `requireFounder()` | `app/clients/custom-field-actions.ts`, `checkpoint-actions.ts`, `plan-duration-actions.ts` | Configuración de clientes |
 | rol founder (chequeo inline) | `app/clients/signals-actions.ts` | Cambiar el aviso de señales |
 | rol founder | `app/executive-reports/report-generation-actions.ts` | Generar reportes |
-| `exigirAccesoAlModulo(moduleId)` (`lib/auth/acceso-a-modulo.ts`) | `app/intelligence/actions.ts` (`getIntelligenceSnapshotAction`) | Leer el resumen de Inteligencia que muestran `/intelligence` y `/founder`: módulo Operaciones, con la misma regla que el layout |
+| `rechazoPorModulo(moduleId)` (`lib/auth/acceso-a-modulo.ts`) | `app/intelligence/actions.ts` (`getIntelligenceSnapshotAction`) | Leer el resumen de Inteligencia que muestran `/intelligence` y `/founder`: módulo Operaciones, con la misma regla que el layout. Devuelve el rechazo como valor y las dos páginas dibujan `SinAcceso` |
 | `requireHoldingProfile()` | `app/(platform)/holding/actions.ts` | founder o `is_holding_admin` |
 | `requireAddOn()` | `app/clients/sub-client-actions.ts`, `onboarding-link-actions.ts`, `custom-field-actions.ts`, `revenue-actions.ts`, `signals-actions.ts` | Add-on `growth_partners` |
 | `requireSuperAdmin()` | todo `app/super-admin/*` y `lib/super-admin/queries.ts` | Panel interno |

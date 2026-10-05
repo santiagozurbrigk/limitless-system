@@ -218,6 +218,7 @@ configuración (`[DEMO-LAYOUT-500]`). `/demo` y `/design-system` sí funcionan.
 | `apps/web/lib/navigation/__tests__/page-meta.test.ts` | Título y "volver" de cada pantalla |
 | `apps/web/lib/navigation/__tests__/module-for-path.test.ts` | Recorre `app/`: toda ruta con módulo pasa por un layout con chequeo, y toda ruta de `(platform)` tiene módulo o es libre |
 | `apps/web/app/__tests__/layout-plataforma-permisos.test.ts`, `apps/web/lib/auth/__tests__/acceso-a-modulo.test.ts` | `/founder` y el resto: member sin el módulo ve «No tenés acceso»; con el módulo, founder y sin rol, ve la pantalla |
+| `apps/web/app/__tests__/paginas-de-inteligencia-permisos.test.ts`, `apps/web/app/intelligence/__tests__/actions.test.ts` | `/founder` e `/intelligence` dibujan «No tenés acceso» cuando la lectura vuelve rechazada (navegación del cliente); la action rechaza como valor, sin lanzar ni consultar la base |
 
 Sin tests: `lib/onboarding/resolve.ts` (IO), `execute-deletion.ts`, las queries de super admin, las
 acciones de Ajustes, `derive-dashboard-data.ts` (`[T-13]`). Sin e2e de onboarding ni de super admin.

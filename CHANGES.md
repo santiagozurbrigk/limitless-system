@@ -37,10 +37,10 @@ al terminar cada bloque de trabajo, aunque sea chico.
 ### 2026-10-05 · `/founder` pasa por el bloqueo de permisos de la plataforma (SCRUM-18)
 
 **Rama:** `fix/SCRUM-18-founder-permisos`
-**Commit(s):** `84398b16` (código y tests) y este (docs)
+**Commit(s):** `84398b16` (código y tests), `1f18449e` (docs), `f9c6dc1c` (fix-pack de la revisión: rechazo como valor) y este (docs del fix-pack)
 **Módulo(s) afectado(s):** Plataforma y permisos (`app/(platform)/founder/page.tsx`, antes en `app/(founder)/`;
-`app/(platform)/layout.tsx`; nuevo `lib/auth/acceso-a-modulo.ts`; `app/intelligence/actions.ts`;
-`lib/navigation/__tests__/module-for-path.test.ts`). Se borran `app/(founder)/layout.tsx` y `layouts/founder-layout.tsx`.
+`app/(platform)/intelligence/page.tsx`; `app/(platform)/layout.tsx`; nuevo `lib/auth/acceso-a-modulo.ts`;
+`app/intelligence/actions.ts`; `lib/navigation/__tests__/module-for-path.test.ts` y `pantallas-de-app.ts`). Se borran `app/(founder)/layout.tsx` y `layouts/founder-layout.tsx`.
 
 **Qué se hizo:**
 - Cierra `[PERMISOS-FOUNDER-AREA]`. `/founder` se movió de su propio grupo `app/(founder)` a `app/(platform)/founder`.
@@ -48,18 +48,24 @@ al terminar cada bloque de trabajo, aunque sea chico.
   Operaciones», el founder y un member con Operaciones ven la pantalla, y sin rol configurado no se bloquea (igual
   que en el resto). Un holding operando un negocio sigue la misma regla.
 - La regla de acceso salió del layout a `lib/auth/acceso-a-modulo.ts`: `moduloBloqueadoParaRuta` (la usa el layout)
-  y `exigirAccesoAlModulo` (para Server Actions). El layout ya no tiene su propia copia.
+  y `rechazoPorModulo` (para Server Actions). El layout ya no tiene su propia copia.
 - `getIntelligenceSnapshotAction`, la lectura que usan `/founder` y `/intelligence`, exige Operaciones: era una
-  Server Action exportada y se podía invocar a mano sin abrir ninguna pantalla. `/founder` no lee nada con
+  Server Action exportada y se podía invocar a mano sin abrir ninguna pantalla. El rechazo vuelve como valor
+  (`ResultadoSnapshotDeInteligencia`: `{ success: true, data }` o un `RechazoPorModulo` con la forma del error de
+  `MutationResult` más `motivo: "sin-acceso"` y `moduleId`) y las dos páginas dibujan `SinAcceso` con el texto de
+  siempre. Así, en una navegación del cliente (donde el layout no se vuelve a ejecutar y la página sí) el member ve
+  «No tenés acceso» y no la pantalla de error de Next, y una visita bloqueada no queda como error en Sentry. `/founder` no lee nada con
   privilegios de founder (usa el cliente con la sesión del usuario y RLS por organización).
-- El test de `module-for-path` recorre `app/` entero (grupos, slots y carpetas privadas según las reglas del App
-  Router) y falla si una ruta con módulo cuelga de un layout que no llama `moduloBloqueadoParaRuta`, o si una ruta de
+- El test de `module-for-path` recorre `app/` entero (grupos, slots, rutas interceptadas, carpetas privadas y
+  páginas `.tsx`, `.ts`, `.jsx` o `.js`, según las reglas del App Router; el recorrido se prueba contra un árbol
+  armado a mano) y falla si una ruta con módulo cuelga de un layout que no llama `moduloBloqueadoParaRuta`, o si una ruta de
   un layout con chequeo no tiene módulo ni es libre.
 - Tests nuevos: `app/__tests__/layout-plataforma-permisos.test.ts` (renderiza el layout real en `/founder` con los
-  cuatro casos y el de holding), `lib/auth/__tests__/acceso-a-modulo.test.ts` y
-  `app/intelligence/__tests__/actions.test.ts`. Control negativo en la carpeta de evidencia de SCRUM-18: sin el
-  chequeo del layout fallan 4 tests; con `/founder` de vuelta en un grupo sin chequeo, 2; sin la exigencia en la
-  action, 1.
+  cuatro casos y el de holding), `app/__tests__/paginas-de-inteligencia-permisos.test.ts` (las dos páginas con la
+  lectura rechazada), `lib/auth/__tests__/acceso-a-modulo.test.ts` y `app/intelligence/__tests__/actions.test.ts`
+  (rechazo como valor, sin lanzar ni consultar la base). Control negativo en la carpeta de evidencia de SCRUM-18:
+  sin el chequeo del layout fallan 4 tests; con `/founder` de vuelta en un grupo sin chequeo, 2; sin el chequeo en
+  la action, 1; con el helper lanzando, 2; con las páginas ignorando el rechazo, 2; con el recorrido viejo, 4.
 - Rutas revisadas fuera de `(platform)`: `(super-admin)` (sin módulo; tiene su propio guard en
   `app/(super-admin)/super-admin/layout.tsx`, sin cambios), `(landing)` (`/prueba`, `/privacidad`, públicas),
   `app/superadmin/*`, `app/login`, `app/auth/*`, `app/invite`, `app/onboarding-cliente/[token]`, `app/demo` y
@@ -76,9 +82,10 @@ el subtítulo de `/founder` están en `page-meta.ts`, el breadcrumb y la secció
 el chequeo en dos layouts habría que haber copiado también los providers. El costo es visual: `/founder` se ve con
 el marco de la plataforma en lugar de la barra propia.
 
-**Riesgos / deuda técnica pendiente:** `/founder` queda sujeto a `[PERMISOS-LAYOUT-NAV-SUAVE]` como cualquier
-pantalla de la plataforma (en una navegación cliente el layout no se vuelve a renderizar); hoy el link a `/founder`
-sólo lo ve el founder y el ⌘K no lo lista, y la lectura igual exige Operaciones. En modo demo (sin Supabase)
+**Riesgos / deuda técnica pendiente:** en `/founder` e `/intelligence` el chequeo de la lectura cubre la
+navegación del cliente; el resto de las pantallas de la plataforma sigue con `[PERMISOS-LAYOUT-NAV-SUAVE]`. Se
+corrigió el comentario de `app/(platform)/layout.tsx`, que decía que la pantalla bloqueada "no llega a
+renderizarse": el layout decide qué se dibuja, pero Next ejecuta la página igual. En modo demo (sin Supabase)
 `/founder` da el mismo 500 que el resto de la plataforma (`[DEMO-LAYOUT-500]`); antes también fallaba, por el
 `ToastProvider`. Falta confirmarlo con cuentas reales: paso 6 del bloque 1 de `docs/operacion/verificacion-manual.md`.
 
