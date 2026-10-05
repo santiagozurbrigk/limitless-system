@@ -1,7 +1,11 @@
 "use server";
 
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
-import { exigirAccesoAlModulo } from "@/lib/auth/acceso-a-modulo";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
+import type { MutationResult } from "@/lib/server/action-result";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type {
@@ -20,6 +24,15 @@ export type IntelligenceSnapshotView = {
   memoryChunks: MemoryChunk[];
   generatedAt: string | null;
 };
+
+/**
+ * El resumen, o el rechazo si quien llama no tiene Operaciones. El rechazo
+ * vuelve como valor para que la pantalla dibuje `SinAcceso` en vez de la
+ * pantalla de error de Next.
+ */
+export type ResultadoSnapshotDeInteligencia =
+  | Extract<MutationResult<IntelligenceSnapshotView>, { success: true }>
+  | RechazoPorModulo;
 
 const EMPTY_SNAPSHOT: IntelligenceSnapshotView = {
   insights: [],
@@ -40,12 +53,19 @@ function parseJsonArray<T>(value: unknown): T[] {
  *
  * ⭐ Exige Operaciones aunque las dos pantallas ya lo exijan en el layout: es
  * una Server Action exportada y se puede invocar a mano sin abrir ninguna de
- * las dos (SCRUM-18).
+ * las dos, y en una navegación del cliente el layout no se vuelve a ejecutar
+ * pero la página sí (SCRUM-18).
  */
-export async function getIntelligenceSnapshotAction(): Promise<IntelligenceSnapshotView> {
-  if (!isSupabaseConfigured()) return EMPTY_SNAPSHOT;
+export async function getIntelligenceSnapshotAction(): Promise<ResultadoSnapshotDeInteligencia> {
+  if (!isSupabaseConfigured()) return { success: true, data: EMPTY_SNAPSHOT };
 
-  await exigirAccesoAlModulo("operations");
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
+
+  return { success: true, data: await leerUltimoSnapshot() };
+}
+
+async function leerUltimoSnapshot(): Promise<IntelligenceSnapshotView> {
   const organizationId = await requireOrganizationId();
 
   const supabase = await createClient();

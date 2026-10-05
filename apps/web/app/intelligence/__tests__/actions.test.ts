@@ -66,11 +66,15 @@ beforeEach(() => {
 });
 
 describe("getIntelligenceSnapshotAction", () => {
-  it("⭐ llamada a mano por un member sin Operaciones: error de permiso y no lee el resumen", async () => {
+  it("⭐ llamada a mano por un member sin Operaciones: devuelve el rechazo, no lanza y no lee el resumen", async () => {
     sim.permisos = member({ dashboard: "full", finance: "full" });
-    await expect(getIntelligenceSnapshotAction()).rejects.toThrow(
-      "No tenés acceso a Operaciones."
-    );
+    const resultado = await getIntelligenceSnapshotAction();
+    expect(resultado).toEqual({
+      success: false,
+      error: "No tenés acceso a Operaciones.",
+      motivo: "sin-acceso",
+      moduleId: "operations",
+    });
     expect(sim.consultas).toEqual([]);
   });
 
@@ -89,8 +93,8 @@ describe("getIntelligenceSnapshotAction", () => {
     for (const permisos of casos) {
       sim.permisos = permisos;
       sim.consultas = [];
-      const snapshot = await getIntelligenceSnapshotAction();
-      expect(snapshot.insights).toHaveLength(1);
+      const resultado = await getIntelligenceSnapshotAction();
+      expect(resultado.success && resultado.data.insights).toHaveLength(1);
       expect(sim.consultas).toEqual(["intelligence_snapshots"]);
     }
   });

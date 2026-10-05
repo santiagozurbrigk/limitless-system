@@ -1,82 +1,26 @@
-import { describe, expect, it } from "vitest";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, relative } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import {
   isRutaLibre,
   permissionModuleForPath,
 } from "@/lib/navigation/module-for-path";
+import {
+  LLAMADA_AL_CHEQUEO,
+  pantallas,
+  pasaPorElChequeo,
+  segmentosAlEntrar,
+} from "./pantallas-de-app";
 
 const APP_DIR = join(process.cwd(), "app");
-
-/**
- * Lo que hace que un layout cuente como "con chequeo": llama al helper que
- * decide si la ruta se bloquea. Si alguien saca esa llamada, el layout deja de
- * contar y las pantallas que cuelgan de él quedan señaladas.
- */
-const LLAMADA_AL_CHEQUEO = "moduloBloqueadoParaRuta(";
-
-type Pantalla = {
-  /** La URL, sin los grupos `(x)`. */
-  ruta: string;
-  /** El `page.tsx`, relativo a `app/`. */
-  archivo: string;
-  /** Los `layout.tsx` de los que cuelga, de `app/` hacia adentro. */
-  layouts: string[];
-};
-
-/**
- * Recorre `app/` entero y devuelve cada `page.tsx` con su URL y su cadena de
- * layouts. Sigue las reglas del App Router: un grupo `(x)` y un slot `@x` no
- * suman segmento a la URL, y una carpeta privada `_x` no es ruta.
- */
-function pantallas(
-  dir = APP_DIR,
-  segmentos: string[] = [],
-  layouts: string[] = []
-): Pantalla[] {
-  const cadena = existsSync(join(dir, "layout.tsx"))
-    ? [...layouts, join(dir, "layout.tsx")]
-    : layouts;
-
-  const propias: Pantalla[] = existsSync(join(dir, "page.tsx"))
-    ? [
-        {
-          ruta: `/${segmentos.join("/")}`,
-          archivo: relative(APP_DIR, join(dir, "page.tsx")),
-          layouts: cadena,
-        },
-      ]
-    : [];
-
-  const hijas = readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
-    .flatMap((entry) => {
-      const sinSegmento =
-        entry.name.startsWith("(") || entry.name.startsWith("@");
-      return pantallas(
-        join(dir, entry.name),
-        sinSegmento ? segmentos : [...segmentos, entry.name],
-        cadena
-      );
-    });
-
-  return [...propias, ...hijas];
-}
-
-function layoutConChequeo(layout: string): boolean {
-  return readFileSync(layout, "utf8").includes(LLAMADA_AL_CHEQUEO);
-}
-
-function pasaPorElChequeo(pantalla: Pantalla): boolean {
-  return pantalla.layouts.some(layoutConChequeo);
-}
 
 function primerNivel(ruta: string): string {
   return `/${ruta.split("/")[1] ?? ""}`;
 }
 
 describe("permissionModuleForPath", () => {
-  const todas = pantallas();
+  const todas = pantallas(APP_DIR);
 
   it("el recorrido encuentra las pantallas de todos los grupos, incluido /founder", () => {
     const rutas = todas.map((p) => p.ruta);
@@ -140,5 +84,69 @@ describe("permissionModuleForPath", () => {
 
   it("una ruta desconocida no se bloquea, pero tampoco inventa módulo", () => {
     expect(permissionModuleForPath("/ruta-que-no-existe")).toBeNull();
+  });
+});
+
+describe("recorrido de app/", () => {
+  it("grupos y slots no suman segmento; las interceptadas suman el que interceptan", () => {
+    expect(segmentosAlEntrar(["fotos"], "(platform)")).toEqual(["fotos"]);
+    expect(segmentosAlEntrar(["fotos"], "@modal")).toEqual(["fotos"]);
+    expect(segmentosAlEntrar(["fotos"], "(.)detalle")).toEqual(["fotos", "detalle"]);
+    expect(segmentosAlEntrar(["a", "b"], "(..)finance")).toEqual(["a", "finance"]);
+    expect(segmentosAlEntrar(["a", "b"], "(..)(..)finance")).toEqual(["finance"]);
+    expect(segmentosAlEntrar(["a", "b"], "(...)finance")).toEqual(["finance"]);
+    expect(segmentosAlEntrar([], "finance")).toEqual(["finance"]);
+  });
+
+  // Un árbol armado a mano con los casos que hoy no existen en la app.
+  const raiz = mkdtempSync(join(tmpdir(), "scrum-18-app-"));
+  afterAll(() => rmSync(raiz, { recursive: true, force: true }));
+
+  function archivo(ruta: string, contenido = "export default function X() {}") {
+    const completo = join(raiz, ruta);
+    mkdirSync(dirname(completo), { recursive: true });
+    writeFileSync(completo, contenido);
+  }
+
+  archivo("(platform)/layout.tsx", `const b = ${LLAMADA_AL_CHEQUEO}"", p);`);
+  archivo("(platform)/finance/page.ts");
+  archivo("(platform)/team/page.js");
+  archivo("(suelto)/layout.tsx");
+  archivo("(suelto)/sales/page.jsx");
+  archivo("(suelto)/@modal/(...)finance/page.tsx");
+  archivo("(suelto)/dashboard/(.)settings/page.tsx");
+  archivo("_privada/workboard/page.tsx");
+
+  const encontradas = pantallas(raiz);
+  const porRuta = (ruta: string) => encontradas.filter((p) => p.ruta === ruta);
+
+  it("encuentra páginas page.ts, page.js y page.jsx, no sólo page.tsx", () => {
+    expect(porRuta("/finance").map((p) => p.archivo)).toContain(
+      join("(platform)", "finance", "page.ts")
+    );
+    expect(porRuta("/team")).toHaveLength(1);
+    expect(porRuta("/sales")).toHaveLength(1);
+  });
+
+  it("una interceptada no se toma como grupo: queda con la URL que intercepta", () => {
+    const interceptada = porRuta("/finance").find((p) =>
+      p.archivo.includes("(...)finance")
+    );
+    expect(interceptada).toBeDefined();
+    expect(porRuta("/dashboard/settings")).toHaveLength(1);
+    expect(encontradas.map((p) => p.ruta)).not.toContain("/");
+  });
+
+  it("las carpetas privadas no son rutas", () => {
+    expect(porRuta("/workboard")).toEqual([]);
+  });
+
+  it("⭐ señala las pantallas con módulo que cuelgan de un layout sin chequeo", () => {
+    const sinChequeo = encontradas
+      .filter((p) => permissionModuleForPath(p.ruta) !== null)
+      .filter((p) => !pasaPorElChequeo(p))
+      .map((p) => p.ruta)
+      .sort();
+    expect(sinChequeo).toEqual(["/dashboard/settings", "/finance", "/sales"]);
   });
 });

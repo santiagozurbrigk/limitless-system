@@ -14,9 +14,9 @@ vi.mock("@/lib/auth/get-current-permissions", () => ({
 }));
 
 import {
-  exigirAccesoAlModulo,
   moduloBloqueadoParaRuta,
   puedeEntrarAlModulo,
+  rechazoPorModulo,
 } from "../acceso-a-modulo";
 
 function member(modulos: Partial<UserPermissions["modules"]>): UserPermissions {
@@ -93,22 +93,25 @@ describe("moduloBloqueadoParaRuta en el resto de la plataforma", () => {
   });
 });
 
-describe("exigirAccesoAlModulo", () => {
+describe("rechazoPorModulo", () => {
   beforeEach(() => {
     sim.permisos = null;
   });
 
-  it("⭐ corta a un member sin Operaciones con el mensaje de la pantalla", async () => {
+  it("⭐ a un member sin Operaciones le devuelve el rechazo como valor, sin lanzar", async () => {
     sim.permisos = sinOperaciones;
-    await expect(exigirAccesoAlModulo("operations")).rejects.toThrow(
-      "No tenés acceso a Operaciones."
-    );
+    await expect(rechazoPorModulo("operations")).resolves.toEqual({
+      success: false,
+      error: "No tenés acceso a Operaciones.",
+      motivo: "sin-acceso",
+      moduleId: "operations",
+    });
   });
 
   it("deja pasar al founder, a un member con Operaciones y a alguien sin rol", async () => {
     for (const permisos of [founder, conOperaciones, sinRol]) {
       sim.permisos = permisos;
-      await expect(exigirAccesoAlModulo("operations")).resolves.toBeUndefined();
+      await expect(rechazoPorModulo("operations")).resolves.toBeNull();
     }
   });
 });

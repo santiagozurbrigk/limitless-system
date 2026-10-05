@@ -36,9 +36,14 @@ export default async function PlatformRouteLayout({
   /**
    * ⭐ El permiso se aplica acá, en el servidor, no sólo escondiendo links.
    *
-   * `x-pathname` lo pone el middleware. Antes de este chequeo, alguien sin
-   * acceso a Finanzas que tipeaba `/finance` entraba igual: la pantalla se
-   * renderizaba entera. Ahora el módulo no llega a renderizarse.
+   * `x-pathname` lo pone el middleware. Con este chequeo, alguien sin acceso a
+   * Finanzas que tipea `/finance` ve `SinAcceso` en lugar de la pantalla.
+   *
+   * El layout decide qué se dibuja, nada más: Next ejecuta la página del
+   * segmento aunque acá no se use `children`, y en una navegación del cliente
+   * este layout no se vuelve a ejecutar. Una lectura que no tiene que llegarle
+   * a alguien sin el módulo chequea el permiso por su cuenta, como
+   * `getIntelligenceSnapshotAction` con `rechazoPorModulo`.
    *
    * La regla (founder siempre pasa, sin rol no se bloquea, rutas sin módulo
    * libres) vive en `moduloBloqueadoParaRuta`. Toda pantalla mapeada en
