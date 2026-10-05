@@ -324,7 +324,7 @@ Detalle y prioridades: `PENDIENTES.md` (entregado al integrador del backlog).
 | Qué | Archivo |
 |---|---|
 | Mapeo y dedupe de la foto diaria de anuncios | `apps/web/lib/marketing/__tests__/ad-metrics-snapshot.test.ts` |
-| Cola del cron de métricas: nuevas primero, piezas medidas antes que reintentos, espera creciente, historias una sola vez, simulación de 40 días con 5, 8 y 15 historias por día | `apps/web/lib/marketing/__tests__/sync-content-metrics.test.ts`, `cola-de-metricas.test.ts` |
+| Cola del cron de métricas: nuevas primero, piezas medidas antes que reintentos, espera creciente, historias una sola vez (de 30 h a 7 días, con cron caído y 429), 401/403 que corta la corrida, otra org y otra fuente, simulación de 40 días con 5, 8 y 15 historias por día | `apps/web/lib/marketing/__tests__/sync-content-metrics.test.ts`, `cola-de-metricas.test.ts` |
 | Lectores sin ceros inventados: promedios, ranking y prompt de patrones | `apps/web/lib/marketing/__tests__/metricas-medidas.test.ts`, `ranking-de-contenido.test.ts`, `patrones-de-contenido.test.ts`, `orden-de-piezas.test.ts`, `apps/web/app/marketing/content/__tests__/top-performing-content.test.ts` |
 | Tools del agente con piezas sin métricas | `apps/web/lib/agent/__tests__/contenido-sin-metricas.test.ts`, `top-contenido-tool.test.ts` |
 | Triggers de comentarios Zernio (Embudos) | `apps/web/lib/zernio/__tests__/triggers.test.ts` |

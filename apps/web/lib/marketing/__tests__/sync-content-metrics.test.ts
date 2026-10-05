@@ -549,6 +549,49 @@ describe("syncContentMetricsForOrg · la cola no se diluye", () => {
   });
 });
 
+describe("syncContentMetricsForOrg · sólo toca la org y la fuente pedidas", () => {
+  it("⭐ el cierre de historias no alcanza a otra org ni a otra fuente", async () => {
+    estado.piezas = [
+      historia("propia", 200),
+      historia("otra-org", 200, { organization_id: "org-2" }),
+      historia("otra-fuente", 200, { source: "manual" }),
+    ];
+
+    await correrCron(0);
+
+    expect(buscar("propia").metrics_reintentar_desde).toBe("infinity");
+    expect(buscar("otra-org").metrics_reintentar_desde).toBeNull();
+    expect(buscar("otra-fuente").metrics_reintentar_desde).toBeNull();
+  });
+
+  it("⭐ el update de cada pieza filtra por la org: una fila de otra org con el mismo id no cambia", async () => {
+    // Mismo id en dos orgs: sólo puede pasar en el falso, y sirve para que el
+    // test falle si el update deja de filtrar por organization_id.
+    estado.piezas = [pieza("compartida"), pieza("compartida", { organization_id: "org-2", platform_post_id: "ig-ajena" })];
+    estado.analytics = { "ig-compartida": { likes: 7 } };
+
+    await correrCron(0);
+
+    const [propia, ajena] = estado.piezas as unknown as Pieza[];
+    expect(propia.metrics).toMatchObject({ likes: 7 });
+    expect(ajena).toMatchObject({ metrics: null, metrics_checked_at: null, metrics_intentos_sin_dato: 0 });
+  });
+
+  it("no le pide a Zernio piezas de otra org ni de otra fuente", async () => {
+    estado.piezas = [
+      pieza("propia"),
+      pieza("otra-org", { organization_id: "org-2" }),
+      pieza("otra-fuente", { source: "google" }),
+      historia("historia-otra-org", 40, { organization_id: "org-2" }),
+    ];
+    estado.analytics = { "ig-propia": { likes: 1 }, "ig-otra-org": { likes: 1 }, "ig-otra-fuente": { likes: 1 } };
+
+    await correrCron(0);
+
+    expect(estado.pedidos).toEqual(["ig-propia"]);
+  });
+});
+
 describe("syncContentMetricsForOrg · cada intento", () => {
   it("⭐ toda pieza intentada queda con metrics_checked_at, haya o no dato", async () => {
     estado.piezas = [pieza("con-dato"), pieza("sin-dato"), pieza("lanza")];
