@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge, Button, DataTable, Input } from "@ai-coo/ui";
 import { paths } from "@/routes";
-import type { AdminOrgStatus, AdminOrganizationListRow } from "@/types/super-admin";
+import type { OrganizationStatus } from "@ai-coo/types";
+import type { AdminOrganizationListRow } from "@/types/super-admin";
 import {
   ETIQUETA_DE_ESTADO_DE_ORG,
   VARIANTE_DE_ESTADO_DE_ORG,
+  accionDeEstado,
 } from "@/lib/super-admin/estado-de-org";
 import { formatOrgDate } from "@/lib/super-admin/format-org-datetime";
 import { setOrganizationStatusAction } from "@/app/super-admin/actions";
@@ -17,7 +19,8 @@ import {
 } from "@/app/super-admin/delete-actions";
 import { DeletionDialog } from "@/components/super-admin/deletion-dialog";
 
-type Filter = "all" | AdminOrgStatus;
+// "Desconocido" no tiene filtro propio: se ve en "Todas".
+type Filter = "all" | OrganizationStatus;
 
 export function OrganizationsList({
   organizations,
@@ -42,9 +45,9 @@ export function OrganizationsList({
     });
   }, [organizations, filter, search]);
 
-  async function toggleStatus(org: AdminOrganizationListRow) {
+  async function toggleStatus(org: AdminOrganizationListRow, activar: boolean) {
     setPendingId(org.id);
-    await setOrganizationStatusAction(org.id, org.status !== "active");
+    await setOrganizationStatusAction(org.id, activar);
     setPendingId(null);
   }
 
@@ -131,18 +134,20 @@ export function OrganizationsList({
                     Ver detalle
                   </Link>
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={pendingId === r.id}
-                  onClick={() => toggleStatus(r)}
-                >
-                  {pendingId === r.id
-                    ? "Procesando…"
-                    : r.status === "active"
-                      ? "Pausar"
-                      : "Activar"}
-                </Button>
+                {(() => {
+                  const accion = accionDeEstado(r.status);
+                  if (!accion) return null;
+                  return (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={pendingId === r.id}
+                      onClick={() => toggleStatus(r, accion.activar)}
+                    >
+                      {pendingId === r.id ? "Procesando…" : accion.etiqueta}
+                    </Button>
+                  );
+                })()}
                 <Button
                   size="sm"
                   variant="ghost"

@@ -66,7 +66,7 @@ Qué no testear en Vitest: componentes React, actions que sólo hacen `select`, 
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **137 archivos, ~1.460 casos** (recontado el 2026-10-04, después de la revisión integral). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **140 archivos, ~1.470 casos** (recontado el 2026-10-04, después de la revisión integral). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -81,7 +81,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/ghl` | 4 | 40 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook |
 | `lib/sales` | 2 | 37 | opciones de seguimiento, hilo del lead |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
-| `lib/super-admin` | 5 | 41 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role y estado de la org alineado con la base |
+| `lib/super-admin` | 5 | 43 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role y estado de la org alineado con la base (incluido el desconocido) |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
 | `lib/sops` | 2 | 25 | marcadores de adjuntos, chunks de audio |
 | `lib/auth` | 6 | 33 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log, un solo chequeo de super admin por pedido |
@@ -93,7 +93,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/navigation` | 2 | 15 | módulo por path, metadata de página |
 | `lib/marketing` | 1 | 13 | snapshot de métricas de anuncios |
 | `lib/webinarjam` | 1 | 13 | normalización de registrantes |
-| `lib/executive-reports` | 2 | 16 | cadencias y mes que toma el reporte mensual |
+| `lib/executive-reports` | 3 | 20 | cadencias, mes que toma el reporte mensual y mensaje del botón de reportes |
 | `lib/hyros` | 1 | 11 | resolución de atribución |
 | `lib/zernio` | 4 | 21 | triggers de comentarios, integración por org, métricas que se guardan y filas de la sync |
 | `lib/security` | 2 | 6 | cifrado, comparación en tiempo constante |
@@ -109,8 +109,9 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/youtube` | 1 | 2 | métricas de video que se guardan |
 | `lib/team` | 1 | 6 | rol de la org (filtro por organización) |
 | `app/__tests__` | 1 | 3 | los catch de páginas y layouts relanzan los errores de Next (`unstable_rethrow`) |
+| `app/executive-reports`, `app/operations` | 3 | 9 | últimos reportes; el botón de reportes y el reporte de Operaciones no llaman a la IA para una org no activa |
 
-**Sin ningún test:** `lib/agent` (compaction, JIT, streaming), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`), los gastos y las métricas de ventas, y los parsers de import de clientes. Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`) y las páginas de `app/__tests__`.
+**Sin ningún test:** `lib/agent` (compaction, JIT, streaming), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`), los gastos y las métricas de ventas, y los parsers de import de clientes. Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`), las actions de reportes a pedido (`app/executive-reports/__tests__`, `app/operations/__tests__`) y las páginas de `app/__tests__`.
 
 ### E2E
 

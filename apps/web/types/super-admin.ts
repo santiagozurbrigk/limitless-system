@@ -1,7 +1,11 @@
 import type { OrganizationStatus } from "@ai-coo/types";
 
-/** El estado de la org tal como está en la base (`active`, `paused`, `churned`). */
-export type AdminOrgStatus = OrganizationStatus;
+/**
+ * El estado de la org que muestra el panel: el de la base (`active`, `paused`,
+ * `churned`) o `unknown` si llegara un valor que el check de la base no admite.
+ * `unknown` es sólo del panel: nunca se escribe en la base.
+ */
+export type AdminOrgStatus = OrganizationStatus | "unknown";
 
 /** Plan estimado por MRR (no hay columna de plan en la base). */
 export type AdminOrgPlan = "starter" | "growth" | "enterprise";

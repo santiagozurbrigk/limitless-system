@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ESTADOS_DE_ORG,
+  accionDeEstado,
   ETIQUETA_DE_ESTADO_DE_ORG,
   VARIANTE_DE_ESTADO_DE_ORG,
   estadoDeOrg,
@@ -31,18 +32,20 @@ describe("estadoDeOrg", () => {
     expect(estadoDeOrg("churned")).not.toBe("inactive");
   });
 
-  it("un valor desconocido nunca se muestra como activa, y avisa", () => {
+  it("⭐ un valor desconocido se muestra como desconocido (no se inventa un estado), y avisa", () => {
     for (const raro of ["trial", "inactive", "", null, undefined]) {
-      expect(estadoDeOrg(raro)).toBe("paused");
+      expect(estadoDeOrg(raro)).toBe("unknown");
     }
     expect(aviso).toHaveBeenCalledTimes(5);
+    expect(ETIQUETA_DE_ESTADO_DE_ORG.unknown).toBe("Desconocido");
   });
 });
 
 describe("textos y colores", () => {
-  it("cada estado de la base tiene etiqueta y variante, y no hay de más", () => {
-    expect(Object.keys(ETIQUETA_DE_ESTADO_DE_ORG).sort()).toEqual([...ESTADOS_DE_ORG].sort());
-    expect(Object.keys(VARIANTE_DE_ESTADO_DE_ORG).sort()).toEqual([...ESTADOS_DE_ORG].sort());
+  it("cada estado de la base y el desconocido tienen etiqueta y variante, y no hay de más", () => {
+    const esperados = [...ESTADOS_DE_ORG, "unknown"].sort();
+    expect(Object.keys(ETIQUETA_DE_ESTADO_DE_ORG).sort()).toEqual(esperados);
+    expect(Object.keys(VARIANTE_DE_ESTADO_DE_ORG).sort()).toEqual(esperados);
   });
 
   it("textos claros para pausada y dada de baja", () => {
@@ -58,5 +61,17 @@ describe("planPorMrr", () => {
     expect(planPorMrr(29999)).toBe("starter");
     expect(planPorMrr(30000)).toBe("growth");
     expect(planPorMrr(50000)).toBe("enterprise");
+  });
+});
+
+describe("accionDeEstado", () => {
+  it("una activa se puede pausar; una pausada o dada de baja, activar", () => {
+    expect(accionDeEstado("active")).toEqual({ etiqueta: "Pausar", activar: false });
+    expect(accionDeEstado("paused")).toEqual({ etiqueta: "Activar", activar: true });
+    expect(accionDeEstado("churned")).toEqual({ etiqueta: "Activar", activar: true });
+  });
+
+  it("⭐ con estado desconocido no se ofrece ninguna acción", () => {
+    expect(accionDeEstado("unknown")).toBeNull();
   });
 });

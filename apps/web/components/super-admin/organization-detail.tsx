@@ -29,6 +29,7 @@ import type { AdminOrganizationDetail } from "@/types/super-admin";
 import {
   ETIQUETA_DE_ESTADO_DE_ORG,
   VARIANTE_DE_ESTADO_DE_ORG,
+  accionDeEstado,
 } from "@/lib/super-admin/estado-de-org";
 import { OrgClientHealthSection } from "@/components/super-admin/org-client-health-section";
 
@@ -76,6 +77,8 @@ export function OrganizationDetailView({
   };
 
   const tokenSpark = detail.tokenUsage.daily.map((d) => d.costUsd);
+  // Con estado desconocido no hay botón: pausar o activar sería engañoso.
+  const accionEstado = accionDeEstado(detail.status);
 
   function runAction(fn: () => Promise<{ success: boolean; error?: string }>) {
     startTransition(async () => {
@@ -101,20 +104,19 @@ export function OrganizationDetailView({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={() =>
-              runAction(() =>
-                setOrganizationStatusAction(
-                  detail.id,
-                  detail.status !== "active"
+          {accionEstado && (
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                runAction(() =>
+                  setOrganizationStatusAction(detail.id, accionEstado.activar)
                 )
-              )
-            }
-          >
-            {detail.status === "active" ? "Pausar" : "Activar"}
-          </Button>
+              }
+            >
+              {accionEstado.etiqueta}
+            </Button>
+          )}
           <Button
             variant="outline"
             disabled={pending}

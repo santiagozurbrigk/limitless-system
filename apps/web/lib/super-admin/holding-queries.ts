@@ -1,5 +1,5 @@
 import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
-import type { OrganizationStatus } from "@ai-coo/types";
+import type { AdminOrgStatus } from "@/types/super-admin";
 import { estadoDeOrg } from "@/lib/super-admin/estado-de-org";
 import { isMissingTableError } from "@/lib/auth/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -11,7 +11,7 @@ export type HoldingHealthStatus = "healthy" | "warning" | "critical";
 export type HoldingPortfolioOrg = {
   id: string;
   name: string;
-  status: OrganizationStatus;
+  status: AdminOrgStatus;
   industry: string | null;
   createdAt: string;
   metrics: {

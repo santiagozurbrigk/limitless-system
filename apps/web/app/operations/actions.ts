@@ -7,6 +7,10 @@ import {
 } from "@/lib/auth/bootstrap";
 import { requireAuthContext } from "@/lib/auth/require-auth";
 import { callClaudeJson } from "@/lib/ai/anthropic";
+import {
+  AVISO_ORG_NO_ACTIVA,
+  organizacionSigueActiva,
+} from "@/lib/intelligence/organizaciones-activas";
 import { buildOrgContextText, getOrgContext } from "@/lib/ai/org-context";
 import { wrapUntrustedContent } from "@/lib/ai/wrap-untrusted-content";
 import { ingestDocument } from "@/lib/rag/ingest";
@@ -266,6 +270,13 @@ export async function generateWeeklyReportAction(): Promise<{ ok: true }> {
   }
 
   const { orgId, supabase } = await requireAuthContext();
+
+  // Una org pausada o dada de baja no gasta IA a pedido (SCRUM-210). Va antes
+  // de marcar el reporte como "generating", para no dejarlo trabado.
+  if (!(await organizacionSigueActiva(orgId))) {
+    throw new Error(AVISO_ORG_NO_ACTIVA);
+  }
+
   const weekStart = getCurrentWeekStart();
 
   const { data: inputs, error: inputsError } = await supabase

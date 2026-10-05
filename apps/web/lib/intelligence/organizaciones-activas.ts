@@ -55,3 +55,10 @@ export async function organizacionSigueActiva(
 
   return data?.status === ACTIVA;
 }
+
+/**
+ * Lo que ve el founder cuando pide un reporte a mano y su org no está activa.
+ * El botón de reportes lo busca en `errors` para mostrarlo siempre.
+ */
+export const AVISO_ORG_NO_ACTIVA =
+  "La organización no está activa: no se generan reportes ni inteligencia con IA.";
