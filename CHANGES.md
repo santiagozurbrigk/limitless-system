@@ -37,7 +37,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 ### 2026-10-05 · Cuarto fix-pack de SCRUM-493: el rango de métricas de ventas en días de la organización
 
 **Rama:** `fix/SCRUM-493-fechas-utc`
-**Commit(s):** `64613368` (rango) y este (docs)
+**Commit(s):** `64613368` (rango), `561b1fe8` (docs) y `6a261dcb` (tests sin `children` como prop, que rompía `next lint` y el build)
 **Módulo(s) afectado(s):** Ventas (`components/sales/metrics/date-range-picker.tsx`, `components/sales/sales-metrics-redesign.tsx`,
 nuevo `lib/sales/rango-de-metricas.ts`) y `lib/fechas/calendario.ts`.
 
