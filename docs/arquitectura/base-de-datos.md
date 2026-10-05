@@ -164,7 +164,7 @@ Propósito de cada una en el doc del área. Las notas del cliente son columnas d
 ### Marketing (`docs/areas/marketing.md`)
 | Tabla | Propósito |
 |---|---|
-| `content_pieces` | Contenido sincronizado (Zernio, Drive, YouTube) con `metrics` JSONB |
+| `content_pieces` | Contenido sincronizado (Zernio, Drive, YouTube) con `metrics` JSONB; `metrics_checked_at` (último intento de medir), `metrics_intentos_sin_dato` y `metrics_reintentar_desde` arman la cola del cron de métricas |
 | `content_assets` | Contenido legacy (Instagram Graph / YouTube) |
 | `content_pattern_reports` | Reportes de patrones de contenido generados por IA |
 | `ad_metrics_daily` | Snapshot diario de anuncios (cron `capture-ad-metrics`) |

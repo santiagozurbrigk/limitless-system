@@ -34,6 +34,182 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-04 — La cola del cron de métricas ya no se traba ni se diluye con piezas sin dato (SCRUM-172, reabierta)
+
+**Rama:** `fix/SCRUM-172-cola-de-metricas`
+**Commit(s):** `877c34fc` (cola y lectores), `c3b4e04c` y `5a5a4357` (fix-pack), `bdb1fb8a` (cola sin diluir), `0f2ea5f5` (docs), `21e151b9` (historias medidas), `f9c7f8a8` (validación con PostgREST), `09b65f74` (historias una sola vez), `9886d3bd` (errores permanentes de Zernio), `4936d221` (docs), `f0043a22` (historias 7 días y primero), `9f3a31ec` (401/403 de la org), `f01cc2b6` (refresco manual borrado), `3fe38c77` (tests de otra org y otra fuente), `41ace3f8` (docs), `76174ea2` (timeout de Zernio), `b84d94a1` (test de historias más viejas primero) y este (docs)
+**Módulo(s) afectado(s):** Marketing y agente.
+- Migración: `20261004120000_content_pieces_metrics_checked_at.sql` (columnas `metrics_checked_at`,
+  `metrics_intentos_sin_dato` y `metrics_reintentar_desde`, backfill e índice `content_pieces_metrics_cola_idx`).
+  Falta aplicarla en producción y registrar la versión.
+- Código: `lib/marketing/sync-content-metrics.ts`, `lib/zernio/client.ts`, `app/marketing/content/actions.ts`,
+  `app/marketing/content/pattern-report-actions.ts`, `lib/agent/data-reader-handlers.ts`,
+  `lib/agent/agent-tool-handler.ts`, `app/agent/actions.ts`, y nuevos `lib/marketing/metricas-medidas.ts`,
+  `lib/marketing/ranking-de-contenido.ts`, `lib/marketing/patrones-de-contenido.ts`, `lib/marketing/cola-de-metricas.ts`,
+  `lib/marketing/orden-de-piezas.ts`.
+
+**Qué se hizo:**
+- **Cola del cron:** `content_pieces.metrics_checked_at` guarda el último intento de medir la pieza, con o sin
+  dato. El cron ordena por esa columna (null primero) y hace un solo update por pieza: siempre
+  `metrics_checked_at = now()`, y `metrics` con `metrics_updated_at` sólo si reconoce los analytics. También marca
+  el intento si `getPostAnalytics` lanza. `updated` sigue contando sólo piezas con métricas nuevas; si falla el
+  update en sí, cuenta como `failed` y se loguea sin cortar el resto. El backfill copia `metrics_updated_at` en
+  las piezas ya medidas, así conservan su lugar en la cola. La sync de contenido y la de YouTube no tocan la
+  columna: una pieza nueva entra con null y el cron la mide primero.
+- **La cola no se diluye (revisión adversarial):** con sólo `metrics_checked_at` las piezas que nunca se pueden
+  medir rotaban igual que las reales, y con N piezas un reel se medía cada `ceil(N/50)` días (100 historias muertas
+  y 50 reels: `updated` por día `[0,0,50,0,0,50]`), gastando pedidos del límite de Zernio. Ahora el lote se arma con
+  prioridades (`lib/marketing/cola-de-metricas.ts`):
+  1. Historias listas (abiertas, publicadas hace entre 30 h y 7 días), las más viejas primero.
+  2. Otras piezas nuevas (`metrics_checked_at` null), por orden de llegada.
+  3. Piezas con métricas (nunca historias), la que hace más tiempo que no se intenta primero.
+  4. Piezas ya intentadas sin dato (nunca historias), sólo si venció su espera (`metrics_reintentar_desde`) y con
+     un cupo de 10 de los 50 lugares cuando hay piezas con métricas esperando; si sobran lugares, los ocupan.
+  - Una pieza sin dato suma `metrics_intentos_sin_dato` y espera 1, 2, 4, 8 y después 16 días. Cuando llegan
+    métricas vuelve a 0 y sin espera. Un error permanente de Zernio (4xx distinto de 401, 403, 408 y 429, por ejemplo
+    404 de un post borrado) cuenta como sin dato y suma espera; antes se pedía todos los días. Un error pasajero
+    (408, 429, 5xx, red, timeout) no suma intento, y 401 y 403 tampoco cuentan como sin dato (ver abajo). Para distinguirlos, `zernioFetchJson` lanza `ZernioHttpError` con el `status`
+    (`lib/zernio/client.ts`; mismo mensaje que antes, así que los chequeos por texto siguen andando).
+  - Timeout: `zernioFetchJson` corta cada pedido a los 15 s con `AbortSignal.timeout` y lanza `ZernioTimeoutError`,
+    que la cola trata como pasajero. Sin esto, con las dos fases, un pedido colgado dejaba el lote entero sin escribir
+    (49 respuestas y 1 colgada: 0 filas y sin cierre) hasta que el worker moría a los 60 s. Los 50 pedidos van en
+    paralelo, así que la fase de pedidos dura a lo sumo 15 s y la corrida entera queda muy por debajo de los 60 s.
+    Avanza `[API-TIMEOUTS]` y `[AUDITORIA §3 confiabilidad 1]` (los `fetch` directos de `lib/zernio/client.ts` siguen
+    sin timeout).
+  - Un 401 o 403 de Zernio (clave revocada o sin plan) es un problema de toda la org, no de la pieza: el cron le
+    pide a Zernio todo el lote antes de escribir y, si alguna respuesta es 401 o 403, corta la corrida de esa org
+    sin marcar intentos, sin sumar esperas y sin cerrar historias, lo deja en `console.error` y lo manda a Sentry
+    con `reportarFalla` (etiquetas de org y proveedor). El resultado lleva `sinAcceso: true`.
+  - **Las historias se miden una sola vez** (segunda re-revisión: con los reintentos cortados a las 48 h cada
+    historia gastaba 1 intento como nueva y 1 o 2 reintentos, y llenaban el cupo de reintentos). Una historia entra
+    a la cola a las 30 h de publicada, se pide una vez y, con o sin dato, queda con `metrics_reintentar_desde =
+    infinity`. Un error pasajero (429, red) no la marca: se vuelve a pedir en la corrida siguiente. Una sola
+    consulta cierra sin pedirlas las historias que siguen abiertas a los 7 días o sin `published_at`. Las
+    historias sólo entran por su propia consulta: nunca como pieza con métricas ni como reintento.
+  - Revisión final: el cierre pasó de 72 h a 7 días. El cron corre una vez por día (`apps/web/vercel.json`,
+    `0 6 * * *`), así que una historia llega a su primera corrida con 30 a 54 h y con el cierre a 72 h un día de
+    cron caído o de 429 la cerraba sin pedirla. Con 7 días tiene al menos 5 corridas y, como sus números ya no
+    cambian, esperar no cuesta nada. Las historias listas van antes que las otras piezas nuevas (con más de 50
+    nuevas, por ejemplo en el alta de una org o el deploy, quedaban al final por `created_at`), y la consulta de
+    piezas con métricas ya no trae historias (las jóvenes con métricas del backfill se pedían antes de las 30 h).
+  - Se borró `syncZernioMetricsAction` (refresco manual de piezas puntuales con `contentPieceIds`): no tenía
+    llamadores (estaba en `[MKT-CODIGO-MUERTO]`) y, como todo export de un `"use server"`, era un endpoint abierto.
+    `syncContentMetricsForOrg` ya no recibe `contentPieceIds`: sólo arma el lote del cron.
+  - Con el escenario de la revisión (100 historias de 10 días sin pedir y 50 reels), `updated` por día queda
+    `[50,50,50,50,50,50]`: las historias se cierran sin pedirlas y los reels se refrescan todos los días.
+  - Simulación de 40 días con 100 reels medidos, 5 reels que nunca tienen dato y N historias por día (peor caso:
+    ninguna trae métricas). Cada historia se pide exactamente una vez; desde el segundo día cada corrida pide N
+    historias, y los reels usan el resto del lote: 5 por día, 45 reels por día (cada reel cada 2,2 días); 8 por día,
+    42 (cada 2,4 días); 15 por día, 35 (cada 2,9 días). Los días que les toca a los reels sin dato (días 0, 1, 3, 7,
+    15 y 31) son 5 reels menos. Historias abiertas a la vez: 6, 10 y 19, sin crecer. Estas cifras valen sin el 429 diario de `[ZERNIO-METRICAS-429]`:
+    en la simulación con 429 de la revisión, con 15 historias por día se cierran 34 historias sin medir (con el
+    cierre a 72 h eran 94).
+- **Ranking de contenido (tool `get_top_performing_content`):** `getTopPerformingContentAction` devuelve
+  `{ piezas, sinMetricas }` y las dos tools del agente agregan `piezas_sin_metricas` y una nota cuando hay piezas
+  sin medir. Además se arregló que el ranking salía de `.limit(100)` sin orden (100 piezas cualquiera): ahora se
+  calcula sobre todas las piezas de la org, paginando con `fetchAllRows`.
+- **Reporte de patrones:** los promedios de views y guardados de cada formato, hook y CTA salen sólo de las piezas
+  medidas (`con_metricas` dice cuántas son); el prompt dice "sin métricas todavía" en vez de "0 views, 0
+  guardados, 0 likes" y el top de piezas analizadas ordena sólo entre las medidas.
+- **Tools `get_marketing_overview` y `get_business_snapshot`:** engagement total y promedio sólo sobre piezas
+  medidas, top 5 con las sin medir al final y marcadas "sin métricas", y `piezas_sin_metricas`.
+- Tests nuevos: `lib/marketing/__tests__/sync-content-metrics.test.ts` (14), `cola-de-metricas.test.ts` (9),
+  `metricas-medidas.test.ts` (5), `ranking-de-contenido.test.ts` (7), `patrones-de-contenido.test.ts` (5),
+  `app/marketing/content/__tests__/top-performing-content.test.ts` (4),
+  `lib/agent/__tests__/contenido-sin-metricas.test.ts` (4) y `top-contenido-tool.test.ts` (3).
+- Fix-pack (`c3b4e04c` y `5a5a4357`, para no dejar deuda):
+  - `5a5a4357`: se borra la acción sin uso `getContentBenchmarkAction` (y su tipo `ContentBenchmark`): no tenía llamadores (el
+    promedio de la org del detalle sale de `computeOrgAvgMetrics` en la page), leía sin paginar y, como todo export
+    de un `"use server"`, era un endpoint abierto. Se saca también de la lista de `[MKT-CODIGO-MUERTO]`.
+  - `c3b4e04c`: la grilla de contenido (`content-piece-grid.tsx`) ordena con `ordenarPiezas`
+    (`lib/marketing/orden-de-piezas.ts`): por views o engagement las piezas sin métricas van siempre al final, sin
+    mezclarse con los ceros medidos. Test `lib/marketing/__tests__/orden-de-piezas.test.ts` (4).
+
+**Por qué / finalidad:** el informe integral de SCRUM-172 encontró un MAYOR: las piezas cuyos analytics Zernio
+nunca reconoce (las historias llegan sin analytics) quedaban con `metrics_updated_at` en null al frente de la cola,
+y con 50 o más las piezas con métricas reales no se refrescaban nunca, aunque el cron respondía 200. Y tres MENOR:
+el ranking dejaba afuera las piezas sin métricas sin avisar, y patrones y agente seguían tratando "sin dato" como
+cero.
+
+**Decisiones de diseño relevantes:**
+- Columnas para el intento y la espera en vez de ordenar por `coalesce(metrics_updated_at, created_at)` o excluir
+  historias: toda pieza se mide al menos una vez, las que tienen dato no pierden su turno y las que no, esperan,
+  sin inventar ceros ni esconder tipos de pieza.
+- Espera de 1, 2, 4, 8 y 16 días: los analytics de un post nuevo pueden tardar, así que el primer reintento es al
+  día siguiente; el tope de 16 días hace que una pieza que nunca va a tener dato cueste 2 pedidos por mes y que
+  una que se recupera se mida en no más de 16 días. Cupo de 10: deja al menos 40 lugares para refrescar piezas
+  medidas y, con la espera creciente, alcanza (50 piezas muertas en la espera máxima son unos 3 pedidos por día).
+- Historias una sola vez, de 30 h a 7 días: Meta sólo expone las historias vigentes (24 h) y Zernio guarda sus métricas
+  con el webhook `story_insights` al vencer (`lib/zernio/client.ts`, `ZernioInstagramStory`, `listInstagramStories`
+  y `syncExternalStories`; no hay doc local de Zernio, ver `docs/integraciones/apis-sin-documentacion.md`). Antes de
+  vencer no hay números finales y después no cambian: pedirla antes de las 24 h o más de una vez gasta pedidos sin
+  dato nuevo. 30 h deja 6 h de margen para el webhook. El cierre a los 7 días deja al menos 5 corridas del cron
+  diario para pedirla, así que un día de cron caído o de 429 no la pierde. Costo real: un pedido por historia,
+  sin el 429 diario de `[ZERNIO-METRICAS-429]` (con 429 se suman los reintentos de las que chocan).
+- El lote son hasta tres consultas de PostgREST (nuevas; con métricas; reintentos) en vez de un solo orden: el
+  orden "con métricas antes que sin dato" no se puede expresar con `order` de PostgREST sin una columna derivada,
+  y la espera vencida es un `or=(metrics_reintentar_desde.is.null,metrics_reintentar_desde.lte."<ahora>")`. Las
+  tres usan el índice `(organization_id, metrics_checked_at nulls first)` parcial por `source = 'zernio'` y
+  `platform_post_id is not null`; los demás filtros se aplican sobre las filas de la org, que son pocas, así que no
+  hizo falta otro índice. `infinity` en `metrics_reintentar_desde` nunca cumple `<= ahora`. El filtro con el timestamp entre
+  comillas y la escritura de `infinity` se validaron con supabase-js contra PostgREST real (binarios oficiales
+  12.2.12 y 16.4) sobre una base armada con todas las migraciones: deja pasar la espera null y la vencida, y deja
+  afuera la futura y `infinity`, también corriendo `syncContentMetricsForOrg` entero. Después de la segunda
+  re-revisión se repitió con las dos versiones: el cierre de historias (un PATCH con
+  `or=(published_at.is.null,published_at.lte."<ahora-7d>")`), las nuevas con
+  `or=(type.neq.story,published_at.lte."<ahora-30h>")` y un 404 que suma espera hacen lo esperado. En la revisión
+  final se repitió otra vez con las dos versiones y las consultas nuevas (historias listas con
+  `published_at=lte.<ahora-30h>&published_at=gt.<ahora-7d>`, el resto con `type=neq.story`, el cierre de 7 días):
+  el lote sale en el orden esperado, otra org y otra fuente no se tocan, y un 403 corta la corrida sin cambiar
+  ninguna fila. Los SQL para aplicar en producción (precheck, migración con registro en
+  `supabase_migrations.schema_migrations` y verificación) están fuera del repo, en
+  `limitless-auditoria/sql-produccion/scrum-172/`, con su prueba en una base con las 187 migraciones previas.
+- El ranking se ordena en JS y no en SQL porque `engagement_total` pondera varias claves del jsonb y `sales` sale
+  de otra columna; ordenar en SQL pediría una RPC. Se traen sólo `id, metrics, sales_attributed` de todas las
+  piezas y después el detalle de las ganadoras. El contrato nuevo de la action no es compatible con el anterior;
+  sus dos únicos llamadores (las tools del agente) se adaptaron.
+- Las piezas sin métricas siguen afuera del ranking por métrica (no se puede rankear lo que no se midió) pero el
+  agente recibe el conteo. Por `sales` entran todas, como antes.
+- Los tests clave se comprobaron rompiendo el arreglo: con el orden por `metrics_updated_at` o sin marcar el
+  intento en las piezas sin dato falla el caso de las 55 historias; con `.limit(100)` falla el del ranking
+  completo; con los promedios sobre todas las piezas fallan los de patrones y agente; con las piezas sin métricas
+  como 0 en la grilla fallan los dos órdenes. De la cola: sin espera, con espera fija de 1 día, sin el vencimiento
+  de historias, con los reintentos antes que las piezas medidas o sin las nuevas primero, falla cada caso que lo
+  cubre (incluido el de 100 historias y 50 reels). De las historias: sin el cierre, sin esperar las 30 h, sin
+  cerrarla al medirla con dato, con espera y en los reintentos, o marcándola con un error pasajero, falla cada caso
+  que lo cubre (incluidas las simulaciones de 40 días). De los errores: sin la rama de error permanente, con todo
+  4xx o 5xx como permanente, con el 429 como permanente o con el cliente lanzando un `Error` sin status, falla cada
+  caso que lo cubre. De la revisión final: con el cierre a 72 h fallan los de cron caído y 429; con historias en la
+  consulta de piezas con métricas, el de la historia joven del backfill; con las historias después de las otras
+  nuevas, el de 200 nuevas; sin reconocer el 401/403, sin cortar la corrida, cerrando historias antes de pedirle a
+  Zernio o sin el reporte a Sentry, los de 401 y 403; sin el filtro de `organization_id` o de `source` en el
+  cierre (N2, N3), en el update de cada pieza (N13) o en las consultas del lote, el caso de otra org u otra fuente
+  (piezas de otra org, de otra fuente y con el mismo id en otra org).
+
+- Fix-pack de la revisión del timeout: los pedidos que hacen trabajo en el servidor de Zernio contra Meta (`syncExternalPosts`, `syncExternalStories`, `listAds`) tienen 30 s (`ZERNIO_TIMEOUT_TRABAJO_MS`); las lecturas puntuales siguen con 15 s. Test en `lib/zernio/__tests__/error-http.test.ts` (control negativo: con 15 s para todos, falla).
+
+**Riesgos / deuda técnica pendiente:**
+- El límite de pedidos de Zernio sigue en `[ZERNIO-METRICAS-429]`: una pieza que choca con el 429 pasa al final de
+  su grupo sin sumar espera y se reintenta cuando le vuelve a tocar; una historia con 429 no se marca y se pide en la
+  corrida siguiente.
+- El lote sigue siendo de 50 por corrida: cada historia publicada usa un lugar una vez, así que con 100 reels medidos
+  y el cron una vez por día cada reel se refresca cada 2,2 días con 5 historias por día, cada 2,4 con 8 y cada 2,9
+  con 15, sin el 429 diario de `[ZERNIO-METRICAS-429]`. Con ese 429 los refrescos son más espaciados y, con 15 historias por día, en la
+  simulación de la revisión se cierran 34 historias sin medir (antes del cierre a 7 días eran 94). La función también corre después de cada sync de contenido (al abrir Contenido), lo que sólo adelanta
+  refrescos.
+- Una historia se pide una sola vez: si Zernio todavía no tenía sus métricas cuando se la pidió (webhook atrasado),
+  queda sin dato y no se vuelve a pedir. Una historia sin `published_at` se cierra sin pedirla.
+- Si Zernio rechaza la clave de una org (401/403), sus métricas no se actualizan hasta que alguien reconecte
+  Zernio; queda en Sentry con la org.
+- Hasta aplicar la migración en producción, el cron nuevo falla al leer columnas que no existen: aplicarla antes del
+  deploy. En la verificación posterior, el chequeo del backfill mira sólo piezas que nadie tocó desde antes de la
+  migración (`created_at`, `metrics_updated_at` y `updated_at` anteriores): una pieza que la sync inserta después
+  del deploy con métricas entra con `metrics_checked_at` en null a propósito (es nueva para el cron), y lo mismo
+  una pieza vieja que recibe métricas después (su `metrics_updated_at` puede ser anterior, porque sale de
+  `lastUpdated` de Zernio, pero su `updated_at` no).
+
+---
+
 ### 2026-10-04 — Hallazgos de la revisión integral del 4-oct (SCRUM-210, SCRUM-111, SCRUM-43, SCRUM-75, tipos de estado de org y pantallas dinámicas)
 
 **Rama:** `fix/revision-integral-4-oct`

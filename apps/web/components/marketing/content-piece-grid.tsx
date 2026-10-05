@@ -13,10 +13,11 @@ import {
   segmentedNavItemClass,
 } from "@/components/shared/segmented-nav-styles";
 import { safeThumbnailUrl } from "@/lib/marketing/cdn-utils";
+import { ordenarPiezas, type OrdenDePiezas } from "@/lib/marketing/orden-de-piezas";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SortKey = "reciente" | "views" | "engagement";
+type SortKey = OrdenDePiezas;
 
 const TYPE_LABEL: Record<string, string> = {
   reel: "Reel",
@@ -83,21 +84,8 @@ export function ContentPieceGrid({ pieces }: Props) {
       result = result.filter((p) => p.type === typeFilter);
     }
 
-    // Sort
-    result = [...result].sort((a, b) => {
-      if (sortKey === "views") {
-        return (b.metrics?.views ?? 0) - (a.metrics?.views ?? 0);
-      }
-      if (sortKey === "engagement") {
-        return getEngagement(b) - getEngagement(a);
-      }
-      // Reciente: by published_at desc, then created_at desc
-      const dateA = a.published_at ? new Date(a.published_at).getTime() : new Date(a.created_at).getTime();
-      const dateB = b.published_at ? new Date(b.published_at).getTime() : new Date(b.created_at).getTime();
-      return dateB - dateA;
-    });
-
-    return result;
+    // Orden: las piezas sin métricas van al final por views o engagement.
+    return ordenarPiezas(result, sortKey);
   }, [pieces, typeFilter, sortKey]);
 
   if (pieces.length === 0) {

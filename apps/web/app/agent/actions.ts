@@ -16,6 +16,7 @@ import {
   sopGenerateRateLimit,
 } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/sanitize";
+import { avisoDePiezasSinMetricas } from "@/lib/marketing/ranking-de-contenido";
 import {
   aiPromptSchema,
   firstZodError,
@@ -1048,16 +1049,18 @@ export async function sendAgentMessageAction(input: {
             const { getTopPerformingContentAction } = await import(
               "@/app/marketing/content/actions"
             );
-            const results = await getTopPerformingContentAction({
-              metric,
-              limit,
-              typeFilter,
-            });
+            const { piezas: results, sinMetricas } =
+              await getTopPerformingContentAction({
+                metric,
+                limit,
+                typeFilter,
+              });
 
             return JSON.stringify({
               success: true,
               results,
               count: results.length,
+              ...avisoDePiezasSinMetricas(sinMetricas),
             });
           } catch (err) {
             return JSON.stringify({

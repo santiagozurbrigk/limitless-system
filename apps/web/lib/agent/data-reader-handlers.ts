@@ -5,6 +5,12 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import {
+  SIN_METRICAS,
+  engagementDe,
+  resumirEngagement,
+  tieneMetricas,
+} from "@/lib/marketing/metricas-medidas";
 
 /*
  * Nombres de columna reales (ver supabase/migrations). Las consultas de este
@@ -135,18 +141,9 @@ export async function handleGetBusinessSnapshot(
           )
         : null;
 
-    // Contenido
+    // Contenido: el engagement sale sólo de las piezas medidas (SCRUM-172).
     const contentPieces = contentRes.data ?? [];
-    const totalEngagement = contentPieces.reduce((sum, p) => {
-      const m = (p.metrics ?? {}) as Record<string, number>;
-      return (
-        sum +
-        (m.likes ?? 0) +
-        (m.comments ?? 0) +
-        (m.shares ?? 0) +
-        (m.saves ?? 0)
-      );
-    }, 0);
+    const engagement = resumirEngagement(contentPieces);
 
     // Lead Magnets
     const lms = lmsRes.data ?? [];
@@ -179,7 +176,9 @@ export async function handleGetBusinessSnapshot(
       },
       marketing: {
         piezas_de_contenido_periodo: contentPieces.length,
-        engagement_total: fmt(totalEngagement),
+        engagement_total:
+          engagement.conMetricas > 0 ? fmt(engagement.total) : SIN_METRICAS,
+        piezas_sin_metricas: engagement.sinMetricas,
       },
       lead_magnets: {
         activos: lms.filter((l) => l.status === "active").length,
@@ -609,36 +608,30 @@ export async function handleGetMarketingOverview(
     const lms = lmsRes.data ?? [];
     const leads = leadsRes.data ?? [];
 
-    // Métricas de contenido
-    type MetricsObj = Record<string, number>;
-    const topContent = content
-      .map((p) => {
-        const m = (p.metrics ?? {}) as MetricsObj;
-        const engagement =
-          (m.likes ?? 0) + (m.comments ?? 0) + (m.shares ?? 0) + (m.saves ?? 0);
-        return {
-          titulo: p.title ?? "(sin título)",
-          tipo: p.type,
-          engagement,
-          likes: m.likes ?? 0,
-          comentarios: m.comments ?? 0,
-          alcance: m.reach ?? 0,
-          url: p.platform_post_url ?? null,
-        };
-      })
-      .sort((a, b) => b.engagement - a.engagement)
-      .slice(0, 5);
-
-    const totalEngagement = content.reduce((sum, p) => {
-      const m = (p.metrics ?? {}) as MetricsObj;
-      return (
-        sum +
-        (m.likes ?? 0) +
-        (m.comments ?? 0) +
-        (m.shares ?? 0) +
-        (m.saves ?? 0)
-      );
-    }, 0);
+    // Métricas de contenido: el top y los promedios salen sólo de las piezas
+    // medidas; una pieza sin métricas no es un cero (SCRUM-172).
+    const engagement = resumirEngagement(content);
+    const piezasMedidas = content
+      .flatMap((p) => (tieneMetricas(p.metrics) ? [{ pieza: p, m: p.metrics }] : []))
+      .map(({ pieza, m }) => ({
+        titulo: pieza.title ?? "(sin título)",
+        tipo: pieza.type,
+        engagement: engagementDe(m),
+        likes: m.likes ?? 0,
+        comentarios: m.comments ?? 0,
+        alcance: m.reach ?? 0,
+        url: pieza.platform_post_url ?? null,
+      }))
+      .sort((a, b) => b.engagement - a.engagement);
+    const piezasSinMedir = content
+      .filter((p) => !tieneMetricas(p.metrics))
+      .map((p) => ({
+        titulo: p.title ?? "(sin título)",
+        tipo: p.type,
+        metricas: SIN_METRICAS,
+        url: p.platform_post_url ?? null,
+      }));
+    const topContent = [...piezasMedidas, ...piezasSinMedir].slice(0, 5);
 
     // Lead magnets
     const leadsByLm: Record<string, number> = {};
@@ -671,11 +664,12 @@ export async function handleGetMarketingOverview(
       periodo_dias: days,
       contenido: {
         piezas_en_periodo: content.length,
-        engagement_total: fmt(totalEngagement),
+        piezas_con_metricas: engagement.conMetricas,
+        piezas_sin_metricas: engagement.sinMetricas,
+        engagement_total:
+          engagement.conMetricas > 0 ? fmt(engagement.total) : SIN_METRICAS,
         engagement_promedio:
-          content.length > 0
-            ? fmt(Math.round(totalEngagement / content.length))
-            : "0",
+          engagement.promedio !== null ? fmt(engagement.promedio) : SIN_METRICAS,
         top_5_piezas: topContent,
       },
       lead_magnets: {

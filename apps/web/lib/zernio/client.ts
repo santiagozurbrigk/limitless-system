@@ -254,16 +254,83 @@ export type ZernioMediaItem = {
 
 export type ZernioClient = ReturnType<typeof createZernioClient>;
 
-export function createZernioClient(apiKey: string) {
+/**
+ * Respuesta HTTP no exitosa de Zernio. Lleva el `status` para que quien llama
+ * distinga un error permanente (404 de un post borrado) de uno pasajero (429,
+ * 5xx). El mensaje es el mismo de siempre: `Zernio <label>: HTTP <status> — ...`.
+ */
+export class ZernioHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ZernioHttpError";
+    this.status = status;
+  }
+}
+
+/**
+ * Zernio no respondió a tiempo: el pedido se cortó con `AbortSignal.timeout`.
+ * Es un error pasajero (como un 429 o un 5xx), no dice nada de la pieza.
+ */
+export class ZernioTimeoutError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(label: string, timeoutMs: number) {
+    super(`Zernio ${label}: sin respuesta en ${timeoutMs / 1000} s`);
+    this.name = "ZernioTimeoutError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+/**
+ * Tiempo máximo de un pedido que pasa por `zernioFetchJson`, incluida la lectura
+ * de la respuesta. 15 s para las lecturas puntuales (analytics de un post,
+ * comentarios, una URL firmada): Zernio responde con datos que ya tiene, así que
+ * un pedido que tarda más está colgado. Con este tope el cron de métricas, que
+ * pide su lote de 50 en paralelo, termina la fase de pedidos en 15 s y le queda
+ * margen para escribir dentro de los 60 s del worker
+ * (`/api/queue/process-cron-sync-metrics`, `maxDuration = 60`).
+ */
+export const ZERNIO_TIMEOUT_MS = 15_000;
+
+/**
+ * Tope para los pedidos que hacen trabajo en el servidor de Zernio contra Meta
+ * (sincronizar posts o historias, listar todos los anuncios): su demora depende
+ * de esa consulta, no del tamaño de la respuesta, así que tienen más margen.
+ * Queda por debajo de los 60 s de las funciones que los llaman.
+ */
+export const ZERNIO_TIMEOUT_TRABAJO_MS = 30_000;
+
+export function createZernioClient(
+  apiKey: string,
+  opciones: { timeoutMs?: number } = {}
+) {
   const headers = () => buildHeaders(apiKey);
+  const timeoutMs = opciones.timeoutMs ?? ZERNIO_TIMEOUT_MS;
 
   async function zernioFetchJson<T>(
     label: string,
     url: string,
-    init?: RequestInit
+    init?: RequestInit,
+    limiteMs: number = timeoutMs
   ): Promise<T> {
-    const res = await fetch(url, { ...init, cache: "no-store" });
-    const bodyText = await res.text();
+    let res: Response;
+    let bodyText: string;
+    try {
+      res = await fetch(url, {
+        ...init,
+        cache: "no-store",
+        signal: init?.signal ?? AbortSignal.timeout(limiteMs),
+      });
+      bodyText = await res.text();
+    } catch (err) {
+      if (err instanceof Error && err.name === "TimeoutError") {
+        console.error(`[Zernio] ${label} timeout`, { url, timeoutMs: limiteMs });
+        throw new ZernioTimeoutError(label, limiteMs);
+      }
+      throw err;
+    }
     const preview = bodyText.slice(0, 200);
 
     if (!res.ok) {
@@ -272,7 +339,7 @@ export function createZernioClient(apiKey: string) {
         url,
         preview,
       });
-      throw new Error(`Zernio ${label}: HTTP ${res.status} — ${preview}`);
+      throw new ZernioHttpError(`Zernio ${label}: HTTP ${res.status} — ${preview}`, res.status);
     }
 
     const contentType = res.headers.get("content-type") ?? "";
@@ -430,9 +497,12 @@ export function createZernioClient(apiKey: string) {
       if (params?.fromDate) url.searchParams.set("fromDate", params.fromDate);
       if (params?.toDate) url.searchParams.set("toDate", params.toDate);
 
-      return zernioFetchJson<ZernioAdsResponse>("listAds", url.toString(), {
-        headers: headers(),
-      });
+      return zernioFetchJson<ZernioAdsResponse>(
+        "listAds",
+        url.toString(),
+        { headers: headers() },
+        Math.max(timeoutMs, ZERNIO_TIMEOUT_TRABAJO_MS)
+      );
     },
 
     async replyToComment(
@@ -538,11 +608,12 @@ export function createZernioClient(apiKey: string) {
         const data = await zernioFetchJson<{
           posts?: ZernioPost[];
           stories?: ZernioPost[];
-        }>("syncExternalStories", `${ZERNIO_API_BASE}/posts/sync-stories`, {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify({ accountId }),
-        });
+        }>(
+          "syncExternalStories",
+          `${ZERNIO_API_BASE}/posts/sync-stories`,
+          { method: "POST", headers: headers(), body: JSON.stringify({ accountId }) },
+          Math.max(timeoutMs, ZERNIO_TIMEOUT_TRABAJO_MS)
+        );
         const posts = data.posts ?? data.stories ?? [];
         return { posts };
       } catch (err) {
@@ -564,11 +635,12 @@ export function createZernioClient(apiKey: string) {
           postsSynced?: number;
           skipped?: boolean;
         };
-      }>("syncExternalPosts", `${ZERNIO_API_BASE}/posts/sync-external`, {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify({ accountId }),
-      });
+      }>(
+        "syncExternalPosts",
+        `${ZERNIO_API_BASE}/posts/sync-external`,
+        { method: "POST", headers: headers(), body: JSON.stringify({ accountId }) },
+        Math.max(timeoutMs, ZERNIO_TIMEOUT_TRABAJO_MS)
+      );
 
       return { posts: data.posts ?? [], synced: data.synced };
     },

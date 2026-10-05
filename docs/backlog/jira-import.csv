@@ -1938,7 +1938,7 @@ Fuente: PENDIENTES.md [CALENDLY-RECONEXION-SUSCRIPCIONES] · Doc del área: docs
 Fuente: PENDIENTES.md [CALENDLY-SYNC-SIN-CANCELADOS] · Doc del área: docs/areas/ventas.md",CALENDLY-SYNC-SIN-CANCELADOS,Ventas,P2,,confiabilidad
 "[API-TIMEOUTS] (parte Ventas) Sin timeout en Calendly, Fathom y Zernio",Task,Medium,ventas,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
 
-*Estado verificado:* auditoría §3 ""Confiabilidad"" 1. Ningún {{AbortSignal.timeout}} en {{lib/calendly}}, {{lib/fathom}}, {{lib/zernio}}.
+*Estado verificado:* auditoría §3 ""Confiabilidad"" 1. Ningún {{AbortSignal.timeout}} en {{lib/calendly}} ni {{lib/fathom}}. En {{lib/zernio}}, {{zernioFetchJson}} corta a los 15 s con {{ZernioTimeoutError}} desde SCRUM-172 (cubre analytics de posts, comentarios, anuncios, posts, historias y presign); los {{fetch}} directos de {{lib/zernio/client.ts}} siguen sin timeout (ver {{[AUDITORIA §3 confiabilidad 1]}}).
 
 *Qué hay que hacer:* agregar timeout en cada fetch.
 
@@ -1982,9 +1982,9 @@ Fuente: PENDIENTES.md [UTM-PUBLICO-ORG-EN-CUERPO] · Doc del área: docs/areas/m
 
 *Severidad:* Media
 
-*Estado verificado:* {{syncContentMetricsForOrg}} lanza hasta 50 {{getPostAnalytics}} en paralelo ({{lib/marketing/sync-content-metrics.ts:8,56-77}}); {{zernioFetchJson}} ({{lib/zernio/client.ts:268-284}}) no reintenta. Zernio responde 429 con {{limit: 6}} y {{retryAfterSeconds: 1}}: 849 rechazos en {{/api/queue/process-cron-sync-metrics}} en 7 días (agregado de Vercel, 2026-09-23).
+*Estado verificado:* {{syncContentMetricsForOrg}} lanza hasta 50 {{getPostAnalytics}} en paralelo ({{lib/marketing/sync-content-metrics.ts:190-215}}); {{zernioFetchJson}} ({{lib/zernio/client.ts:303-354}}) no reintenta ante un 429 (desde SCRUM-172 tiene timeout de 15 s). Zernio responde 429 con {{limit: 6}} y {{retryAfterSeconds: 1}}: 849 rechazos en {{/api/queue/process-cron-sync-metrics}} en 7 días (agregado de Vercel, 2026-09-23).
 
-*Riesgo:* Si una org tiene más de ~6 piezas, entonces la mayoría no se actualiza, y como el orden es ""más viejas primero"", las mismas vuelven a chocar al día siguiente. Lo mismo pasa con las piezas cuyo analytics nunca se reconoce (por ejemplo, historias que Zernio trae sin analytics): quedan con {{metrics_updated_at}} en null o viejo, el cron las toma primero cada día y, si son 50 o más, el resto de la org no se actualiza. Hace falta registrar el último intento fallido o un tope de reintentos.
+*Riesgo:* Si una org tiene más de ~6 piezas, entonces la mayoría de cada lote falla con 429 y no se actualiza. El intento queda anotado en {{metrics_checked_at}} y la pieza pasa al final de su grupo (sin sumar espera), así que no se traba, pero no se reintenta hasta que le vuelve a tocar.
 
 *Impacto:* Métricas de contenido desactualizadas en Marketing para las orgs con más publicaciones (3 afectadas en la ventana).
 
@@ -2078,9 +2078,9 @@ Fuente: PENDIENTES.md [AUDITORIA §3 seguridad 5] · Doc del área: docs/areas/m
 Fuente: PENDIENTES.md [AUDITORIA §3 seguridad 9] · Doc del área: docs/areas/marketing.md",AUDITORIA §3 seguridad 9,Marketing,P2,Baja,seguridad
 [AUDITORIA §3 confiabilidad 1] Zernio sin timeouts ni defensas uniformes,Task,Medium,marketing,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
 
-*Estado verificado:* ningún {{fetch}} de {{lib/zernio/client.ts}} usa {{AbortSignal.timeout}}; {{listAccounts}}, inbox, {{replyToComment}}, {{hideComment}}, {{createPost}} y los analytics de cuenta no pasan por {{zernioFetchJson}}.
+*Estado verificado:* {{zernioFetchJson}} ya tiene timeout de 15 s ({{AbortSignal.timeout}}, {{ZernioTimeoutError}}; SCRUM-172). Falta el resto: {{listAccounts}}, inbox, {{replyToComment}}, {{hideComment}}, {{createPost}} y los analytics de cuenta hacen {{fetch}} directo, sin timeout ni {{ZernioHttpError}}.
 
-*Qué hay que hacer:* timeout en {{zernioFetchJson}} y pasar todos los métodos por ahí.
+*Qué hay que hacer:* pasar esos métodos por {{zernioFetchJson}}.
 
 *Dónde:* {{apps/web/lib/zernio/client.ts}}
 
@@ -2105,7 +2105,7 @@ Fuente: PENDIENTES.md [ZERNIO-DOCS] · Doc del área: docs/areas/marketing.md",Z
 Fuente: PENDIENTES.md [MKT-LEAD-MAGNETS-CAPTURA] · Doc del área: docs/areas/marketing.md",MKT-LEAD-MAGNETS-CAPTURA,Marketing,P2,,feature
 [MKT-CODIGO-MUERTO] Componentes y acciones huérfanos,Task,Medium,marketing,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
 
-*Estado verificado:* sin imports: {{components/marketing/{marketing-subnav,marketing-content-library,marketing-content-detail,youtube-video-performance,marketing-charts,instagram-empty-state}.tsx}}, {{overview/{conversion-strip,marketing-stat-card,metrics-sections,rate-bar,index}.ts(x)}} (metrics-sections todavía cae a {{mockMarketingOverview}}); por arrastre quedan inalcanzables {{cta-minute-input}}, {{content-label-badge}}, {{content-platform-metrics}} (minuto de CTA + retención real de YouTube y etiqueta manual). Acciones sin caller: {{publishVariantAsZernioDraftAction}}, {{generateVariantCaptionAction}}, {{getContentBenchmarkAction}}, {{deleteContentPieceAction}}, {{updateSalesAttributionAction}}, {{syncZernioMetricsAction}}, {{getContentPatternsAnalysisAction}}, {{getContentLabelDistributionAction}}, {{getInstagramIntegrationStatusAction}}, {{getContentAssetByIdAction}}, {{syncInstagramContentAction}}, {{syncInstagramMessagesAction}}, {{searchDriveFilesAction}}, {{getDriveFolderPathAction}}, {{getDriveFileAction}}, {{getUtmBaseUrlAction}}, {{getUTMLeadsAction}}, {{getReelMusicPathAction}}, {{getReelVariationJobAction}}; en {{lib/zernio/client.ts}} {{validateApiKey}}, {{listPostAnalytics}}, {{getAccountAnalytics}}, {{getPostsAnalytics}} y todos los {{zernio*}} exportados. Cada export de un {{""use server""}} es un endpoint.
+*Estado verificado:* sin imports: {{components/marketing/{marketing-subnav,marketing-content-library,marketing-content-detail,youtube-video-performance,marketing-charts,instagram-empty-state}.tsx}}, {{overview/{conversion-strip,marketing-stat-card,metrics-sections,rate-bar,index}.ts(x)}} (metrics-sections todavía cae a {{mockMarketingOverview}}); por arrastre quedan inalcanzables {{cta-minute-input}}, {{content-label-badge}}, {{content-platform-metrics}} (minuto de CTA + retención real de YouTube y etiqueta manual). Acciones sin caller: {{publishVariantAsZernioDraftAction}}, {{generateVariantCaptionAction}}, {{deleteContentPieceAction}}, {{updateSalesAttributionAction}}, {{getContentPatternsAnalysisAction}}, {{getContentLabelDistributionAction}}, {{getInstagramIntegrationStatusAction}}, {{getContentAssetByIdAction}}, {{syncInstagramContentAction}}, {{syncInstagramMessagesAction}}, {{searchDriveFilesAction}}, {{getDriveFolderPathAction}}, {{getDriveFileAction}}, {{getUtmBaseUrlAction}}, {{getUTMLeadsAction}}, {{getReelMusicPathAction}}, {{getReelVariationJobAction}}; en {{lib/zernio/client.ts}} {{validateApiKey}}, {{listPostAnalytics}}, {{getAccountAnalytics}}, {{getPostsAnalytics}} y todos los {{zernio*}} exportados. Cada export de un {{""use server""}} es un endpoint.
 
 *Qué hay que hacer:* decidir si se recupera algo (retención/CTA de YouTube, publicar variante a Zernio) y borrar el resto.
 
