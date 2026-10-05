@@ -82,7 +82,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 12 | 31 | 17 |
-| [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
+| [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 19 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
@@ -545,16 +545,6 @@ Doc del área: [`docs/areas/clientes.md`](./docs/areas/clientes.md)
 - **Qué hay que hacer:** parser de montos con separadores es-AR/en-US y error por fila cuando no se entiende; fecha ilegible → error por fila, no hoy. Tests (`[T-3]`).
 - **Criterio de aceptación:** Importar un Excel con montos «1.500», «1.500,00» y «1,500.00» guarda 1500 en los tres casos; una fila con monto o fecha ilegible (o fecha vacía) se informa como error de esa fila y no se guarda con monto 0 ni con la fecha de hoy; hay tests del parser con esos casos
 - **Dónde:** `apps/web/lib/clients/excel-parser.ts`, `apps/web/app/clients/import-actions.ts`.
-
-#### [CLIENTES-PENDING-CALLS-HUERFANA] «Llamadas sin asociar» no tiene link en la navegación *(nuevo)*
-- **Tipo:** bug
-- **Severidad:** Media
-- **Estado verificado:** `paths.platform.clients.pendingCalls` no se usa en ningún componente; la notch nav y `clients-list.tsx` no linkean a `/clients/pending-calls`. Sólo `components/layout/mobile-nav.tsx` pinta un badge con el conteo sobre «Clientes». El tooltip de «Última 1-1» dice «Confirmalo en Llamadas sin asociar» sin link. Es la pantalla del botón «Cargar identidades desde el CRM», del que depende `[B-SEMBRAR-IDENTIDADES]`.
-- **Riesgo:** Si nadie llega a «Llamadas sin asociar» (sólo es alcanzable escribiendo la URL o por el badge del menú móvil), entonces las grabaciones que el resolvedor no asoció se acumulan sin confirmar y no se aprieta «Cargar identidades desde el CRM».
-- **Impacto:** Todas las orgs con Fathom: 1-1 que no llegan a la ficha del cliente y «Última 1-1» desactualizada; bloquea en la práctica [B-SEMBRAR-IDENTIDADES]. Hay workaround (URL directa).
-- **Qué hay que hacer:** agregar el acceso desde la barra de `/clients` (con el conteo) y linkear el tooltip.
-- **Criterio de aceptación:** Desde la barra de /clients en escritorio hay un acceso a «Llamadas sin asociar» que muestra la cantidad pendiente y lleva a /clients/pending-calls; el tooltip de «Última 1-1» que dice «Confirmalo en Llamadas sin asociar» es un link a esa pantalla
-- **Dónde:** `apps/web/components/clients/clients-list.tsx`, `apps/web/routes/paths.ts`.
 
 #### [CLIENTES-SIN-MAIL] Los clientes viejos no tienen mail
 - **Tipo:** bug + decisión de negocio

@@ -145,7 +145,7 @@ Fuente: PENDIENTES.md [PERMISOS-SERVER-ACTIONS/ventas] · Doc del área: docs/ar
 
 *Riesgo:* Mientras client_identities siga vacía (0 filas), cada grabación sin mail de invitado reconocible cae al último peldaño y queda pendiente de confirmación manual, sin aviso de que el resolvedor está funcionando a medias.
 
-*Impacto:* Todas las orgs con Fathom: 1-1 y ventas que no se asocian solas, fichas con «Última 1-1» desactualizada y clasificación purpose incompleta; se resuelve con un botón, pero está en una pantalla sin link ([CLIENTES-PENDING-CALLS-HUERFANA]).
+*Impacto:* Todas las orgs con Fathom: 1-1 y ventas que no se asocian solas, fichas con «Última 1-1» desactualizada y clasificación purpose incompleta; se resuelve con un botón de «Llamadas sin asociar», a la que se llega desde la barra de /clients (desde SCRUM-31).
 
 *Qué hay que hacer:* apretar ""Cargar identidades desde el CRM"" en {{/clients/pending-calls}}, dejar correr el cron y medir {{purpose}}/{{resolution_method}}. Medir falsos positivos del peldaño de nombre.
 

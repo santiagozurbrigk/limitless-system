@@ -7,13 +7,12 @@ Summary,Issue Type,Priority,Labels,Labels,Labels,Labels,Labels,Labels,Descriptio
 * Se apretó «Cargar identidades desde el CRM» con la cuenta real, el sistema quedó con los datos de los clientes cargados y quedó anotado cuántas grabaciones pasaron a asignarse solas y cuántas se asignaron mal por nombre.
 
 *Tareas técnicas (PENDIENTES.md):*
-* [CLIENTES-PENDING-CALLS-HUERFANA] «Llamadas sin asociar» no tiene link en la navegación *(nuevo)* (P1)
 * [B-SEMBRAR-IDENTIDADES] / [1-1-SEMBRAR-Y-MEDIR] client_identities sigue vacía (P0)
 
 *Para confirmar:*
 * Martín: esta funcionalidad es la misma pantalla que F-VEN-25 (Ventas); conviene decidir si se cargan como una sola historia.
 
-Funcionalidad: F-CLI-12 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-CLI-12]",H-CLI-12,Clientes,P0,Alta,CLIENTES-PENDING-CALLS-HUERFANA B-SEMBRAR-IDENTIDADES,
+Funcionalidad: F-CLI-12 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-CLI-12]",H-CLI-12,Clientes,P0,Alta,B-SEMBRAR-IDENTIDADES,
 [H-CLI-23] Que cada miembro sólo pueda hacer en Clientes lo que su permiso permite,Story,Highest,historia,clientes,p0,sev-alta,,,"*Historia:* Como founder, quiero que un miembro con Clientes en «Solo lectura» o «Sin acceso» no pueda borrar ni modificar clientes por ningún camino, para que el permiso por módulo proteja los datos y no sea sólo esconder botones.
 
 *Criterios de aceptación:*
@@ -214,12 +213,11 @@ Funcionalidad: F-VEN-23 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 
 *Tareas técnicas (PENDIENTES.md):*
 * [B-SEMBRAR-IDENTIDADES] / [1-1-SEMBRAR-Y-MEDIR] client_identities sigue vacía (P0)
-* [CLIENTES-PENDING-CALLS-HUERFANA] «Llamadas sin asociar» no tiene link en la navegación *(nuevo)* (P1)
 
 *Para confirmar:*
 * Martín: es la misma pantalla que F-CLI-12 (Clientes); conviene decidir si se cargan como una sola historia.
 
-Funcionalidad: F-VEN-25 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-25]",H-VEN-25,Ventas,P0,Alta,B-SEMBRAR-IDENTIDADES CLIENTES-PENDING-CALLS-HUERFANA,
+Funcionalidad: F-VEN-25 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-VEN-25]",H-VEN-25,Ventas,P0,Alta,B-SEMBRAR-IDENTIDADES,
 [H-VEN-28] Limitar por rol quién ve Ventas y los montos,Story,Highest,historia,ventas,p0,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que un miembro sin permiso de Ventas no pueda ver ni cambiar turnos, leads, cobros ni llamadas por ningún camino, para que los montos y los datos comerciales queden sólo para quien los necesita.
 
 *Criterios de aceptación:*
