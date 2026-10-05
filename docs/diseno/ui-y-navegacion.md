@@ -22,7 +22,6 @@ app/layout.tsx              fuentes (Inter, JetBrains Mono), script de tema, met
          ├─ título + "volver"       de lib/navigation/page-meta.ts (fijo, fuera del scroll)
          └─ contenido               .main-container-scroll
 app/(super-admin)/layout.tsx → layouts/super-admin-layout.tsx  Topbar de @ai-coo/ui + sidebar propio
-app/(founder)/layout.tsx     → layouts/founder-layout.tsx      Topbar + "Volver a la plataforma"
 app/(landing)/layout.tsx     Geist + fondo #0A0A0A + Meta Pixel   (/prueba, /privacidad)
 ```
 

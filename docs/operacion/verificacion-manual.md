@@ -40,7 +40,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 3. 🔒⭐ Con el member, tipear `/finance` en la barra. Resultado: "No tenés acceso a Finanzas".
 4. 🔒 Probar `/finance/expenses` y `/team/roles` (con Equipo en "Sin acceso"). Resultado: bloqueadas igual.
 5. ⚠️🔒 Estando en `/dashboard`, abrir ⌘K y elegir Finanzas (navegación cliente). Resultado esperado: bloqueado. **Probable falla**: el chequeo vive en el layout, que no se re-renderiza en navegación cliente, y la paleta no filtra permisos (`[PERMISOS-LAYOUT-NAV-SUAVE]`, `[NAV-PALETA-PERMISOS]`).
-6. ⚠️🔒 Con el member, abrir `/founder`. Resultado esperado: bloqueado si no tiene Operaciones. **Probable falla** (`[PERMISOS-FOUNDER-AREA]`).
+6. 🔒 Con el member sin Operaciones, tipear `/founder`. Resultado: "No tenés acceso a Operaciones", dentro del marco de la plataforma. Con el founder y con un member que tenga Operaciones, `/founder` muestra el Área del fundador (también sin resumen todavía: el estado vacío no da error). Desde SCRUM-18 `/founder` vive en `app/(platform)` y los tests lo cubren; este paso lo confirma con cuentas reales.
 7. ⭐ Invitar a alguien sin rol y entrar. Resultado: puede abrir pantallas por URL (el bloqueo no corre sin rol). Anotar si la notch nav aparece vacía (`[PERMISOS-SIN-ROL-NAV]`).
 8. Con el rol limitado, entrar a `/onboarding` y `/holding`. Resultado: entra (rutas libres).
 9. ⚠️🔒 Desde la consola del navegador del member, invocar una Server Action de Finanzas o `saveClaudeApiKeyAction`. Resultado hoy: **responde** (`[PERMISOS-SERVER-ACTIONS]`). Sirve de línea base para cuando se agregue el guard.

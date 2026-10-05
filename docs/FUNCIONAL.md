@@ -38,17 +38,17 @@ cambio, igual que el doc técnico del área.
 
 | Área | Funcionalidades | Funciona | Con fallas | No funciona | A medias | Sin verificar |
 |---|---|---|---|---|---|---|
-| [Plataforma](#plataforma) | 30 | 11 | 14 | 1 | 3 | 1 |
+| [Plataforma](#plataforma) | 30 | 12 | 13 | 1 | 3 | 1 |
 | [Clientes](#clientes) | 28 | 20 | 5 | 0 | 1 | 2 |
-| [Ventas](#ventas) | 28 | 12 | 10 | 3 | 2 | 1 |
+| [Ventas](#ventas) | 28 | 14 | 9 | 2 | 2 | 1 |
 | [Marketing](#marketing) | 27 | 9 | 7 | 4 | 3 | 4 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 24 | 11 | 3 | 1 | 3 | 6 |
-| [Agente de negocio e IA](#agente-de-negocio-e-ia) | 28 | 13 | 11 | 0 | 3 | 1 |
+| [Agente de negocio e IA](#agente-de-negocio-e-ia) | 28 | 15 | 10 | 0 | 3 | 0 |
 | [Operaciones y equipo](#operaciones-y-equipo) | 23 | 16 | 4 | 0 | 2 | 1 |
 | [Finanzas](#finanzas) | 12 | 6 | 4 | 0 | 2 | 0 |
 | [Producto](#producto) | 15 | 13 | 0 | 0 | 2 | 0 |
 | [Discord](#discord) | 13 | 0 | 2 | 0 | 1 | 10 |
-| **Total** | **228** | **111** | **60** | **9** | **22** | **26** |
+| **Total** | **228** | **116** | **57** | **8** | **22** | **25** |
 
 Lecturas rápidas:
 
@@ -97,7 +97,7 @@ Doc técnico: [`docs/areas/plataforma.md`](./areas/plataforma.md) · permisos y 
 | F-PLA-04 | Una cuenta creada por Limitless, por un holding o por el founder al sumar a alguien de su equipo entra con contraseña temporal, que vence a las 24 h, y está obligada a cambiarla en el primer ingreso | Funciona | — | [`arquitectura/auth-organizaciones-y-permisos.md` § Alta de cuentas](./arquitectura/auth-organizaciones-y-permisos.md#alta-de-cuentas) · `app/auth/force-password-change/page.tsx` | |
 | F-PLA-05 | El founder puede sumar a una persona a su equipo con un rol: el sistema crea la cuenta con contraseña temporal y le muestra las credenciales para que se las pase (no se manda mail; el flujo `/invite?token=` es legado y nada genera invitaciones) | Funciona | `INVITE-ROL-SIN-VALIDAR`, `ROL-MEMBER-SIN-CATALOGO` | [`arquitectura/auth-organizaciones-y-permisos.md` § Alta de cuentas](./arquitectura/auth-organizaciones-y-permisos.md#alta-de-cuentas) · `app/invite/page.tsx` | |
 | F-PLA-06 | El founder puede crear roles que definen, para cada uno de los 13 módulos, "sin acceso", "ver" o "completo", y asignarlos a su equipo | Con fallas | `PERMISOS-SERVER-ACTIONS`, `PERMISOS-VERIFICAR-SESION`, `ROL-MEMBER-SIN-CATALOGO` | [`arquitectura/auth-organizaciones-y-permisos.md` § Permisos por módulo](./arquitectura/auth-organizaciones-y-permisos.md#permisos-por-módulo) · `app/(platform)/team/page.tsx` | |
-| F-PLA-07 | El sistema le bloquea a un miembro las pantallas de los módulos donde no tiene acceso y se los esconde del menú | Con fallas | `PERMISOS-SERVER-ACTIONS`, `PERMISOS-LAYOUT-NAV-SUAVE`, `PERMISOS-FOUNDER-AREA`, `PERMISOS-SIN-ROL-NAV`, `PERMISOS-VERIFICAR-SESION` | [`arquitectura/auth-organizaciones-y-permisos.md` § Permisos por módulo](./arquitectura/auth-organizaciones-y-permisos.md#permisos-por-módulo) · `app/(platform)/layout.tsx` | |
+| F-PLA-07 | El sistema le bloquea a un miembro las pantallas de los módulos donde no tiene acceso y se los esconde del menú | Con fallas | `PERMISOS-SERVER-ACTIONS`, `PERMISOS-LAYOUT-NAV-SUAVE`, `PERMISOS-SIN-ROL-NAV`, `PERMISOS-VERIFICAR-SESION` | [`arquitectura/auth-organizaciones-y-permisos.md` § Permisos por módulo](./arquitectura/auth-organizaciones-y-permisos.md#permisos-por-módulo) · `app/(platform)/layout.tsx` | |
 | F-PLA-08 | El usuario navega con la barra superior (notch nav) y con la paleta ⌘K; los menús se adaptan a los add-ons de su organización | Con fallas | `PERMISOS-LAYOUT-NAV-SUAVE`, `NAV-PALETA-PERMISOS`, `ADDONS-HOLDING`, `NAV-1` | [`arquitectura/auth-organizaciones-y-permisos.md` § Add-ons](./arquitectura/auth-organizaciones-y-permisos.md#add-ons) · `components/navigation/notch-nav/platform-notch-nav.tsx` | |
 | F-PLA-09 | Un holding puede ver su portfolio de negocios con sus números en `/holding` | Con fallas | `HOLDING-PORTFOLIO-ROL` | [`arquitectura/auth-organizaciones-y-permisos.md` § Holding: qué org ve cada request](./arquitectura/auth-organizaciones-y-permisos.md#holding-qué-org-ve-cada-request) · `app/(platform)/holding/page.tsx` | |
 | F-PLA-10 | Un holding puede entrar a uno de sus negocios, operarlo como si fuera el founder y volver a la vista del holding | Con fallas | `HOLDING-PORTFOLIO-ROL`, `ADDONS-HOLDING`, `AUD-SALUD-ORG-HOLDING` | [`arquitectura/auth-organizaciones-y-permisos.md` § Holding: qué org ve cada request](./arquitectura/auth-organizaciones-y-permisos.md#holding-qué-org-ve-cada-request) · `components/holding/holding-business-switcher.tsx` | |
@@ -113,7 +113,7 @@ Doc técnico: [`docs/areas/plataforma.md`](./areas/plataforma.md) · permisos y 
 | F-PLA-20 | El founder puede cargar su propia clave de Claude (se valida antes de guardarse cifrada) para que la IA de su organización corra con ella | Con fallas | `PERMISOS-SERVER-ACTIONS` | [`areas/plataforma.md` § Ajustes](./areas/plataforma.md#ajustes) · `components/settings/claude-api-key-settings.tsx` | |
 | F-PLA-21 | El founder ve todas las integraciones agrupadas por categoría, con su estado e incidencias, y puede conectar, configurar y desconectar cada una | Con fallas | `PERMISOS-SERVER-ACTIONS`, `INTEGRACIONES-VERIFICAR`, `INTEGRACIONES-PLAYWRIGHT` | [`areas/plataforma.md` § Integraciones (la pantalla)](./areas/plataforma.md#integraciones-la-pantalla) · `app/(platform)/integrations/page.tsx` | |
 | F-PLA-22 | El founder puede importar su histórico de clientes y ventas desde Excel/CSV, GoHighLevel o ClickUp | Con fallas | `CLIENTES-IMPORT-EXCEL-MONTOS`, `CLICKUP-MONTOS` | [`areas/plataforma.md` § Pantallas y rutas](./areas/plataforma.md#pantallas-y-rutas) · `app/(platform)/integrations/import/page.tsx` (Excel y GHL), `components/integrations/clickup-import-wizard.tsx` (ClickUp, desde su tarjeta en Integraciones) | |
-| F-PLA-23 | El founder puede ver el Área del fundador (`/founder`) con el último resumen de Inteligencia | Con fallas | `PERMISOS-FOUNDER-AREA`, `FOUNDER-AREA` | [`areas/plataforma.md` § Limitaciones conocidas y deuda](./areas/plataforma.md#limitaciones-conocidas-y-deuda) · `app/(founder)/founder/page.tsx` | |
+| F-PLA-23 | El founder puede ver el Área del fundador (`/founder`) con el último resumen de Inteligencia | Funciona | `FOUNDER-AREA` | [`areas/plataforma.md` § Limitaciones conocidas y deuda](./areas/plataforma.md#limitaciones-conocidas-y-deuda) · `app/(platform)/founder/page.tsx` | |
 | F-PLA-24 | El staff de Limitless entra al panel interno con su propio login y ve todas las organizaciones y usuarios (con último ingreso) | Funciona | — | [`areas/plataforma.md` § Super Admin](./areas/plataforma.md#super-admin) · `app/superadmin/login/page.tsx`, `app/(super-admin)/super-admin/organizations/page.tsx` | |
 | F-PLA-25 | El staff puede dar de alta un founder, crear holdings y sus negocios, y en el detalle de cada organización cambiar estado, MRR, notas, add-ons y regenerar la contraseña temporal | Funciona | `ONBOARDING-SKIP-SIN-UI`, `ADDONS-HOLDING` | [`areas/plataforma.md` § Super Admin](./areas/plataforma.md#super-admin) · `app/(super-admin)/super-admin/organizations/[id]/page.tsx` | |
 | F-PLA-26 | El staff puede dar de baja una organización o una persona (con vista previa del alcance, confirmación por nombre y registro de lo que falló) | Sin verificar | `BAJAS-SIN-PROBAR`, `DELETION-COMENTARIO-FK` | [`areas/plataforma.md` § Bajas (super admin)](./areas/plataforma.md#bajas-super-admin) · `components/super-admin/deletion-dialog.tsx` | |
