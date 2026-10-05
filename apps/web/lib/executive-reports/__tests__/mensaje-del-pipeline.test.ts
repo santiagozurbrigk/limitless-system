@@ -40,6 +40,12 @@ describe("mensajeDelPipeline", () => {
 
   it("sin nada generado, el primer error o 'Sin datos suficientes'", () => {
     expect(mensajeDelPipeline({ ...NADA, errors: ["falló"] }).description).toBe("falló");
-    expect(mensajeDelPipeline(NADA).title).toBe("Sin datos suficientes");
+    expect(mensajeDelPipeline(NADA)).toEqual({
+      title: "Sin datos suficientes",
+      // Texto de la interfaz en voseo, como el resto de la app: que no cambie sin querer.
+      description:
+        "Completá al menos 2 inputs semanales y asegurate de tener actividad en ventas u operaciones.",
+      variant: "default",
+    });
   });
 });

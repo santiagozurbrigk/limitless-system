@@ -87,7 +87,7 @@ Los informes de origen son las pruebas integrales del 4-oct (SCRUM-111, 121 y 21
 
 **Decisiones de diseño relevantes:** el mock aplica los filtros que llegaron en vez de filtrar siempre por los dos, así que sin el filtro de organización devuelve el cliente o rol ajeno y el rechazo no ocurre. Controles negativos: quitar el `.eq("organization_id", ...)` hace fallar 2 casos por aserción en cada archivo ("expected [['id', …]] to deep equally contain ['organization_id', 'org-a']"); filtrar `organization_id` por otro valor hace fallar 3 por aserción.
 
-**Riesgos / deuda técnica pendiente:** ninguno.
+**Riesgos / deuda técnica pendiente:** ninguno. En `PENDIENTES.md`, `[AUD-SEG-5]` ya no lista como abiertos `[FATHOM-CLIENTID-SIN-VALIDAR]` ni `customRoleId`: quedan marcados como resueltos en SCRUM-43 y SCRUM-75 (el ítem sigue abierto por `updateContentPieceAction` y `attributeSaleToUTM`).
 
 #### 4. Tipos del estado de la organización alineados con la base
 

@@ -2332,11 +2332,11 @@ Prioridad sugerida P2: no hay una filtración conocida; el procedimiento se nece
 
 #### [AUD-SEG-5] Mass assignment e ids ajenos
 - **Tipo:** seguridad
-- **Estado verificado:** `updateContentPieceAction` (`app/marketing/content/actions.ts:148`) hace `.update(updates)` sin zod; `customRoleId` en invitaciones (`app/team/actions.ts:242-289`) y `clientId` en `associateFathomCallAction` (`app/fathom/actions.ts:161`) no se validan contra la org.
+- **Estado verificado:** `updateContentPieceAction` (`app/marketing/content/actions.ts:148`) hace `.update(updates)` sin zod. (resuelto el 2026-09-30 en SCRUM-43: el `clientId` de `associateFathomCallAction` se valida contra la org en `finalizeAssociatedCall` con `assertClienteDeLaOrg`, `lib/fathom/cliente-de-la-org.ts`). (resuelto el 2026-09-30 en SCRUM-75: el `customRoleId` de invitar, cambiar rol y aceptar una invitación se valida con `assertRolDeLaOrg`, `lib/team/rol-de-la-org.ts`).
 - **Qué hay que hacer:** schema zod con campos editables; verificar que `custom_role_id` y `client_id` pertenezcan a la org antes de escribir. Contexto (auditoría de aislamiento, 2026-09-23): ninguna de las 57 FKs de producción hacia `clients`, `workboard_tasks`, `team_roles` y `profiles` es compuesta con `organization_id`, así que RLS acepta filas propias que apuntan a ids ajenos. Se vuelve cruce real cuando un proceso con service role sigue la FK sin filtrar. Casos encontrados:
-  - `[FATHOM-CLIENTID-SIN-VALIDAR]`;
+  - `[FATHOM-CLIENTID-SIN-VALIDAR]` (resuelto en SCRUM-43, `lib/fathom/cliente-de-la-org.ts`);
   - `attributeSaleToUTM` (`lib/utm/attribute-booking.ts:198-210`), que lee `closing_calls.lead_name` por un `closingCallId` que manda el cliente al crear un cliente;
-  - `customRoleId`.
+  - `customRoleId` (resuelto en SCRUM-75, `lib/team/rol-de-la-org.ts`).
 
   Evaluar FKs compuestas `(x_id, organization_id)` en las tablas principales.
 - **Dónde:** archivos citados.
