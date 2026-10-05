@@ -244,7 +244,8 @@ como JSON.
   (`lib/marketing/ranking-de-contenido.ts`); el reporte de patrones promedia sólo sobre piezas medidas y le dice
   a la IA "sin métricas todavía"; las tools `get_marketing_overview` y `get_business_snapshot` promedian sobre
   piezas medidas y cuentan las que no tienen dato (`lib/marketing/metricas-medidas.ts`). El ranking se calcula
-  sobre todas las piezas de la org, paginando con `fetchAllRows`.
+  sobre todas las piezas de la org, paginando con `fetchAllRows`, igual que el benchmark `getContentBenchmarkAction`. En la grilla,
+  al ordenar por views o engagement, las piezas sin métricas van al final (`lib/marketing/orden-de-piezas.ts`).
 - **Historias primero en el dedupe.** `GET /posts?type=story` de Zernio no filtra: usarlo para tipar
   convierte reels en historias. Sólo `listInstagramStories` es confiable y cubre las **últimas 24 h** (Meta
   no expone más). Historias con ID interno de Zernio se guardan como `zstory_<id>`.
@@ -305,7 +306,7 @@ Detalle y prioridades: `PENDIENTES.md` (entregado al integrador del backlog).
 |---|---|
 | Mapeo y dedupe de la foto diaria de anuncios | `apps/web/lib/marketing/__tests__/ad-metrics-snapshot.test.ts` |
 | Cola del cron de métricas: piezas sin dato no la traban, todo intento queda con `metrics_checked_at` | `apps/web/lib/marketing/__tests__/sync-content-metrics.test.ts` |
-| Lectores sin ceros inventados: promedios, ranking y prompt de patrones | `apps/web/lib/marketing/__tests__/metricas-medidas.test.ts`, `ranking-de-contenido.test.ts`, `patrones-de-contenido.test.ts`, `apps/web/app/marketing/content/__tests__/top-performing-content.test.ts` |
+| Lectores sin ceros inventados: promedios, ranking y prompt de patrones | `apps/web/lib/marketing/__tests__/metricas-medidas.test.ts`, `ranking-de-contenido.test.ts`, `patrones-de-contenido.test.ts`, `orden-de-piezas.test.ts`, `apps/web/app/marketing/content/__tests__/top-performing-content.test.ts`, `content-benchmark.test.ts` |
 | Tools del agente con piezas sin métricas | `apps/web/lib/agent/__tests__/contenido-sin-metricas.test.ts`, `top-contenido-tool.test.ts` |
 | Triggers de comentarios Zernio (Embudos) | `apps/web/lib/zernio/__tests__/triggers.test.ts` |
 | `/api/cron/sync-content-metrics` pasa sin sesión y `/api/content/analyze` exige sesión (`isPublicPath`; `/api/utm/*` no tiene caso de test) | `apps/web/lib/supabase/__tests__/public-paths.test.ts` |

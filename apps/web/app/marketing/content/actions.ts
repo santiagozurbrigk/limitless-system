@@ -795,18 +795,27 @@ export async function getContentBenchmarkAction(
   const organizationId = await requireProfileOrganizationId();
   const supabase = await createClient();
 
-  let query = supabase
-    .from("content_pieces")
-    .select("metrics")
-    .eq("organization_id", organizationId)
-    .not("metrics", "is", null);
-
-  if (type && type !== "all") {
-    query = query.eq("type", type);
+  // ⭐ Paginado: PostgREST corta en 1.000 filas sin avisar y el promedio
+  // saldría de una parte de las piezas medidas. Sólo piezas con métricas: una
+  // pieza sin medir no es un cero (SCRUM-172).
+  const { rows: pieces, error } = await fetchAllRows<{
+    id: string;
+    metrics: Record<string, number> | null;
+  }>((from, to) => {
+    let query = supabase
+      .from("content_pieces")
+      .select("id, metrics")
+      .eq("organization_id", organizationId)
+      .not("metrics", "is", null);
+    if (type && type !== "all") {
+      query = query.eq("type", type);
+    }
+    return query.order("id", { ascending: true }).range(from, to);
+  });
+  if (error) {
+    // Antes un error devolvía promedios en cero como si fueran datos.
+    throw new Error(error);
   }
-
-  const { data } = await query;
-  const pieces = (data ?? []) as { metrics: Record<string, number> | null }[];
   const total = pieces.length;
 
   if (total === 0) {
