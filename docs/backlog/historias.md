@@ -872,7 +872,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Si la generación falla por un error momentáneo de la IA, el sistema lo reintenta solo y el informe aparece igual.
   - Un reintento no deja dos informes iguales del mismo momento.
   - Las organizaciones dadas de baja no generan informes.
-- **Tareas técnicas:** `[INTELIGENCIA-FUENTES-LEGACY]`, `[INTELIGENCIA-SIN-REINTENTO]`, `[REPORTES-DUPLICADOS]`, `[CRONS-ORGS-INACTIVAS]`
+- **Tareas técnicas:** `[INTELIGENCIA-FUENTES-LEGACY]`, `[INTELIGENCIA-SIN-REINTENTO]`, `[REPORTES-DUPLICADOS]`, CRONS-ORGS-INACTIVAS (resuelta en SCRUM-210)
 - **Para confirmar:** Agustín: cuánto tiempo guardar los informes viejos (hoy se guardan dos por día para siempre).
 
 ### [H-IA-19] Recibir un pulso diario que hable sólo del día
@@ -912,7 +912,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un founder con DMs y contenido cargados, cuando se analiza el tono, entonces el análisis tiene en cuenta esos textos (no sale vacío por falta de fuentes).
   - Si el análisis falla por un error momentáneo, el sistema lo reintenta solo.
   - Las organizaciones dadas de baja no se analizan.
-- **Tareas técnicas:** `[INTELIGENCIA-FUENTES-LEGACY]`, `[INTELIGENCIA-SIN-REINTENTO]`, `[CRONS-ORGS-INACTIVAS]`
+- **Tareas técnicas:** `[INTELIGENCIA-FUENTES-LEGACY]`, `[INTELIGENCIA-SIN-REINTENTO]`, CRONS-ORGS-INACTIVAS (resuelta en SCRUM-210)
 - **Para confirmar:** —
 
 ### [H-IA-25] Cargar mi clave de Claude y enterarme si deja de andar

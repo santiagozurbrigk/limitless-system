@@ -66,7 +66,7 @@ Qué no testear en Vitest: componentes React, actions que sólo hacen `select`, 
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **129 archivos, ~1.416 casos** (recontado el 2026-10-04). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **130 archivos, ~1.419 casos** (recontado el 2026-10-04). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -105,8 +105,9 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/storage` | 1 | 3 | validación de rutas por org |
 | `lib/queue` | 1 | 3 | aviso cuando falla un trabajo de QStash |
 | `lib/unipile` | 1 | 3 | secreto del webhook |
+| `lib/intelligence` | 1 | 3 | organizaciones sobre las que corren los crons de IA |
 
-**Sin ningún test:** `lib/agent` (compaction, JIT, streaming), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence`, `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`), los gastos y las métricas de ventas, y los parsers de import de clientes. Tampoco hay tests de route handlers ni de Server Actions.
+**Sin ningún test:** `lib/agent` (compaction, JIT, streaming), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`), los gastos y las métricas de ventas, y los parsers de import de clientes. Tampoco hay tests de route handlers ni de Server Actions.
 
 ### E2E
 

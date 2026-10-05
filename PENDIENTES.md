@@ -87,7 +87,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 12 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 20 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
-| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
+| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 16 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 18 | 42 | 13 |
 
@@ -1601,12 +1601,6 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 - **Estado verificado:** `generateAndSaveIntelligenceSnapshot` y `generateAndSaveFounderTone` atrapan el error y devuelven `"failed"`; los workers `process-cron-intelligence-snapshot` y `process-cron-founder-tone` responden 200 → QStash no reintenta. El de reportes ejecutivos ya lo resolvió. En prod el snapshot falla con "Respuesta de IA con formato inválido" (10 casos en el agregado de errores de Vercel al 2026-09-23), que es justo el tipo de error que un reintento resuelve.
 - **Qué hay que hacer:** replicar el `if (result === "failed") → 500` en esos dos workers.
 - **Dónde:** `apps/web/app/api/queue/process-cron-intelligence-snapshot/route.ts`, `process-cron-founder-tone/route.ts`.
-
-#### [CRONS-ORGS-INACTIVAS] (nuevo) Los crons de IA corren sobre orgs dadas de baja
-- **Tipo:** bug
-- **Estado verificado:** `listActiveOrganizationIds()` (`lib/intelligence/generate-snapshot.ts:215`, duplicada en `lib/founder-tone/analyze-tone.ts:108`) filtra sólo `account_type = 'founder'`, no `status`. Snapshot 2×/día + reportes + tono con Sonnet por cada una.
-- **Qué hay que hacer:** filtrar `status = 'active'` (o equivalente) y unificar la función.
-- **Dónde:** esos dos archivos.
 
 #### [IA-COSTOS-INCOMPLETOS] (nuevo) Costos de IA subestimados
 - **Tipo:** deuda técnica

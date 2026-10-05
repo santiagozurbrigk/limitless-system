@@ -8,6 +8,7 @@ import {
 import { buildOrgContextText, getOrgContext } from "@/lib/ai/org-context";
 import { wrapUntrustedContent } from "@/lib/ai/wrap-untrusted-content";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { listActiveOrganizationIds } from "./organizaciones-activas";
 import { formatDate } from "@/lib/format";
 import {
   collectIntelligenceData,
@@ -212,19 +213,7 @@ export async function saveIntelligenceSnapshot(
   }
 }
 
-export async function listActiveOrganizationIds(): Promise<string[]> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("organizations")
-    .select("id")
-    .eq("account_type", "founder");
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((row) => String(row.id));
-}
+export { listActiveOrganizationIds };
 
 export async function generateAndSaveIntelligenceSnapshot(
   organizationId: string
