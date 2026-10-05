@@ -57,9 +57,15 @@ export type TeamCompensationRow = {
   estimated_this_month: number;
 };
 
+/**
+ * `totals` es obligatorio: sin transacciones, quien llama pasa
+ * `lastTransactionAt` con el "hoy" de la organización. El default de antes era
+ * el "hoy" de UTC del servidor, un día adelantado de noche en Argentina
+ * (SCRUM-493).
+ */
 export function rowToPaymentPlatform(
   row: PaymentPlatformRow,
-  totals?: { totalReceived: number; lastTransactionAt: string }
+  totals: { totalReceived: number; lastTransactionAt: string }
 ): PaymentPlatformConfig & { slug?: string } {
   return {
     id: row.id,
@@ -67,8 +73,8 @@ export function rowToPaymentPlatform(
     slug: row.slug ?? undefined,
     currency: row.currency,
     accountLabel: row.account_label ?? undefined,
-    totalReceived: totals?.totalReceived ?? 0,
-    lastTransactionAt: totals?.lastTransactionAt ?? new Date().toISOString().slice(0, 10),
+    totalReceived: totals.totalReceived,
+    lastTransactionAt: totals.lastTransactionAt,
   };
 }
 

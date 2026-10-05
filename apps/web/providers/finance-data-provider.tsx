@@ -25,6 +25,7 @@ import {
   updateTeamCompensationAction,
 } from "@/app/finance/actions";
 import { listOrganizationPaymentsAction } from "@/app/sales/payment-actions";
+import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 import { getSalesMetricsSnapshotsAction } from "@/app/sales/metrics-actions";
 import {
   mockFinanceSummary,
@@ -197,7 +198,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           ...platform,
           id: `pp-${Date.now()}`,
           totalReceived: 0,
-          lastTransactionAt: new Date().toISOString().slice(0, 10),
+          lastTransactionAt: fechaDeHoyLocal(),
         },
       ]);
       return undefined;

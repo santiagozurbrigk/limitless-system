@@ -2,6 +2,8 @@
 
 import { Button, GlassPanel, Input, cn } from "@ai-coo/ui";
 import type { RevenueDateRange, RevenuePeriodPreset } from "@/lib/metrics/revenue-period";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { useFechaDeHoyLocal } from "@/lib/hooks/use-fecha-de-hoy-local";
 
 const PRESETS: { id: RevenuePeriodPreset; label: string }[] = [
   { id: "day", label: "Hoy" },
@@ -27,6 +29,10 @@ export function FacturacionPeriodFilter({
   formatMoney,
   eventCount,
 }: Props) {
+  // Sin referencia elegida, el campo muestra el día de hoy del navegador (en el
+  // render del servidor todavía no se sabe cuál es: queda vacío un instante).
+  const hoy = useFechaDeHoyLocal();
+
   const setPreset = (preset: RevenuePeriodPreset) => {
     onChange({
       preset,
@@ -78,13 +84,10 @@ export function FacturacionPeriodFilter({
           <label className="text-xs text-muted-foreground shrink-0">
             Referencia
           </label>
-          <Input
-            type="date"
+          <CampoFecha
             className="h-9 flex-1 min-w-[140px]"
-            value={value.anchor ?? new Date().toISOString().slice(0, 10)}
-            onChange={(e) =>
-              onChange({ ...value, anchor: e.target.value || undefined })
-            }
+            value={value.anchor ?? hoy}
+            onChange={(fecha) => onChange({ ...value, anchor: fecha ?? undefined })}
           />
         </div>
       )}

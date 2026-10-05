@@ -1,7 +1,14 @@
 "use client";
 
-import { CalendarDays, ChevronDown } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { cn } from "@ai-coo/ui";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaLocal } from "@/lib/fechas/calendario";
+import { useFechaDeHoyLocal } from "@/lib/hooks/use-fecha-de-hoy-local";
+
+/** Las clases para que `CampoFecha` quede sin caja propia dentro del recuadro del rango. */
+const CLASE_CAMPO =
+  "h-auto w-auto rounded-none border-0 bg-transparent p-0 text-sm tabular-nums shadow-none outline-none focus-visible:ring-0 dark:bg-transparent";
 
 export interface DateRange {
   from: Date;
@@ -28,42 +35,44 @@ interface DateRangePickerProps {
  * Usa inputs nativos del browser — sin dependencias externas.
  */
 export function DateRangePicker({ value, onChange, className }: DateRangePickerProps) {
-  const toInputValue = (d: Date) => d.toISOString().split("T")[0];
-
-  const handleFrom = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const from = new Date(e.target.value + "T00:00:00");
+  // El rango son instantes locales (el "hasta" es a las 23:59:59): se muestran
+  // con su fecha local. Con `toISOString` el "hasta" salía corrido al día
+  // siguiente en Argentina (SCRUM-493).
+  const handleFrom = (fecha: string | null) => {
+    if (!fecha) return;
+    const from = new Date(fecha + "T00:00:00");
     if (!Number.isNaN(from.getTime()) && from <= value.to) {
       onChange({ ...value, from });
     }
   };
 
-  const handleTo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const to = new Date(e.target.value + "T23:59:59");
+  const handleTo = (fecha: string | null) => {
+    if (!fecha) return;
+    const to = new Date(fecha + "T23:59:59");
     if (!Number.isNaN(to.getTime()) && to >= value.from) {
       onChange({ ...value, to });
     }
   };
 
-  const today = toInputValue(new Date());
+  // `null` en el render del servidor (UTC): el tope se pone con el día local.
+  const today = useFechaDeHoyLocal() ?? undefined;
 
   return (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
       <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 shadow-sm">
         <CalendarDays size={13} className="shrink-0 text-muted-foreground" />
-        <input
-          type="date"
-          value={toInputValue(value.from)}
+        <CampoFecha
+          value={fechaLocal(value.from)}
           max={today}
           onChange={handleFrom}
-          className="bg-transparent text-sm tabular-nums outline-none"
+          className={CLASE_CAMPO}
         />
         <span className="text-muted-foreground">—</span>
-        <input
-          type="date"
-          value={toInputValue(value.to)}
+        <CampoFecha
+          value={fechaLocal(value.to)}
           max={today}
           onChange={handleTo}
-          className="bg-transparent text-sm tabular-nums outline-none"
+          className={CLASE_CAMPO}
         />
       </div>
 

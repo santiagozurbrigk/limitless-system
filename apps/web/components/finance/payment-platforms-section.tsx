@@ -18,6 +18,16 @@ import { PLATFORM_SUGGESTIONS } from "@/mocks/finance";
 import { useFinanceData } from "@/providers";
 import { useToast } from "@/providers/toast-provider";
 import { formatMoney } from "@/lib/finance/format";
+import { aFechaDeInput, diaLocal } from "@/lib/fechas/calendario";
+
+/**
+ * La fecha de la última transacción, con su día. `new Date("2026-10-04")` es
+ * medianoche de UTC y en Argentina se mostraba como el día anterior.
+ */
+function formatearUltimaTransaccion(valor: string): string {
+  const fecha = aFechaDeInput(valor);
+  return fecha ? diaLocal(fecha).toLocaleDateString("es-ES") : valor;
+}
 import type { PaymentPlatformConfig } from "@/types/finance";
 
 const selectClass =
@@ -81,7 +91,7 @@ export function PaymentPlatformsSection() {
             </div>
             <p className="text-xs text-muted-foreground">
               Última transacción:{" "}
-              {new Date(platform.lastTransactionAt).toLocaleDateString("es-ES")}
+              {formatearUltimaTransaccion(platform.lastTransactionAt)}
             </p>
             <div className="flex gap-2 pt-1">
               <Button

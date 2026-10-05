@@ -1,3 +1,4 @@
+import { fechaLocal } from "@/lib/fechas/calendario";
 import { formatMoney } from "@/lib/finance/format";
 import { deriveFinanceSummary } from "@/lib/metrics/derive-finance-summary";
 import { collectRevenueEvents } from "@/lib/metrics/revenue-events";
@@ -25,18 +26,24 @@ function formatMinutes(min: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-/** Ingresos cobrados por día (últimos 7 días) para el gráfico del panel. */
+/**
+ * Ingresos cobrados por día (últimos 7 días) para el gráfico del panel.
+ *
+ * Los días son fechas locales, igual que las fechas de cobro: con la de UTC,
+ * de noche en Argentina el último punto ya era mañana y lo cobrado hoy no
+ * aparecía (SCRUM-493).
+ */
 export function deriveDashboardRevenueTrend(
-  clients: Client[]
+  clients: Client[],
+  now: Date = new Date()
 ): { label: string; value: number }[] {
   const events = collectRevenueEvents(clients);
-  const now = new Date();
   const points: { label: string; value: number }[] = [];
 
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
+    const key = fechaLocal(d);
     const label = d.toLocaleDateString("es", { weekday: "short" });
     const total = events
       .filter((e) => e.date === key)
