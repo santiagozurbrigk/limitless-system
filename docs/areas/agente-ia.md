@@ -26,7 +26,7 @@ Uso real en producción (filas al 2026-09-23): `agent_messages` 12, `agent_conve
 | `/business-context/[id]` | `app/(platform)/business-context/[id]/page.tsx` | Visor de un documento |
 | `/intelligence` | `app/(platform)/intelligence/page.tsx` → `components/intelligence/intelligence-page-content.tsx` | Último `intelligence_snapshots` de la org |
 | `/intelligence/{insights,recommendations,bottlenecks,opportunities,ai-memory}` | `app/(platform)/intelligence/*/page.tsx` | Redirects a anchors de `/intelligence` |
-| `/founder` | `app/(founder)/founder/page.tsx` | Mismo snapshot, vista "área del fundador" |
+| `/founder` | `app/(platform)/founder/page.tsx` | Mismo snapshot, vista "área del fundador" |
 | `/executive-reports/history` | `app/(platform)/executive-reports/history/page.tsx` | Grilla de reportes + las tres cadencias. Sin entrada en la nav: se llega desde el panel de la notch nav (`components/executive-reports/reports-panel.tsx`) |
 | `/executive-reports/[id]` | `app/(platform)/executive-reports/[id]/page.tsx` | Detalle de un reporte |
 

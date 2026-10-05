@@ -63,7 +63,7 @@ de clientes por link, `/prueba`), Server Actions (cada export de un `"use server
 | I | Clickjacking | — | `[SEG-HEADERS]` (sin `frame-ancestors`) |
 | I | Errores internos al cliente | La mayoría de las actions devuelven mensajes propios | `[AUD-SEG-8]` |
 | D | Abuso de formularios públicos y de IA | Rate limit por IP en `/api/waitlist`, `/api/utm/*`, onboarding; `aiRateLimit` por usuario (`lib/rate-limit.ts`) | Rate limit fail-open si la base cae (a propósito); signup sin límite por IP (`[SIGNUP-PUBLICO]`) |
-| E | Member que opera fuera de su rol | Bloqueo del **render** por módulo en `app/(platform)/layout.tsx` | `[PERMISOS-SERVER-ACTIONS]` (P0), `[PERMISOS-LAYOUT-NAV-SUAVE]`, `[PERMISOS-FOUNDER-AREA]`, `[NAV-PALETA-PERMISOS]` |
+| E | Member que opera fuera de su rol | Bloqueo del **render** por módulo en `app/(platform)/layout.tsx` | `[PERMISOS-SERVER-ACTIONS]` (P0), `[PERMISOS-LAYOUT-NAV-SUAVE]`, `[NAV-PALETA-PERMISOS]` |
 | E | Miembro desactivado que sigue entrando | — | `[EQUIPO-DESACTIVAR-NO-BLOQUEA]` (P0) |
 | E | Miembro del holding que elige un negocio por cookie o header | `resolveEffectiveOrganizationId` re-verifica contra `holding_businesses` | `[HOLDING-PORTFOLIO-ROL]` (también se puede mandar el header `x-active-org-id` directo) |
 

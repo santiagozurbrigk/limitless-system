@@ -1021,14 +1021,13 @@ Funcionalidad: F-PLA-03 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 *Tareas técnicas (PENDIENTES.md):*
 * [PERMISOS-LAYOUT-NAV-SUAVE] El bloqueo por módulo vive en un layout que no se re-renderiza al navegar (nuevo) (P1)
 * [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo) (P2)
-* [PERMISOS-FOUNDER-AREA] /founder no pasa por el bloqueo de permisos (nuevo) (P1)
 * [PERMISOS-SIN-ROL-NAV] Un member sin rol pasa el gate pero no ve ningún ítem (nuevo) (P2)
 * [PERMISOS-VERIFICAR-SESION] Probar el bloqueo con un rol limitado (ex bloque de PLAN_VERIFICACION) (P1)
 
 *Para confirmar:*
 * Agustín: un miembro sin rol asignado, ¿ve todo en modo lectura o se obliga a elegir un rol al sumarlo?
 
-Funcionalidad: F-PLA-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-07]",H-PLA-07,Plataforma,P1,Alta,PERMISOS-LAYOUT-NAV-SUAVE NAV-PALETA-PERMISOS PERMISOS-FOUNDER-AREA PERMISOS-SIN-ROL-NAV PERMISOS-VERIFICAR-SESION,
+Funcionalidad: F-PLA-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-07]",H-PLA-07,Plataforma,P1,Alta,PERMISOS-LAYOUT-NAV-SUAVE NAV-PALETA-PERMISOS PERMISOS-SIN-ROL-NAV PERMISOS-VERIFICAR-SESION,
 [H-PLA-09] Ver el portfolio del holding sólo si lo administro,Story,High,historia,plataforma,p1,sev-critica,,,"*Historia:* Como admin del holding, quiero ver el portfolio de mis negocios con sus números y que las personas del holding que no lo administran no puedan verlo, para proteger los datos de clientes de cada negocio.
 
 *Criterios de aceptación:*
@@ -1067,20 +1066,6 @@ Funcionalidad: F-PLA-10 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * [CLICKUP-MONTOS] El import de ClickUp lee mal los montos [Clientes / Integraciones] (P1)
 
 Funcionalidad: F-PLA-22 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-22]",H-PLA-22,Plataforma,P1,Alta,CLIENTES-IMPORT-EXCEL-MONTOS CLICKUP-MONTOS,
-[H-PLA-23] Tener un Área del fundador que sea sólo mía,Story,High,historia,plataforma,p1,sev-media,para-confirmar,,"*Historia:* Como founder, quiero un Área del fundador con el resumen de Inteligencia de mi negocio que mi equipo sin permiso no pueda abrir, para revisar la foto general del negocio en privado.
-
-*Criterios de aceptación:*
-* Dado un miembro sin acceso a Operaciones, cuando abre el Área del fundador, entonces ve ""No tenés acceso""; el founder la sigue viendo.
-* El Área muestra lo que se decida que tiene que mostrar (hoy es el mismo resumen de Inteligencia con otra presentación).
-
-*Tareas técnicas (PENDIENTES.md):*
-* [PERMISOS-FOUNDER-AREA] /founder no pasa por el bloqueo de permisos (nuevo) (P1)
-* [FOUNDER-AREA] El Área del fundador es sólo el snapshot de Inteligencia (P3)
-
-*Para confirmar:*
-* Agustín: ¿qué debería tener el Área del fundador además del resumen de Inteligencia, o se une con Inteligencia? (la tarea técnica no tiene descripción).
-
-Funcionalidad: F-PLA-23 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-23]",H-PLA-23,Plataforma,P1,Media,PERMISOS-FOUNDER-AREA FOUNDER-AREA,
 [H-PLA-26] Dar de baja a un cliente de Limitless sin dejar restos,Story,High,historia,plataforma,p1,sev-media,,,"*Historia:* Como super admin de Limitless, quiero dar de baja una organización o una persona viendo antes qué se borra, para que un ex cliente no conserve accesos ni archivos en la plataforma.
 
 *Criterios de aceptación:*

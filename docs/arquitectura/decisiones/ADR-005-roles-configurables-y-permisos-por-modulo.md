@@ -59,7 +59,7 @@ editores), y un rol fijo no deja decir "ve Ventas pero no Finanzas".
   módulos: `[PERMISOS-SERVER-ACTIONS]` (P0) y sus partes por área (`/clientes`, `/ventas`, `/marketing`,
   `/agente-ia`, `/ops-fin-prod`, `/infra`), `[EMBUDOS-PERMISOS-ACCIONES]`, `[DISCORD-PERMISOS]`.
 - El bloqueo vive en un layout que no se re-renderiza en navegaciones del cliente (`[PERMISOS-LAYOUT-NAV-SUAVE]`);
-  `/founder` queda fuera del layout (`[PERMISOS-FOUNDER-AREA]`); la paleta ⌘K no filtra (`[NAV-PALETA-PERMISOS]`);
+  `/founder` quedaba fuera del layout (`[PERMISOS-FOUNDER-AREA]`, resuelto el 2026-10-05 en SCRUM-18); la paleta ⌘K no filtra (`[NAV-PALETA-PERMISOS]`);
   un member sin rol pasa el gate pero no ve ningún ítem (`[PERMISOS-SIN-ROL-NAV]`).
 - `view` vs `full` no tiene enforcement central: cada pantalla lo consulta (o no) con `useModuleAccess()`.
 - Las tools de lectura del agente leen todos los módulos sin mirar permisos (`[PERMISOS-SERVER-ACTIONS/agente-ia]`).

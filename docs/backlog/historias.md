@@ -99,7 +99,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un miembro sin acceso a Operaciones, cuando abre el Área del fundador, entonces ve "No tenés acceso"; el founder la sigue viendo.
   - Dado un miembro invitado sin rol asignado, cuando entra, entonces el menú y el bloqueo de pantallas se comportan con una misma regla (no puede abrir por dirección lo que el menú no le muestra, ni al revés).
   - Se probó con una segunda cuenta con rol limitado y el resultado de cada paso quedó anotado.
-- **Tareas técnicas:** `[PERMISOS-LAYOUT-NAV-SUAVE]`, `[NAV-PALETA-PERMISOS]`, `[PERMISOS-FOUNDER-AREA]`, `[PERMISOS-SIN-ROL-NAV]`, `[PERMISOS-VERIFICAR-SESION]`
+- **Tareas técnicas:** `[PERMISOS-LAYOUT-NAV-SUAVE]`, `[NAV-PALETA-PERMISOS]`, PERMISOS-FOUNDER-AREA (resuelta en SCRUM-18), `[PERMISOS-SIN-ROL-NAV]`, `[PERMISOS-VERIFICAR-SESION]`
 - **Para confirmar:** Agustín: un miembro sin rol asignado, ¿ve todo en modo lectura o se obliga a elegir un rol al sumarlo?
 
 ### [H-PLA-08] Navegar con un menú que muestre sólo lo que tengo
@@ -199,15 +199,6 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un import desde ClickUp con montos "1.500" y "$2,500.00", entonces quedan en 1500 y 2500; un monto ambiguo no se importa y aparece informado en el resultado.
 - **Tareas técnicas:** `[CLIENTES-IMPORT-EXCEL-MONTOS]`, `[CLICKUP-MONTOS]`
 - **Para confirmar:** —
-
-### [H-PLA-23] Tener un Área del fundador que sea sólo mía
-- **Funcionalidad:** F-PLA-23 · Con fallas
-- **Historia:** Como founder, quiero un Área del fundador con el resumen de Inteligencia de mi negocio que mi equipo sin permiso no pueda abrir, para revisar la foto general del negocio en privado.
-- **Criterios de aceptación:**
-  - Dado un miembro sin acceso a Operaciones, cuando abre el Área del fundador, entonces ve "No tenés acceso"; el founder la sigue viendo.
-  - El Área muestra lo que se decida que tiene que mostrar (hoy es el mismo resumen de Inteligencia con otra presentación).
-- **Tareas técnicas:** `[PERMISOS-FOUNDER-AREA]`, `[FOUNDER-AREA]`
-- **Para confirmar:** Agustín: ¿qué debería tener el Área del fundador además del resumen de Inteligencia, o se une con Inteligencia? (la tarea técnica no tiene descripción).
 
 ### [H-PLA-26] Dar de baja a un cliente de Limitless sin dejar restos
 - **Funcionalidad:** F-PLA-26 · Sin verificar

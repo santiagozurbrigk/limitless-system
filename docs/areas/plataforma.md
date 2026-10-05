@@ -28,6 +28,7 @@ de negocio (clientes, ventas, marketing, etc.).
 | `/integrations/discord` | `app/(platform)/integrations/discord/page.tsx` | Ver [`discord.md`](./discord.md) |
 | `/team`, `/team/members`, `/team/roles` | `app/(platform)/team/*` | Miembros, invitaciones y roles. `/team/members` y `/team/roles` redirigen a `/team#…` (`lib/navigation/redirects.ts`) |
 | `/redesign-preview` | `app/(platform)/redesign-preview/page.tsx` | Pantalla interna de diseño, sin datos, libre de permisos |
+| `/founder` | `app/(platform)/founder/page.tsx` → `components/founder/founder-overview.tsx` | Área del fundador: el último `intelligence_snapshots`. Módulo Operaciones, como `/intelligence`; con el marco de la plataforma desde SCRUM-18 |
 
 ### Fuera de plataforma
 
@@ -36,7 +37,6 @@ de negocio (clientes, ventas, marketing, etc.).
 | `/` | redirect en `next.config.ts` | Temporal (307) a `/login`. La landing pública se borró el 2026-09-23 |
 | `/login`, `/auth/*` | `app/login`, `app/auth/*` | Login + signup, recuperar, actualizar y forzar cambio de contraseña. Sin Supabase: `MockLoginPage` |
 | `/invite` | `app/invite/page.tsx` | Aceptar invitación de equipo por token (legado: invitar hoy crea la cuenta con contraseña temporal y no genera filas en `team_invitations`) |
-| `/founder` | `app/(founder)/founder/page.tsx` | Área del fundador: el último `intelligence_snapshots` con layout propio (`layouts/founder-layout.tsx`) |
 | `/prueba` | `app/(landing)/prueba/page.tsx` | Confirmación de prueba gratis → `POST /api/trial-confirm` → `waitlist_leads` (`source = 'trial'`) |
 | `/privacidad` | `app/(landing)/privacidad/page.tsx` | Política de privacidad, pública (la piden las apps OAuth) |
 | `/demo` | `app/demo/page.tsx` | Tour estático (`components/demo`, `lib/demo/tour-steps.ts`), público |
@@ -174,6 +174,10 @@ configuración (`[DEMO-LAYOUT-500]`). `/demo` y `/design-system` sí funcionan.
 - **Derivar, no guardar.** Si una org borra su oferta principal después del gate, el ítem se reabre en el
   checklist pero **no la expulsa** (el gate sólo mira `gate_completed_at`).
 - **Toda ruta nueva de `(platform)` tiene que decidir su módulo** en `module-for-path.ts`, o falla el test.
+- **Toda ruta con módulo tiene que colgar de `app/(platform)`** (o de otro layout que llame
+  `moduloBloqueadoParaRuta`). El test de `module-for-path` recorre `app/` entero y falla si una queda afuera:
+  es lo que le pasaba a `/founder` en su propio grupo `(founder)` hasta SCRUM-18. Super admin no tiene
+  módulo: lo cuida su propio guard (`app/(super-admin)/super-admin/layout.tsx`).
 - **Super admin no tiene organización.** Todo lo que haga contra una org lo hace con service role.
 - **Integraciones: para agregar un proveedor** se tocan cuatro lugares y nada más (id, registro, color,
   health). La UI se arma sola.
@@ -193,8 +197,8 @@ configuración (`[DEMO-LAYOUT-500]`). `/demo` y `/design-system` sí funcionan.
 - `[BAJAS-SIN-PROBAR]` La baja nunca se ejecutó entera en producción.
 - `[CLIENT-HEALTH-LEGACY]` (nuevo) El score de `/super-admin/client-health` da 25 pts por `conversations`,
   la tabla del inbox viejo que quedó vacía con Zernio: nadie los suma.
-- `[FOUNDER-AREA]` `/founder` es el mismo snapshot de Inteligencia con otro layout, y no pasa por el
-  bloqueo de permisos (está fuera de `(platform)`).
+- `[FOUNDER-AREA]` `/founder` es el mismo snapshot de Inteligencia que `/intelligence`, con otra
+  presentación.
 - `[WAITLIST-HUERFANO]` (nuevo) `/api/waitlist` sigue público y sin llamador desde que se borró la landing.
 - `[SETTINGS-CLOSER-POR-NOMBRE]` (nuevo) La pestaña "Mi Calendly" aparece si el nombre del rol custom
   contiene "closer" (`includes`, sin distinguir mayúsculas): renombrar el rol la esconde.
@@ -212,6 +216,9 @@ configuración (`[DEMO-LAYOUT-500]`). `/demo` y `/design-system` sí funcionan.
 | `apps/web/lib/super-admin/__tests__/onboarding-progress.test.ts` | Orden y mapeo del panel de onboarding |
 | `apps/web/lib/integrations/__tests__/health.test.ts` | Contrato de estado de integraciones |
 | `apps/web/lib/navigation/__tests__/page-meta.test.ts` | Título y "volver" de cada pantalla |
+| `apps/web/lib/navigation/__tests__/module-for-path.test.ts` | Recorre `app/`: toda ruta con módulo pasa por un layout con chequeo, y toda ruta de `(platform)` tiene módulo o es libre |
+| `apps/web/app/__tests__/layout-plataforma-permisos.test.ts`, `apps/web/lib/auth/__tests__/acceso-a-modulo.test.ts` | `/founder` y el resto: member sin el módulo ve «No tenés acceso»; con el módulo, founder y sin rol, ve la pantalla |
+| `apps/web/app/__tests__/paginas-de-inteligencia-permisos.test.ts`, `apps/web/app/intelligence/__tests__/actions.test.ts` | `/founder` e `/intelligence` dibujan «No tenés acceso» cuando la lectura vuelve rechazada (navegación del cliente); la action rechaza como valor, sin lanzar ni consultar la base |
 
 Sin tests: `lib/onboarding/resolve.ts` (IO), `execute-deletion.ts`, las queries de super admin, las
 acciones de Ajustes, `derive-dashboard-data.ts` (`[T-13]`). Sin e2e de onboarding ni de super admin.

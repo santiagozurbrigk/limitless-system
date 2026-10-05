@@ -13,9 +13,11 @@ import type { PermissionModuleId } from "@/constants/permission-modules";
  *
  * Se eligió una tabla explícita y no derivarla del sidebar porque hay pantallas
  * que no están en el menú (`/sops/[id]`, `/comentarios`, los detalles de
- * cliente) y son justamente las que se olvidan. El test recorre `app/(platform)`
+ * cliente) y son justamente las que se olvidan. El test recorre `app/` entero
  * en disco y falla si aparece una ruta nueva que no está acá ni en la lista de
- * libres: agregar una pantalla obliga a decidir quién la ve.
+ * libres, o si una ruta de esta tabla vive fuera de un layout que haga el
+ * chequeo (como pasaba con `/founder` en su propio grupo, SCRUM-18): agregar
+ * una pantalla obliga a decidir quién la ve.
  */
 const MODULE_BY_PREFIX: { prefix: string; moduleId: PermissionModuleId }[] = [
   { prefix: "/dashboard", moduleId: "dashboard" },

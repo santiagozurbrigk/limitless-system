@@ -34,6 +34,63 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · `/founder` pasa por el bloqueo de permisos de la plataforma (SCRUM-18)
+
+**Rama:** `fix/SCRUM-18-founder-permisos`
+**Commit(s):** `84398b16` (código y tests), `1f18449e` (docs), `f9c6dc1c` (fix-pack de la revisión: rechazo como valor) y este (docs del fix-pack)
+**Módulo(s) afectado(s):** Plataforma y permisos (`app/(platform)/founder/page.tsx`, antes en `app/(founder)/`;
+`app/(platform)/intelligence/page.tsx`; `app/(platform)/layout.tsx`; nuevo `lib/auth/acceso-a-modulo.ts`;
+`app/intelligence/actions.ts`; `lib/navigation/__tests__/module-for-path.test.ts` y `pantallas-de-app.ts`). Se borran `app/(founder)/layout.tsx` y `layouts/founder-layout.tsx`.
+
+**Qué se hizo:**
+- Cierra `[PERMISOS-FOUNDER-AREA]`. `/founder` se movió de su propio grupo `app/(founder)` a `app/(platform)/founder`.
+  Ahora pasa por el mismo chequeo que el resto de la plataforma: un member sin Operaciones ve «No tenés acceso a
+  Operaciones», el founder y un member con Operaciones ven la pantalla, y sin rol configurado no se bloquea (igual
+  que en el resto). Un holding operando un negocio sigue la misma regla.
+- La regla de acceso salió del layout a `lib/auth/acceso-a-modulo.ts`: `moduloBloqueadoParaRuta` (la usa el layout)
+  y `rechazoPorModulo` (para Server Actions). El layout ya no tiene su propia copia.
+- `getIntelligenceSnapshotAction`, la lectura que usan `/founder` y `/intelligence`, exige Operaciones: era una
+  Server Action exportada y se podía invocar a mano sin abrir ninguna pantalla. El rechazo vuelve como valor
+  (`ResultadoSnapshotDeInteligencia`: `{ success: true, data }` o un `RechazoPorModulo` con la forma del error de
+  `MutationResult` más `motivo: "sin-acceso"` y `moduleId`) y las dos páginas dibujan `SinAcceso` con el texto de
+  siempre. Así, en una navegación del cliente (donde el layout no se vuelve a ejecutar y la página sí) el member ve
+  «No tenés acceso» y no la pantalla de error de Next, y una visita bloqueada no queda como error en Sentry. `/founder` no lee nada con
+  privilegios de founder (usa el cliente con la sesión del usuario y RLS por organización).
+- El test de `module-for-path` recorre `app/` entero (grupos, slots, rutas interceptadas, carpetas privadas y
+  páginas `.tsx`, `.ts`, `.jsx` o `.js`, según las reglas del App Router; el recorrido se prueba contra un árbol
+  armado a mano) y falla si una ruta con módulo cuelga de un layout que no llama `moduloBloqueadoParaRuta`, o si una ruta de
+  un layout con chequeo no tiene módulo ni es libre.
+- Tests nuevos: `app/__tests__/layout-plataforma-permisos.test.ts` (renderiza el layout real en `/founder` con los
+  cuatro casos y el de holding), `app/__tests__/paginas-de-inteligencia-permisos.test.ts` (las dos páginas con la
+  lectura rechazada), `lib/auth/__tests__/acceso-a-modulo.test.ts` y `app/intelligence/__tests__/actions.test.ts`
+  (rechazo como valor, sin lanzar ni consultar la base). Control negativo en la carpeta de evidencia de SCRUM-18:
+  sin el chequeo del layout fallan 4 tests; con `/founder` de vuelta en un grupo sin chequeo, 2; sin el chequeo en
+  la action, 1; con el helper lanzando, 2; con las páginas ignorando el rechazo, 2; con el recorrido viejo, 4.
+- Rutas revisadas fuera de `(platform)`: `(super-admin)` (sin módulo; tiene su propio guard en
+  `app/(super-admin)/super-admin/layout.tsx`, sin cambios), `(landing)` (`/prueba`, `/privacidad`, públicas),
+  `app/superadmin/*`, `app/login`, `app/auth/*`, `app/invite`, `app/onboarding-cliente/[token]`, `app/demo` y
+  `app/design-system`. Ninguna está en `module-for-path` ni muestra datos de una org con la sesión de un member.
+
+**Por qué / finalidad:** un member sin acceso a Operaciones que tipeaba `/founder` veía el resumen de Inteligencia
+del negocio. Además, en su grupo propio `/founder` no tenía los providers de la plataforma: con el resumen todavía
+vacío, el botón del estado vacío pedía `ToastProvider` y la pantalla daba error para todos, también para el founder.
+
+**Decisiones de diseño relevantes:** se eligió mover la ruta y no replicar el chequeo en `app/(founder)/layout.tsx`.
+El marco propio (`FounderLayout`: título, subtítulo y "Volver a la plataforma") ya lo cubre la plataforma: el título y
+el subtítulo de `/founder` están en `page-meta.ts`, el breadcrumb y la sección activa de la notch nav ya contemplaban
+`/founder`, y la pantalla dependía de providers que sólo monta `(platform)` (toasts, zona de la org, holding). Con
+el chequeo en dos layouts habría que haber copiado también los providers. El costo es visual: `/founder` se ve con
+el marco de la plataforma en lugar de la barra propia.
+
+**Riesgos / deuda técnica pendiente:** en `/founder` e `/intelligence` el chequeo de la lectura cubre la
+navegación del cliente; el resto de las pantallas de la plataforma sigue con `[PERMISOS-LAYOUT-NAV-SUAVE]`. Se
+corrigió el comentario de `app/(platform)/layout.tsx`, que decía que la pantalla bloqueada "no llega a
+renderizarse": el layout decide qué se dibuja, pero Next ejecuta la página igual. En modo demo (sin Supabase)
+`/founder` da el mismo 500 que el resto de la plataforma (`[DEMO-LAYOUT-500]`); antes también fallaba, por el
+`ToastProvider`. Falta confirmarlo con cuentas reales: paso 6 del bloque 1 de `docs/operacion/verificacion-manual.md`.
+
+---
+
 ### 2026-10-05 · Cuarto fix-pack de SCRUM-493: el rango de métricas de ventas en días de la organización
 
 **Rama:** `fix/SCRUM-493-fechas-utc`

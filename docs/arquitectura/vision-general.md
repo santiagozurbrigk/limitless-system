@@ -80,7 +80,7 @@ limitless-system/
 | `lib/` | Lógica de negocio y clientes de proveedores, ~70 carpetas por dominio | acá van los tests (`__tests__`) |
 | `components/` | UI por dominio (~40 carpetas) | client components sólo si hay estado/efectos |
 | `providers/` | Contextos React (datos de plataforma, permisos, toasts, tema, workboard…) | |
-| `layouts/` | `PlatformLayout`, `SuperAdminLayout`, `FounderLayout`, `ThreeColumnLayout` | los usan los `layout.tsx` de los route groups |
+| `layouts/` | `PlatformLayout`, `SuperAdminLayout`, `ThreeColumnLayout` | los usan los `layout.tsx` de los route groups |
 | `routes/` | `paths.ts` (fuente única de paths), `navigation.ts` | |
 | `constants/` | ids de integraciones, roles, módulos de permisos | |
 | `types/` | tipos por dominio | |
@@ -99,9 +99,8 @@ Route groups (no aparecen en la URL):
 
 | Grupo | Contenido |
 |---|---|
-| `app/(platform)/` | Toda la UI autenticada del negocio: `dashboard`, `workboard`, `agent`, `clients`, `marketing`, `sales`, `funnels`, `product`, `operations`, `finance`, `business-context`, `integrations`, `team`, `settings`, `holding`, `onboarding`, `lanzamientos`, `intelligence`, `executive-reports`, `sops`, `comentarios`, `redesign-preview`. El `layout.tsx` aplica el bloqueo por módulo. |
+| `app/(platform)/` | Toda la UI autenticada del negocio: `dashboard`, `workboard`, `agent`, `clients`, `marketing`, `sales`, `funnels`, `product`, `operations`, `finance`, `business-context`, `integrations`, `team`, `settings`, `holding`, `onboarding`, `lanzamientos`, `intelligence`, `executive-reports`, `sops`, `comentarios`, `founder`, `redesign-preview`. El `layout.tsx` aplica el bloqueo por módulo; toda ruta con módulo tiene que vivir acá (lo controla el test de `module-for-path`). |
 | `app/(super-admin)/super-admin/` | Panel del staff de Limitless (orgs, costos, waitlist, holding, trials, ai-brain, client-health, infrastructure, onboarding, users). |
-| `app/(founder)/founder/` | Una página. |
 | `app/(landing)/` | Sólo `/prueba` (confirmación de prueba gratis) y `/privacidad`. **La landing de `/` se borró**: `/` redirige a `/login` desde `next.config.ts`. |
 
 Fuera de los grupos hay dos tipos de carpeta en `app/`:

@@ -135,10 +135,22 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
   el nivel **más alto** (`LEGACY_PERMISSION_MODULES`, `highestPermissionLevel`).
 - `hasRoleConfigured = false` (member sin rol o rol vacío) → **el layout no bloquea nada**. Decisión: sin
   rol, "sin acceso a todo" dejaría la cuenta inutilizable.
+- La regla (founder pasa siempre, sin rol no se bloquea, con rol entra si el módulo no está en `none`) vive
+  en `lib/auth/acceso-a-modulo.ts`: `moduloBloqueadoParaRuta` la usa el layout de `(platform)` y
+  `rechazoPorModulo` la aplica en una Server Action (hoy, `getIntelligenceSnapshotAction`, que exige
+  `operations` desde SCRUM-18). El rechazo vuelve como valor (`RechazoPorModulo`: la forma del error de
+  `MutationResult` más `motivo: "sin-acceso"` y `moduleId`), no como excepción: así `/founder` e
+  `/intelligence` dibujan `SinAcceso` también cuando se llega con una navegación del cliente, donde el layout
+  no se vuelve a ejecutar y la página sí.
+- El layout decide qué se dibuja, no qué se ejecuta: Next ejecuta la página del segmento aunque el layout
+  muestre `SinAcceso`. Por eso una lectura que no tiene que llegarle a alguien sin el módulo chequea el permiso
+  por su cuenta.
 - Mapeo ruta → módulo: tabla explícita `MODULE_BY_PREFIX` en `lib/navigation/module-for-path.ts`, gana el
   prefijo más largo. `/product`, `/sops`, `/intelligence`, `/executive-reports`, `/founder` → `operations`;
   `/lanzamientos` → `funnels`; `/comentarios` → `marketing`. Libres: `/onboarding`, `/holding`,
-  `/redesign-preview`. El test recorre `app/(platform)` en disco y falla si aparece una ruta sin decidir.
+  `/redesign-preview`. El test (`lib/navigation/__tests__/module-for-path.test.ts`) recorre `app/` entero en
+  disco y falla si una ruta de `(platform)` no tiene módulo ni es libre, o si una ruta con módulo cuelga de un
+  layout que no llama `moduloBloqueadoParaRuta` (así quedó afuera `/founder` hasta SCRUM-18).
 - Navegación: `canSeeNavItem()` en `providers/permissions-provider.tsx`. Un item **sin** `permissionId`
   (Producto, Inteligencia, Área del fundador) sólo lo ve el founder.
 - Nivel `view` vs `full`: no hay enforcement central. Algunas pantallas lo consultan con
@@ -154,6 +166,7 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
 | `requireFounder()` | `app/clients/custom-field-actions.ts`, `checkpoint-actions.ts`, `plan-duration-actions.ts` | Configuración de clientes |
 | rol founder (chequeo inline) | `app/clients/signals-actions.ts` | Cambiar el aviso de señales |
 | rol founder | `app/executive-reports/report-generation-actions.ts` | Generar reportes |
+| `rechazoPorModulo(moduleId)` (`lib/auth/acceso-a-modulo.ts`) | `app/intelligence/actions.ts` (`getIntelligenceSnapshotAction`) | Leer el resumen de Inteligencia que muestran `/intelligence` y `/founder`: módulo Operaciones, con la misma regla que el layout. Devuelve el rechazo como valor y las dos páginas dibujan `SinAcceso` |
 | `requireHoldingProfile()` | `app/(platform)/holding/actions.ts` | founder o `is_holding_admin` |
 | `requireAddOn()` | `app/clients/sub-client-actions.ts`, `onboarding-link-actions.ts`, `custom-field-actions.ts`, `revenue-actions.ts`, `signals-actions.ts` | Add-on `growth_partners` |
 | `requireSuperAdmin()` | todo `app/super-admin/*` y `lib/super-admin/queries.ts` | Panel interno |
@@ -195,8 +208,8 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
   layouts no se vuelven a renderizar en navegaciones del lado del cliente entre páginas del mismo grupo:
   un `<Link>` o la paleta de comandos (`routes/navigation.ts`, sin filtro de permisos) llevarían a un módulo
   bloqueado sin pasar por `SinAcceso`. Tipear la URL sí lo bloquea. **Verificar en navegador**.
-- `[PERMISOS-FOUNDER-AREA]` (nuevo) `/founder` está mapeado a `operations` pero vive en `app/(founder)`,
-  fuera del layout de plataforma: el bloqueo no corre ahí. Cualquier miembro ve el snapshot de inteligencia.
+- `[PERMISOS-FOUNDER-AREA]` resuelto el 2026-10-05 (SCRUM-18): `/founder` vive en `app/(platform)/founder` y
+  pasa por el mismo bloqueo que el resto; la action que lee su resumen exige Operaciones.
 - `[PERMISOS-SIN-ROL-NAV]` (nuevo) Un member sin rol pasa el gate de pantallas, pero la notch nav le
   esconde todo (`modules` en `none`): navega sólo por URL.
 - `[HOLDING-PORTFOLIO-ROL]` Cualquier miembro de la org holding lee clientes, llamadas y conversaciones

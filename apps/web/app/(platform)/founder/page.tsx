@@ -1,10 +1,10 @@
-import { getIntelligenceSnapshotAction } from "@/app/intelligence/actions";
-import { IntelligencePageContent } from "@/components/intelligence/intelligence-page-content";
+import { FounderOverview } from "@/components/founder";
 import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getIntelligenceSnapshotAction } from "@/app/intelligence/actions";
 import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import { getPermissionModuleLabel } from "@/constants/permission-modules";
 
-export default async function IntelligencePage() {
+export default async function FounderAreaPage() {
   const [resultado, profile] = await Promise.all([
     getIntelligenceSnapshotAction(),
     getCurrentProfile(),
@@ -17,7 +17,7 @@ export default async function IntelligencePage() {
     );
   }
   return (
-    <IntelligencePageContent
+    <FounderOverview
       snapshot={resultado.data}
       isFounder={profile?.role === "founder"}
     />
