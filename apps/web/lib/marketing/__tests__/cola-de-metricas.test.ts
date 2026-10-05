@@ -3,6 +3,7 @@ import { ZernioHttpError } from "@/lib/zernio/client";
 import {
   armarLote,
   diasDeEspera,
+  esErrorDeAcceso,
   esErrorPermanente,
   historiasACerrarHasta,
   historiasListasHasta,
@@ -72,10 +73,15 @@ describe("armarLote", () => {
 describe("esErrorPermanente", () => {
   const http = (status: number) => new ZernioHttpError(`Zernio getPostAnalytics: HTTP ${status}`, status);
 
-  it("⭐ un 4xx distinto de 408 y 429 es permanente", () => {
-    expect([400, 401, 403, 404, 410, 422].map((s) => esErrorPermanente(http(s)))).toEqual([
-      true, true, true, true, true, true,
-    ]);
+  it("⭐ un 4xx distinto de 401, 403, 408 y 429 es permanente", () => {
+    expect([400, 404, 410, 422].map((s) => esErrorPermanente(http(s)))).toEqual([true, true, true, true]);
+  });
+
+  it("⭐ 401 y 403 no son de la pieza sino de la org", () => {
+    expect([401, 403].map((s) => esErrorPermanente(http(s)))).toEqual([false, false]);
+    expect([401, 403].map((s) => esErrorDeAcceso(http(s)))).toEqual([true, true]);
+    expect([400, 404, 429, 500].map((s) => esErrorDeAcceso(http(s)))).toEqual([false, false, false, false]);
+    expect(esErrorDeAcceso(new Error("Zernio getPostAnalytics: HTTP 401"))).toBe(false);
   });
 
   it("408, 429, 5xx y los errores sin status (red) son pasajeros", () => {

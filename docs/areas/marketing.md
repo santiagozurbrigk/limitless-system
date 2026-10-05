@@ -245,7 +245,9 @@ como JSON.
   - Sin dato, la pieza suma `metrics_intentos_sin_dato` y espera 1, 2, 4, 8 y después 16 días. Con métricas,
     vuelve a 0 y sin espera. Un error permanente de Zernio (4xx distinto de 408 y 429, por ejemplo 404 de un post
     borrado) cuenta como sin dato. Un error pasajero (408, 429, 5xx, red) marca el intento pero no suma espera.
-    El status sale de `ZernioHttpError` (`lib/zernio/client.ts`).
+    El status sale de `ZernioHttpError` (`lib/zernio/client.ts`). Un 401 o 403 es de toda la org (clave
+    revocada o sin plan): el cron pide todo el lote antes de escribir y, si aparece, corta la corrida de la org
+    sin tocar ninguna fila y lo reporta a Sentry.
   - **Una historia se mide una sola vez.** Meta sólo expone historias vigentes (24 h) y Zernio guarda sus
     métricas con el webhook `story_insights` al vencer (`lib/zernio/client.ts`): antes no hay números finales y
     después no cambian. La historia entra a la cola a las 30 h (6 h de margen para el webhook), se pide una vez y,

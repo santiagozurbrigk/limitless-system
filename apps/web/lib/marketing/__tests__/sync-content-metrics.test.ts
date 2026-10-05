@@ -159,6 +159,13 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
+const reportes = vi.hoisted(() => [] as Array<{ error: unknown; contexto: Record<string, unknown> }>);
+vi.mock("@/lib/observability/reportar-falla", () => ({
+  reportarFalla: (error: unknown, contexto: Record<string, unknown>) => {
+    reportes.push({ error, contexto });
+  },
+}));
+
 vi.mock("@/lib/zernio/integration", () => ({
   getZernioIntegrationForOrg: async () => ({ id: "int-1" }),
   getZernioClientForOrganization: async () => ({
@@ -248,6 +255,7 @@ beforeEach(() => {
   estado.cierres = 0;
   estado.analytics = {};
   estado.fallaUpdateDe = null;
+  reportes.length = 0;
   dia = 0;
   vi.useFakeTimers();
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -620,6 +628,35 @@ describe("syncContentMetricsForOrg · cada intento", () => {
     await correrCron(0);
 
     expect(estado.updates[0].cambios).toEqual({ metrics_checked_at: new Date(ahora()).toISOString() });
+  });
+
+  it.each([401, 403])("⭐ un %i de Zernio corta la corrida de la org sin escribir nada y se reporta", async (status) => {
+    estado.piezas = [
+      pieza("a"),
+      medida("b", "2026-09-01T00:00:00.000Z"),
+      historia("lista", 40),
+      historia("para-cerrar", 200),
+    ];
+    estado.analytics = {
+      "ig-a": { likes: 1 },
+      "ig-b": new ZernioHttpError(`Zernio getPostAnalytics: HTTP ${status} — unauthorized`, status),
+      "ig-lista": {},
+    };
+    const antes = JSON.stringify(estado.piezas);
+
+    const r = await correrCron(0);
+
+    expect(r).toEqual({ attempted: 3, updated: 0, failed: 3, sinAcceso: true });
+    // Ninguna fila cambió: ni intentos, ni esperas, ni métricas, ni el cierre de historias.
+    expect(estado.updates).toEqual([]);
+    expect(estado.cierres).toBe(0);
+    expect(JSON.stringify(estado.piezas)).toBe(antes);
+    expect(reportes).toHaveLength(1);
+    expect(reportes[0].contexto).toMatchObject({ organizationId: "org-1", provider: "zernio" });
+    expect(console.error).toHaveBeenCalledWith(
+      "[syncContentMetrics] Zernio rechazó la clave de la org: corrida cortada sin escribir",
+      expect.objectContaining({ organizationId: "org-1" })
+    );
   });
 
   it("si falla el update de una pieza, cuenta como fallo, se loguea y sigue con el resto", async () => {

@@ -91,15 +91,23 @@ export function proximoIntento(
 }
 
 /**
- * Un error de Zernio que no se arregla reintentando (4xx distinto de 408 y 429:
+ * Un error de Zernio que no se arregla reintentando (4xx distinto de 401, 403, 408 y 429:
  * por ejemplo 404 de un post borrado o 400 de un id inválido). Cuenta como "sin
  * dato" y suma espera. 408, 429, 5xx y los errores de red no: son pasajeros.
- * El status sale de `ZernioHttpError` (`lib/zernio/client.ts`).
+ * 401 y 403 tampoco: son de toda la org (ver `esErrorDeAcceso`). El status sale de `ZernioHttpError` (`lib/zernio/client.ts`).
  */
 export function esErrorPermanente(err: unknown): boolean {
   if (!(err instanceof ZernioHttpError)) return false;
   const { status } = err;
-  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+  return status >= 400 && status < 500 && !esErrorDeAcceso(err) && status !== 408 && status !== 429;
+}
+
+/**
+ * 401 o 403 de Zernio: la clave de la org está revocada o sin plan. Es un
+ * problema de toda la org, no de la pieza: la corrida se corta sin escribir.
+ */
+export function esErrorDeAcceso(err: unknown): boolean {
+  return err instanceof ZernioHttpError && (err.status === 401 || err.status === 403);
 }
 
 /**
