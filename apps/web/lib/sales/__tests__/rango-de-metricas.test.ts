@@ -61,13 +61,14 @@ describe("⭐ rango de métricas en la zona de la organización", () => {
   it("el selector muestra los días de la org a un miembro en Madrid", () => {
     conZona("Europe/Madrid");
     const salida = renderToStaticMarkup(
-      createElement(ZonaDeLaOrganizacionProvider, {
-        zona: ARGENTINA,
-        children: createElement(DateRangePicker, {
+      createElement(
+        ZonaDeLaOrganizacionProvider,
+        { zona: ARGENTINA },
+        createElement(DateRangePicker, {
           value: rangoDeDias("2026-10-01", "2026-10-05", ARGENTINA),
           onChange: () => {},
-        }),
-      })
+        })
+      )
     );
     expect(salida).toContain('value="2026-10-01"');
     expect(salida).toContain('value="2026-10-05"');

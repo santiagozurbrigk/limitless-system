@@ -24,7 +24,7 @@ export function ZonaDeLaOrganizacionProvider({
   children,
 }: {
   zona: string | null;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return <ZonaCtx.Provider value={zona}>{children}</ZonaCtx.Provider>;
 }

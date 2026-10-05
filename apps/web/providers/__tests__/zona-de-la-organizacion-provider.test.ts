@@ -36,7 +36,7 @@ describe("⭐ ZonaDeLaOrganizacionProvider", () => {
   it("los componentes leen la zona que pasó el layout; sin provider, ninguna (la de por defecto)", () => {
     expect(
       renderToStaticMarkup(
-        createElement(ZonaDeLaOrganizacionProvider, { zona: ARGENTINA, children: createElement(MostrarZona) })
+        createElement(ZonaDeLaOrganizacionProvider, { zona: ARGENTINA }, createElement(MostrarZona))
       )
     ).toContain(`zona=${ARGENTINA}`);
     expect(renderToStaticMarkup(createElement(MostrarZona))).toContain("zona=ninguna");
@@ -45,10 +45,11 @@ describe("⭐ ZonaDeLaOrganizacionProvider", () => {
   it("un miembro en Madrid a las 22:00 de Argentina ve en CampoFecha el día de la org", () => {
     conZona("Europe/Madrid");
     const salida = renderToStaticMarkup(
-      createElement(ZonaDeLaOrganizacionProvider, {
-        zona: ARGENTINA,
-        children: createElement(CampoFecha, { value: "2026-10-06T01:00:00Z", onChange: () => {} }),
-      })
+      createElement(
+        ZonaDeLaOrganizacionProvider,
+        { zona: ARGENTINA },
+        createElement(CampoFecha, { value: "2026-10-06T01:00:00Z", onChange: () => {} })
+      )
     );
     expect(salida).toContain('value="2026-10-05"');
   });
@@ -56,7 +57,7 @@ describe("⭐ ZonaDeLaOrganizacionProvider", () => {
   it("en el render del servidor el hoy todavía no está (null), para no hidratar otro día", () => {
     expect(
       renderToStaticMarkup(
-        createElement(ZonaDeLaOrganizacionProvider, { zona: ARGENTINA, children: createElement(MostrarHoy) })
+        createElement(ZonaDeLaOrganizacionProvider, { zona: ARGENTINA }, createElement(MostrarHoy))
       )
     ).toContain("hoy=todavía no");
   });
