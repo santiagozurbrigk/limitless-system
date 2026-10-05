@@ -34,6 +34,36 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · Cuarto fix-pack de SCRUM-493: el rango de métricas de ventas en días de la organización
+
+**Rama:** `fix/SCRUM-493-fechas-utc`
+**Commit(s):** `64613368` (rango) y este (docs)
+**Módulo(s) afectado(s):** Ventas (`components/sales/metrics/date-range-picker.tsx`, `components/sales/sales-metrics-redesign.tsx`,
+nuevo `lib/sales/rango-de-metricas.ts`) y `lib/fechas/calendario.ts`.
+
+**Qué se hizo:**
+- **MENOR-G:** el selector de rango de métricas de ventas mezclaba el tope (hoy de la org) con bordes y valor por
+  defecto del navegador. Ahora todo sale de la zona de la org: el valor por defecto ("este mes") y los atajos terminan
+  hoy en la org; "desde" empieza a las 00:00 de la org y "hasta" termina a las 23:59:59.999 de la org; los campos
+  muestran esos días. Los consumidores (`use-sales-metrics.ts` y `getSalesPerformanceMetricsAction`) ya filtraban
+  con instantes y no cambian. Se borró `fechaLocal`, que quedó sin uso.
+- El agrupado por semanas de la misma pantalla (`use-sales-metrics.ts:74,90`) quedó anotado en `[FECHAS-UTC-RESTO]`.
+- Nuevo `[MANYCHAT-CTA-DUPLICADOS]` en `PENDIENTES.md` (Ventas, P2): la búsqueda de "ya se registró este CTA hoy"
+  usa `gte` sin tope y `maybeSingle()`, y con dos o más filas inserta un duplicado. Es previo a esta HU.
+- Test con un miembro en Madrid a las 00:30 del 6-oct y la org en Argentina: el "hasta" por defecto y el tope son el
+  5, se puede elegir el 5 y el rango cubre ese día entero de la org. Control negativo en
+  `control-negativo-fixpack-4.txt`.
+
+**Por qué / finalidad:** era la última incoherencia de zonas dentro de una misma pantalla que encontró la revisión
+adversarial.
+
+**Decisiones de diseño relevantes:** `DateRange` sigue siendo un par de instantes, que es lo que esperan sus
+consumidores; sólo cambia cómo se arman y se muestran.
+
+**Riesgos / deuda técnica pendiente:** `[FECHAS-UTC-RESTO]`, `[CAMPO-FECHA-MIGRAR]` y `[MANYCHAT-CTA-DUPLICADOS]`.
+
+---
+
 ### 2026-10-05 · Tercer fix-pack de SCRUM-493: una sola regla de fechas para toda la app, la zona de la organización
 
 **Rama:** `fix/SCRUM-493-fechas-utc`

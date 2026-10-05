@@ -275,6 +275,9 @@ Orden sugerido: (1) sacar `conversations` del provider y de métricas/embudo, (2
   cliente la zona sale de `useZonaDeLaOrganizacion()` (la lee una vez el layout); el servidor la lee una vez por
   pedido para derivar el estado. El cobro del cierre (modal de pago) usa también el hoy de la org. Las filas que el seguimiento del lead guardó a medianoche UTC (antes de SCRUM-493) se leen con su día
   de UTC.
+- **El rango de métricas de ventas se corta en días de la zona de la org** (`lib/sales/rango-de-metricas.ts`): "desde"
+  empieza a las 00:00 de la org y "hasta" termina a las 23:59:59.999 de la org; el valor por defecto ("este mes"), los
+  atajos y el tope son el hoy de la org. El agrupado por semanas de la misma pantalla sigue en `[FECHAS-UTC-RESTO]`.
 - **El próximo paso vence por día, en la zona de la organización.** `buildLeadThread(intentos, ahora, zona)` lee
   `next_action_at` con `fechaDeValorGuardado` en `organizations.timezone`: lo que vence hoy es "Seguimiento
   agendado" todo el día y pasa a "Seguimiento vencido" al día siguiente. `listLeadsTableAction` lee la zona una vez

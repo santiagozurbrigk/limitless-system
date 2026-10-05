@@ -67,7 +67,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **170 archivos, ~1.690 casos** (recontado el 2026-10-05 con el tercer fix-pack de SCRUM-493). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **171 archivos, ~1.690 casos** (recontado el 2026-10-05 con el cuarto fix-pack de SCRUM-493). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -77,11 +77,11 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/custom-fields` | 7 | 85 | campos configurables: validación, merge, formato, alertas por fecha |
 | `lib/payments` | 5 | 85 | normalización Whop/Commas, firmas, agregados, retención |
 | `lib/clients` | 10 | 102 | próxima tarea (vencida con el hoy de la org, también para un miembro en otra zona), facturación, satisfacción, señales, sub-clientes, revisión semanal, fecha de alta por defecto del import de Excel, día de la 1-1 en el prompt de tareas, días que le quedan al programa |
-| `lib/fechas` | 2 | 42 | fechas calendario: hoy en una zona, suma de días (fin de mes, año y horario de verano), días entre dos fechas, vencida (sólo `YYYY-MM-DD`), valor guardado leído en la zona de la org (ida y vuelta), formato de fecha guardada, mediodía e inicio de una fecha en una zona, día de un instante real, zona de la organización con fallback |
+| `lib/fechas` | 2 | 39 | fechas calendario: hoy en una zona, suma de días (fin de mes, año y horario de verano), días entre dos fechas, vencida (sólo `YYYY-MM-DD`), valor guardado leído en la zona de la org (ida y vuelta), formato de fecha guardada, mediodía e inicio de una fecha en una zona, día de un instante real, zona de la organización con fallback |
 | `lib/onboarding` | 4 | 61 | derivación, gate de routing, ítems, tours |
 | `lib/discord` | 5 | 60 | actividad, canales, clasificador, perfil, identidades |
 | `lib/ghl` | 5 | 45 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook, fecha de alta de un contacto en la zona de la org |
-| `lib/sales` | 2 | 45 | opciones de seguimiento (incluida la fecha propuesta del próximo paso), hilo del lead (el próximo paso vence por día en la zona de la org) |
+| `lib/sales` | 3 | 50 | opciones de seguimiento (incluida la fecha propuesta del próximo paso), hilo del lead (el próximo paso vence por día en la zona de la org), rango de métricas de ventas en días de la org (miembro en Madrid) |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
 | `lib/super-admin` | 5 | 43 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role y estado de la org alineado con la base (incluido el desconocido) |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |

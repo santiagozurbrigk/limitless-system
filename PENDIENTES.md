@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|---|---|
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 31 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
-| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 12 | 0 | 16 | 8 |
+| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 12 | 0 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 19 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
@@ -908,6 +908,18 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 - **Dónde:** `team_roles.permissions`.
 
 ### Ventas · P2
+
+#### [MANYCHAT-CTA-DUPLICADOS] Un CTA de ManyChat puede guardarse dos veces el mismo día
+- **Tipo:** bug
+- **Estado verificado:** `app/manychat/cta-actions.ts:125-133` busca si el CTA ya se registró con
+  `.gte("triggered_at", inicio del día)` **sin tope** y `.maybeSingle()`. Si desde ese corte hay dos o más filas
+  (por ejemplo, el mismo tag registrado en días posteriores, o un duplicado viejo), `maybeSingle` devuelve error,
+  `existing` queda en `null` y el insert de `:137-143` agrega otra fila. Pasaba igual antes de SCRUM-493 (que sólo
+  movió el corte del día a la zona de la org).
+- **Qué hay que hacer:** acotar la búsqueda al día del evento (`.lt("triggered_at", inicio del día siguiente)` con
+  `inicioDelDiaEnZona`) y no depender de `maybeSingle` para saber si existe (`.limit(1)` y mirar la lista, o un índice
+  único por organización, suscriptor, tag y día con `upsert`). Limpiar los duplicados que ya existan.
+- **Dónde:** `apps/web/app/manychat/cta-actions.ts`, tabla `manychat_events`.
 
 #### [PAGO-SIN-IDEMPOTENCIA] Registrar un pago puede duplicarlo y la cuota puede quedar impaga
 - **Tipo:** bug
@@ -2571,9 +2583,9 @@ Prioridad sugerida P2: no hay una filtración conocida; el procedimiento se nece
   - Reportes por cron: `lib/executive-reports/generate-daily.ts:144`, `compute-departments.ts:61`,
     `lib/intelligence/collect-context.ts:198,298`.
   - Ventanas de los últimos días y del mes en pantallas y actions: sparklines de conversaciones del Panel y de Ventas
-    (`lib/metrics/derive-dashboard-data.ts:64,158-168`, `derive-sales-metrics.ts:25`), rango de métricas de ventas
-    (`components/sales/metrics/date-range-picker.tsx`, bordes del día del navegador; el tope ya es el hoy de la org),
-    `app/sales/metrics-actions.ts:43-59`, `app/manychat/cta-actions.ts:19-36` y `lib/metrics/custom-metrics.ts:109`.
+    (`lib/metrics/derive-dashboard-data.ts:64,158-168`, `derive-sales-metrics.ts:25`), agrupado por semanas de las
+    métricas de ventas (`components/sales/metrics/use-sales-metrics.ts:74,90`, semanas de 7 días desde el reloj del
+    navegador; el rango elegido ya se corta en la zona de la org), `app/sales/metrics-actions.ts:43-59`, `app/manychat/cta-actions.ts:19-36` y `lib/metrics/custom-metrics.ts:109`.
   - "Mes actual" con el reloj del navegador o del servidor: `lib/metrics/derive-dashboard-data.ts:127-130` (clientes
     nuevos del mes), `lib/metrics/enrich-team-compensation.ts:5-11`, `lib/metrics/derive-monthly-series.ts:36` (serie de 6 meses),
     `lib/product/offer-metrics.ts:34,43,87`. Los
