@@ -228,7 +228,9 @@ como JSON.
   la foto diaria el histórico de gasto no se puede reconstruir.
 - **Un analytics no reconocido no es un cero.** Ni el cron ni la sync de contenido (`sync-actions.ts`) pisan
   métricas si `recognized=false`: una pieza nueva queda con `metrics` en null y una existente conserva las
-  suyas (`lib/zernio/metricas-para-guardar.ts`, SCRUM-172). Ojo: `views` cae a `impressions || reach` si Zernio no manda `views`.
+  suyas (`lib/zernio/metricas-para-guardar.ts`, SCRUM-172). Lo mismo con la sync de YouTube por Google: si YouTube
+  no devuelve el detalle de un video (cuota o token), la pieza nueva queda con `metrics` en null y la existente conserva
+  las suyas (`metricasDeVideoParaGuardar`, `lib/youtube/video-metrics.ts`). Ojo: `views` cae a `impressions || reach` si Zernio no manda `views`.
 - **Historias primero en el dedupe.** `GET /posts?type=story` de Zernio no filtra: usarlo para tipar
   convierte reels en historias. Sólo `listInstagramStories` es confiable y cubre las **últimas 24 h** (Meta
   no expone más). Historias con ID interno de Zernio se guardan como `zstory_<id>`.
