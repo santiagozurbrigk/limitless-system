@@ -40,16 +40,14 @@ const COLUMNAS_DE_LA_COLA =
   "id, platform_post_id, type, published_at, metrics_updated_at, metrics_intentos_sin_dato";
 
 /**
- * Elige las piezas a medir. Con `contentPieceIds` (refresco manual) toma esas,
- * sin mirar esperas. Si no, arma el lote del cron con las prioridades de
- * `lib/marketing/cola-de-metricas.ts`: nuevas, después las que tienen métricas
- * y, con cupo, los reintentos sin dato cuya espera venció.
+ * Arma el lote del cron con las prioridades de `lib/marketing/cola-de-metricas.ts`:
+ * historias listas, otras nuevas, después las que tienen métricas y, con cupo,
+ * los reintentos sin dato cuya espera venció.
  */
 async function elegirPiezas(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
-  ahora: Date,
-  contentPieceIds?: string[]
+  ahora: Date
 ): Promise<PiezaDeLaCola[]> {
   const base = () =>
     admin
@@ -66,15 +64,6 @@ async function elegirPiezas(
     if (error) throw new Error(error.message);
     return (data ?? []) as PiezaDeLaCola[];
   };
-
-  if (contentPieceIds && contentPieceIds.length > 0) {
-    return leer(
-      base()
-        .in("id", contentPieceIds)
-        .order("metrics_checked_at", { ascending: true, nullsFirst: true })
-        .limit(METRICS_BATCH_LIMIT)
-    );
-  }
 
   // 1. Historias listas: abiertas y publicadas hace entre 30 h y 7 días, con o
   // sin métricas viejas. Van primero porque se piden una sola vez y su ventana
@@ -176,13 +165,9 @@ type Respuesta =
  * respuesta es 401 o 403 (clave revocada, sin plan), el problema es de la org y
  * no de la pieza: la corrida se corta sin marcar intentos, sin sumar esperas y
  * sin cerrar historias, y se reporta a Sentry.
- *
- * @param contentPieceIds - opcional; si se omite, arma el lote del cron
- *   (hasta METRICS_BATCH_LIMIT piezas).
  */
 export async function syncContentMetricsForOrg(
-  organizationId: string,
-  contentPieceIds?: string[]
+  organizationId: string
 ): Promise<SyncContentMetricsResult> {
   const empty: SyncContentMetricsResult = { attempted: 0, updated: 0, failed: 0 };
 
@@ -191,8 +176,7 @@ export async function syncContentMetricsForOrg(
 
   const admin = createAdminClient();
   const inicio = new Date();
-  const esCron = !contentPieceIds || contentPieceIds.length === 0;
-  const pieces = await elegirPiezas(admin, organizationId, inicio, contentPieceIds);
+  const pieces = await elegirPiezas(admin, organizationId, inicio);
 
   if (pieces.length > 0) {
     const client = await getZernioClientForOrganization(organizationId);
@@ -319,11 +303,11 @@ export async function syncContentMetricsForOrg(
       });
     }
 
-    if (esCron) await cerrarHistoriasVencidas(admin, organizationId, inicio);
+    await cerrarHistoriasVencidas(admin, organizationId, inicio);
     return { attempted: results.length, updated, failed };
   }
 
-  if (esCron) await cerrarHistoriasVencidas(admin, organizationId, inicio);
+  await cerrarHistoriasVencidas(admin, organizationId, inicio);
   return empty;
 }
 

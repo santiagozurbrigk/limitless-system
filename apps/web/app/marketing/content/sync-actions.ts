@@ -420,10 +420,3 @@ export async function maybeSyncZernioContentAction(): Promise<void> {
 
   await syncZernioContentAction();
 }
-
-export async function syncZernioMetricsAction(
-  contentPieceIds?: string[]
-): Promise<void> {
-  const organizationId = await requireOrganizationId();
-  await syncContentMetricsForOrg(organizationId, contentPieceIds);
-}

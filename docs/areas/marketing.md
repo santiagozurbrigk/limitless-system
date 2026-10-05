@@ -256,7 +256,6 @@ como JSON.
     `published_at`: el cron corre una vez por día y una historia llega a su primera corrida con 30 a 54 h, así
     que tiene al menos 5 corridas y un día de cron caído o de 429 no la pierde. Costo: un pedido por historia; con 100 reels y 8 historias por día cada
     reel se refresca cada 2,4 días.
-  - El refresco manual de piezas puntuales (`contentPieceIds`) no mira esperas.
   - La sync de contenido y la de YouTube no tocan estas columnas: una pieza nueva entra con null y el cron la
     mide primero.
 - **Quien lee `metrics` no trata "sin dato" como cero.** Una pieza con `metrics` en null no se midió. El ranking
@@ -312,7 +311,7 @@ como JSON.
   `overview/index.ts`, `reel-music-upload.tsx`; por arrastre, `content-platform-metrics.tsx`, `cta-minute-input.tsx`,
   `content-label-badge.tsx`; acciones sin caller:
   `publishVariantAsZernioDraftAction`, `generateVariantCaptionAction`,
-  `deleteContentPieceAction`, `updateSalesAttributionAction`, `syncZernioMetricsAction`,
+  `deleteContentPieceAction`, `updateSalesAttributionAction`,
   `getContentPatternsAnalysisAction`, `getContentLabelDistributionAction`, `getInstagramIntegrationStatusAction`,
   `getContentAssetByIdAction`, `getUtmBaseUrlAction`, `getUTMLeadsAction`, `getDriveFileAction`,
   `getDriveFolderPathAction`, `searchDriveFilesAction`, `getReelMusicPathAction`, `getReelVariationJobAction`,

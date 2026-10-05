@@ -239,13 +239,13 @@ function intentadas(): string[] {
 }
 
 /** Corre el cron en el día `d` (0 = primera corrida) y limpia los registros. */
-async function correrCron(d: number, ids?: string[]) {
+async function correrCron(d: number) {
   dia = d;
   vi.setSystemTime(new Date(ahora()));
   estado.updates = [];
   estado.pedidos = [];
   estado.cierres = 0;
-  return syncContentMetricsForOrg("org-1", ids);
+  return syncContentMetricsForOrg("org-1");
 }
 
 beforeEach(() => {
@@ -672,22 +672,6 @@ describe("syncContentMetricsForOrg · cada intento", () => {
       "[syncContentMetrics] no se pudo guardar el intento de la pieza",
       expect.objectContaining({ contentPieceId: "a" })
     );
-  });
-
-  it("con contentPieceIds intenta esas piezas aunque estén esperando o cerradas", async () => {
-    estado.piezas = [
-      pieza("a"),
-      historia("b", 100, { metrics_checked_at: hace(HORA), metrics_reintentar_desde: "infinity" }),
-      pieza("c"),
-    ];
-    estado.analytics = { "ig-a": { likes: 1 }, "ig-b": { likes: 2 }, "ig-c": { likes: 3 } };
-
-    const r = await correrCron(0, ["b"]);
-
-    expect(r).toEqual({ attempted: 1, updated: 1, failed: 0 });
-    expect(intentadas()).toEqual(["b"]);
-    expect(buscar("a").metrics_checked_at).toBeNull();
-    expect(estado.cierres).toBe(0);
   });
 
   it("la sync de contenido no toca las columnas de la cola: una pieza nueva entra sin medir", () => {
