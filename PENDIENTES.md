@@ -81,7 +81,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 31 | 17 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 13 | 31 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 19 | 5 |
@@ -101,7 +101,7 @@ Doc del área: [`docs/areas/plataforma.md`](./docs/areas/plataforma.md)
 #### [PERMISOS-SERVER-ACTIONS] Los permisos por módulo no protegen datos, sólo pantallas
 - **Tipo:** seguridad
 - **Severidad:** Alta
-- **Estado verificado:** **Parte A resuelta el 2026-09-29 (SCRUM-1):** `20260929100000_roles_equipo_y_config_en_la_base` agrega `current_user_has_org_role(roles)` y exige founder para escribir `team_roles`, para todo `team_invitations` (incluido leer el token) y para el UPDATE de `organizations`; founder o admin para el DELETE de `clients`. `lib/auth/require-org-role.ts` aplica lo mismo en las actions de configuración de la org, clave de Claude, `deleteClientAction` y los `disconnect*Action` de la org. Lo que sigue abierto es la parte B, descrita en el resto del ítem (permiso por módulo y nivel). Estado anterior: `getCurrentUserPermissions` sólo se usa en `app/(platform)/layout.tsx` y en componentes de navegación. Ninguna server action consulta `modules`. Ninguna policy RLS de datos de negocio mira `role` (todas `organization_id = get_my_organization_id()`); la excepción es `profiles`, cuyo UPDATE exige founder/admin para editar a otros y cuyo trigger `protect_profile_columns` impide cambiar el propio `role`/`organization_id`. Confirmado sin guard: `saveClaudeApiKeyAction` (`app/settings/actions.ts:438`), `saveGeneralOrganizationSettingsAction` (nombre, web, moneda y zona horaria de la org), `updateCloserCommissionAction` (`app/sales/closer-actions.ts:275`; sin guard en el código, pero usa `createClient()` y la policy de UPDATE de `profiles` + el trigger la frenan), los `disconnect*Action`, todas las de `app/discord/actions.ts`. `team_roles` tiene policies de insert/update/delete para cualquier miembro (`20260616400000_team_roles_permissions.sql`): un member puede editar los permisos de su propio rol por PostgREST.
+- **Estado verificado:** **Parte A resuelta el 2026-09-29 (SCRUM-1):** `20260929100000_roles_equipo_y_config_en_la_base` agrega `current_user_has_org_role(roles)` y exige founder para escribir `team_roles`, para todo `team_invitations` (incluido leer el token) y para el UPDATE de `organizations`; founder o admin para el DELETE de `clients`. `lib/auth/require-org-role.ts` aplica lo mismo en las actions de configuración de la org, clave de Claude, `deleteClientAction` y los `disconnect*Action` de la org. Desde SCRUM-18 (2026-10-05) existe `rechazoPorModulo(moduleId)` en `lib/auth/acceso-a-modulo.ts`, con la misma regla que el layout y sin nivel: devuelve el rechazo como valor (forma del error de `MutationResult`, con `motivo` y `moduleId`) o `null`, sin lanzar. Lo usa `getIntelligenceSnapshotAction` (Operaciones) y la parte B lo puede extender con el nivel en vez de crear otro helper. Lo que sigue abierto es la parte B, descrita en el resto del ítem (permiso por módulo y nivel). Estado anterior: `getCurrentUserPermissions` sólo se usa en `app/(platform)/layout.tsx` y en componentes de navegación. Ninguna server action consulta `modules`. Ninguna policy RLS de datos de negocio mira `role` (todas `organization_id = get_my_organization_id()`); la excepción es `profiles`, cuyo UPDATE exige founder/admin para editar a otros y cuyo trigger `protect_profile_columns` impide cambiar el propio `role`/`organization_id`. Confirmado sin guard: `saveClaudeApiKeyAction` (`app/settings/actions.ts:438`), `saveGeneralOrganizationSettingsAction` (nombre, web, moneda y zona horaria de la org), `updateCloserCommissionAction` (`app/sales/closer-actions.ts:275`; sin guard en el código, pero usa `createClient()` y la policy de UPDATE de `profiles` + el trigger la frenan), los `disconnect*Action`, todas las de `app/discord/actions.ts`. `team_roles` tiene policies de insert/update/delete para cualquier miembro (`20260616400000_team_roles_permissions.sql`): un member puede editar los permisos de su propio rol por PostgREST.
 - **Riesgo:** Si un member con un rol limitado quiere más acceso, entonces le alcanza con su JWT para hacer un PATCH a team_roles y darse todos los módulos, o para cambiar la clave de Claude, el nombre/moneda de la org o las comisiones de closers llamando la action. Es fácil para alguien con nociones técnicas y no deja rastro en la UI.
 - **Impacto:** Toda organización con miembros que no son founder/admin: el esquema de roles no protege datos ni configuración. Confirmado en producción: team_roles, team_invitations y organizations tienen policies de escritura sólo por organization_id; profiles sí está protegido (trigger protect_profile_columns), así que no puede cambiarse su propio role ni su organización.
 - **Qué hay que hacer:** (parte B) helper `requireModuleAccess(moduleId, level)` sobre `requireOrganizationId()` y aplicarlo en plata (finanzas, `updateCloserCommissionAction`), `app/discord/actions.ts` y los `connect*`/`save*` de integraciones, que todavía no piden rol; policies de escritura por rol en finanzas y en las tablas de integraciones editables por el usuario (`discord_integrations`, `unipile_integrations`). Equipo, configuración de la org, clave de Claude, desconectar integraciones y borrar clientes ya quedaron (parte A).
@@ -153,16 +153,6 @@ Prioridad sugerida P1: la severidad es Crítica, pero la toma del super admin ex
 - **Qué hay que hacer:** verificar en navegador; si se confirma, mover el chequeo a cada `page.tsx` (o a un layout por módulo) y filtrar la paleta con `canSeeNavItem`.
 - **Criterio de aceptación:** Se ejecutó el paso 5 del bloque «Permisos por módulo» de verificacion-manual.md con un member sin acceso a Finanzas y el resultado quedó anotado; si falló, abrir Finanzas desde ⌘K o desde un link interno estando en /dashboard muestra «No tenés acceso» igual que tipeando la URL; la paleta ⌘K de ese member no lista Finanzas
 - **Dónde:** `apps/web/app/(platform)/layout.tsx`, `apps/web/components/navigation/command-palette.tsx`, `apps/web/routes/navigation.ts`.
-
-#### [PERMISOS-FOUNDER-AREA] `/founder` no pasa por el bloqueo de permisos (nuevo)
-- **Tipo:** seguridad
-- **Severidad:** Media
-- **Estado verificado:** `module-for-path.ts` mapea `/founder` → `operations`, pero la ruta vive en `app/(founder)/`, cuyo layout (`layouts/founder-layout.tsx`) no chequea nada. El test de `module-for-path` sólo recorre `app/(platform)`.
-- **Riesgo:** Si un member sin acceso a Operaciones abre /founder, entonces ve el resumen de inteligencia del negocio (snapshot de métricas) pensado para el founder. Basta tipear la URL.
-- **Impacto:** Miembros de cualquier org con roles limitados; es una sola pantalla de lectura y esos datos ya son legibles por RLS, por eso el daño adicional es acotado.
-- **Qué hay que hacer:** mover `/founder` bajo `(platform)` o replicar el chequeo en `app/(founder)/layout.tsx`; extender el test a `(founder)`.
-- **Criterio de aceptación:** Un member sin acceso a Operaciones que abre /founder ve la pantalla de «No tenés acceso»; el founder sigue viendo /founder; el test de module-for-path recorre también las rutas de app/(founder) y pasa
-- **Dónde:** `apps/web/app/(founder)/`, `apps/web/lib/navigation/module-for-path.ts`.
 
 #### [HOLDING-PORTFOLIO-ROL] El portfolio del holding no mira el rol
 - **Tipo:** seguridad
@@ -255,7 +245,7 @@ Y no hace falta la cookie: `lib/supabase/middleware.ts:61-65` sólo sobrescribe 
 - **Tipo:** verificación manual
 - **Severidad:** Alta
 - **Estado verificado:** nunca se probó con una segunda cuenta.
-- **Riesgo:** Si el bloqueo por módulo no funciona como se espera (hay indicios fuertes en PERMISOS-LAYOUT-NAV-SUAVE y PERMISOS-FOUNDER-AREA), entonces un member ve módulos que su rol tiene en «sin acceso» sin que el equipo lo sepa.
+- **Riesgo:** Si el bloqueo por módulo no funciona como se espera (hay indicios fuertes en PERMISOS-LAYOUT-NAV-SUAVE), entonces un member ve módulos que su rol tiene en «sin acceso» sin que el equipo lo sepa.
 - **Impacto:** Todas las orgs que confían en roles limitados; lo que protege es la única barrera real entre roles hoy, porque RLS no mira el rol.
 - **Qué hay que hacer:** bloque "Permisos por módulo" de `docs/operacion/verificacion-manual.md` § Plataforma.
 - **Criterio de aceptación:** Se ejecutó el bloque «Permisos por módulo con un rol limitado» de verificacion-manual.md con una segunda cuenta member y el resultado de cada paso quedó anotado; si algo falló, se abrió un ítem nuevo
@@ -507,6 +497,7 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 #### [NAV-3] Etiqueta "Fase 1 · Beta"
 
 #### [FOUNDER-AREA] El Área del fundador es sólo el snapshot de Inteligencia
+- **Qué hay que hacer:** decidir con Agustín qué tiene que tener el Área del fundador además del resumen de Inteligencia, o si se une con Inteligencia (era la pregunta abierta de H-PLA-23, que se cerró con SCRUM-18).
 
 #### [BRAND-B] Licenciar Neue Haas Grotesk
 
