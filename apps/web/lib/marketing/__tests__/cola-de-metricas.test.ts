@@ -29,9 +29,9 @@ describe("diasDeEspera", () => {
 });
 
 describe("ventana de las historias", () => {
-  it("⭐ una historia se puede medir desde las 30 h y se cierra sin pedirla a las 72 h", () => {
+  it("⭐ una historia se puede medir desde las 30 h y se cierra sin pedirla a los 7 días", () => {
     expect(historiasListasHasta(AHORA)).toBe(haceHoras(30));
-    expect(historiasACerrarHasta(AHORA)).toBe(haceHoras(72));
+    expect(historiasACerrarHasta(AHORA)).toBe(haceHoras(7 * 24));
   });
 });
 

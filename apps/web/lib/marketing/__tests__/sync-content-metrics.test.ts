@@ -105,6 +105,14 @@ vi.mock("@/lib/supabase/admin", () => ({
           filtros.push((fila) => fila[columna] === valor);
           return consulta;
         },
+        lte: (columna: string, valor: string) => {
+          filtros.push((fila) => fila[columna] !== null && comparar(fila[columna] as string, valor) <= 0);
+          return consulta;
+        },
+        gt: (columna: string, valor: string) => {
+          filtros.push((fila) => fila[columna] !== null && comparar(fila[columna] as string, valor) > 0);
+          return consulta;
+        },
         neq: (columna: string, valor: unknown) => {
           filtros.push((fila) => fila[columna] !== null && fila[columna] !== valor);
           return consulta;
@@ -352,12 +360,12 @@ describe("syncContentMetricsForOrg · la cola no se diluye", () => {
     expect(estado.pedidos).toEqual([]);
   });
 
-  it("⭐ al empezar, cierra sin pedirlas las historias abiertas de más de 72 h o sin fecha", async () => {
+  it("⭐ cierra sin pedirlas las historias abiertas de más de 7 días o sin fecha", async () => {
     estado.piezas = [
-      historia("vieja", 80),
+      historia("vieja", 200),
       historia("sin-fecha", 0, { published_at: null }),
       historia("a-tiempo", 50),
-      historia("medida-vieja", 100, {
+      historia("medida-vieja", 170, {
         metrics: { likes: 3 },
         metrics_updated_at: "2026-10-01T00:00:00.000Z",
         metrics_checked_at: "2026-10-01T00:00:00.000Z",
@@ -375,20 +383,83 @@ describe("syncContentMetricsForOrg · la cola no se diluye", () => {
     expect(buscar("medida-vieja").metrics).toEqual({ likes: 3 });
   });
 
-  it("una historia con error pasajero no se marca: se vuelve a pedir y la cierra el corte de 72 h", async () => {
-    estado.piezas = [historia("con-429", 40)];
-    estado.analytics = { "ig-con-429": new Error("Zernio getPostAnalytics: HTTP 429") };
+  it("⭐ una historia de 50 h no se pierde si un día el cron no corre", async () => {
+    estado.piezas = [historia("h", 50)];
+    estado.analytics = { "ig-h": { likes: 8 } };
+
+    // Día 0: el cron no corre. Día 1: la historia tiene 74 h y se pide.
+    await correrCron(1);
+    expect(estado.pedidos).toEqual(["ig-h"]);
+    expect(buscar("h")).toMatchObject({ metrics: expect.objectContaining({ likes: 8 }), metrics_reintentar_desde: "infinity" });
+  });
+
+  it("⭐ una historia con 429 no se marca y se pide al día siguiente", async () => {
+    estado.piezas = [historia("h", 50)];
+    estado.analytics = { "ig-h": new ZernioHttpError("Zernio getPostAnalytics: HTTP 429", 429) };
 
     const r = await correrCron(0);
     expect(r).toEqual({ attempted: 1, updated: 0, failed: 1 });
-    expect(buscar("con-429").metrics_checked_at).toBeNull();
+    expect(buscar("h")).toMatchObject({ metrics_checked_at: null, metrics_reintentar_desde: null });
 
-    await correrCron(1); // 64 h: se vuelve a pedir
-    expect(estado.pedidos).toEqual(["ig-con-429"]);
+    estado.analytics = { "ig-h": { likes: 3 } };
+    await correrCron(1);
+    expect(estado.pedidos).toEqual(["ig-h"]);
+    expect(buscar("h").metrics_reintentar_desde).toBe("infinity");
+  });
 
-    await correrCron(2); // 88 h: se cierra sin pedirla
-    expect(estado.pedidos).toEqual([]);
-    expect(buscar("con-429").metrics_reintentar_desde).toBe("infinity");
+  it("⭐ dos corridas fallidas seguidas tampoco la pierden; recién a los 7 días se cierra sin pedirla", async () => {
+    estado.piezas = [historia("h", 50)];
+    estado.analytics = { "ig-h": new ZernioHttpError("Zernio getPostAnalytics: HTTP 429", 429) };
+
+    const pedidaPorDia: boolean[] = [];
+    for (let d = 0; d < 6; d++) {
+      await correrCron(d);
+      pedidaPorDia.push(estado.pedidos.includes("ig-h"));
+    }
+
+    // 50, 74, 98, 122 y 146 h: se pide; 170 h: se cierra sin pedirla.
+    expect(pedidaPorDia).toEqual([true, true, true, true, true, false]);
+    expect(buscar("h").metrics_reintentar_desde).toBe("infinity");
+  });
+
+  it("⭐ una historia joven con métricas viejas (backfill) no se pide antes de las 30 h", async () => {
+    estado.piezas = [
+      historia("joven-medida", 20, {
+        metrics: { likes: 2 },
+        metrics_updated_at: hace(10 * HORA),
+        metrics_checked_at: hace(10 * HORA),
+      }),
+      medida("reel", "2026-10-01T00:00:00.000Z"),
+    ];
+    estado.analytics = { "ig-joven-medida": { likes: 5 }, "ig-reel": { likes: 1 } };
+
+    await correrCron(0);
+    expect(estado.pedidos).toEqual(["ig-reel"]);
+
+    // Al día siguiente tiene 44 h: se pide una vez y queda cerrada.
+    await correrCron(1);
+    expect(estado.pedidos).toContain("ig-joven-medida");
+    expect(buscar("joven-medida")).toMatchObject({
+      metrics: expect.objectContaining({ likes: 5 }),
+      metrics_reintentar_desde: "infinity",
+    });
+  });
+
+  it("⭐ con 200 piezas nuevas, las historias listas entran primero", async () => {
+    for (let i = 0; i < 200; i++) {
+      estado.piezas.push(pieza(`nueva-${i}`, { created_at: `2026-09-${String(1 + (i % 28)).padStart(2, "0")}T00:00:00.000Z` }));
+      estado.analytics[`ig-nueva-${i}`] = { likes: 1 };
+    }
+    for (let i = 0; i < 3; i++) {
+      estado.piezas.push(historia(`historia-${i}`, 40 + i, { created_at: "2026-10-05T00:00:00.000Z" }));
+      estado.analytics[`ig-historia-${i}`] = {};
+    }
+
+    const r = await correrCron(0);
+
+    expect(r.attempted).toBe(50);
+    expect(estado.pedidos.filter((p) => p.startsWith("ig-historia"))).toHaveLength(3);
+    expect(estado.pedidos.filter((p) => p.startsWith("ig-nueva"))).toHaveLength(47);
   });
 
   it("⭐ una pieza sin dato se reintenta recién cuando vence su espera (1, 2, 4 días)", async () => {

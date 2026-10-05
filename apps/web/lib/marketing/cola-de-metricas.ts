@@ -4,10 +4,11 @@ import { ZernioHttpError } from "@/lib/zernio/client";
  * Reglas de la cola del cron de métricas de contenido (SCRUM-172, reabierta).
  *
  * Prioridades del lote diario de cada org:
- * 1. Piezas nuevas (`metrics_checked_at` null): se miden primero. Una historia
- *    nueva recién entra cuando venció (ver abajo).
- * 2. Piezas con métricas: se refrescan, la que hace más tiempo que no se intenta primero.
- * 3. Piezas ya intentadas que siguen sin dato (nunca historias): sólo cuando venció
+ * 1. Historias listas para medir (ver abajo), las más viejas primero.
+ * 2. Otras piezas nuevas (`metrics_checked_at` null), por orden de llegada.
+ * 3. Piezas con métricas (nunca historias): se refrescan, la que hace más tiempo
+ *    que no se intenta primero.
+ * 4. Piezas ya intentadas que siguen sin dato (nunca historias): sólo cuando venció
  *    su espera (`metrics_reintentar_desde`), y con un cupo: no pueden ocupar el
  *    lugar de las piezas con métricas, pero tampoco se quedan sin turno si sobran.
  *
@@ -18,12 +19,16 @@ import { ZernioHttpError } from "@/lib/zernio/client";
  * y Zernio guarda sus métricas con el webhook `story_insights` al vencer
  * (`lib/zernio/client.ts`: `ZernioInstagramStory`, `listInstagramStories` y
  * `syncExternalStories`): antes de vencer no hay números finales que pedir, y
- * después no cambian. Por eso una historia entra a la cola a las 30 h de publicada
- * (24 h de vida + 6 h de margen para el webhook), se pide una sola vez, y con o sin
- * dato queda cerrada (`metrics_reintentar_desde = infinity`). Al empezar cada
- * corrida se cierran sin pedirle nada a Zernio las historias que pasaron las 72 h
- * sin cerrarse (o que no tienen fecha de publicación): la ventana de 30 a 72 h
- * (42 h) alcanza para que el cron diario la tome al menos una vez.
+ * después no cambian. Por eso una historia está lista a las 30 h de publicada
+ * (24 h de vida + 6 h de margen para el webhook), se pide una sola vez y, con o sin
+ * dato, queda cerrada (`metrics_reintentar_desde = infinity`). Si el pedido falla
+ * por algo pasajero (429, red, cron caído) no se marca y se pide en la corrida
+ * siguiente. Al final de cada corrida se cierran sin pedirle nada a Zernio las
+ * historias que siguen abiertas a los 7 días (o que no tienen fecha de
+ * publicación). El cron corre una vez por día (`apps/web/vercel.json`, `0 6 * * *`), así que
+ * una historia llega a su primera corrida con 30 a 54 h y tiene al menos 4
+ * corridas más antes del cierre: como sus números ya no cambian, esperar no cuesta
+ * nada y un día de cron caído o de 429 no la pierde.
  */
 
 export const TAMANO_DEL_LOTE = 50;
@@ -47,8 +52,8 @@ export const ESPERA_MAXIMA_DIAS = 16;
 /** Una historia entra a la cola a las 30 h: 24 h vigente + 6 h para `story_insights`. */
 export const HISTORIA_LISTA_HORAS = 30;
 
-/** A las 72 h una historia que no se cerró se cierra sin pedirla. */
-export const HISTORIA_CIERRE_HORAS = 72;
+/** A los 7 días una historia que no se cerró se cierra sin pedirla. */
+export const HISTORIA_CIERRE_HORAS = 7 * 24;
 
 /** Fecha de reintento de una pieza que no se vuelve a intentar sola. */
 export const NUNCA = "infinity";

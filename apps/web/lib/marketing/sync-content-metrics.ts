@@ -72,26 +72,39 @@ async function elegirPiezas(
     );
   }
 
-  // 1. Nuevas: nunca intentadas ni cerradas, por orden de llegada. Una historia
-  // recién entra a las 30 h de publicada, cuando ya tiene sus números finales.
-  const nuevas = await leer(
+  // 1. Historias listas: abiertas y publicadas hace entre 30 h y 7 días, con o
+  // sin métricas viejas. Van primero porque se piden una sola vez y su ventana
+  // es acotada; las más viejas primero. Ninguna otra consulta trae historias.
+  const historias = await leer(
     base()
-      .is("metrics_checked_at", null)
+      .eq("type", "story")
       .is("metrics_reintentar_desde", null)
-      .or(`type.neq.story,published_at.lte."${historiasListasHasta(ahora)}"`)
-      .order("created_at", { ascending: true })
+      .lte("published_at", historiasListasHasta(ahora))
+      .gt("published_at", historiasACerrarHasta(ahora))
+      .order("published_at", { ascending: true })
       .limit(METRICS_BATCH_LIMIT)
   );
-  const lugares = METRICS_BATCH_LIMIT - nuevas.length;
-  if (lugares <= 0) return nuevas;
+  if (historias.length >= METRICS_BATCH_LIMIT) return historias;
 
-  // 2 y 3. Con métricas y reintentos sin dato, las dos sólo si venció su espera
-  // (`metrics_reintentar_desde` null o pasada). Las historias cerradas tienen
-  // `infinity` y no entran nunca; y nunca son reintentos: se miden una vez.
+  // 2. Otras piezas nuevas: nunca intentadas, por orden de llegada.
+  const nuevas = await leer(
+    base()
+      .neq("type", "story")
+      .is("metrics_checked_at", null)
+      .order("created_at", { ascending: true })
+      .limit(METRICS_BATCH_LIMIT - historias.length)
+  );
+  const primeras = [...historias, ...nuevas];
+  const lugares = METRICS_BATCH_LIMIT - primeras.length;
+  if (lugares <= 0) return primeras;
+
+  // 3 y 4. Con métricas y reintentos sin dato, las dos sólo si venció su espera
+  // (`metrics_reintentar_desde` null o pasada).
   const esperaVencida = `metrics_reintentar_desde.is.null,metrics_reintentar_desde.lte."${ahora.toISOString()}"`;
   const [conMetricas, reintentos] = await Promise.all([
     leer(
       base()
+        .neq("type", "story")
         .not("metrics_checked_at", "is", null)
         .not("metrics_updated_at", "is", null)
         .or(esperaVencida)
@@ -100,21 +113,21 @@ async function elegirPiezas(
     ),
     leer(
       base()
+        .neq("type", "story")
         .not("metrics_checked_at", "is", null)
         .is("metrics_updated_at", null)
-        .neq("type", "story")
         .or(esperaVencida)
         .order("metrics_checked_at", { ascending: true })
         .limit(lugares)
     ),
   ]);
 
-  return [...nuevas, ...armarLote(conMetricas, reintentos, lugares)];
+  return [...primeras, ...armarLote(conMetricas, reintentos, lugares)];
 }
 
 /**
  * Cierra, en una sola consulta y sin pedirle nada a Zernio, las historias que
- * siguen abiertas pasadas las 72 h (o sin fecha de publicación): ya no se van a
+ * siguen abiertas a los 7 días (o sin fecha de publicación): ya no se van a
  * pedir. Si falla se loguea y la corrida sigue.
  */
 async function cerrarHistoriasVencidas(
@@ -225,7 +238,7 @@ export async function syncContentMetricsForOrg(
           // Un error pasajero (408, 429, 5xx, red) no es "sin dato": no suma intento.
           motivoSinDato = mensaje;
           // Una historia con error pasajero no se marca: sigue como estaba y se
-          // vuelve a pedir en la próxima corrida, hasta el cierre de las 72 h.
+          // vuelve a pedir en la próxima corrida, hasta el cierre de los 7 días.
           if (piece.type === "story") throw new Error(mensaje);
         }
       }

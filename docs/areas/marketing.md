@@ -77,9 +77,9 @@ persistidas porque las URLs del CDN de Instagram vencen en 1–2 h; `lib/marketi
             └─ void syncContentMetricsForOrg
 cron 06:00 UTC /api/cron/sync-content-metrics
   └─ con QStash: fan-out a /api/queue/process-cron-sync-metrics por org; sin QStash: secuencial
-       └─ lib/marketing/sync-content-metrics.ts: cierra sin pedirlas las historias abiertas de más de 72 h;
-            lote de 50 piezas source=zernio (lib/marketing/cola-de-metricas.ts):
-            nuevas (historias desde las 30 h) → con métricas → reintentos sin dato con la espera vencida (cupo 10);
+       └─ lib/marketing/sync-content-metrics.ts: lote de 50 piezas source=zernio (lib/marketing/cola-de-metricas.ts):
+            historias listas (30 h a 7 días) → otras nuevas → con métricas → reintentos sin dato con la espera
+            vencida (cupo 10); cierra sin pedirlas las historias abiertas de más de 7 días;
             GET /analytics?postId= → resolvePostAnalytics; un update por pieza: siempre metrics_checked_at = now;
             con dato metrics + metrics_updated_at; sin dato intentos + 1 y metrics_reintentar_desde
 ```
@@ -237,9 +237,10 @@ como JSON.
 - **La cola del cron de métricas no se traba ni se diluye con piezas sin dato** (SCRUM-172, reabierta;
   reglas en `lib/marketing/cola-de-metricas.ts`). `metrics_checked_at` es la fecha del último intento de medir la
   pieza, con o sin dato; `metrics_updated_at`, la de las métricas guardadas. El lote diario de 50 se arma así:
-  1. Piezas nuevas (`metrics_checked_at` null): se miden primero. Una historia recién entra a las 30 h.
-  2. Piezas con métricas: se refrescan, la que hace más tiempo que no se intenta primero.
-  3. Piezas ya intentadas sin dato (nunca historias): sólo si venció `metrics_reintentar_desde`, y a lo sumo 10 lugares si hay
+  1. Historias listas: abiertas y publicadas hace entre 30 h y 7 días, las más viejas primero.
+  2. Otras piezas nuevas (`metrics_checked_at` null), por orden de llegada.
+  3. Piezas con métricas (nunca historias): se refrescan, la que hace más tiempo que no se intenta primero.
+  4. Piezas ya intentadas sin dato (nunca historias): sólo si venció `metrics_reintentar_desde`, y a lo sumo 10 lugares si hay
      piezas con métricas esperando (si sobran lugares, los ocupan).
   - Sin dato, la pieza suma `metrics_intentos_sin_dato` y espera 1, 2, 4, 8 y después 16 días. Con métricas,
     vuelve a 0 y sin espera. Un error permanente de Zernio (4xx distinto de 408 y 429, por ejemplo 404 de un post
@@ -249,8 +250,9 @@ como JSON.
     métricas con el webhook `story_insights` al vencer (`lib/zernio/client.ts`): antes no hay números finales y
     después no cambian. La historia entra a la cola a las 30 h (6 h de margen para el webhook), se pide una vez y,
     con o sin dato, queda con `metrics_reintentar_desde = infinity`. Un error pasajero no la marca y se vuelve a
-    pedir al día siguiente. Al empezar cada corrida, una sola consulta cierra sin pedirlas las historias abiertas
-    de más de 72 h o sin `published_at`. Costo: un pedido por historia; con 100 reels y 8 historias por día cada
+    pedir al día siguiente. Una sola consulta cierra sin pedirlas las historias abiertas de más de 7 días o sin
+    `published_at`: el cron corre una vez por día y una historia llega a su primera corrida con 30 a 54 h, así
+    que tiene al menos 5 corridas y un día de cron caído o de 429 no la pierde. Costo: un pedido por historia; con 100 reels y 8 historias por día cada
     reel se refresca cada 2,4 días.
   - El refresco manual de piezas puntuales (`contentPieceIds`) no mira esperas.
   - La sync de contenido y la de YouTube no tocan estas columnas: una pieza nueva entra con null y el cron la
