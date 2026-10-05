@@ -38,7 +38,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Rama:** `fix/revision-integral-4-oct`
 **Commit(s):** uno por apartado (este y los siguientes de la rama)
-**Módulo(s) afectado(s):** Agente de negocio e IA, Plataforma (super admin, tipos), Fathom, Equipo
+**Módulo(s) afectado(s):** Agente de negocio e IA, Operaciones (inputs y reporte semanal), Plataforma (super admin, tipos), Fathom, Equipo
 
 Los informes de origen son las pruebas integrales del 4-oct (SCRUM-111, 121 y 210, y la regresión de toda la app sobre `b0f154e9`). Ninguno de estos hallazgos era una regresión de los commits revisados.
 
@@ -55,6 +55,16 @@ Los informes de origen son las pruebas integrales del 4-oct (SCRUM-111, 121 y 21
 - Controles negativos: sacar el chequeo de un generador (fallan sus casos y los de su worker por aserción), meterlo dentro del `try` (falla "si la base falla al comprobar, lanza"), volver a exigir founder al procesar (fallan 6: la holding activa deja de generar), dejar de mirar el estado (fallan 22), quitar el `catch` del modo en serie y volver a poner el reexport; a pedido, dejar seguir el botón con la org pausada (fallan 2: se llama a los tres reportes), sacar el chequeo de `generateWeeklyReportAction` (fallan 2) y mostrar el aviso sólo si no se generó nada (falla 1); en el reporte de Operaciones, volver a lanzar el aviso, el "sin inputs" o el error de la IA (cada uno hace fallar su caso: "promise rejected … instead of resolving"), clasificar todo como fallido (fallan 2) y mostrar un mensaje genérico en vez del devuelto (fallan 2): cada uno falla por aserción.
 
 **Riesgos / deuda técnica pendiente:** los demás procesos con IA, automáticos y a pedido, siguen sin mirar el estado de la org. Se revisaron todas las actions que llaman a Claude por org: fuera de reportes e inteligencia quedan el agente, la generación de SOPs, el análisis, variantes y captions de contenido, el reporte de patrones de contenido, el post-mortem de lanzamientos, el análisis de conversaciones de Zernio y los captions de Trial Reels. Son herramientas de cada módulo, no del circuito de reportes e inteligencia, y quedaron anotadas en `[CRONS-IA-ORGS-PAUSADAS-RESTO]` para la misma decisión de negocio.
+
+#### 1b. Operaciones: los errores esperables de las acciones llegan al usuario
+
+**Qué se hizo:** `saveWeeklyInputAction`, `updateWeeklyInputAction` y `deleteWeeklyInputAction` (`app/operations/actions.ts`) devuelven `MutationResult` en vez de lanzar sus errores esperables (validación de Zod, "Input no encontrado.", "Solo podés editar/eliminar tus propios inputs.", `mapWeeklyError`, Supabase no configurado); sólo lo inesperado (sin sesión) sigue lanzando. Sus componentes (`weekly-input-row-actions.tsx`, `weekly-input-form.tsx`, `team-input-form.tsx`) y los dos botones de reportes (`weekly-inputs-page-content.tsx`, `generate-weekly-pipeline-button.tsx`) las corren con `correrAccion`/`correrMutacion` (`lib/operations/correr-accion.ts`, nuevo): un error devuelto se muestra con su mensaje; uno lanzado se registra en consola y se avisa con un texto fijo en voseo, "Ocurrió un error inesperado. Intentá de nuevo.", nunca con el párrafo técnico de Next. El botón de Inputs semanales decide con `manejarReporteSemanal` (avisa con `mensajeDelReporteSemanal` y sólo con éxito lleva a Operaciones). Tests nuevos `app/operations/__tests__/inputs-semanales-errores-como-valor.test.ts` (18) y `lib/operations/__tests__/correr-accion.test.ts` (7); `reporte-semanal-org-no-activa.test.ts` suma el camino de éxito (JSON válido de la IA: éxito y upsert con `status: "ready"`), la falla al marcar `generating` (motivo `falla`, sin llamar a la IA ni relanzar) y Supabase no configurado.
+
+**Por qué / finalidad:** el mismo defecto que el del reporte semanal: en producción un member que borraba el input de un compañero veía "An error occurred in the Server Components render…" en vez de "Solo podés eliminar tus propios inputs.".
+
+**Decisiones de diseño relevantes:** returns explícitos y no `runMutation`, que atraparía también un `redirect` de `requireAuthContext`. Controles negativos (cada uno falla por aserción): volver a lanzar el "input ajeno", el "no encontrado" o el error de Zod; sacar el chequeo de autor; mostrar el mensaje crudo del error inesperado o no registrarlo; navegar también con error; no usar `mensajeDelReporteSemanal`; guardar el reporte sin `ready`; devolver `sin-inputs` o relanzar cuando falla marcar `generating`; lanzar "Supabase no configurado.".
+
+**Riesgos / deuda técnica pendiente:** el resto de la app tiene el mismo patrón: 101 funciones en 30 archivos de server actions lanzan errores esperables con texto para el usuario. Quedó contado y listado por módulo en `[ACTIONS-ERRORES-EN-PRODUCCION]`.
 
 #### 2. SCRUM-111: un solo chequeo de super admin por pedido
 
