@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, GlassPanel, Input, Label } from "@ai-coo/ui";
 import { completePasswordChangeAction } from "@/app/auth/force-password-change/actions";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import { paths } from "@/routes";
 
 export default function ForcePasswordChangePage() {
@@ -28,15 +29,20 @@ export default function ForcePasswordChangePage() {
 
     setLoading(true);
 
-    const result = await completePasswordChangeAction(newPassword);
-    if (!result.ok) {
-      setError(result.error);
-      setLoading(false);
-      return;
-    }
-
-    router.push(paths.platform.dashboard);
-    router.refresh();
+    await correrMutacion({
+      accion: () => completePasswordChangeAction(newPassword),
+      // El error se muestra debajo del formulario, como los de validación.
+      avisar: (aviso) => {
+        setError(aviso.description ?? aviso.title);
+        setLoading(false);
+      },
+      tituloError: "No se pudo cambiar la contraseña",
+      etiqueta: "[ForcePasswordChange] cambiar contraseña",
+      alExito: () => {
+        router.push(paths.platform.dashboard);
+        router.refresh();
+      },
+    });
   };
 
   return (
