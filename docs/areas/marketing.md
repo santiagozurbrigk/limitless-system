@@ -243,8 +243,9 @@ como JSON.
   4. Piezas ya intentadas sin dato (nunca historias): sólo si venció `metrics_reintentar_desde`, y a lo sumo 10 lugares si hay
      piezas con métricas esperando (si sobran lugares, los ocupan).
   - Sin dato, la pieza suma `metrics_intentos_sin_dato` y espera 1, 2, 4, 8 y después 16 días. Con métricas,
-    vuelve a 0 y sin espera. Un error permanente de Zernio (4xx distinto de 408 y 429, por ejemplo 404 de un post
-    borrado) cuenta como sin dato. Un error pasajero (408, 429, 5xx, red) marca el intento pero no suma espera.
+    vuelve a 0 y sin espera. Un error permanente de Zernio (4xx distinto de 401, 403, 408 y 429, por ejemplo 404 de
+    un post borrado) cuenta como sin dato. Un error pasajero (408, 429, 5xx, red o el timeout de 15 s de
+    `zernioFetchJson`) marca el intento pero no suma espera. 401 y 403 tampoco cuentan como sin dato.
     El status sale de `ZernioHttpError` (`lib/zernio/client.ts`). Un 401 o 403 es de toda la org (clave
     revocada o sin plan): el cron pide todo el lote antes de escribir y, si aparece, corta la corrida de la org
     sin tocar ninguna fila y lo reporta a Sentry.
@@ -255,7 +256,11 @@ como JSON.
     pedir al día siguiente. Una sola consulta cierra sin pedirlas las historias abiertas de más de 7 días o sin
     `published_at`: el cron corre una vez por día y una historia llega a su primera corrida con 30 a 54 h, así
     que tiene al menos 5 corridas y un día de cron caído o de 429 no la pierde. Costo: un pedido por historia; con 100 reels y 8 historias por día cada
-    reel se refresca cada 2,4 días.
+    reel se refresca cada 2,4 días. Valen sin el 429 diario de `[ZERNIO-METRICAS-429]`: con 429, en la simulación de la revisión
+    final, con 15 historias por día se cierran 34 historias sin medir (con el cierre a 72 h eran 94).
+  - Cada pedido a Zernio se corta a los 15 s (`ZERNIO_TIMEOUT_MS`, `ZernioTimeoutError`, pasajero): los 50 van en
+    paralelo, así que un pedido colgado no deja el lote sin escribir y la corrida queda debajo de los 60 s del
+    worker.
   - La sync de contenido y la de YouTube no tocan estas columnas: una pieza nueva entra con null y el cron la
     mide primero.
 - **Quien lee `metrics` no trata "sin dato" como cero.** Una pieza con `metrics` en null no se midió. El ranking

@@ -28,7 +28,10 @@ import { ZernioHttpError } from "@/lib/zernio/client";
  * publicación). El cron corre una vez por día (`apps/web/vercel.json`, `0 6 * * *`), así que
  * una historia llega a su primera corrida con 30 a 54 h y tiene al menos 4
  * corridas más antes del cierre: como sus números ya no cambian, esperar no cuesta
- * nada y un día de cron caído o de 429 no la pierde.
+ * nada y un día de cron caído o de 429 no la pierde. El costo de un pedido por
+ * historia vale sin el 429 diario de [ZERNIO-METRICAS-429]: con 429 se suman los
+ * reintentos, y en la simulación de la revisión final, con 15 historias por día,
+ * se cierran 34 sin medir (con el cierre a 72 h eran 94).
  */
 
 export const TAMANO_DEL_LOTE = 50;
