@@ -121,7 +121,7 @@ los grants permitan, un usuario lo puede hacer por fuera de la app.
 | S | Disparar un cron o un worker desde afuera | `assertCronAuthorized` (lanza sin `CRON_SECRET`), `verifyQueueRequest` (secreto o firma QStash, 503 sin credenciales), `safeEqual` | `[AUD-SEG-4]` (firma QStash sin `url`: un cuerpo firmado vale para otro worker) |
 | I | Secreto del worker expuesto | — | `[TRIAL-SECRET-EN-URL]`, `[SEG-WORKER-SECRET-QUERY]` (en la URL de QStash y en logs) |
 | T | Cron que acepta parámetros | `ghl-sync` acepta `?organizationId=` detrás de `CRON_SECRET` | — (sólo quien tiene el secreto) |
-| D | Crons pisándose o reprocesando | — | `[AUD-CONF-3]`, `[TRIAL-CLEANUP-LOOP]`, `[CRONS-ORGS-INACTIVAS]` |
+| D | Crons pisándose o reprocesando | — | `[AUD-CONF-3]`, `[TRIAL-CLEANUP-LOOP]`, `[CRONS-ORGS-INACTIVAS]` (resuelto el 2026-10-04 en SCRUM-210) |
 | R | Trabajo cortado sin registro | — | `[AUD-CONF-6]` (sin `after()`), `[EMBUDOS-CRON-ERRORES]` |
 
 ## 6. Bot de Discord (Railway)

@@ -85,7 +85,7 @@ la falla. Ninguno tiene lock (`[AUD-SALUD-3]`) ni fila en una tabla de corridas 
 | `ghl-sync` (hora) | `Promise.all` de todas las orgs (`lib/ghl/sync-pipeline.ts:118`) | la org devuelve ceros; un timeout corta todas | 200 con ceros | log (`[ghl-sync] Error org=…`: 168 veces token inválido de una org) | ventana fija sí; token muerto nunca | **Falla** | `[EMBUDOS-CRON-ERRORES]`, nuevo `[INTEGRACIONES-ERROR-SIN-MARCA]`, nuevo `[CRONS-CORTE-60S]` |
 | `instagram/sync`, `instagram/poll` | serie | `.catch` por org | 200 | log | ver `[AUD-CONF-9]` | Revisar (legacy) | `[AUD-SALUD-1]`, `[AUD-CONF-9]` |
 | `mercadopago-token-refresh` (diario) | serie, aislado | la org no se marca | 200 con `failed` | log | reintenta mañana | Revisar (sin uso) | `[FIN-STRIPE-MP-DECIDIR]` |
-| `intelligence-snapshot` (2×día) | QStash por org, 2 reintentos | worker responde **200** con `failed` | — | log | no reintenta | **Falla** | `[INTELIGENCIA-SIN-REINTENTO]`, `[CRONS-ORGS-INACTIVAS]` |
+| `intelligence-snapshot` (2×día) | QStash por org, 2 reintentos | worker responde **200** con `failed` | — | log | no reintenta | **Falla** | `[INTELIGENCIA-SIN-REINTENTO]`, `[CRONS-ORGS-INACTIVAS]` (resuelto el 2026-10-04 en SCRUM-210) |
 | `founder-tone-analysis` (lunes) | ídem | ídem | — | log | no | **Falla** | ídem |
 | `executive-report-{daily,weekly,monthly}` | QStash por org | worker responde **500** con `failed` → QStash reintenta | — | log | sí, pero puede duplicar | OK con reparo | `[REPORTES-DUPLICADOS]` |
 | `sync-content-metrics` (diario) | QStash por org | 50 pedidos en paralelo a Zernio → **429** masivo (849 en 7 días) | 200 con `failed` | `console.warn` | las piezas viejas se reintentan mañana, y vuelven a chocar | Revisar | nuevo `[ZERNIO-METRICAS-429]` |

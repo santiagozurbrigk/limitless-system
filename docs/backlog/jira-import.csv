@@ -2322,6 +2322,15 @@ Fuente: PENDIENTES.md [REPORTES-DUPLICADOS] · Doc del área: docs/areas/agente-
 *Dónde:* {{apps/web/app/api/queue/process-cron-intelligence-snapshot/route.ts}}, {{process-cron-founder-tone/route.ts}}.
 
 Fuente: PENDIENTES.md [INTELIGENCIA-SIN-REINTENTO] · Doc del área: docs/areas/agente-ia.md",INTELIGENCIA-SIN-REINTENTO,Agente de negocio e IA,P2,,bug
+[CRONS-IA-ORGS-PAUSADAS-RESTO] (nuevo) Otros procesos con IA siguen corriendo para orgs pausadas,Task,Medium,agente-ia,p2,decision-de-negocio,,,,"*Tipo:* decisión de negocio
+
+*Estado verificado:* desde SCRUM-210, inteligencia, reportes ejecutivos y tono del founder sólo corren para orgs {{status = 'active'}} ({{lib/intelligence/organizaciones-activas.ts}}). Pero otros procesos con IA no miran {{organizations.status}}: {{/api/integrations/fathom/process}} (cada 10 min; analiza las llamadas que trae {{fathom/sync}} con Claude e indexa en RAG), {{/api/cron/daily-signals}} (Haiku para clasificar Discord y proponer hitos; elige orgs en {{route.ts:86-104}}) y el inbox de Instagram ({{instagram/poll}} + {{process-message}}, {{lib/manychat/score-conversation.ts}}). Desde SCRUM-7 el costo va a la clave de Claude de cada org, no a la de Limitless. La pausa tampoco corta el acceso a la app ({{lib/auth/bootstrap.ts}} no mira {{status}}).
+
+*Qué hay que hacer:* decidir si pausar una org detiene todos sus procesos automáticos. Si sí, filtrar {{status = 'active'}} en esos tres caminos (reusar {{listActiveOrganizationIds}} o un chequeo por org).
+
+*Dónde:* {{apps/web/app/api/integrations/fathom/process/route.ts}}, {{apps/web/app/api/cron/daily-signals/route.ts}}, {{apps/web/app/api/instagram/}}.
+
+Fuente: PENDIENTES.md [CRONS-IA-ORGS-PAUSADAS-RESTO] · Doc del área: docs/areas/agente-ia.md",CRONS-IA-ORGS-PAUSADAS-RESTO,Agente de negocio e IA,P2,,decisión de negocio
 [IA-COSTOS-INCOMPLETOS] (nuevo) Costos de IA subestimados,Task,Medium,agente-ia,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
 
 *Estado verificado:* {{MODEL_PRICING}} ({{lib/track-token-usage.ts}}) pone Haiku 4.5 a 0,80/4 USD por MTok, que es el precio de Haiku 3.5 (Haiku 4.5 lista 1/5 — confirmar en la página de precios). Embeddings de OpenAI no se registran (el Batch API del cerebro sí, desde SCRUM-7). El modelo guardado es el lógico {{claude-sonnet-4-6}} aunque la API recibe 4.5 (mismo precio).

@@ -34,7 +34,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
-### 2026-10-04 — Los procesos de IA ya no corren para organizaciones pausadas o dadas de baja (SCRUM-210)
+### 2026-10-04 — Inteligencia, reportes ejecutivos y tono ya no corren para organizaciones pausadas o dadas de baja (SCRUM-210)
 
 **Rama:** `fix/SCRUM-210-crons-orgs-inactivas`
 **Commit(s):** este
@@ -45,6 +45,10 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Por qué / finalidad:** cierra `[CRONS-ORGS-INACTIVAS]`. Antes una org pausada o dada de baja (`paused`, `churned`) seguía recibiendo el informe de inteligencia dos veces por día, los reportes ejecutivos y el análisis de tono, con su costo de IA.
 
 **Decisiones de diseño relevantes:** una sola función para todos los crons, para que no vuelvan a separarse. El test se comprobó sacando el filtro de `status`: falla el caso de las pausadas y dadas de baja.
+
+**Riesgos / deuda técnica pendiente:** otros procesos con IA (análisis de llamadas de Fathom, `daily-signals` e inbox de Instagram) no miran el estado de la org; queda como decisión en `[CRONS-IA-ORGS-PAUSADAS-RESTO]`. Un mensaje ya encolado o una corrida manual con `?organizationId=` siguen procesando la org pedida.
+
+---
 
 ### 2026-10-04 — Los permisos de un miembro ya no se escriben en los registros (SCRUM-121)
 
