@@ -1,3 +1,4 @@
+import { sumarDias } from "@/lib/fechas/calendario";
 import type { Department } from "@/types/operations";
 
 export type DbWeeklyDepartment =
@@ -39,14 +40,20 @@ export const DB_DEPARTMENT_LABELS: Record<DbWeeklyDepartment, string> = {
   founder: "Founder",
 };
 
-/** Lunes de la semana (ISO) en YYYY-MM-DD. */
-export function getCurrentWeekStart(date = new Date()): string {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+/**
+ * Lunes de la semana (ISO) de una fecha calendario, en YYYY-MM-DD.
+ *
+ * Recibe "hoy" ya armado (`fechaDeHoyLocal()` en el navegador, el de la
+ * organización en el servidor). Antes tomaba el reloj del proceso: en el
+ * servidor (UTC), el domingo de noche en Argentina ya era lunes y los inputs
+ * caían en la semana siguiente; y la medianoche local pasada por
+ * `toISOString` daba el domingo en zonas al este de UTC (SCRUM-493).
+ */
+export function getCurrentWeekStart(hoy: string): string {
+  // Día de la semana de la fecha calendario (0 = domingo), leído sobre el
+  // calendario y no sobre el reloj de nadie.
+  const diaDeLaSemana = new Date(`${hoy}T00:00:00Z`).getUTCDay();
+  return sumarDias(hoy, diaDeLaSemana === 0 ? -6 : 1 - diaDeLaSemana);
 }
 
 export function getWeekEndLabel(weekStart: string): string {

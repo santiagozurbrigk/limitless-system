@@ -5,6 +5,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
+import { getCurrentWeekStart } from "@/lib/operations/weekly-utils";
 import {
   SIN_METRICAS,
   engagementDe,
@@ -789,14 +791,11 @@ export async function handleGetOperationsSummary(
   if (!isSupabaseConfigured()) return notConfigured("operaciones");
 
   try {
-    // Semana actual (lunes)
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - daysFromMonday);
-    weekStart.setHours(0, 0, 0, 0);
-    const weekStartStr = weekStart.toISOString().slice(0, 10);
+    // Semana actual (lunes) de la organización: la misma cuenta que usan los
+    // inputs semanales, con su zona y no con el reloj del servidor (UTC).
+    const weekStartStr = getCurrentWeekStart(
+      await fechaDeHoyDeLaOrganizacion(supabase, organizationId)
+    );
 
     const [weeklyRes, sopsRes, snapshotRes] = await Promise.all([
       supabase

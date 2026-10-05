@@ -6,16 +6,18 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { InputsPageTabs } from "@/components/operations/inputs-page-tabs";
 import {
+  getCurrentWeekStartAction,
   getWeeklyInputsAction,
   getWeeklyCompletionStatus,
 } from "@/app/operations/actions";
 import { mapWeeklyInputRowsToTeamInputs } from "@/lib/operations/weekly-input-mapper";
-import { getCurrentWeekStart, formatWeekRange } from "@/lib/operations/weekly-utils";
+import { formatWeekRange } from "@/lib/operations/weekly-utils";
 import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export default async function InputsPage() {
-  const weekStart = getCurrentWeekStart();
+  // La semana de la organización, no la del reloj del servidor (UTC).
+  const weekStart = await getCurrentWeekStartAction();
 
   const [rows, completionStatus, profile] = await Promise.all([
     getWeeklyInputsAction(weekStart),

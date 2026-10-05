@@ -38,6 +38,8 @@ import { STATUS_LABELS, TASK_AREA_LABELS } from "@/lib/workboard/constants";
 import { paths } from "@/routes";
 import type { LaunchDetail, LaunchStatus } from "@/types/launches";
 import { FilterPills } from "@/components/marketing/filter-pills";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 
 export function LaunchDetailContent({
   initialLaunch,
@@ -50,7 +52,7 @@ export function LaunchDetailContent({
   const [pending, startTransition] = useTransition();
   const [generatingPostMortem, setGeneratingPostMortem] = useState(false);
   const [metricForm, setMetricForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: fechaDeHoyLocal(),
     revenue: "",
     newClients: "",
     conversationsStarted: "",
@@ -400,11 +402,10 @@ export function LaunchDetailContent({
           <div className="grid gap-3 py-2">
             <div className="space-y-2">
               <Label>Fecha</Label>
-              <Input
-                type="date"
+              <CampoFecha
                 value={metricForm.date}
-                onChange={(e) =>
-                  setMetricForm((f) => ({ ...f, date: e.target.value }))
+                onChange={(fecha) =>
+                  setMetricForm((f) => ({ ...f, date: fecha ?? "" }))
                 }
               />
             </div>

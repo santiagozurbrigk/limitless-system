@@ -59,6 +59,11 @@ vi.mock("@/lib/auth/require-auth", () => ({
             sim.updates.push(cambios);
             return builder;
           },
+          // La semana actual se calcula con la zona de la organización (SCRUM-493).
+          maybeSingle: async () =>
+            tabla === "organizations"
+              ? { data: { timezone: "America/Argentina/Buenos_Aires" }, error: null }
+              : { data: null, error: null },
           then(resolver: (r: unknown) => void) {
             if (tabla === "weekly_inputs") {
               resolver({ data: sim.errorInputs ? null : sim.inputs, error: sim.errorInputs });
