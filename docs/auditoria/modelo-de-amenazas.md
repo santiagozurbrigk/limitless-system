@@ -109,7 +109,7 @@ los grants permitan, un usuario lo puede hacer por fuera de la app.
 | E | Una org usa la credencial global de otra cosa | BYOK con respaldo global explícito (`lib/ai/credential-resolver.ts`) | `[ZERNIO-KEY-GLOBAL]` (P0), `[IA-CLAVES-INVALIDAS]`, `[SIGNUP-PUBLICO]` (cualquier alta gasta la key de Anthropic) |
 | E | Scopes OAuth de más | — | `[MKT-SCOPE-YT-UPLOAD]` |
 | D | Proveedor colgado retiene la lambda | Timeouts en Discord, agente, Fathom share link | `[AUD-CONF-1]`, `[API-TIMEOUTS]`, `[EMBUDOS-TIMEOUTS]` |
-| T | Respuesta del proveedor mal interpretada como dato | Regla de CLAUDE.md §3 (persistir crudo, no inventar) | `[AUDITORIA §3 confiabilidad 11]` (ceros de Zernio) |
+| T | Respuesta del proveedor mal interpretada como dato | Regla de CLAUDE.md §3 (persistir crudo, no inventar) | `[AUDITORIA §3 confiabilidad 11]` (ceros de Zernio; resuelto el 2026-10-04 en SCRUM-172) |
 | S | SSRF por URLs que controla el usuario | Las URLs base vienen de variables de entorno (`*_API_BASE`) | Calendly valida `https` en prod (`calendly/oauth/callback`); no se revisaron todos los fetch a URLs de usuario (thumbnails, Drive) |
 
 ## 5. Crons y colas (Vercel Cron, QStash)

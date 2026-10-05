@@ -1167,7 +1167,7 @@ Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
 - **Tipo:** bug
 - **Severidad:** Media
 - **Estado verificado:** `syncContentMetricsForOrg` lanza hasta 50 `getPostAnalytics` en paralelo (`lib/marketing/sync-content-metrics.ts:8,56-77`); `zernioFetchJson` (`lib/zernio/client.ts:268-284`) no reintenta. Zernio responde 429 con `limit: 6` y `retryAfterSeconds: 1`: 849 rechazos en `/api/queue/process-cron-sync-metrics` en 7 días (agregado de Vercel, 2026-09-23).
-- **Riesgo:** Si una org tiene más de ~6 piezas, entonces la mayoría no se actualiza, y como el orden es "más viejas primero", las mismas vuelven a chocar al día siguiente.
+- **Riesgo:** Si una org tiene más de ~6 piezas, entonces la mayoría no se actualiza, y como el orden es "más viejas primero", las mismas vuelven a chocar al día siguiente. Lo mismo pasa con las piezas cuyo analytics nunca se reconoce (por ejemplo, historias que Zernio trae sin analytics): quedan con `metrics_updated_at` en null o viejo, el cron las toma primero cada día y, si son 50 o más, el resto de la org no se actualiza. Hace falta registrar el último intento fallido o un tope de reintentos.
 - **Impacto:** Métricas de contenido desactualizadas en Marketing para las orgs con más publicaciones (3 afectadas en la ventana).
 - **Qué hay que hacer:** limitar la concurrencia (p. ej. 4 pedidos a la vez) y, ante 429, esperar `retryAfterSeconds` y reintentar una o dos veces dentro de `zernioFetchJson`.
 - **Dónde:** `apps/web/lib/marketing/sync-content-metrics.ts`, `apps/web/lib/zernio/client.ts`.
@@ -2496,7 +2496,7 @@ Prioridad sugerida P2: no hay una filtración conocida; el procedimiento se nece
 
 #### [T-11] `lib/zernio/resolve-analytics.ts`
 - **Tipo:** tests
-- **Estado verificado:** `lib/zernio/__tests__/` sólo tiene `triggers.test.ts`.
+- **Estado verificado:** `lib/zernio/__tests__/` no tiene tests de `resolve-analytics.ts`; `metricas-para-guardar.test.ts` y `filas-de-contenido.test.ts` (SCRUM-172) cubren de forma indirecta que un analytics vacío o desconocido da `recognized: false`.
 - **Qué hay que hacer:** vacío/inválido → ceros; plano; anidado (`{instagram}` y `{platforms:{instagram}}`) suma; campos faltantes.
 - **Dónde:** archivo citado.
 

@@ -1,4 +1,5 @@
 import { parseDuration } from "@/lib/youtube/parse-duration";
+import type { ContentMetrics } from "@/types/content";
 
 export type YouTubePlatformMetadata = {
   view_count: number;
@@ -86,6 +87,31 @@ export async function fetchYouTubeVideoDetails(
   }
 
   return result;
+}
+
+/**
+ * Las métricas de un video para guardar en `content_pieces`. Si YouTube no
+ * devolvió el detalle del video (cuota agotada, token vencido), no hay
+ * métricas: devuelve un objeto vacío para no pisar las guardadas con ceros
+ * (SCRUM-172, fix-pack).
+ */
+export function metricasDeVideoParaGuardar(
+  metadata: YouTubePlatformMetadata | undefined,
+  ahora: string
+): Partial<{ metrics: ContentMetrics; metrics_updated_at: string }> {
+  if (!metadata) return {};
+  return {
+    metrics: {
+      views: metadata.view_count,
+      likes: metadata.like_count,
+      comments: metadata.comment_count,
+      shares: 0,
+      saves: 0,
+      reach: 0,
+      impressions: 0,
+    },
+    metrics_updated_at: ahora,
+  };
 }
 
 export function youtubeMetricsToAssetFields(metadata: YouTubePlatformMetadata) {
