@@ -81,7 +81,7 @@ supabase db dump --db-url "$DB_URL" -f data.sql --use-copy --data-only
    ```
    Ojo: no hay lock entre corridas (`[AUD-SALUD-3]`) y los reportes se pueden duplicar (`[REPORTES-DUPLICADOS]`).
 5. Lo que no se recupera: el snapshot de anuncios del día (`capture-ad-metrics`) si Zernio no respondió; queda el hueco.
-6. Sync de Fathom: una caída de varios días se pone al día sola (24 h por corrida). Una llamada que la sync dejó de reintentar (Sentry: "Fathom: una reunión no se pudo guardar durante el plazo de reintentos") se recupera arreglando la causa y rebobinando `last_sync_at` de esa conexión; el paso a paso está en [`docs/areas/ventas.md`](../areas/ventas.md), "Cómo recuperar una reunión descartada".
+6. Sync de Fathom: una caída de varios días se pone al día sola (24 h por corrida). Una llamada que la sync dejó de reintentar (Sentry: "Fathom: una reunión no se pudo guardar durante el plazo de reintentos") se recupera arreglando la causa, borrando su fila de `fathom_sync_fallas` y rebobinando `last_sync_at` de esa conexión; el paso a paso está en [`docs/areas/ventas.md`](../areas/ventas.md), "Cómo recuperar una reunión descartada".
 
 ### D · Se agotó o rechazan la clave de IA (Anthropic)
 1. Logs: `[anthropic] La clave propia de la organización … fue rechazada` (401/403) o errores de créditos (400 `billing_error`).

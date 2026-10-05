@@ -196,6 +196,14 @@ acá: llevan la misma key que el negocio y harían privadas de quien conectó to
     descartado sin reintentos. Cuando la reunión se guarda, su fila se borra. Si la tabla no se puede leer o
     escribir, la reunión frena el cursor y no se descarta. Una que falla sin ninguna fecha no puede frenar el
     cursor: se reporta.
+  - Una descartada **sigue descartada** aunque vuelva a llegar (cae en el solape, o el cursor no pudo pasarla en
+    la corrida del descarte): no suma intentos, no frena el cursor y no se reporta otra vez. Para reintentarla
+    hay que borrar su fila (ver "Cómo recuperar una reunión descartada"); así la sync no tiene que adivinar si
+    volvió porque alguien rebobinó el cursor.
+  - Limpieza: en cada corrida se borran las filas de esa conexión sin fallas nuevas en **30 días**
+    (`limpiarFallasViejas`). Cubre las que ya no se vuelven a leer (una falla sin fecha, una reunión borrada en
+    Fathom mientras fallaba) y las descartadas, que se pueden recuperar durante ese plazo. Una reunión que
+    sigue frenando el cursor se relee en cada corrida y renueva su `ultima_falla_at`, así que no vence.
   - `listFathomMeetings` avisa si se cortó en el tope de páginas (20 la org, 5 el miembro). Fathom devuelve primero
     lo más nuevo, así que lo que queda sin leer es lo más viejo: el cursor no pasa de ahí. Si llegó en orden
     ascendente, avanza hasta lo último leído.
@@ -207,16 +215,25 @@ acá: llevan la misma key que el negocio y harían privadas de quien conectó to
     org, 50 para un miembro), el cursor no puede avanzar y se reporta a Sentry en cada corrida.
   - Si Fathom corta a mitad (429 o una falla de su lado) después de algún tramo completo, lo leído se guarda y el
     cursor avanza hasta el último tramo completo. Si el 429 trae un `Retry-After` de hasta 10 s, se espera y se
-    reintenta el mismo tramo una vez por corrida. Sin ningún tramo completo, la falla se propaga como siempre.
+    reintenta el mismo tramo una vez por conexión, si entra antes del plazo del cron (ver más abajo). Sin ningún tramo completo, la falla se propaga como siempre.
   - Si no se guardó ni falló nada, el cursor queda donde estaba; nunca retrocede.
   - Si `created_at` falta o no se puede leer, se usa el inicio de la grabación, que nunca es posterior.
   - Volver a traer una llamada ya guardada (por el solape o por un reintento) actualiza sus datos de Fathom pero
     no vuelve a pasarla por el matcher por título si ya se procesó (`debeReasociarAlSincronizar` en
     `lib/fathom/sync.ts`): el matcher la devolvía a `pending` y se pagaba de nuevo el análisis, con entradas
     duplicadas en el timeline y en problemas del cliente.
+  - **Plazo del cron** (`lib/fathom/plazo-del-cron.ts`): el cron tiene 60 s para todas las conexiones, en serie.
+    La corrida tiene un plazo de 45 s desde el inicio: pasado, no se arranca ninguna conexión más (quedan como
+    `postergadas`/`postergados` en la respuesta), no se pide otra página ni otro tramo (la lectura vuelve
+    cortada y el cursor no pasa de lo que faltó leer) y un `Retry-After` sólo se espera si la espera más 8 s
+    de margen entran antes del plazo. Los 15 s restantes son para terminar la página en curso y escribir los
+    cursores. Para que no queden siempre las mismas afuera, las tandas se alternan cada hora (en las corridas
+    impares van primero los miembros) y dentro de cada tanda el orden rota. La sincronización manual (botones)
+    no tiene plazo.
   - **Cómo recuperar una reunión descartada** (o una que el bug anterior a SCRUM-36 salteó): arregla primero la
-    causa (el error del guardado está en los logs `[Fathom:sync]` y en Sentry). Después rebobina el cursor de
-    esa conexión a un poco antes del `created_at` de la reunión, en el SQL Editor de Supabase:
+    causa (el error del guardado está en los logs `[Fathom:sync]` y en Sentry). Después, en el SQL Editor de
+    Supabase, borra su fila de `fathom_sync_fallas` (si no, sigue descartada) y rebobina el cursor de esa
+    conexión a un poco antes del `created_at` de la reunión. Las descartadas se guardan 30 días.
 
     ```sql
     -- Conexión de la organización
@@ -230,10 +247,14 @@ acá: llevan la misma key que el negocio y harían privadas de quien conectó to
      where organization_id = '<org>' and user_id = '<miembro>' and integration_type = 'fathom';
 
     -- Las descartadas de una org, con su created_at (user_id nulo = la conexión de la org)
-    select user_id, fathom_call_id, fathom_created_at, intentos, primera_falla_at, descartada_at
+    select id, user_id, fathom_call_id, fathom_created_at, intentos, primera_falla_at, descartada_at
       from public.fathom_sync_fallas
      where organization_id = '<org>' and descartada_at is not null
      order by fathom_created_at;
+
+    -- Borrar la fila de la que se quiere recuperar (por su id, de la consulta anterior)
+    delete from public.fathom_sync_fallas
+     where organization_id = '<org>' and id = '<id>';
     ```
 
     El cursor nunca baja de `connected_at`. La corrida siguiente relee desde ahí por tramos (las ya guardadas

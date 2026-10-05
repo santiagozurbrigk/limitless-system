@@ -34,6 +34,51 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · Segundo fix-pack de SCRUM-36: plazo del cron de Fathom, limpieza y descartadas que vuelven
+
+**Rama:** `fix/SCRUM-36-fathom-cursor`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Integraciones → Fathom. `app/api/integrations/fathom/sync/route.ts`, nuevo
+`lib/fathom/plazo-del-cron.ts`, `lib/fathom/leer-ventana.ts`, `lib/fathom/api.ts`, `lib/fathom/sync.ts`,
+`lib/fathom/member-sync.ts`, `lib/fathom/fallas-de-sync.ts`, `lib/fathom/cursor.ts`. Sin cambios en la migración.
+
+**Qué se hizo** (segunda pasada de la revisión adversarial):
+- **N-1, plazo del cron:** la espera por `Retry-After` (hasta 10 s) era por conexión y sin presupuesto común; con
+  seis conexiones con 429 el cron pasaba los 60 s de `maxDuration` y los miembros, que iban últimos, no se
+  sincronizaban. Ahora la corrida tiene un plazo de 45 s desde el inicio que baja hasta cada lectura: pasado,
+  no se arranca ninguna conexión más (vuelven en `postergadas`/`postergados`), no se pide otra página
+  (`listFathomMeetings` corta como `truncated`) ni otro tramo, y un `Retry-After` sólo se espera si la espera
+  más 8 s de margen entran. Los 15 s restantes son para terminar y escribir cursores. Contra la inanición, las
+  tandas se alternan cada hora (en las corridas impares van primero los miembros) y dentro de cada tanda el
+  orden rota. La sincronización manual no tiene plazo.
+- **O-1, limpieza:** en cada corrida se borran las filas de `fathom_sync_fallas` de esa conexión sin fallas nuevas
+  en 30 días (`limpiarFallasViejas`): fallas sin fecha, reuniones borradas en Fathom mientras fallaban y
+  descartadas viejas. Una reunión que sigue frenando el cursor renueva su `ultima_falla_at` y no vence.
+- **O-2, descartadas que vuelven:** antes una descartada que volvía a llegar reiniciaba la cuenta, como si
+  alguien hubiera rebobinado el cursor, y eso también pasaba si caía en el solape o si el cursor no había podido
+  pasarla. Ahora sigue descartada: no suma intentos, no frena el cursor y no se reporta otra vez. Para
+  reintentarla, la recuperación manual borra su fila además de rebobinar el cursor (`docs/areas/ventas.md`,
+  `docs/operacion/incidentes.md` y el texto que va a Sentry).
+- Tests: `plazo-del-cron.test.ts` (7, nuevo), `sync-cron.test.ts` de la ruta (2, nuevo: plazo común y tandas
+  alternadas), `leer-ventana.test.ts` (16: espera que entra o no, sin tramo ni página después del plazo),
+  `sync-corridas.test.ts` (17: seis orgs con 429 terminan antes del plazo, postergadas sin tocar su cursor,
+  rotación de orgs y miembros, plazo en la sync del miembro, limpieza, descartada que vuelve y recuperación),
+  `cursor.test.ts` (32) y `fallas-de-sync.test.ts` (6). Control negativo: 17 mutaciones, todas detectadas
+  (`control-negativo-fixpack-2.txt` en la evidencia).
+
+**Por qué / finalidad:** que una tanda de 429 no deje sin sincronizar a los miembros, que la tabla de fallas no
+acumule filas que ya no sirven y que una reunión descartada no vuelva a frenar la sync 24 h por un falso
+rebobinado.
+
+**Decisiones de diseño relevantes:** rotación sin estado (por número de corrida horaria) en vez de guardar qué
+conexión quedó afuera: alcanza para que ninguna quede siempre última y no necesita columnas. Para O-2 se eligió
+no adivinar el rebobinado: la recuperación es explícita (borrar la fila), con lo que la migración no cambia.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Las conexiones que no entran en una corrida esperan como mucho
+algunas horas hasta que la rotación las pone adelante.
+
+---
+
 ### 2026-10-05 · Fix-pack de SCRUM-36: reintentos medidos desde la primera falla, 429 sin perder lo leído
 
 **Rama:** `fix/SCRUM-36-fathom-cursor`
