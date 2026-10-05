@@ -7,6 +7,7 @@ import { resolvePostAnalytics } from "@/lib/zernio/resolve-analytics";
 import type { ContentMetrics } from "@/types/content";
 import {
   armarLote,
+  esErrorPermanente,
   historiasACerrarHasta,
   historiasListasHasta,
   NUNCA,
@@ -187,6 +188,18 @@ export async function syncContentMetricsForOrg(
       } = { metrics_checked_at: ahora };
       let motivoSinDato: string | null = null;
 
+      // Sin dato (analytics no reconocidos o un error permanente de Zernio): suma
+      // un intento y espera antes de volver a la cola.
+      const sinDato = (motivo: string) => {
+        const intentos = (piece.metrics_intentos_sin_dato ?? 0) + 1;
+        cambios = {
+          ...cambios,
+          metrics_intentos_sin_dato: intentos,
+          metrics_reintentar_desde: proximoIntento(piece, intentos, momento),
+        };
+        motivoSinDato = motivo;
+      };
+
       try {
         const analytics = await client.getPostAnalytics(postId);
         const { metrics, lastUpdated, recognized } = resolvePostAnalytics(analytics);
@@ -200,20 +213,21 @@ export async function syncContentMetricsForOrg(
             metrics_reintentar_desde: piece.type === "story" ? NUNCA : null,
           };
         } else {
-          const intentos = (piece.metrics_intentos_sin_dato ?? 0) + 1;
-          cambios = {
-            ...cambios,
-            metrics_intentos_sin_dato: intentos,
-            metrics_reintentar_desde: proximoIntento(piece, intentos, momento),
-          };
-          motivoSinDato = `analytics sin datos reconocibles para ${postId}`;
+          sinDato(`analytics sin datos reconocibles para ${postId}`);
         }
       } catch (err) {
-        // Un error del pedido (429, red) no es "sin dato": no suma intento.
-        motivoSinDato = err instanceof Error ? err.message : String(err);
-        // Una historia con error pasajero no se marca: sigue como estaba y se
-        // vuelve a pedir en la próxima corrida, hasta el cierre de las 72 h.
-        if (piece.type === "story") throw new Error(motivoSinDato);
+        const mensaje = err instanceof Error ? err.message : String(err);
+        if (esErrorPermanente(err)) {
+          // 4xx distinto de 408 y 429 (por ejemplo 404 de un post borrado): no se
+          // arregla reintentando al día siguiente, cuenta como sin dato.
+          sinDato(mensaje);
+        } else {
+          // Un error pasajero (408, 429, 5xx, red) no es "sin dato": no suma intento.
+          motivoSinDato = mensaje;
+          // Una historia con error pasajero no se marca: sigue como estaba y se
+          // vuelve a pedir en la próxima corrida, hasta el cierre de las 72 h.
+          if (piece.type === "story") throw new Error(mensaje);
+        }
       }
 
       const { error: updateError } = await admin

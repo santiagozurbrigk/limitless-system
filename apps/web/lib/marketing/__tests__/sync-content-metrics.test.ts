@@ -165,7 +165,7 @@ vi.mock("@/lib/zernio/integration", () => ({
 
 import { syncContentMetricsForOrg } from "../sync-content-metrics";
 import { cambiosParaActualizar, mapExternalPostToRow } from "@/lib/zernio/filas-de-contenido";
-import type { ZernioPost } from "@/lib/zernio/client";
+import { ZernioHttpError, type ZernioPost } from "@/lib/zernio/client";
 
 const HORA = 60 * 60 * 1000;
 const DIA = 24 * HORA;
@@ -517,6 +517,38 @@ describe("syncContentMetricsForOrg · cada intento", () => {
       metrics_checked_at: new Date(ahora()).toISOString(),
     });
     expect(buscar("ok").metrics).toMatchObject({ likes: 2 });
+  });
+
+  it("⭐ un 404 de Zernio (post borrado) cuenta como sin dato: suma un intento y espera", async () => {
+    estado.piezas = [pieza("borrado"), historia("historia-borrada", 40)];
+    estado.analytics = {
+      "ig-borrado": new ZernioHttpError("Zernio getPostAnalytics: HTTP 404 — not found", 404),
+      "ig-historia-borrada": new ZernioHttpError("Zernio getPostAnalytics: HTTP 404 — not found", 404),
+    };
+
+    const r = await correrCron(0);
+
+    expect(r).toEqual({ attempted: 2, updated: 0, failed: 2 });
+    expect(buscar("borrado")).toMatchObject({
+      metrics_intentos_sin_dato: 1,
+      metrics_reintentar_desde: new Date(ahora() + DIA).toISOString(),
+    });
+    expect(buscar("historia-borrada").metrics_reintentar_desde).toBe("infinity");
+
+    // Al día siguiente vuelve (espera de 1 día); al otro, no (espera de 2).
+    await correrCron(1);
+    expect(estado.pedidos).toEqual(["ig-borrado"]);
+    await correrCron(2);
+    expect(estado.pedidos).toEqual([]);
+  });
+
+  it.each([429, 408, 500, 503])("un HTTP %i es pasajero: marca el intento sin sumar espera", async (status) => {
+    estado.piezas = [pieza("pasajero")];
+    estado.analytics = { "ig-pasajero": new ZernioHttpError(`Zernio getPostAnalytics: HTTP ${status}`, status) };
+
+    await correrCron(0);
+
+    expect(estado.updates[0].cambios).toEqual({ metrics_checked_at: new Date(ahora()).toISOString() });
   });
 
   it("si falla el update de una pieza, cuenta como fallo, se loguea y sigue con el resto", async () => {

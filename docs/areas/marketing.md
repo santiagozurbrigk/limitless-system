@@ -242,7 +242,9 @@ como JSON.
   3. Piezas ya intentadas sin dato (nunca historias): sólo si venció `metrics_reintentar_desde`, y a lo sumo 10 lugares si hay
      piezas con métricas esperando (si sobran lugares, los ocupan).
   - Sin dato, la pieza suma `metrics_intentos_sin_dato` y espera 1, 2, 4, 8 y después 16 días. Con métricas,
-    vuelve a 0 y sin espera. Un error del pedido (429, red) marca el intento pero no suma espera.
+    vuelve a 0 y sin espera. Un error permanente de Zernio (4xx distinto de 408 y 429, por ejemplo 404 de un post
+    borrado) cuenta como sin dato. Un error pasajero (408, 429, 5xx, red) marca el intento pero no suma espera.
+    El status sale de `ZernioHttpError` (`lib/zernio/client.ts`).
   - **Una historia se mide una sola vez.** Meta sólo expone historias vigentes (24 h) y Zernio guarda sus
     métricas con el webhook `story_insights` al vencer (`lib/zernio/client.ts`): antes no hay números finales y
     después no cambian. La historia entra a la cola a las 30 h (6 h de margen para el webhook), se pide una vez y,

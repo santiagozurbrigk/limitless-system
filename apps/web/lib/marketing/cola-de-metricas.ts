@@ -1,3 +1,5 @@
+import { ZernioHttpError } from "@/lib/zernio/client";
+
 /**
  * Reglas de la cola del cron de métricas de contenido (SCRUM-172, reabierta).
  *
@@ -81,6 +83,18 @@ export function proximoIntento(
 ): string {
   if (pieza.type === "story") return NUNCA;
   return new Date(ahora.getTime() + diasDeEspera(intentosSinDato) * DIA_MS).toISOString();
+}
+
+/**
+ * Un error de Zernio que no se arregla reintentando (4xx distinto de 408 y 429:
+ * por ejemplo 404 de un post borrado o 400 de un id inválido). Cuenta como "sin
+ * dato" y suma espera. 408, 429, 5xx y los errores de red no: son pasajeros.
+ * El status sale de `ZernioHttpError` (`lib/zernio/client.ts`).
+ */
+export function esErrorPermanente(err: unknown): boolean {
+  if (!(err instanceof ZernioHttpError)) return false;
+  const { status } = err;
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
 }
 
 /**

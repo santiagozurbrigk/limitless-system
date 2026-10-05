@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { ZernioHttpError } from "@/lib/zernio/client";
 import {
   armarLote,
   diasDeEspera,
+  esErrorPermanente,
   historiasACerrarHasta,
   historiasListasHasta,
   NUNCA,
@@ -64,5 +66,23 @@ describe("armarLote", () => {
 
   it("sin lugares no arma nada", () => {
     expect(armarLote(medidas, sinDato, 0)).toEqual([]);
+  });
+});
+
+describe("esErrorPermanente", () => {
+  const http = (status: number) => new ZernioHttpError(`Zernio getPostAnalytics: HTTP ${status}`, status);
+
+  it("⭐ un 4xx distinto de 408 y 429 es permanente", () => {
+    expect([400, 401, 403, 404, 410, 422].map((s) => esErrorPermanente(http(s)))).toEqual([
+      true, true, true, true, true, true,
+    ]);
+  });
+
+  it("408, 429, 5xx y los errores sin status (red) son pasajeros", () => {
+    expect([408, 429, 500, 502, 503].map((s) => esErrorPermanente(http(s)))).toEqual([
+      false, false, false, false, false,
+    ]);
+    expect(esErrorPermanente(new Error("fetch failed"))).toBe(false);
+    expect(esErrorPermanente(new Error("Zernio getPostAnalytics: HTTP 404"))).toBe(false);
   });
 });

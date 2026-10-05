@@ -254,6 +254,21 @@ export type ZernioMediaItem = {
 
 export type ZernioClient = ReturnType<typeof createZernioClient>;
 
+/**
+ * Respuesta HTTP no exitosa de Zernio. Lleva el `status` para que quien llama
+ * distinga un error permanente (404 de un post borrado) de uno pasajero (429,
+ * 5xx). El mensaje es el mismo de siempre: `Zernio <label>: HTTP <status> — ...`.
+ */
+export class ZernioHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ZernioHttpError";
+    this.status = status;
+  }
+}
+
 export function createZernioClient(apiKey: string) {
   const headers = () => buildHeaders(apiKey);
 
@@ -272,7 +287,7 @@ export function createZernioClient(apiKey: string) {
         url,
         preview,
       });
-      throw new Error(`Zernio ${label}: HTTP ${res.status} — ${preview}`);
+      throw new ZernioHttpError(`Zernio ${label}: HTTP ${res.status} — ${preview}`, res.status);
     }
 
     const contentType = res.headers.get("content-type") ?? "";
