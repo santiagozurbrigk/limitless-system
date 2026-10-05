@@ -56,6 +56,19 @@ Los informes de origen son las pruebas integrales del 4-oct (SCRUM-111, 121 y 21
 
 **Riesgos / deuda técnica pendiente:** los demás procesos con IA siguen sin mirar el estado de la org (`[CRONS-IA-ORGS-PAUSADAS-RESTO]`, ahora con la función por org lista para reusar).
 
+#### 2. SCRUM-111: un solo chequeo de super admin por pedido
+
+**Qué se hizo:** `lib/auth/require-super-admin.ts` resuelve al usuario super admin en una función interna envuelta en `cache` de React, que devuelve el usuario o el motivo del rechazo; `requireSuperAdmin` lanza sobre esa base con los mismos mensajes de antes (`Supabase no configurado`, `No autenticado`, `Sin permisos de super admin`) e `isSuperAdminUser` devuelve el booleano. `isSuperAdminEmail` no cambia (la usan el login, el callback, el middleware y el bootstrap, con un email explícito). Test nuevo `lib/auth/__tests__/super-admin-una-consulta.test.ts`.
+
+**Por qué / finalidad:** `/super-admin/ai-brain/[id]` con imagen corría tres chequeos por pedido (layout, `loadAiBrainDocument` y `getSignedFileUrl`), cada uno con `auth.getUser()` más una consulta a `super_admin_users`. Ahora es uno.
+
+**Decisiones de diseño relevantes:**
+- React 19.2 y Next 15.5: `cache` memoiza dentro del render de server components (el despachador de Flight da una caché por pedido). En server actions y route handlers no hay pedido de Flight y `cache` llama a la función cada vez (`getCacheForType` devuelve un `Map` nuevo), así que ahí el comportamiento es el de antes y no hay riesgo de arrastrar un resultado viejo después de un login. El middleware y la versión de cliente de React también exportan `cache` (en el cliente es un pasamanos), así que el import no rompe en ningún bundle; el `next build` lo confirma.
+- El test carga la versión de servidor de React (`react.react-server.js`, la que usa Next) y simula un pedido instalando el despachador como lo hace Flight. Con la versión que Vitest resuelve por defecto, `cache` no memoiza y el test no podría probar nada. Los dos tests que mockean `require-super-admin` entero siguen pasando sin cambios.
+- Controles negativos: sacar el `cache` (fallan "una sola consulta" y "un rechazo también se comparte": 3 consultas en vez de 1), hacer que `isSuperAdminUser` vuelva a consultar por su cuenta (fallan 3) y cambiar un mensaje (falla "sin sesión").
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Que una función de `lib/super-admin` rechace con `throw` (500 en vez de redirect) sigue igual; hoy es inalcanzable porque el layout redirige antes.
+
 ---
 
 ### 2026-10-04 — La sync de contenido de Zernio no pisa las métricas con ceros (SCRUM-172)

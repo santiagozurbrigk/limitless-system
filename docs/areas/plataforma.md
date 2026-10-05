@@ -64,7 +64,7 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 
 Guard doble: `app/(super-admin)/super-admin/layout.tsx` (redirect) y `requireSuperAdmin()` dentro de
 cada query/acción (incluidas las de sólo lectura, vía `lib/super-admin/queries.ts`, `org-health.ts` y
-`onboarding-progress.ts` y `getSignedFileUrl`, que lo suman desde SCRUM-111).
+`onboarding-progress.ts` y `getSignedFileUrl`, que lo suman desde SCRUM-111). Los dos guards (`isSuperAdminUser` y `requireSuperAdmin`) comparten una resolución memoizada con `cache` de React (`lib/auth/require-super-admin.ts`): dentro de un mismo render de server components (layout + página, p. ej. `/super-admin/ai-brain/[id]` con imagen, que encadena tres chequeos) se hace un solo `auth.getUser()` y una sola consulta a `super_admin_users`. En server actions y route handlers `cache` no memoiza: cada llamada consulta, como antes. Los mensajes de rechazo no cambiaron.
 
 ## Modelo de datos
 

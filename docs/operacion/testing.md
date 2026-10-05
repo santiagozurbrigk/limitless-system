@@ -84,7 +84,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/super-admin` | 4 | 35 | plan de bajas, progreso de onboarding y chequeo de super admin en las lecturas con service role |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
 | `lib/sops` | 2 | 25 | marcadores de adjuntos, chunks de audio |
-| `lib/auth` | 5 | 25 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log |
+| `lib/auth` | 6 | 33 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log, un solo chequeo de super admin por pedido |
 | `lib/integrations` | 1 | 23 | `health.ts` y completitud del registro |
 | `lib/vturb` | 2 | 23 | normalización de stats, período cerrado |
 | `lib/metrics` | 6 | 79 | etapas del embudo de ventas, match de closer, períodos y prorrateo, ingresos por fecha, resumen de Finanzas, serie de 6 meses (varias zonas horarias) |
