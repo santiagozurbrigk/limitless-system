@@ -34,6 +34,183 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · Tercer fix-pack de SCRUM-36: rotación sin paridad compartida y cortes por plazo sin falsa alarma
+
+**Rama:** `fix/SCRUM-36-fathom-cursor`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Integraciones → Fathom. `lib/fathom/plazo-del-cron.ts`, `lib/fathom/sync.ts`,
+`lib/fathom/member-sync.ts`, `lib/fathom/api.ts`, `lib/fathom/leer-ventana.ts`, `lib/fathom/cursor.ts`. Sin cambios en la
+migración.
+
+**Qué se hizo** (tercera pasada de la revisión adversarial):
+- **N-2:** la rotación de cada tanda (`corrida % n`) y la alternancia de tandas usaban la misma paridad. Con una
+  cantidad par de orgs, en las corridas en que las orgs iban primero arrancaba siempre una de índice par, y una
+  org de índice impar podía no sincronizarse nunca si la otra y los miembros se comían el plazo. Ahora cada tanda
+  rota con `Math.floor(corrida / 2)` (`ordenDeLaTanda`): cada conexión arranca primera de toda la corrida una vez
+  cada 2 × n horas.
+- **N-3:** un corte por el plazo del cron en orden descendente se reportaba a Sentry como "tope de páginas, sync
+  trabada". Ahora el motivo del corte viaja de punta a punta: `listFathomMeetings` devuelve `cortadaPorPlazo`,
+  `LecturaDeVentana` lleva `motivoDeCorte` (`tope`, `plazo`, `tramos` o `fathom`) y `calcularNuevoCursor` sólo marca
+  `trabada` cuando el corte fue por el tope de páginas. El motivo también va al log de la sync.
+- Tests: `plazo-del-cron.test.ts` (cada org y cada miembro arranca primero dentro de 2 × n horas, con 1 a 6
+  conexiones, y el caso que fallaba antes), `cursor.test.ts` (sólo el tope cuenta como trabada), `leer-ventana.test.ts`
+  (el motivo de cada corte) y `sync-corridas.test.ts` (corte por plazo sin reporte; corte por tope con reporte).
+  Control negativo: 8 mutaciones, todas detectadas (`control-negativo-fixpack-3.txt` en la evidencia).
+
+**Por qué / finalidad:** que la promesa de "ninguna conexión queda siempre afuera" valga también con cantidades
+pares, y que la alerta de sync trabada sólo suene cuando la sync está trabada de verdad.
+
+**Decisiones de diseño relevantes:** el motivo es opcional en `LecturaDeVentana` y sin dato se trata como `tope`, el
+caso conservador (reporta).
+
+**Riesgos / deuda técnica pendiente:** ninguno.
+
+---
+
+### 2026-10-05 · Segundo fix-pack de SCRUM-36: plazo del cron de Fathom, limpieza y descartadas que vuelven
+
+**Rama:** `fix/SCRUM-36-fathom-cursor`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Integraciones → Fathom. `app/api/integrations/fathom/sync/route.ts`, nuevo
+`lib/fathom/plazo-del-cron.ts`, `lib/fathom/leer-ventana.ts`, `lib/fathom/api.ts`, `lib/fathom/sync.ts`,
+`lib/fathom/member-sync.ts`, `lib/fathom/fallas-de-sync.ts`, `lib/fathom/cursor.ts`. Sin cambios en la migración.
+
+**Qué se hizo** (segunda pasada de la revisión adversarial):
+- **N-1, plazo del cron:** la espera por `Retry-After` (hasta 10 s) era por conexión y sin presupuesto común; con
+  seis conexiones con 429 el cron pasaba los 60 s de `maxDuration` y los miembros, que iban últimos, no se
+  sincronizaban. Ahora la corrida tiene un plazo de 45 s desde el inicio que baja hasta cada lectura: pasado,
+  no se arranca ninguna conexión más (vuelven en `postergadas`/`postergados`), no se pide otra página
+  (`listFathomMeetings` corta como `truncated`) ni otro tramo, y un `Retry-After` sólo se espera si la espera
+  más 8 s de margen entran. Los 15 s restantes son para terminar y escribir cursores. Contra la inanición, las
+  tandas se alternan cada hora (en las corridas impares van primero los miembros) y dentro de cada tanda el
+  orden rota. La sincronización manual no tiene plazo.
+- **O-1, limpieza:** en cada corrida se borran las filas de `fathom_sync_fallas` de esa conexión sin fallas nuevas
+  en 30 días (`limpiarFallasViejas`): fallas sin fecha, reuniones borradas en Fathom mientras fallaban y
+  descartadas viejas. Una reunión que sigue frenando el cursor renueva su `ultima_falla_at` y no vence.
+- **O-2, descartadas que vuelven:** antes una descartada que volvía a llegar reiniciaba la cuenta, como si
+  alguien hubiera rebobinado el cursor, y eso también pasaba si caía en el solape o si el cursor no había podido
+  pasarla. Ahora sigue descartada: no suma intentos, no frena el cursor y no se reporta otra vez. Para
+  reintentarla, la recuperación manual borra su fila además de rebobinar el cursor (`docs/areas/ventas.md`,
+  `docs/operacion/incidentes.md` y el texto que va a Sentry).
+- Tests: `plazo-del-cron.test.ts` (7, nuevo), `sync-cron.test.ts` de la ruta (2, nuevo: plazo común y tandas
+  alternadas), `leer-ventana.test.ts` (16: espera que entra o no, sin tramo ni página después del plazo),
+  `sync-corridas.test.ts` (17: seis orgs con 429 terminan antes del plazo, postergadas sin tocar su cursor,
+  rotación de orgs y miembros, plazo en la sync del miembro, limpieza, descartada que vuelve y recuperación),
+  `cursor.test.ts` (32) y `fallas-de-sync.test.ts` (6). Control negativo: 17 mutaciones, todas detectadas
+  (`control-negativo-fixpack-2.txt` en la evidencia).
+
+**Por qué / finalidad:** que una tanda de 429 no deje sin sincronizar a los miembros, que la tabla de fallas no
+acumule filas que ya no sirven y que una reunión descartada no vuelva a frenar la sync 24 h por un falso
+rebobinado.
+
+**Decisiones de diseño relevantes:** rotación sin estado (por número de corrida horaria) en vez de guardar qué
+conexión quedó afuera: alcanza para que ninguna quede siempre última y no necesita columnas. Para O-2 se eligió
+no adivinar el rebobinado: la recuperación es explícita (borrar la fila), con lo que la migración no cambia.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Las conexiones que no entran en una corrida esperan como mucho
+algunas horas hasta que la rotación las pone adelante.
+
+---
+
+### 2026-10-05 · Fix-pack de SCRUM-36: reintentos medidos desde la primera falla, 429 sin perder lo leído
+
+**Rama:** `fix/SCRUM-36-fathom-cursor`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Ventas → Llamadas / Integraciones → Fathom. `lib/fathom/cursor.ts`, `lib/fathom/leer-ventana.ts`,
+`lib/fathom/api.ts`, `lib/fathom/sync.ts`, `lib/fathom/member-sync.ts`, nuevo `lib/fathom/fallas-de-sync.ts`, migración
+`20261005120000_fathom_sync_fallas.sql` (**sin aplicar en producción**; el SQL está listo aparte) y su test de RLS
+`supabase/ci/tests/70_fathom_sync_fallas.sql`.
+
+**Qué se hizo** (los cuatro MENOR de la revisión adversarial y su observación):
+- **M-1, reintentos:** el plazo de 24 h se medía desde el `created_at` de la reunión. Después de una caída de más
+  de un día todo lo atrasado ya estaba "vencido" y se descartaba con uno o cero reintentos. Ahora cada falla se
+  anota en la tabla nueva `fathom_sync_fallas` (una fila por reunión y por conexión: `user_id` nulo es la de la
+  org) con la primera falla y los intentos. Se deja de reintentar con **24 h desde la primera falla y al menos 6
+  intentos** (`debeDescartarse`); entonces se marca `descartada_at` y va a Sentry con cómo recuperarla. Al
+  guardarse, la fila se borra; una descartada que vuelve (cursor rebobinado) arranca de cero. Si la tabla no se
+  puede leer o escribir, la reunión frena el cursor y no se descarta. RLS activa sin políticas y sin grants para
+  `anon`/`authenticated`; índices únicos parciales por conexión. Recuperación documentada en
+  `docs/areas/ventas.md` ("Cómo recuperar una reunión descartada") y enlazada desde `docs/operacion/incidentes.md`.
+- **M-2, 429 en la puesta al día:** si Fathom corta con 429 o 5xx después de algún tramo completo,
+  `leerVentanaDeFathom` devuelve lo leído como lectura cortada con `completaHasta` y el cursor avanza hasta ahí.
+  Un 429 con `Retry-After` de hasta 10 s se espera y se reintenta una vez por corrida (`FathomApiError` trae
+  `retryAfterSeconds`, `leerRetryAfter` acepta segundos o fecha HTTP). Como mucho 4 tramos cerrados por corrida:
+  con el límite reducido de Fathom (5 pedidos pesados por minuto) una corrida normal no pasa de 5 pedidos, y la
+  puesta al día sigue a 24 h por corrida. Sin ningún tramo completo, o con un 401, la falla se propaga como antes.
+- **M-3:** tests de `leerVentanaDeFathom` que matan las dos mutaciones que sobrevivían: el presupuesto restante por
+  tramo (cantidad exacta de pedidos) y la reunión que cae en el segundo de solape entre tramos.
+- **M-4:** `[FATHOM-SYNC-CURSOR]` tachado como resuelto en `docs/auditoria/plan-de-remediacion.md`.
+- **Solape de 2 h** (antes 30 min): cubre reuniones que Fathom lista un rato después de su `created_at` (el
+  transcript de una llamada larga tarda; el retraso no está documentado). Releer cuesta poco porque el guardado
+  no reanaliza una llamada procesada, y el pedido abierto ya relee como mucho 12 h.
+- Tests: `cursor.test.ts` (30), `sync-corridas.test.ts` (10, suma la reunión que falla siempre para la org y el
+  miembro, con la recuperación por rebobinado), `leer-ventana.test.ts` (12, nuevo: presupuesto, borde, tope de
+  tramos, 429 al sexto pedido, 5xx, `Retry-After` corto y largo, una sola espera, sin tramo cerrado, 401) y
+  `fallas-de-sync.test.ts` (6, nuevo: errores de la tabla y reinicio de la cuenta). Control negativo: 13
+  mutaciones del código y 2 de la migración, todas detectadas.
+
+**Por qué / finalidad:** sin esto, la recuperación después de una caída (el momento en que más fallan los guardados)
+podía descartar llamadas de venta recuperables, y un 429 durante la puesta al día dejaba la sync sin avanzar.
+
+**Decisiones de diseño relevantes:** se eligió una tabla en vez de columnas en las integraciones porque las fallas son
+por reunión y la org y cada miembro tienen su propia cuenta. Los 6 intentos cubren que el cron haya estado parado (24 h
+sin corridas no alcanzan para descartar); las 24 h cubren que alguien apriete "Sincronizar" muchas veces seguidas. La
+espera por `Retry-After` se acota a 10 s porque el cron tiene 60 s para todas las organizaciones.
+
+**Riesgos / deuda técnica pendiente:** la migración se aplica **antes** del deploy, con
+`sql-produccion/scrum-36/` (precheck, migración en transacción, verificación de una fila). Si el código llegara
+antes, nada se rompe: sin tabla, una reunión que falla frena el cursor y no se descarta nunca.
+
+---
+
+### 2026-10-05 · La sync de Fathom ya no saltea una llamada que no se pudo guardar (SCRUM-36)
+
+**Rama:** `fix/SCRUM-36-fathom-cursor`
+**Commit(s):** `acb24f75` (código y tests) y este (docs)
+**Módulo(s) afectado(s):** Ventas → Llamadas / Integraciones → Fathom. `lib/fathom/sync.ts`, `lib/fathom/member-sync.ts`,
+`lib/fathom/api.ts`, nuevos `lib/fathom/cursor.ts` y `lib/fathom/leer-ventana.ts`.
+
+**Qué se hizo:**
+- **Cursor nuevo (`cursor.ts`, puro):** `last_sync_at` ya no es la hora del servidor. Avanza al `created_at` de
+  Fathom de lo leído y guardado, menos 30 min de solape; nunca pasa del `created_at` de una reunión que falló al
+  guardarse ni de lo que quedó sin leer; nunca retrocede. Si no se guardó ni falló nada, queda donde estaba. Si
+  `created_at` falta o es ilegible se usa el inicio de la grabación (nunca es posterior).
+- **Una falla que no se arregla sola:** frena el cursor y se reintenta en cada corrida mientras tenga menos de 24 h.
+  Pasado eso, y si ya venía frenando el cursor, se deja de reintentar, va a Sentry con su `recording_id`
+  (`reportarFalla`) y la sync sigue. Una falla sin ninguna fecha no puede frenar el cursor: va a Sentry.
+- **Tope de páginas:** `listFathomMeetings` devuelve `{ meetings, truncated, pages }` y acepta `createdBefore`. Sus
+  dos llamadores (sync de la org y del miembro) se actualizaron. Cortada en orden descendente (lo que hace Fathom) o
+  desconocido, el cursor no pasa de lo que quedó sin leer; en orden ascendente avanza hasta lo último leído.
+- **Lectura por tramos (`leer-ventana.ts`):** si el cursor está atrasado más de 12 h, se lee de a tramos cerrados de
+  6 h desde el más viejo, con el mismo presupuesto de páginas (20 la org, 5 el miembro). Cada tramo leído entero
+  hace avanzar el cursor aunque esté vacío: una caída de varios días se pone al día sola y la ventana no crece sin
+  límite. Si un solo tramo supera el presupuesto, el cursor no avanza y se reporta a Sentry en cada corrida.
+- **El solape no reprocesa:** al volver a traer una llamada ya guardada, `applyClientMatchToCall` la devolvía a
+  `pending` si el título coincidía con un cliente, y se pagaba de nuevo el análisis con el modelo, con entradas
+  duplicadas en el timeline y en problemas del cliente. Ahora el guardado actualiza los datos de Fathom pero sólo
+  pasa por el matcher una llamada nueva o una que todavía no se procesó (`debeReasociarAlSincronizar`). También
+  protege los reintentos del webhook por miembro, que usan el mismo guardado.
+- Tests: `cursor.test.ts` (27: una falla y otra entra, todas bien, todas fallan, corte por tope en orden ascendente,
+  descendente y desconocido, `created_at` ausente e ilegible, solape, plazo de reintentos, tramos) y
+  `sync-corridas.test.ts` (8: dos corridas de punta a punta con Fathom y Supabase simulados, para la org y el
+  miembro, con chequeo del filtro por organización; corte por tope; puesta al día por tramos; llamada ya procesada).
+  Control negativo: con el código de `main` fallan 7 de los 8 de punta a punta; sin el chequeo de llamada procesada
+  falla el del solape.
+
+**Por qué / finalidad:** cierra `[FATHOM-SYNC-CURSOR]`. Con una llamada que fallaba y otra que entraba en la misma
+corrida, la que fallaba no se volvía a pedir nunca. La sync por miembro ya no avanzaba si fallaba alguna, pero
+usaba la hora del servidor y avanzaba aunque la lectura se hubiera cortado en 5 páginas.
+
+**Decisiones de diseño relevantes:** sin migraciones: el estado de los reintentos sale del propio cursor (si quedó a
+la altura de la reunión que falla, ya la venía frenando). La lectura por tramos existe porque Fathom devuelve primero
+lo más nuevo: con un pedido abierto y más reuniones que el tope, cada corrida volvería a leer lo nuevo y nunca llegaría
+a lo viejo. El solape es de 30 min (no de pocos minutos) porque volver a leer ya no cuesta análisis.
+
+**Riesgos / deuda técnica pendiente:** el límite de un tramo saturado (más de 200 reuniones creadas en 6 h para la
+org, 50 para un miembro) queda reportado a Sentry en cada corrida; no hay un pendiente abierto porque no es alcanzable
+con el volumen de las cuentas de hoy. El orden de Fathom se deduce de lo que llega; si un día cambia, el cálculo ya
+contempla los dos.
+
 ### 2026-10-05 · `/founder` pasa por el bloqueo de permisos de la plataforma (SCRUM-18)
 
 **Rama:** `fix/SCRUM-18-founder-permisos`
@@ -749,7 +926,6 @@ se borra la historia H-VEN-21.
 - la prueba de aceptación (`docs/operacion/alertas.md`).
 
 Typeform, Google Forms, Instagram, anuncios y `daily-signals` no reportan por org (sí tienen monitor).
-
 
 ---
 

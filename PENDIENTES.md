@@ -63,7 +63,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | ID | Área | Severidad | Qué |
 |---|---|---|---|
 | `[PERMISOS-SERVER-ACTIONS]` | Plataforma | Alta | Los permisos por módulo no protegen datos, sólo pantallas |
-| `[FATHOM-SYNC-CURSOR]` | Ventas | Alta | La sync de Fathom saltea para siempre una llamada que no se pudo guardar |
 | `[CLOSER-AMOUNT-CLOSED]` | Ventas | Media | La pestaña Equipo de Closing siempre sale vacía |
 | `[CALENDLY-CLOSER-SIN-LEAD]` | Ventas | Alta | Los turnos del Calendly de cada closer no entran al seguimiento |
 | `[CALENDLY-CRONS-SUPERPUESTOS]` | Ventas | Media | `calendly-sync` y `calendly-sync-closers` corren a la misma hora |
@@ -84,7 +83,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|---|---|
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 13 | 31 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
-| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 12 | 0 | 17 | 8 |
+| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 19 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
@@ -774,18 +773,6 @@ Doc del área: [`docs/areas/clientes.md`](./docs/areas/clientes.md)
 Doc del área: [`docs/areas/ventas.md`](./docs/areas/ventas.md)
 
 ### Ventas · P0
-
-#### [FATHOM-SYNC-CURSOR] La sync de Fathom saltea para siempre una llamada que no se pudo guardar
-- **Tipo:** bug
-- **Severidad:** Alta
-- **Estado verificado:** `syncFathomMeetingsForOrganization` cuenta las reuniones guardadas (`lib/fathom/sync.ts:268`) y, si guardó al menos una, pone `last_sync_at = now()` (`:274-277`) aunque otras hayan fallado (`upsertFathomCallFromMeeting` devuelve `false`). La corrida siguiente pide `created_after = last_sync_at` (`lib/fathom/sync-window.ts:50-58`). El cursor es la hora del servidor, no el `created_at` más nuevo recibido. Para la key de la org esta sync es la única vía automática de entrada (el webhook por miembro sólo cubre las keys de miembros).
-- **Riesgo:** Si en una misma corrida una llamada falla al guardarse y otra entra bien, entonces la que falló no se vuelve a pedir nunca. Si Fathom asigna `created_at` antes de que la reunión aparezca en el listado (no verificado), también se pierden las reuniones creadas durante la corrida.
-- **Impacto:** Llamadas de venta y de entrega que no llegan a Limitless: sin clasificación, sin análisis, sin hitos propuestos, sin cruce con el turno. Se nota sólo si alguien compara contra Fathom.
-- **Qué hay que hacer:** avanzar el cursor al `created_at` máximo de las guardadas bien, sin pasar del `created_at` de la más vieja que falló; restar un solape de unos minutos (el upsert deduplica).
-- **Criterio de aceptación:** Con una corrida simulada donde una reunión falla al guardarse y otra entra, la corrida siguiente vuelve a pedir la que falló y la guarda; el cursor nunca pasa del created_at de una reunión no guardada; hay tests de la función que calcula el nuevo cursor
-- **Dónde:** `apps/web/lib/fathom/sync.ts`, `apps/web/lib/fathom/sync-window.ts`.
-
-Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio usa.
 
 #### [CLOSER-AMOUNT-CLOSED] La pestaña Equipo de Closing siempre sale vacía
 - **Tipo:** bug

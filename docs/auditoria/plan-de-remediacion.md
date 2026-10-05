@@ -72,7 +72,7 @@ El orden dentro de la fase importa: el helper de permisos es la base de todos lo
 | 2.1 | Ingesta de pagos: responder 5xx si no se guardó, no descartar reintentos legítimos, idempotencia en el registro de pagos | ~~`[EMBUDOS-WEBHOOK-PERDIDA]`~~ (resuelto 2026-09-30, SCRUM-6), `[AUD-CONF-5]` (reintentos resueltos en SCRUM-6; falta el índice por org), `[PAGO-SIN-IDEMPOTENCIA]` | Crítica |
 | 2.2 | Cierre de venta en una sola transacción en el servidor | `[CLOSING-CIERRE-ATOMICO]` | Crítica |
 | 2.3 | Closing con más de 1.000 turnos (medir primero cuántas orgs lo pasan) | `[CLOSING-LIST-1000]` | Alta |
-| 2.4 | Llamadas y Fathom: pantalla de Llamadas, webhook por miembro, cursor de la sync | ~~`[LLAMADAS-EMBED-ROTO]`~~ (resuelto 2026-09-28), ~~`[FATHOM-WEBHOOK-MIEMBRO-ROTO]`~~ (resuelto 2026-10-02, SCRUM-37), `[FATHOM-SYNC-CURSOR]` | Alta |
+| 2.4 | Llamadas y Fathom: pantalla de Llamadas, webhook por miembro, cursor de la sync | ~~`[LLAMADAS-EMBED-ROTO]`~~ (resuelto 2026-09-28), ~~`[FATHOM-WEBHOOK-MIEMBRO-ROTO]`~~ (resuelto 2026-10-02, SCRUM-37), ~~`[FATHOM-SYNC-CURSOR]`~~ (resuelto 2026-10-05, SCRUM-36) | Alta |
 | 2.5 | Formularios que pierden respuestas o se pisan entre orgs | `[AUDITORIA-ABIERTOS §6]`, `[AUD-CONF-4]` | Crítica |
 | 2.6 | Saber cuándo algo falla: errores por org a Sentry, monitores de crons, integraciones con token vencido marcadas | `[OBS-SIN-ALERTAS]`, `[MONITOREO-Y-ALERTAS]`, `[INTEGRACIONES-ERROR-SIN-MARCA]` | Alta |
 | 2.7 | Lo que Agustín marque "Sí" en la columna Octubre de [`FUNCIONAL.md`](../FUNCIONAL.md) | según su marca | — |

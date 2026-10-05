@@ -9,7 +9,11 @@
  * llegue o no el aviso.
  */
 import { resolverVentanaDeSync } from "@/lib/fathom/sync-window";
-import { listFathomMeetings, mensajeDeFathom } from "@/lib/fathom/api";
+import { calcularNuevoCursor, type ResultadoDeReunion } from "@/lib/fathom/cursor";
+import { leerVentanaDeFathom, reportarDecisionDeCursor } from "@/lib/fathom/leer-ventana";
+import { ordenDeLaTanda, quedaTiempo } from "@/lib/fathom/plazo-del-cron";
+import { marcarDescartadas, registrarFallasDeSync } from "@/lib/fathom/fallas-de-sync";
+import { mensajeDeFathom } from "@/lib/fathom/api";
 import { upsertFathomCallFromMeeting } from "@/lib/fathom/sync";
 import { readMemberFathomKey } from "@/lib/fathom/member-key";
 import { reportarFalla } from "@/lib/observability/reportar-falla";
@@ -51,19 +55,24 @@ export async function sincronizarMiembroFathom(
   fila: Pick<
     FilaMiembroFathom,
     "organization_id" | "user_id" | "encrypted_api_key" | "last_sync_at" | "connected_at"
-  >
+  >,
+  /** Plazo de la corrida del cron (`lib/fathom/plazo-del-cron.ts`). El botón no lo pasa. */
+  plazo?: number
 ): Promise<{ synced: number; fallidas: number }> {
   if (!fila.encrypted_api_key) throw new Error("No tenés Fathom conectado");
 
   const apiKey = readMemberFathomKey(fila.encrypted_api_key, fila.organization_id, fila.user_id);
   const ventana = resolverVentanaDeSync(fila.last_sync_at, fila.connected_at);
 
-  let meetings;
+  const ahora = new Date();
+  let lectura;
   try {
-    meetings = await listFathomMeetings(apiKey, {
-      // Desde la conexión en adelante, igual que la sync de la organización.
-      createdAfter: ventana.desde ?? undefined,
+    // Desde la conexión en adelante, igual que la sync de la organización.
+    lectura = await leerVentanaDeFathom(apiKey, {
+      desde: ventana.desde,
+      ahora,
       maxPages: 5,
+      plazo,
     });
   } catch (fallo) {
     throw new Error(mensajeDeFathom(fallo));
@@ -71,22 +80,42 @@ export async function sincronizarMiembroFathom(
 
   let synced = 0;
   let fallidas = 0;
-  for (const meeting of meetings) {
+  const resultados: ResultadoDeReunion[] = [];
+  for (const meeting of lectura.meetings) {
     // El mismo upsert que la sync de la organización, con el dueño de la
     // grabación: una llamada sin vincular la ve sólo quien la grabó.
     const ok = await upsertFathomCallFromMeeting(admin, fila.organization_id, meeting, {
       userId: fila.user_id,
     });
+    resultados.push({ meeting, guardada: ok });
     if (ok) synced += 1;
     else fallidas += 1;
   }
 
-  // Si alguna falló, el cursor no avanza: la próxima corrida la vuelve a pedir
-  // (el upsert deduplica las que ya entraron).
-  if (fallidas === 0) {
+  // ⭐ La misma regla que la sync de la organización (SCRUM-36): el cursor
+  // avanza con el `created_at` de lo guardado, nunca pasa de una que falló ni
+  // de lo que quedó sin leer por el tope de páginas.
+  // Cuenta las fallas por reunión desde la primera (`fathom_sync_fallas`): con
+  // eso se decide cuándo dejar de reintentar una que falla siempre.
+  const conexion = { organizationId: fila.organization_id, userId: fila.user_id };
+  const conFallas = await registrarFallasDeSync(admin, conexion, resultados, ahora);
+  const decision = calcularNuevoCursor({
+    cursorAnterior: ventana.desde,
+    lectura,
+    resultados: conFallas,
+    ahora,
+  });
+  await marcarDescartadas(admin, conexion, decision.descartadas, ahora);
+  reportarDecisionDeCursor(decision, {
+    organizationId: fila.organization_id,
+    conexion: "miembro",
+    userId: fila.user_id,
+  });
+
+  if (decision.avanza) {
     await admin
       .from("team_member_integrations")
-      .update({ last_sync_at: new Date().toISOString() })
+      .update({ last_sync_at: decision.cursor })
       .eq("organization_id", fila.organization_id)
       .eq("user_id", fila.user_id)
       .eq("integration_type", "fathom");
@@ -95,11 +124,20 @@ export async function sincronizarMiembroFathom(
   return { synced, fallidas };
 }
 
-/** Todas las conexiones por miembro, una por una. Una que falla no corta las demás. */
-export async function sincronizarTodosLosMiembrosFathom(): Promise<{
+/**
+ * Todas las conexiones por miembro, una por una. Una que falla no corta las
+ * demás. Con `plazo`, pasado ese momento no se arranca ninguna más; con
+ * `corrida`, el orden rota para que ningún miembro quede siempre último.
+ */
+export async function sincronizarTodosLosMiembrosFathom(options?: {
+  plazo?: number;
+  corrida?: number;
+}): Promise<{
   miembros: number;
   ingested: number;
   fallidos: number;
+  /** Los que no se empezaron por falta de tiempo; van en la próxima corrida. */
+  postergados: number;
 }> {
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -111,13 +149,21 @@ export async function sincronizarTodosLosMiembrosFathom(): Promise<{
 
   if (error) throw new Error(error.message);
 
-  const filas = miembrosParaSincronizar((data ?? []) as FilaMiembroFathom[]);
+  const filas = ordenDeLaTanda(
+    miembrosParaSincronizar((data ?? []) as FilaMiembroFathom[]),
+    options?.corrida ?? 0
+  );
   let ingested = 0;
   let fallidos = 0;
+  let postergados = 0;
 
   for (const fila of filas) {
+    if (!quedaTiempo(options?.plazo)) {
+      postergados += 1;
+      continue;
+    }
     try {
-      const resultado = await sincronizarMiembroFathom(admin, fila);
+      const resultado = await sincronizarMiembroFathom(admin, fila, options?.plazo);
       ingested += resultado.synced;
       if (resultado.fallidas > 0) fallidos += 1;
       await admin
@@ -143,5 +189,8 @@ export async function sincronizarTodosLosMiembrosFathom(): Promise<{
     }
   }
 
-  return { miembros: filas.length, ingested, fallidos };
+  if (postergados) {
+    console.warn("[Fathom:member-sync] Sin tiempo en esta corrida; quedan para la próxima:", postergados);
+  }
+  return { miembros: filas.length, ingested, fallidos, postergados };
 }

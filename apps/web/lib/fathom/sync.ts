@@ -1,9 +1,12 @@
 import { applyClientMatchToCall } from "@/lib/fathom/apply-call-match";
 import { isManualFathomLink } from "@/lib/fathom/client-matcher";
 import { resolverVentanaDeSync } from "@/lib/fathom/sync-window";
+import { calcularNuevoCursor, type ResultadoDeReunion } from "@/lib/fathom/cursor";
+import { leerVentanaDeFathom, reportarDecisionDeCursor } from "@/lib/fathom/leer-ventana";
+import { ordenDeLaTanda, quedaTiempo } from "@/lib/fathom/plazo-del-cron";
+import { marcarDescartadas, registrarFallasDeSync } from "@/lib/fathom/fallas-de-sync";
 import {
   FathomApiError,
-  listFathomMeetings,
   mensajeDeFathom,
   type FathomMeetingRecord,
 } from "@/lib/fathom/api";
@@ -77,6 +80,27 @@ export type FathomCallOrigin = {
   ingestSource?: "sync" | "webhook";
 };
 
+/**
+ * ⭐ ¿Se vuelve a correr el matcher por título sobre una llamada que ya estaba?
+ *
+ * Sólo si todavía no se procesó (`processed_at` vacío, y sigue `pending` o
+ * `pending_review`). El matcher pone `status = 'pending'` cuando encuentra
+ * cliente, y eso mete la llamada otra vez en la cola de análisis: con una
+ * llamada ya procesada se pagaba de nuevo el análisis con el modelo y se
+ * duplicaban la entrada del timeline y los problemas del cliente. Pasaba cada
+ * vez que una corrida volvía a traer una llamada ya guardada, y la sync la
+ * vuelve a traer a propósito (el solape del cursor y los reintentos,
+ * SCRUM-36).
+ */
+export function debeReasociarAlSincronizar(existing: {
+  status: string | null;
+  processed_at: string | null;
+} | null): boolean {
+  if (!existing) return true;
+  if (existing.processed_at) return false;
+  return existing.status === "pending" || existing.status === "pending_review";
+}
+
 export async function upsertFathomCallFromMeeting(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
@@ -91,7 +115,7 @@ export async function upsertFathomCallFromMeeting(
 
   const { data: existing, error: existingError } = await admin
     .from("fathom_calls")
-    .select("id, client_id, association_confidence, status, user_id")
+    .select("id, client_id, association_confidence, status, user_id, processed_at")
     .eq("organization_id", organizationId)
     .eq("fathom_call_id", row.fathom_call_id)
     .maybeSingle();
@@ -168,13 +192,18 @@ export async function upsertFathomCallFromMeeting(
     console.log("[Fathom:sync] Upsert result: OK (inserted)");
   }
 
-  if (!manualLink) {
-    await applyClientMatchToCall(admin, callId, organizationId, callTitle);
-  } else {
+  if (manualLink) {
     console.log("[Fathom:sync] Skipping auto-match — manual link preserved", {
       callId,
       clientId: existing?.client_id,
     });
+  } else if (!debeReasociarAlSincronizar(existing ?? null)) {
+    console.log("[Fathom:sync] Skipping auto-match — call already processed", {
+      callId,
+      status: existing?.status,
+    });
+  } else {
+    await applyClientMatchToCall(admin, callId, organizationId, callTitle);
   }
 
   console.log("[Fathom:sync] Inserted:", recordingId, callTitle);
@@ -183,7 +212,11 @@ export async function upsertFathomCallFromMeeting(
 
 export async function syncFathomMeetingsForOrganization(
   organizationId: string,
-  options?: { debug?: boolean }
+  options?: {
+    debug?: boolean;
+    /** Plazo de la corrida del cron (`lib/fathom/plazo-del-cron.ts`). */
+    plazo?: number;
+  }
 ): Promise<number> {
   console.log("[Fathom] syncFathomMeetingsForOrganization start:", organizationId);
 
@@ -248,13 +281,19 @@ export async function syncFathomMeetingsForOrganization(
     apiKeyLength: integration.api_key.trim().length,
   });
 
-  let meetings;
+  const ahora = new Date();
+  let lectura;
   try {
-    meetings = await listFathomMeetings(integration.api_key.trim(), {
-      createdAfter,
-      includeTranscript: true,
-      debug: options?.debug,
-      debugContext: `sync:${organizationId.slice(0, 8)}`,
+    lectura = await leerVentanaDeFathom(integration.api_key.trim(), {
+      desde: ventana.desde,
+      ahora,
+      maxPages: 20,
+      plazo: options?.plazo,
+      opciones: {
+        includeTranscript: true,
+        debug: options?.debug,
+        debugContext: `sync:${organizationId.slice(0, 8)}`,
+      },
     });
   } catch (e) {
     console.error("[Fathom:sync] listFathomMeetings failed:", e);
@@ -262,15 +301,21 @@ export async function syncFathomMeetingsForOrganization(
     throw e;
   }
 
-  console.log("[Fathom:sync] Meetings received:", meetings?.length);
+  const meetings = lectura.meetings;
+  console.log("[Fathom:sync] Meetings received:", meetings.length, {
+    cortada: lectura.cortada,
+    motivoDeCorte: lectura.motivoDeCorte,
+    completaHasta: lectura.completaHasta,
+  });
 
-  if (!meetings?.length) {
+  if (!meetings.length) {
     console.log(
       "[Fathom:sync] No meetings to upsert — insert loop skipped (check Date filter or mapFathomMeeting)"
     );
   }
 
   let ingested = 0;
+  const resultados: ResultadoDeReunion[] = [];
   for (const meeting of meetings) {
     console.log("[Fathom] Inserting call:", {
       organization_id: organizationId,
@@ -282,29 +327,63 @@ export async function syncFathomMeetingsForOrganization(
         meeting.callDate,
     });
     const ok = await upsertFathomCallFromMeeting(admin, organizationId, meeting);
+    resultados.push({ meeting, guardada: ok });
     if (ok) ingested++;
   }
 
   console.log("[Fathom] sync complete:", { organizationId, ingested, total: meetings.length });
 
-  if (ingested > 0) {
-    await admin
+  /**
+   * ⭐ El cursor avanza sobre lo leído y guardado, con el `created_at` de
+   * Fathom, nunca con la hora del servidor (SCRUM-36). Antes bastaba con
+   * guardar una llamada para escribir `new Date()`, y las que habían fallado
+   * quedaban atrás para siempre.
+   */
+  // Cuenta las fallas por reunión desde la primera (`fathom_sync_fallas`): con
+  // eso se decide cuándo dejar de reintentar una que falla siempre.
+  const conexion = { organizationId, userId: null };
+  const conFallas = await registrarFallasDeSync(admin, conexion, resultados, ahora);
+  const decision = calcularNuevoCursor({
+    cursorAnterior: ventana.desde,
+    lectura,
+    resultados: conFallas,
+    ahora,
+  });
+  await marcarDescartadas(admin, conexion, decision.descartadas, ahora);
+  reportarDecisionDeCursor(decision, { organizationId, conexion: "organizacion" });
+
+  if (decision.avanza) {
+    const { error: cursorError } = await admin
       .from("fathom_integrations")
-      .update({ last_sync_at: new Date().toISOString() })
+      .update({ last_sync_at: decision.cursor })
       .eq("organization_id", organizationId);
-  } else {
-    console.log("[Fathom] last_sync_at unchanged — no calls ingested");
+    if (cursorError) {
+      // Sin avanzar, la próxima corrida vuelve a pedir lo mismo: no se pierde nada.
+      console.error("[Fathom:sync] last_sync_at update error:", cursorError.message);
+    }
   }
+  console.log("[Fathom] last_sync_at:", {
+    organizationId,
+    avanza: decision.avanza,
+    cursor: decision.cursor,
+    motivo: decision.motivo,
+  });
 
   return ingested;
 }
 
 export async function syncAllFathomIntegrations(options?: {
   debug?: boolean;
+  /** Plazo de la corrida: pasado, no se arranca ninguna org más. */
+  plazo?: number;
+  /** Número de corrida: rota el orden para que ninguna org quede siempre última. */
+  corrida?: number;
 }): Promise<{
   organizations: number;
   ingested: number;
   skippedOrgs: string[];
+  /** Las que no se empezaron por falta de tiempo; van en la próxima corrida. */
+  postergadas: string[];
   orgResults: Array<{
     organizationId: string;
     ingested: number;
@@ -321,7 +400,10 @@ export async function syncAllFathomIntegrations(options?: {
   const orgs = diagnostics.rows.filter(
     (r) => r.status === "connected" && r.has_key
   );
-  const organizationIds = orgs.map((r) => r.organization_id);
+  const organizationIds = ordenDeLaTanda(
+    orgs.map((r) => r.organization_id),
+    options?.corrida ?? 0
+  );
 
   console.log(
     "[Fathom:sync] Orgs from DB:",
@@ -331,11 +413,12 @@ export async function syncAllFathomIntegrations(options?: {
 
   if (organizationIds.length === 0) {
     console.log("[Fathom:sync] Early return: zero eligible orgs, skipping all fetches");
-    return { organizations: 0, ingested: 0, skippedOrgs: [], orgResults: [] };
+    return { organizations: 0, ingested: 0, skippedOrgs: [], postergadas: [], orgResults: [] };
   }
 
   let ingested = 0;
   const skippedOrgs: string[] = [];
+  const postergadas: string[] = [];
   const orgResults: Array<{
     organizationId: string;
     ingested: number;
@@ -343,10 +426,15 @@ export async function syncAllFathomIntegrations(options?: {
   }> = [];
 
   for (const organizationId of organizationIds) {
+    if (!quedaTiempo(options?.plazo)) {
+      postergadas.push(organizationId);
+      continue;
+    }
     console.log("[Fathom:sync] Processing org:", organizationId);
     try {
       const orgIngested = await syncFathomMeetingsForOrganization(organizationId, {
         debug: options?.debug,
+        plazo: options?.plazo,
       });
       ingested += orgIngested;
       orgResults.push({ organizationId, ingested: orgIngested });
@@ -367,8 +455,12 @@ export async function syncAllFathomIntegrations(options?: {
     organizations: organizationIds.length,
     ingested,
     skippedOrgs,
+    postergadas,
     orgResults,
   };
+  if (postergadas.length) {
+    console.warn("[Fathom:sync] Sin tiempo en esta corrida; quedan para la próxima:", postergadas);
+  }
   console.log("[Fathom:sync] syncAllFathomIntegrations done:", JSON.stringify(result));
   return result;
 }

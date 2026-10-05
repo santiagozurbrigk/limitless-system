@@ -53,6 +53,7 @@ Superficies de Ventas que viven en otras pantallas:
 | `metrics_snapshots` | 1 | `category = 'sales'`, `period_start`, `metrics` (JSONB) | Métricas importadas de Excel; fallback de `/sales/metrics` |
 | `calendly_integrations` | 3 | `access_token`, `refresh_token`, `webhook_signing_key` | Tokens en texto plano (RLS cerrado, sólo service role) |
 | `fathom_integrations` | 7 | `api_key`, `webhook_secret`, `connected_at`, `last_sync_at` | Key de la org, en texto plano |
+| `fathom_sync_fallas` | 0 (nueva) | `organization_id`, `user_id` (nulo = conexión de la org), `fathom_call_id`, `fathom_created_at`, `primera_falla_at`, `intentos`, `descartada_at` | Reuniones que la sync no pudo guardar; decide cuándo dejar de reintentar (SCRUM-36). Sólo service role |
 
 **Legacy (tablas vivas en la base, sin uso real):** `conversations` (0 filas), `manychat_events` (0),
 `instagram_threads`/`instagram_messages` (0), `manychat_integrations` (4), `unipile_integrations` (6),
@@ -151,7 +152,7 @@ cron /api/integrations/fathom/process (10 min, espera 30 min por llamada) → pr
 `/api/integrations/fathom/sync`, después de la key de cada org, trae las grabaciones de cada miembro conectado
 desde la sección por miembro (filas con `webhook_token`, no `revoked`) con su propia key, desde la conexión en
 adelante, con el mismo upsert y `user_id` del miembro. El botón "Sincronizar mis llamadas" usa la misma función.
-Si una grabación falla al guardarse, el cursor (`last_sync_at`) no avanza. Si la key falla, la fila queda en
+El cursor (`last_sync_at`) sigue la misma regla que el de la org (ver "Cursor de la sync" más abajo). Si la key falla, la fila queda en
 `status = 'error'` con `last_error` y va a Sentry. **Por qué:** en la prueba real (2026-10-03) Fathom no disparó el
 webhook aunque la grabación ya estaba lista; con el cron la grabación entra igual, como mucho una hora después.
 Las filas que crea la conexión de la organización (`connectFathomAction`, sin `webhook_token`) no se sincronizan
@@ -181,6 +182,88 @@ acá: llevan la misma key que el negocio y harían privadas de quien conectó to
 
 - **Ventana de sync:** desde `last_sync_at`, pero nunca antes de `connected_at` (el historial no se trae)
   (`lib/fathom/sync-window.ts`). Excepción: si no hay ninguna de las dos fechas, trae todo.
+- **Cursor de la sync** (`lib/fathom/cursor.ts`, SCRUM-36), igual para la org y para el miembro. `last_sync_at`
+  ya no es la hora del servidor: es el `created_at` de Fathom de lo leído y guardado, menos un solape de 2 h.
+  - **Solape de 2 h:** cubre las reuniones que Fathom lista un rato después de su `created_at` (el transcript de
+    una llamada larga tarda en estar listo; el retraso no está documentado). Volver a leer cuesta poco: el
+    guardado no vuelve a mandar a análisis una llamada ya procesada (ver el último punto).
+  - Una grabación que falla al guardarse frena el cursor en su `created_at`: la corrida siguiente la vuelve a pedir.
+    Cada falla se anota en `fathom_sync_fallas` (una fila por reunión y por conexión, con la primera falla y los
+    intentos; `lib/fathom/fallas-de-sync.ts`). Se deja de reintentar cuando pasaron **24 h desde su primera
+    falla y falló por lo menos 6 veces**: ahí se marca `descartada_at`, se reporta a Sentry (`reportarFalla`, con
+    el `recording_id`, su `created_at` y cómo recuperarla) y la sync sigue sin ella. Se mide desde la primera
+    falla y no desde el `created_at` porque, después de una caída, todo lo atrasado ya es "viejo" y se habría
+    descartado sin reintentos. Cuando la reunión se guarda, su fila se borra. Si la tabla no se puede leer o
+    escribir, la reunión frena el cursor y no se descarta. Una que falla sin ninguna fecha no puede frenar el
+    cursor: se reporta.
+  - Una descartada **sigue descartada** aunque vuelva a llegar (cae en el solape, o el cursor no pudo pasarla en
+    la corrida del descarte): no suma intentos, no frena el cursor y no se reporta otra vez. Para reintentarla
+    hay que borrar su fila (ver "Cómo recuperar una reunión descartada"); así la sync no tiene que adivinar si
+    volvió porque alguien rebobinó el cursor.
+  - Limpieza: en cada corrida se borran las filas de esa conexión sin fallas nuevas en **30 días**
+    (`limpiarFallasViejas`). Cubre las que ya no se vuelven a leer (una falla sin fecha, una reunión borrada en
+    Fathom mientras fallaba) y las descartadas, que se pueden recuperar durante ese plazo. Una reunión que
+    sigue frenando el cursor se relee en cada corrida y renueva su `ultima_falla_at`, así que no vence.
+  - `listFathomMeetings` avisa si se cortó en el tope de páginas (20 la org, 5 el miembro). Fathom devuelve primero
+    lo más nuevo, así que lo que queda sin leer es lo más viejo: el cursor no pasa de ahí. Si llegó en orden
+    ascendente, avanza hasta lo último leído.
+  - Si el cursor quedó atrasado más de 12 h, la lectura es por tramos cerrados de 6 h desde el más viejo
+    (`lib/fathom/leer-ventana.ts`), como mucho **4 tramos por corrida** (cada pedido con transcript es "pesado"
+    para Fathom: 30 por minuto, que puede bajar a 5) y con el mismo presupuesto de páginas. Cada tramo leído
+    entero hace avanzar el cursor aunque no haya traído nada: una caída de varios días se pone al día sola, a
+    razón de 24 h por corrida. Si un solo tramo tiene más reuniones que el presupuesto (más de 200 en 6 h para la
+    org, 50 para un miembro), el cursor no puede avanzar y se reporta a Sentry en cada corrida.
+    Sólo ese corte (por el tope de páginas) se reporta como sync trabada: la lectura dice por qué se cortó
+    (`motivoDeCorte`: tope, plazo del cron, límite de tramos o Fathom) y los otros cortes siguen solos en la
+    corrida siguiente.
+  - Si Fathom corta a mitad (429 o una falla de su lado) después de algún tramo completo, lo leído se guarda y el
+    cursor avanza hasta el último tramo completo. Si el 429 trae un `Retry-After` de hasta 10 s, se espera y se
+    reintenta el mismo tramo una vez por conexión, si entra antes del plazo del cron (ver más abajo). Sin ningún tramo completo, la falla se propaga como siempre.
+  - Si no se guardó ni falló nada, el cursor queda donde estaba; nunca retrocede.
+  - Si `created_at` falta o no se puede leer, se usa el inicio de la grabación, que nunca es posterior.
+  - Volver a traer una llamada ya guardada (por el solape o por un reintento) actualiza sus datos de Fathom pero
+    no vuelve a pasarla por el matcher por título si ya se procesó (`debeReasociarAlSincronizar` en
+    `lib/fathom/sync.ts`): el matcher la devolvía a `pending` y se pagaba de nuevo el análisis, con entradas
+    duplicadas en el timeline y en problemas del cliente.
+  - **Plazo del cron** (`lib/fathom/plazo-del-cron.ts`): el cron tiene 60 s para todas las conexiones, en serie.
+    La corrida tiene un plazo de 45 s desde el inicio: pasado, no se arranca ninguna conexión más (quedan como
+    `postergadas`/`postergados` en la respuesta), no se pide otra página ni otro tramo (la lectura vuelve
+    cortada y el cursor no pasa de lo que faltó leer) y un `Retry-After` sólo se espera si la espera más 8 s
+    de margen entran antes del plazo. Los 15 s restantes son para terminar la página en curso y escribir los
+    cursores. Para que no queden siempre las mismas afuera, las tandas se alternan cada hora (en las corridas
+    impares van primero los miembros) y dentro de cada tanda el orden rota con la mitad del número de corrida
+    (`ordenDeLaTanda`). Rotar con el mismo número que la alternancia hacía que, con una cantidad par de
+    conexiones, arrancaran primero siempre las de índice par; así, cada conexión arranca primera de toda la
+    corrida una vez cada 2 × n horas. La sincronización manual (botones) no tiene plazo.
+  - **Cómo recuperar una reunión descartada** (o una que el bug anterior a SCRUM-36 salteó): arregla primero la
+    causa (el error del guardado está en los logs `[Fathom:sync]` y en Sentry). Después, en el SQL Editor de
+    Supabase, borra su fila de `fathom_sync_fallas` (si no, sigue descartada) y rebobina el cursor de esa
+    conexión a un poco antes del `created_at` de la reunión. Las descartadas se guardan 30 días.
+
+    ```sql
+    -- Conexión de la organización
+    update public.fathom_integrations
+       set last_sync_at = timestamptz '2026-10-03 09:00:00+00'  -- un rato antes del created_at
+     where organization_id = '<org>';
+
+    -- Conexión de un miembro
+    update public.team_member_integrations
+       set last_sync_at = timestamptz '2026-10-03 09:00:00+00'
+     where organization_id = '<org>' and user_id = '<miembro>' and integration_type = 'fathom';
+
+    -- Las descartadas de una org, con su created_at (user_id nulo = la conexión de la org)
+    select id, user_id, fathom_call_id, fathom_created_at, intentos, primera_falla_at, descartada_at
+      from public.fathom_sync_fallas
+     where organization_id = '<org>' and descartada_at is not null
+     order by fathom_created_at;
+
+    -- Borrar la fila de la que se quiere recuperar (por su id, de la consulta anterior)
+    delete from public.fathom_sync_fallas
+     where organization_id = '<org>' and id = '<id>';
+    ```
+
+    El cursor nunca baja de `connected_at`. La corrida siguiente relee desde ahí por tramos (las ya guardadas
+    no se vuelven a analizar); si la reunión vuelve a fallar, su cuenta de intentos arranca de cero.
 - **Keys por miembro:** `app/fathom/member-actions.ts` valida la key, la cifra
   (`lib/fathom/member-key.ts`, atada a la org y al miembro; `ENCRYPTION_MASTER_KEY` obligatoria) y crea
   el webhook por API (`lib/fathom/webhooks.ts`). Conectar Fathom para la org (`connectFathomAction`)
