@@ -598,9 +598,9 @@ con una sesión real.
 **Prerrequisitos:** org con Zernio y piezas con métricas.
 1. `curl -X POST "$APP_URL/api/cron/sync-content-metrics?organizationId=<org>" -H "Authorization: Bearer $CRON_SECRET"`.
 2. Mirar `attempted`, `updated`, `failed` y, en las piezas, `metrics_updated_at`, `metrics_checked_at`, `metrics_intentos_sin_dato` y `metrics_reintentar_desde`.
-3. Repetir: primero entran las piezas nuevas, después las que tienen métricas; una pieza sin dato no vuelve hasta su `metrics_reintentar_desde` y una historia sin métricas de más de 48 h queda en `infinity`.
+3. Repetir: primero entran las piezas nuevas, después las que tienen métricas; una pieza sin dato no vuelve hasta su `metrics_reintentar_desde`. Una historia se pide una sola vez, desde las 30 h de publicada, y queda en `infinity`; la que pasa 7 días sin pedirse (o no tiene fecha) se cierra sin pedirla. Si Zernio responde 401 o 403, la corrida de esa org se corta sin escribir nada y queda en Sentry.
 
-**Esperado:** piezas con analytics no reconocido quedan en `failed`, conservan sus métricas y `metrics_updated_at`, su `metrics_checked_at` queda con la hora de la corrida y su `metrics_reintentar_desde` en el futuro. Una org con 50 o más historias sin analytics refresca sus reels y posts todos los días una vez medidas las historias nuevas (SCRUM-172, reabierta). Lo mismo con la sync manual de contenido (SCRUM-172): comparar una pieza antes y después de abrir `/marketing/content`; si Zernio no manda números, conserva los que tenía.
+**Esperado:** piezas con analytics no reconocido quedan en `failed`, conservan sus métricas y `metrics_updated_at`, su `metrics_checked_at` queda con la hora de la corrida y su `metrics_reintentar_desde` en el futuro. Una org con muchas historias sin analytics sigue refrescando sus reels y posts: cada historia ocupa un solo lugar del lote (SCRUM-172, reabierta). Lo mismo con la sync manual de contenido (SCRUM-172): comparar una pieza antes y después de abrir `/marketing/content`; si Zernio no manda números, conserva los que tenía.
 
 ### V4. Trial Reels de punta a punta ⚠️
 **Prerrequisitos:** Google conectado con Drive, Zernio con Instagram, `REEL_WORKER_URL`, `QSTASH_TOKEN`, `WORKER_AUTH_SECRET` en Vercel y Fly; una pieza con video de Drive vinculado (< 500 MB).
