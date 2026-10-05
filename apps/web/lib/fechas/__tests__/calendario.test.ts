@@ -18,10 +18,12 @@ import {
   esFechaCalendario,
   fechaAInstanteLocal,
   fechaDeHoyEnZona,
+  fechaDeValorGuardado,
   fechaDeHoyLocal,
   fechaEnZona,
   fechaLocal,
   fechaVencida,
+  formatearFechaGuardada,
   resolverZonaHoraria,
   sumarDias,
 } from "../calendario";
@@ -154,9 +156,15 @@ describe("fechaVencida", () => {
     expect(fechaVencida("", hoy)).toBe(false);
   });
 
-  it("de una fecha con hora toma el día que trae escrito", () => {
-    expect(fechaVencida("2026-09-30T23:00:00Z", hoy)).toBe(true);
-    expect(fechaVencida("2026-10-01T00:00:00Z", hoy)).toBe(false);
+  it("⭐ no corta un instante para quedarse con su día de UTC: sólo acepta YYYY-MM-DD", () => {
+    // 30-sep 22:00 en Argentina = 1-oct 01:00 UTC. Cortar el texto daría el 1
+    // (no vencida) cuando la fecha local es el 30. Un instante se convierte
+    // antes con `fechaDeValorGuardado` o `aFechaDeInput`; sin convertir, no vence.
+    expect(fechaVencida("2026-10-01T01:00:00Z", hoy)).toBe(false);
+    expect(fechaVencida("2026-09-30T23:00:00Z", hoy)).toBe(false);
+    expect(fechaVencida("2026-02-31", hoy)).toBe(false);
+    conZona("America/Argentina/Buenos_Aires");
+    expect(fechaVencida(aFechaDeInput("2026-10-01T01:00:00Z"), hoy)).toBe(true);
   });
 });
 
@@ -213,17 +221,65 @@ describe("aFechaDeInput y fechaAInstanteLocal (ida y vuelta)", () => {
   });
 });
 
+describe("fechaDeValorGuardado (lectura en la zona de la organización)", () => {
+  it("⭐ un instante se lee con el día de la zona pedida, no con el de UTC ni el del proceso", () => {
+    for (const zonaDelProceso of ["UTC", "Asia/Tokyo"]) {
+      conZona(zonaDelProceso);
+      // 5-oct 22:00 en Buenos Aires = 6-oct 01:00 UTC.
+      expect(fechaDeValorGuardado("2026-10-06T01:00:00Z", "America/Argentina/Buenos_Aires")).toBe(
+        "2026-10-05"
+      );
+      expect(fechaDeValorGuardado("2026-10-06T01:00:00Z", "Europe/Madrid")).toBe("2026-10-06");
+    }
+  });
+
+  it("aplica las mismas reglas que aFechaDeInput", () => {
+    conZona("UTC");
+    const argentina = "America/Argentina/Buenos_Aires";
+    expect(fechaDeValorGuardado("2026-10-05", argentina)).toBe("2026-10-05");
+    // Medianoche UTC exacta: una fecha sin hora guardada en timestamptz.
+    expect(fechaDeValorGuardado("2026-10-05T00:00:00+00:00", argentina)).toBe("2026-10-05");
+    expect(fechaDeValorGuardado(null, argentina)).toBe("");
+    expect(fechaDeValorGuardado("mañana", argentina)).toBe("");
+    // Zona nula: la de por defecto (Argentina).
+    expect(fechaDeValorGuardado("2026-10-06T01:00:00Z", null)).toBe("2026-10-05");
+  });
+
+  it("lo guardado al mediodía local en Argentina se lee igual en la zona de la org", () => {
+    conZona("America/Argentina/Buenos_Aires");
+    const guardado = fechaAInstanteLocal("2026-10-05");
+    conZona("UTC");
+    expect(fechaDeValorGuardado(guardado, "America/Argentina/Buenos_Aires")).toBe("2026-10-05");
+  });
+});
+
+describe("formatearFechaGuardada", () => {
+  it("⭐ muestra sólo la fecha, con el mismo día que el campo de fecha", () => {
+    conZona("America/Argentina/Buenos_Aires");
+    const opciones = { day: "2-digit", month: "2-digit", year: "numeric" } as const;
+    // 5-oct 22:00 en Argentina: con toLocaleString de un instante salía la hora.
+    expect(formatearFechaGuardada("2026-10-06T01:00:00Z", opciones)).toBe("05/10/2026");
+    // Fila vieja del seguimiento del lead, a medianoche UTC.
+    expect(formatearFechaGuardada("2026-10-05T00:00:00+00:00", opciones)).toBe("05/10/2026");
+    expect(formatearFechaGuardada("2026-10-05", opciones)).toBe("05/10/2026");
+    expect(formatearFechaGuardada(null, opciones)).toBeNull();
+    expect(formatearFechaGuardada("mañana", opciones)).toBeNull();
+  });
+});
+
 describe("diaLocal", () => {
   it("⭐ muestra el día de la fecha, no el anterior", () => {
     conZona("America/Argentina/Buenos_Aires");
     // `new Date("2026-10-04")` es medianoche UTC: en Argentina, el 3 a las 21.
     expect(new Date("2026-10-04").getDate()).toBe(3);
     expect(diaLocal("2026-10-04").getDate()).toBe(4);
-    expect(diaLocal("2026-10-04T00:00:00Z").getDate()).toBe(4);
   });
 
-  it("no acepta una fecha que no existe", () => {
+  it("no acepta una fecha que no existe ni un instante", () => {
     expect(() => diaLocal("2026-02-31")).toThrow(RangeError);
+    // Un instante se convierte antes (`aFechaDeInput`): cortarlo es quedarse
+    // con su día de UTC.
+    expect(() => diaLocal("2026-10-06T01:00:00Z")).toThrow(RangeError);
   });
 });
 

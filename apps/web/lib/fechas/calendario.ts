@@ -133,11 +133,16 @@ export function fechaDeHoyEnZona(
  * ¿Ya venció? Vence **el día después** de su fecha: lo que vence hoy todavía
  * está a tiempo. Se compara por día, no por instante, contra un "hoy" que
  * arma quien llama (el local en el navegador, el de la organización en el
- * servidor). Acepta una fecha con hora y se queda con el día que trae escrito.
+ * servidor).
+ *
+ * Sólo acepta fechas calendario (`YYYY-MM-DD`). Un instante no se corta a
+ * mano (eso es quedarse con su día de UTC): quien tiene un `timestamptz` lo
+ * convierte antes con `fechaDeValorGuardado` o `aFechaDeInput`. Lo que no es
+ * una fecha calendario no vence: una fecha que no se entiende no es una fecha.
  */
 export function fechaVencida(fecha: string | null | undefined, hoy: string): boolean {
-  if (!fecha) return false;
-  return fecha.slice(0, 10) < hoy;
+  if (!fecha || !esFechaCalendario(fecha)) return false;
+  return fecha < hoy;
 }
 
 /**
@@ -150,11 +155,28 @@ export function fechaVencida(fecha: string | null | undefined, hoy: string): boo
  * `new Date("2026-10-04")`, que se lee como medianoche de UTC.
  */
 export function diaLocal(fecha: string): Date {
-  if (!esFechaCalendario(fecha.slice(0, 10))) {
+  // Sólo fechas calendario: un instante se convierte antes con
+  // `aFechaDeInput` o `fechaDeValorGuardado`, no cortando su texto.
+  if (!esFechaCalendario(fecha)) {
     throw new RangeError(`"${fecha}" no es una fecha calendario (YYYY-MM-DD).`);
   }
-  const [y, m, d] = fecha.slice(0, 10).split("-").map(Number) as [number, number, number];
+  const [y, m, d] = fecha.split("-").map(Number) as [number, number, number];
   return new Date(y, m - 1, d, 12, 0, 0, 0);
+}
+
+/**
+ * Un valor guardado (columna `date` o `timestamptz` con una fecha elegida)
+ * formateado para mostrar sólo la fecha, con el día que lee `aFechaDeInput`
+ * (el mismo que muestra `CampoFecha`). `null` si no hay valor o no se entiende,
+ * para que quien llama elija qué mostrar en ese caso.
+ */
+export function formatearFechaGuardada(
+  valor: string | null | undefined,
+  opciones?: Intl.DateTimeFormatOptions,
+  idioma = "es-AR"
+): string | null {
+  const fecha = aFechaDeInput(valor);
+  return fecha ? diaLocal(fecha).toLocaleDateString(idioma, opciones) : null;
 }
 
 /**
@@ -179,6 +201,27 @@ export function fechaAInstanteLocal(fecha: string): string {
  *   la que se eligió si se guardó con `fechaAInstanteLocal`.
  */
 export function aFechaDeInput(valor: string | null | undefined): string {
+  return leerValorGuardado(valor, fechaLocal);
+}
+
+/**
+ * Lo mismo que `aFechaDeInput`, pero leyendo el instante en una zona dada (la
+ * de la organización) en vez de la del navegador. Es la lectura del servidor:
+ * por ejemplo, para decidir si un próximo paso de Closing (`next_action_at`)
+ * vence hoy. Zona nula o inválida: la de por defecto. `""` si no se entiende.
+ */
+export function fechaDeValorGuardado(
+  valor: string | null | undefined,
+  zona: string | null | undefined
+): string {
+  return leerValorGuardado(valor, (instante) => fechaEnZona(instante, zona));
+}
+
+/** Las reglas comunes de `aFechaDeInput` y `fechaDeValorGuardado`. */
+function leerValorGuardado(
+  valor: string | null | undefined,
+  fechaDelInstante: (instante: Date) => string
+): string {
   if (!valor) return "";
   const texto = valor.trim();
   if (FECHA_CALENDARIO.test(texto)) return esFechaCalendario(texto) ? texto : "";
@@ -191,8 +234,11 @@ export function aFechaDeInput(valor: string | null | undefined): string {
     instante.getUTCMinutes() === 0 &&
     instante.getUTCSeconds() === 0 &&
     instante.getUTCMilliseconds() === 0;
-  if (esMedianocheUtc) {
-    return `${instante.getUTCFullYear()}-${dosDigitos(instante.getUTCMonth() + 1)}-${dosDigitos(instante.getUTCDate())}`;
-  }
-  return fechaLocal(instante);
+  if (esMedianocheUtc) return fechaUtc(instante);
+  return fechaDelInstante(instante);
+}
+
+/** La fecha de UTC de un instante. Sólo para las reglas de lectura de valores guardados. */
+function fechaUtc(instante: Date): string {
+  return `${instante.getUTCFullYear()}-${dosDigitos(instante.getUTCMonth() + 1)}-${dosDigitos(instante.getUTCDate())}`;
 }

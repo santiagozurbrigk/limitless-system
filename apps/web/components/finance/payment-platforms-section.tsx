@@ -18,17 +18,16 @@ import { PLATFORM_SUGGESTIONS } from "@/mocks/finance";
 import { useFinanceData } from "@/providers";
 import { useToast } from "@/providers/toast-provider";
 import { formatMoney } from "@/lib/finance/format";
-import { aFechaDeInput, diaLocal } from "@/lib/fechas/calendario";
+import { formatearFechaGuardada } from "@/lib/fechas/calendario";
+import type { PaymentPlatformConfig } from "@/types/finance";
 
 /**
  * La fecha de la última transacción, con su día. `new Date("2026-10-04")` es
  * medianoche de UTC y en Argentina se mostraba como el día anterior.
  */
 function formatearUltimaTransaccion(valor: string): string {
-  const fecha = aFechaDeInput(valor);
-  return fecha ? diaLocal(fecha).toLocaleDateString("es-ES") : valor;
+  return formatearFechaGuardada(valor, undefined, "es-ES") ?? valor;
 }
-import type { PaymentPlatformConfig } from "@/types/finance";
 
 const selectClass =
   "flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm";
