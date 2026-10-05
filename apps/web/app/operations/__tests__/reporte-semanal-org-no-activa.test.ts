@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getRedirectError } from "next/dist/client/components/redirect";
+import { RedirectType } from "next/dist/client/components/redirect-error";
 
 /**
  * SCRUM-210 · el reporte semanal de Operaciones (`generateWeeklyReportAction`,
@@ -16,6 +18,7 @@ const sim = vi.hoisted(() => ({
   upserts: [] as Array<Record<string, unknown>>,
   errorAlMarcarGenerating: null as { message: string } | null,
   configurado: true,
+  fallaAuth: null as unknown,
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -33,7 +36,9 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 vi.mock("@/lib/auth/require-auth", () => ({
-  requireAuthContext: async () => ({
+  requireAuthContext: async () => {
+    if (sim.fallaAuth) throw sim.fallaAuth;
+    return {
     orgId: "org-1",
     supabase: {
       from(tabla: string) {
@@ -65,7 +70,8 @@ vi.mock("@/lib/auth/require-auth", () => ({
         return builder;
       },
     },
-  }),
+    };
+  },
 }));
 const ia = vi.hoisted(() => ({ callClaudeJson: vi.fn(async () => null as unknown) }));
 vi.mock("@/lib/ai/anthropic", () => ({ callClaudeJson: ia.callClaudeJson }));
@@ -86,6 +92,7 @@ beforeEach(() => {
   sim.upserts = [];
   sim.errorAlMarcarGenerating = null;
   sim.configurado = true;
+  sim.fallaAuth = null;
   ia.callClaudeJson.mockReset();
   ia.callClaudeJson.mockImplementation(async () => null);
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -167,5 +174,18 @@ describe("generateWeeklyReportAction", () => {
       motivo: "falla",
     });
     expect(sim.tablas).toEqual([]);
+  });
+
+  it("⭐ si requireAuthContext lanza un error, lo relanza (no lo devuelve como valor)", async () => {
+    sim.fallaAuth = new Error("Unauthorized");
+    await expect(generateWeeklyReportAction()).rejects.toThrow("Unauthorized");
+    expect(sim.tablas).toEqual([]);
+  });
+
+  it("⭐ si requireAuthContext redirige, deja pasar el redirect de Next", async () => {
+    sim.fallaAuth = getRedirectError("/auth/force-password-change", RedirectType.replace);
+    await expect(generateWeeklyReportAction()).rejects.toMatchObject({
+      digest: expect.stringMatching(/^NEXT_REDIRECT/),
+    });
   });
 });
