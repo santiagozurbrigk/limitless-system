@@ -100,19 +100,6 @@ export async function getCurrentUserPermissions(): Promise<UserPermissions> {
 
   const modules = permissionsFromRow(teamRolePermissions);
 
-  console.log(
-    "[Permissions] userId:",
-    user.id,
-    "role:",
-    profile.role,
-    "custom_role_id:",
-    profile.custom_role_id,
-    "enabledAddOns:",
-    enabledAddOns,
-    "modules:",
-    modules
-  );
-
   return {
     role: profile.role,
     isFounder: false,

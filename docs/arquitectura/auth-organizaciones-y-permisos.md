@@ -208,8 +208,8 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
 - `[AUTH-CALLBACK-NEXT]` resuelto el 2026-09-30 (SCRUM-2): `auth/callback` sólo redirige a un path interno (`lib/auth/redirect-seguro.ts`, `destinoSeguro`).
 - `[SIGNUP-PUBLICO]` (nuevo, decisión) Cualquiera puede crearse una cuenta founder desde `/login` y usar la
   clave global de Anthropic. Confirmar si es buscado o si hay que apagarlo (código o Supabase Auth).
-- `[PERMISOS-LOG]` (nuevo) `getCurrentUserPermissions` hace `console.log` del mapa de permisos en cada
-  render de plataforma de un member.
+- `[PERMISOS-LOG]` resuelto el 2026-10-04 (SCRUM-121): `getCurrentUserPermissions` ya no escribe en los
+  registros el usuario, el rol ni los módulos de cada member.
 - Invitaciones: `customRoleId` no se valida contra la org (sólo lo puede mandar un founder).
 - `profiles.role = 'member'` no está en `VALID_ROLES` (`lib/team/mapper.ts`) ni en `constants/roles.ts`.
 

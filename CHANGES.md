@@ -34,6 +34,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-04 — Los permisos de un miembro ya no se escriben en los registros (SCRUM-121)
+
+**Rama:** `fix/SCRUM-121-log-permisos`
+**Commit(s):** este
+**Módulo(s) afectado(s):** permisos, `apps/web/lib/auth/get-current-permissions.ts`
+
+**Qué se hizo:** se borró el `console.log` de `getCurrentUserPermissions`, que en cada pantalla de la plataforma escribía en los registros del servidor el id del usuario, su rol, su rol personalizado, los add-ons de la org y el mapa de módulos de cada member. Test nuevo `lib/auth/__tests__/permisos-sin-log.test.ts`: lee los permisos de un member y comprueba que no se escribe nada en la consola.
+
+**Por qué / finalidad:** cierra `[PERMISOS-LOG]`. Esos datos no tienen por qué quedar en los registros de Vercel, y se generaban en cada pedido.
+
+**Decisiones de diseño relevantes:** el test mira todos los niveles de la consola (log, info, debug, warn, error) para que no vuelva un log equivalente con otro nombre. Se comprobó con el log restaurado: el test falla.
+
+**Riesgos / deuda técnica pendiente:** ninguno.
+
+---
+
 ### 2026-10-04 — El progreso de onboarding del super admin pide ser super admin (SCRUM-111)
 
 **Rama:** `fix/SCRUM-111-guard-onboarding-progress`

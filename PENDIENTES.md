@@ -82,7 +82,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 32 | 17 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 31 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 12 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 20 | 5 |
@@ -365,12 +365,6 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Estado verificado:** `lib/super-admin/org-health.ts` suma 25 pts si hay filas en `conversations`, vacía desde Zernio. Tampoco pagina (techo de 1000 filas, auditoría §3 confiabilidad 2).
 - **Qué hay que hacer:** redefinir las cuatro señales con fuentes vivas y contar en SQL.
 - **Dónde:** `apps/web/lib/super-admin/org-health.ts`, `client-health.ts`.
-
-#### [PERMISOS-LOG] `console.log` de permisos en cada render (nuevo)
-- **Tipo:** deuda técnica
-- **Estado verificado:** `lib/auth/get-current-permissions.ts` loguea userId, rol y mapa de módulos para todo member en cada request de plataforma.
-- **Qué hay que hacer:** borrar el log.
-- **Dónde:** `apps/web/lib/auth/get-current-permissions.ts`.
 
 #### [GLASS-TOKENS-PISADOS] `globals.css` pisa los tokens glass de `tokens.css` (nuevo)
 - **Tipo:** bug (visual) / verificación manual
