@@ -9,8 +9,11 @@
 --
 -- Una fila por reunión y por conexión: `user_id` nulo es la conexión de la
 -- organización; con `user_id`, la de ese miembro. Cuando la reunión se guarda, la
--- fila se borra. Una descartada queda con `descartada_at` para poder rastrearla y
--- recuperarla rebobinando el cursor (docs/areas/ventas.md).
+-- fila se borra. Una descartada queda con `descartada_at` y sigue descartada
+-- aunque vuelva a llegar: para reintentarla hay que borrar su fila y rebobinar el
+-- cursor de la conexión a antes de su `created_at` (docs/areas/ventas.md, "Cómo
+-- recuperar una reunión descartada"). Las filas sin fallas nuevas en 30 días las
+-- borra la propia sync.
 
 create table if not exists public.fathom_sync_fallas (
   id uuid primary key default gen_random_uuid(),
