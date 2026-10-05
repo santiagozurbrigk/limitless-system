@@ -1,4 +1,8 @@
+import type { OrganizationStatus } from "@ai-coo/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+/** El único estado en el que corren los procesos de IA (ver el check de la base). */
+const ACTIVA: OrganizationStatus = "active";
 
 /**
  * Las organizaciones sobre las que corren los procesos automáticos de IA
@@ -12,7 +16,7 @@ export async function listActiveOrganizationIds(): Promise<string[]> {
     .from("organizations")
     .select("id")
     .eq("account_type", "founder")
-    .eq("status", "active");
+    .eq("status", ACTIVA);
 
   if (error) {
     throw new Error(error.message);
@@ -47,5 +51,5 @@ export async function organizacionSigueActiva(
     throw new Error(error.message);
   }
 
-  return data?.account_type === "founder" && data?.status === "active";
+  return data?.account_type === "founder" && data?.status === ACTIVA;
 }

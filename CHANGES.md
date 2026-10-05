@@ -79,6 +79,16 @@ Los informes de origen son las pruebas integrales del 4-oct (SCRUM-111, 121 y 21
 
 **Riesgos / deuda técnica pendiente:** ninguno.
 
+#### 4. Tipos del estado de la organización alineados con la base
+
+**Qué se hizo:** `OrganizationStatus` (`packages/types/src/index.ts`) pasa de `active | inactive | suspended` a `active | paused | churned`, lo que admite el check de `organizations.status` (`20260521000000_phase1_orgs_profiles.sql:7`). `AdminOrgStatus` (`apps/web/types/super-admin.ts`) es ese mismo tipo (antes `active | inactive | trial`), `AdminOrgPlan` pierde `trial` y el estado de una persona en `/super-admin/users` (baneada o perfil inactivo) tiene su propio tipo, `AdminUserStatus`. `mapOrgStatus` e `inferPlan` de `lib/super-admin/queries.ts` se reemplazan por `estadoDeOrg` y `planPorMrr` en `lib/super-admin/estado-de-org.ts` (nuevo, puro, con test), junto con las etiquetas y colores. Pantallas: la lista de organizaciones filtra por Activas, Pausadas y Dadas de baja (antes Trial e Inactivas) y el botón dice "Pausar" o "Activar"; el detalle muestra Pausada o Dada de baja (antes "Inactiva" para las dos) y su botón dice "Pausar" o "Activar"; el portfolio de holdings muestra el estado en español en vez del valor crudo. `es.status.org` queda con los tres estados. `organizaciones-activas.ts` usa el tipo para su literal `active`. Test nuevo `lib/super-admin/__tests__/estado-de-org.test.ts`.
+
+**Por qué / finalidad:** los tipos describían estados que la base no puede producir (`trial`, `inactive`, `suspended`): los filtros de "Trial" nunca encontraban nada, una org pausada y una dada de baja se veían igual, y alguien guiándose por los tipos podía agregar un estado que dejara a las orgs fuera de los crons de IA sin que ningún test avisara.
+
+**Decisiones de diseño relevantes:** un valor desconocido (imposible hoy por el check) se muestra como pausada y deja un aviso en consola: nunca como activa. El plan sigue siendo una estimación por MRR porque no hay columna de plan. `packages/types` no lo usa ninguna otra app (bot, worker): sólo `apps/web`; typecheck de `apps/web`, `packages/types` y `packages/ui` en 0. Los tipos deprecados `AdminFounder` y `AdminUsageRow` no se tocaron (no los usa nadie); `AdminOrganization.status` (deprecado, sin usos) pasa a `OrganizationStatus`. Controles negativos: volver al mapeo viejo (falla "los tres estados de la base pasan tal cual"), tratar un desconocido como activa y meter una rama extra en el plan: cada uno falla por aserción.
+
+**Riesgos / deuda técnica pendiente:** ninguna pantalla pasa una org a `churned`; si se quiere esa transición, es una funcionalidad aparte.
+
 ---
 
 ### 2026-10-04 — La sync de contenido de Zernio no pisa las métricas con ceros (SCRUM-172)

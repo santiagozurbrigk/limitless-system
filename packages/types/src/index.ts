@@ -3,7 +3,13 @@
  * Phase 0: structural placeholders for mock data and future API contracts.
  */
 
-export type OrganizationStatus = "active" | "inactive" | "suspended";
+/**
+ * Estado de una organización, igual que el check de la base:
+ * `organizations.status in ('active', 'paused', 'churned')`
+ * (`supabase/migrations/20260521000000_phase1_orgs_profiles.sql`). Si se
+ * agrega un estado, va primero en una migración y después aquí.
+ */
+export type OrganizationStatus = "active" | "paused" | "churned";
 
 export type UserRole =
   | "founder"

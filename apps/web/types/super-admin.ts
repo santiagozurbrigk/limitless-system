@@ -1,6 +1,16 @@
-export type AdminOrgStatus = "active" | "inactive" | "trial";
+import type { OrganizationStatus } from "@ai-coo/types";
 
-export type AdminOrgPlan = "starter" | "growth" | "enterprise" | "trial";
+/** El estado de la org tal como está en la base (`active`, `paused`, `churned`). */
+export type AdminOrgStatus = OrganizationStatus;
+
+/** Plan estimado por MRR (no hay columna de plan en la base). */
+export type AdminOrgPlan = "starter" | "growth" | "enterprise";
+
+/**
+ * Si una persona puede entrar o no (usuario baneado en Auth o perfil
+ * inactivo). Es de la persona, no de su organización.
+ */
+export type AdminUserStatus = "active" | "inactive";
 
 export type AdminOrganizationListRow = {
   id: string;
@@ -30,7 +40,7 @@ export type AdminOrganization = {
   name: string;
   founder: string;
   mrr: string;
-  status: "active" | "trial" | "churned";
+  status: OrganizationStatus;
   aiCostMonth: string;
 };
 
@@ -111,7 +121,7 @@ export type AdminUserRow = {
   organizationName: string;
   organizationTimezone: string | null;
   role: string;
-  status: "active" | "inactive";
+  status: AdminUserStatus;
   lastLogin: string | null;
 };
 

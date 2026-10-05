@@ -81,7 +81,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/ghl` | 4 | 40 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook |
 | `lib/sales` | 2 | 37 | opciones de seguimiento, hilo del lead |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
-| `lib/super-admin` | 4 | 35 | plan de bajas, progreso de onboarding y chequeo de super admin en las lecturas con service role |
+| `lib/super-admin` | 5 | 41 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role y estado de la org alineado con la base |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
 | `lib/sops` | 2 | 25 | marcadores de adjuntos, chunks de audio |
 | `lib/auth` | 6 | 33 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log, un solo chequeo de super admin por pedido |

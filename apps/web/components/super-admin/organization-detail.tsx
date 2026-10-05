@@ -26,6 +26,10 @@ import { formatUsd, formatUsdPrecise } from "@/lib/super-admin/org-metrics";
 import type { ClientHealthTimelineItem } from "@/lib/super-admin/client-health";
 import { formatOrgDateTime } from "@/lib/super-admin/format-org-datetime";
 import type { AdminOrganizationDetail } from "@/types/super-admin";
+import {
+  ETIQUETA_DE_ESTADO_DE_ORG,
+  VARIANTE_DE_ESTADO_DE_ORG,
+} from "@/lib/super-admin/estado-de-org";
 import { OrgClientHealthSection } from "@/components/super-admin/org-client-health-section";
 
 function formatDate(iso: string | null, timezone: string | null): string {
@@ -69,7 +73,6 @@ export function OrganizationDetailView({
     starter: "Starter",
     growth: "Growth",
     enterprise: "Enterprise",
-    trial: "Trial",
   };
 
   const tokenSpark = detail.tokenUsage.daily.map((d) => d.costUsd);
@@ -88,20 +91,8 @@ export function OrganizationDetailView({
           <h2 className="text-xl font-semibold">{detail.name}</h2>
           <p className="text-sm text-muted-foreground">{detail.founder.email}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Badge
-              variant={
-                detail.status === "active"
-                  ? "success"
-                  : detail.status === "trial"
-                    ? "warning"
-                    : "secondary"
-              }
-            >
-              {detail.status === "active"
-                ? "Activa"
-                : detail.status === "trial"
-                  ? "Trial"
-                  : "Inactiva"}
+            <Badge variant={VARIANTE_DE_ESTADO_DE_ORG[detail.status]}>
+              {ETIQUETA_DE_ESTADO_DE_ORG[detail.status]}
             </Badge>
             <Badge variant="outline">{PLAN_LABEL[detail.plan] ?? detail.plan}</Badge>
             <span className="text-xs text-muted-foreground">
@@ -122,9 +113,7 @@ export function OrganizationDetailView({
               )
             }
           >
-            {detail.status === "active" || detail.status === "trial"
-              ? "Desactivar"
-              : "Activar"}
+            {detail.status === "active" ? "Pausar" : "Activar"}
           </Button>
           <Button
             variant="outline"

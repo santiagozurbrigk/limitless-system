@@ -74,9 +74,9 @@ export const es = {
       inactive: "Inactivo",
     },
     org: {
-      active: "Activo",
-      trial: "Prueba",
-      churned: "Baja",
+      active: "Activa",
+      paused: "Pausada",
+      churned: "Dada de baja",
     },
     department: {
       healthy: "Saludable",
