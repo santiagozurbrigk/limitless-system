@@ -151,7 +151,7 @@ cron /api/integrations/fathom/process (10 min, espera 30 min por llamada) → pr
 `/api/integrations/fathom/sync`, después de la key de cada org, trae las grabaciones de cada miembro conectado
 desde la sección por miembro (filas con `webhook_token`, no `revoked`) con su propia key, desde la conexión en
 adelante, con el mismo upsert y `user_id` del miembro. El botón "Sincronizar mis llamadas" usa la misma función.
-Si una grabación falla al guardarse, el cursor (`last_sync_at`) no avanza. Si la key falla, la fila queda en
+El cursor (`last_sync_at`) sigue la misma regla que el de la org (ver "Cursor de la sync" más abajo). Si la key falla, la fila queda en
 `status = 'error'` con `last_error` y va a Sentry. **Por qué:** en la prueba real (2026-10-03) Fathom no disparó el
 webhook aunque la grabación ya estaba lista; con el cron la grabación entra igual, como mucho una hora después.
 Las filas que crea la conexión de la organización (`connectFathomAction`, sin `webhook_token`) no se sincronizan
@@ -181,6 +181,26 @@ acá: llevan la misma key que el negocio y harían privadas de quien conectó to
 
 - **Ventana de sync:** desde `last_sync_at`, pero nunca antes de `connected_at` (el historial no se trae)
   (`lib/fathom/sync-window.ts`). Excepción: si no hay ninguna de las dos fechas, trae todo.
+- **Cursor de la sync** (`lib/fathom/cursor.ts`, SCRUM-36), igual para la org y para el miembro. `last_sync_at`
+  ya no es la hora del servidor: es el `created_at` de Fathom de lo leído y guardado, menos un solape de 30 min.
+  - Una grabación que falla al guardarse frena el cursor en su `created_at`: la corrida siguiente la vuelve a pedir.
+    Si sigue fallando, se reintenta en cada corrida mientras tenga menos de 24 h; pasado eso, y si ya venía
+    frenando el cursor, se deja de reintentar, se reporta a Sentry (`reportarFalla`, con el `recording_id`) y la
+    sync sigue. Una que falla sin ninguna fecha no puede frenar el cursor: se reporta.
+  - `listFathomMeetings` avisa si se cortó en el tope de páginas (20 la org, 5 el miembro). Fathom devuelve primero
+    lo más nuevo, así que lo que queda sin leer es lo más viejo: el cursor no pasa de ahí. Si llegó en orden
+    ascendente, avanza hasta lo último leído.
+  - Si el cursor quedó atrasado más de 12 h, la lectura es por tramos cerrados de 6 h desde el más viejo
+    (`lib/fathom/leer-ventana.ts`), con el mismo presupuesto de páginas: cada tramo leído entero hace avanzar el
+    cursor aunque no haya traído nada. Así una caída de varios días se pone al día sola. Si un solo tramo tiene
+    más reuniones que el presupuesto (más de 200 en 6 h para la org, 50 para un miembro), el cursor no puede
+    avanzar y se reporta a Sentry en cada corrida.
+  - Si no se guardó ni falló nada, el cursor queda donde estaba; nunca retrocede.
+  - Si `created_at` falta o no se puede leer, se usa el inicio de la grabación, que nunca es posterior.
+  - Volver a traer una llamada ya guardada (por el solape o por un reintento) actualiza sus datos de Fathom pero
+    no vuelve a pasarla por el matcher por título si ya se procesó (`debeReasociarAlSincronizar` en
+    `lib/fathom/sync.ts`): el matcher la devolvía a `pending` y se pagaba de nuevo el análisis, con entradas
+    duplicadas en el timeline y en problemas del cliente.
 - **Keys por miembro:** `app/fathom/member-actions.ts` valida la key, la cifra
   (`lib/fathom/member-key.ts`, atada a la org y al miembro; `ENCRYPTION_MASTER_KEY` obligatoria) y crea
   el webhook por API (`lib/fathom/webhooks.ts`). Conectar Fathom para la org (`connectFathomAction`)

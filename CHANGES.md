@@ -34,6 +34,56 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · La sync de Fathom ya no saltea una llamada que no se pudo guardar (SCRUM-36)
+
+**Rama:** `fix/SCRUM-36-fathom-cursor`
+**Commit(s):** `acb24f75` (código y tests) y este (docs)
+**Módulo(s) afectado(s):** Ventas → Llamadas / Integraciones → Fathom. `lib/fathom/sync.ts`, `lib/fathom/member-sync.ts`,
+`lib/fathom/api.ts`, nuevos `lib/fathom/cursor.ts` y `lib/fathom/leer-ventana.ts`.
+
+**Qué se hizo:**
+- **Cursor nuevo (`cursor.ts`, puro):** `last_sync_at` ya no es la hora del servidor. Avanza al `created_at` de
+  Fathom de lo leído y guardado, menos 30 min de solape; nunca pasa del `created_at` de una reunión que falló al
+  guardarse ni de lo que quedó sin leer; nunca retrocede. Si no se guardó ni falló nada, queda donde estaba. Si
+  `created_at` falta o es ilegible se usa el inicio de la grabación (nunca es posterior).
+- **Una falla que no se arregla sola:** frena el cursor y se reintenta en cada corrida mientras tenga menos de 24 h.
+  Pasado eso, y si ya venía frenando el cursor, se deja de reintentar, va a Sentry con su `recording_id`
+  (`reportarFalla`) y la sync sigue. Una falla sin ninguna fecha no puede frenar el cursor: va a Sentry.
+- **Tope de páginas:** `listFathomMeetings` devuelve `{ meetings, truncated, pages }` y acepta `createdBefore`. Sus
+  dos llamadores (sync de la org y del miembro) se actualizaron. Cortada en orden descendente (lo que hace Fathom) o
+  desconocido, el cursor no pasa de lo que quedó sin leer; en orden ascendente avanza hasta lo último leído.
+- **Lectura por tramos (`leer-ventana.ts`):** si el cursor está atrasado más de 12 h, se lee de a tramos cerrados de
+  6 h desde el más viejo, con el mismo presupuesto de páginas (20 la org, 5 el miembro). Cada tramo leído entero
+  hace avanzar el cursor aunque esté vacío: una caída de varios días se pone al día sola y la ventana no crece sin
+  límite. Si un solo tramo supera el presupuesto, el cursor no avanza y se reporta a Sentry en cada corrida.
+- **El solape no reprocesa:** al volver a traer una llamada ya guardada, `applyClientMatchToCall` la devolvía a
+  `pending` si el título coincidía con un cliente, y se pagaba de nuevo el análisis con el modelo, con entradas
+  duplicadas en el timeline y en problemas del cliente. Ahora el guardado actualiza los datos de Fathom pero sólo
+  pasa por el matcher una llamada nueva o una que todavía no se procesó (`debeReasociarAlSincronizar`). También
+  protege los reintentos del webhook por miembro, que usan el mismo guardado.
+- Tests: `cursor.test.ts` (27: una falla y otra entra, todas bien, todas fallan, corte por tope en orden ascendente,
+  descendente y desconocido, `created_at` ausente e ilegible, solape, plazo de reintentos, tramos) y
+  `sync-corridas.test.ts` (8: dos corridas de punta a punta con Fathom y Supabase simulados, para la org y el
+  miembro, con chequeo del filtro por organización; corte por tope; puesta al día por tramos; llamada ya procesada).
+  Control negativo: con el código de `main` fallan 7 de los 8 de punta a punta; sin el chequeo de llamada procesada
+  falla el del solape.
+
+**Por qué / finalidad:** cierra `[FATHOM-SYNC-CURSOR]`. Con una llamada que fallaba y otra que entraba en la misma
+corrida, la que fallaba no se volvía a pedir nunca. La sync por miembro ya no avanzaba si fallaba alguna, pero
+usaba la hora del servidor y avanzaba aunque la lectura se hubiera cortado en 5 páginas.
+
+**Decisiones de diseño relevantes:** sin migraciones: el estado de los reintentos sale del propio cursor (si quedó a
+la altura de la reunión que falla, ya la venía frenando). La lectura por tramos existe porque Fathom devuelve primero
+lo más nuevo: con un pedido abierto y más reuniones que el tope, cada corrida volvería a leer lo nuevo y nunca llegaría
+a lo viejo. El solape es de 30 min (no de pocos minutos) porque volver a leer ya no cuesta análisis.
+
+**Riesgos / deuda técnica pendiente:** el límite de un tramo saturado (más de 200 reuniones creadas en 6 h para la
+org, 50 para un miembro) queda reportado a Sentry en cada corrida; no hay un pendiente abierto porque no es alcanzable
+con el volumen de las cuentas de hoy. El orden de Fathom se deduce de lo que llega; si un día cambia, el cálculo ya
+contempla los dos.
+
+---
+
 ### 2026-10-05 · Cuarto fix-pack de SCRUM-493: el rango de métricas de ventas en días de la organización
 
 **Rama:** `fix/SCRUM-493-fechas-utc`
