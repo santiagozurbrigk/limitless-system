@@ -29,6 +29,7 @@ import {
 } from "@/lib/client-onboarding/links";
 import { applyOnboardingAnswers } from "@/lib/client-onboarding/form";
 import { newClientFromOnboarding } from "@/lib/client-onboarding/assign";
+import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import {
   SUB_CLIENT_NAME_MAX,
   rowToSubClient,
@@ -355,7 +356,13 @@ export async function assignOnboardingSubmissionAction(
     } else {
       const { data, error } = await supabase
         .from("clients")
-        .insert(newClientFromOnboarding(organizationId, v.newClientName!, new Date()))
+        .insert(
+          newClientFromOnboarding(
+            organizationId,
+            v.newClientName!,
+            await fechaDeHoyDeLaOrganizacion(supabase, organizationId)
+          )
+        )
         .select("id, name")
         .single();
       if (error) throw new Error(error.message);

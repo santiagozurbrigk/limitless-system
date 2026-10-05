@@ -31,6 +31,8 @@ import {
 } from "@ai-coo/ui";
 import { UserPlus } from "lucide-react";
 import { createClientAction } from "@/app/clients/actions";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 import { usePlatformData } from "@/providers";
 import { useToast } from "@/providers/toast-provider";
 import type { Client, ClientStatus } from "@/types/clients";
@@ -60,15 +62,11 @@ const PLATAFORMAS: { value: PaymentPlatform; label: string }[] = [
   { value: "other", label: "Otra" },
 ];
 
-function hoy(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function vacio() {
   return {
     name: "",
     email: "",
-    joinDate: hoy(),
+    joinDate: fechaDeHoyLocal(),
     totalAmount: "",
     status: "active" as ClientStatus,
     paymentType: "upfront" as ClientPaymentType,
@@ -189,11 +187,10 @@ export function NewClientDialog() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="cliente-fecha">Desde cuándo es cliente</Label>
-                <Input
+                <CampoFecha
                   id="cliente-fecha"
-                  type="date"
                   value={form.joinDate}
-                  onChange={(evento) => patch({ joinDate: evento.target.value })}
+                  onChange={(fecha) => patch({ joinDate: fecha ?? "" })}
                 />
               </div>
             </div>

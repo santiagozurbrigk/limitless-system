@@ -36,7 +36,8 @@ import {
   type ClientTaskOwner,
 } from "@/types/client-tasks";
 import { CLIENT_TASKS_CHANGED, notifyClientTasksChanged } from "@/lib/clients/tasks-events";
-import { pickNextTask } from "@/lib/clients/next-task";
+import { isOverdue, pickNextTask } from "@/lib/clients/next-task";
+import { useFechaDeHoyLocal } from "@/lib/hooks/use-fecha-de-hoy-local";
 import { ACCION_DE_FILA, FichaSection } from "@/components/clients/ficha-section";
 import { useToast } from "@/providers/toast-provider";
 import { cn } from "@/lib/utils";
@@ -50,12 +51,6 @@ function formatearFecha(iso: string): string {
     month: "short",
     timeZone: "UTC",
   });
-}
-
-/** ¿Está vencida? Se compara por día, no por instante. */
-function estaVencida(task: ClientTask): boolean {
-  if (!task.dueDate || task.status === "done") return false;
-  return task.dueDate < new Date().toISOString().slice(0, 10);
 }
 
 /**
@@ -195,7 +190,8 @@ function Tarea({
   const { push } = useToast();
   const [busy, setBusy] = useState(false);
   const hecha = task.status === "done";
-  const vencida = estaVencida(task);
+  const hoy = useFechaDeHoyLocal();
+  const vencida = hoy !== null && isOverdue(task, hoy);
 
   const tildar = async () => {
     setBusy(true);

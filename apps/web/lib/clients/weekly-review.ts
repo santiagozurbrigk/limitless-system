@@ -15,6 +15,9 @@
  * Lógica pura: no toca base ni red.
  */
 
+import { fechaVencida } from "@/lib/fechas/calendario";
+import type { ClientInstallment } from "@/types/clients";
+
 /** A cuántos días del egreso empieza la conversación de renovación. */
 export const LEAVING_SOON_DAYS = 60;
 
@@ -25,6 +28,22 @@ export const RECENT_WIN_DAYS = 21;
 export const SILENCE_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * ¿Tiene una cuota pendiente que ya venció? Es la señal de pago atrasado.
+ * Vence el día después de su fecha, contra el `hoy` de la organización.
+ */
+export function hasOverduePayment(
+  installments: readonly ClientInstallment[] | undefined,
+  hoy: string
+): boolean {
+  return (installments ?? []).some(
+    (installment) =>
+      installment.status === "pending" &&
+      typeof installment.dueDate === "string" &&
+      fechaVencida(installment.dueDate, hoy)
+  );
+}
 
 export type WeeklyReviewInput = {
   clientId: string;
@@ -63,10 +82,17 @@ export type WeeklyReview = {
   atRisk: WeeklyReviewRow[];
 };
 
+/**
+ * `hoy` es la fecha calendario (`YYYY-MM-DD`) de la organización: el servidor
+ * corre en UTC y de noche en Argentina su día ya es mañana, así que lo arma
+ * quien llama con la zona de la organización (SCRUM-493). Sin default a
+ * propósito.
+ */
 export function buildWeeklyReview(
   clients: readonly WeeklyReviewInput[],
-  now: Date = new Date()
+  hoy: string
 ): WeeklyReview {
+  const now = startOfDay(hoy);
   return {
     stalled: buildStalled(clients),
     aboutToWin: buildAboutToWin(clients, now),
@@ -96,7 +122,7 @@ function buildStalled(clients: readonly WeeklyReviewInput[]): WeeklyReviewRow[] 
  */
 function buildAboutToWin(
   clients: readonly WeeklyReviewInput[],
-  now: Date
+  now: number
 ): WeeklyReviewRow[] {
   return clients
     .filter((client) => {
@@ -126,7 +152,7 @@ function buildAboutToWin(
  */
 function buildLeavingSoon(
   clients: readonly WeeklyReviewInput[],
-  now: Date
+  now: number
 ): WeeklyReviewRow[] {
   return clients
     .map((client) => ({ client, days: daysUntil(client.exitDate, now) }))
@@ -157,7 +183,7 @@ function buildLeavingSoon(
  */
 function buildAtRisk(
   clients: readonly WeeklyReviewInput[],
-  now: Date
+  now: number
 ): WeeklyReviewRow[] {
   return clients
     .map((client) => {
@@ -182,17 +208,17 @@ function buildAtRisk(
 }
 
 /** Días transcurridos desde una fecha. `null` si no hay fecha o no se entiende. */
-function daysSince(date: string | null, now: Date): number | null {
+function daysSince(date: string | null, now: number): number | null {
   const time = parseDate(date);
   if (time === null) return null;
-  return Math.floor((startOfDay(now) - time) / DAY_MS);
+  return Math.floor((now - time) / DAY_MS);
 }
 
 /** Días que faltan para una fecha. Negativo si ya pasó. */
-function daysUntil(date: string | null, now: Date): number | null {
+function daysUntil(date: string | null, now: number): number | null {
   const time = parseDate(date);
   if (time === null) return null;
-  return Math.floor((time - startOfDay(now)) / DAY_MS);
+  return Math.floor((time - now) / DAY_MS);
 }
 
 /** Una fecha que no se entiende no es hoy: no existe. */
@@ -202,8 +228,13 @@ function parseDate(date: string | null): number | null {
   return Number.isNaN(time) ? null : time;
 }
 
-function startOfDay(now: Date): number {
-  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+/**
+ * El comienzo del día `hoy`, en la misma escala que `parseDate` (medianoche
+ * UTC de cada fecha): la diferencia entre dos de estos es un número entero de
+ * días, sin horarios de verano de por medio.
+ */
+function startOfDay(hoy: string): number {
+  return new Date(`${hoy.slice(0, 10)}T00:00:00Z`).getTime();
 }
 
 function plural(count: number, one: string, many: string): string {

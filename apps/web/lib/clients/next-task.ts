@@ -9,6 +9,7 @@
  *
  * Lógica pura: no toca base ni red.
  */
+import { fechaVencida } from "@/lib/fechas/calendario";
 import type { ClientTask } from "@/types/client-tasks";
 
 /**
@@ -46,8 +47,17 @@ function comparar(a: ClientTask, b: ClientTask): number {
   return a.createdAt.localeCompare(b.createdAt);
 }
 
-/** ¿Está vencida? Se compara por día, no por instante. */
-export function isOverdue(task: ClientTask, today: Date = new Date()): boolean {
-  if (!task.dueDate || task.status === "done") return false;
-  return task.dueDate < today.toISOString().slice(0, 10);
+/**
+ * ¿Está vencida? Se compara por día, no por instante: lo que vence hoy todavía
+ * está a tiempo.
+ *
+ * `hoy` es una fecha calendario (`YYYY-MM-DD`) que arma quien llama:
+ * `fechaDeHoyLocal()` en el navegador y `fechaDeHoyEnZona(zona de la
+ * organización)` en el servidor. No hay default a propósito: el reloj del
+ * proceso en el servidor es UTC, y de noche en Argentina ya es mañana
+ * (SCRUM-493).
+ */
+export function isOverdue(task: ClientTask, hoy: string): boolean {
+  if (task.status === "done") return false;
+  return fechaVencida(task.dueDate, hoy);
 }

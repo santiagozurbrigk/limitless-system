@@ -23,6 +23,8 @@ import {
   Input,
   Label,
 } from "@ai-coo/ui";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 import type { ClientBaseline } from "@/types/wins";
 import type { ClientTracking } from "@/types/clients";
 
@@ -151,12 +153,11 @@ export function ClientBaselineDialog({
               <Label htmlFor="baseline-date" className="text-xs">
                 Cuándo se midió
               </Label>
-              <Input
+              <CampoFecha
                 id="baseline-date"
-                type="date"
-                max={new Date().toISOString().slice(0, 10)}
+                max={fechaDeHoyLocal()}
                 value={draft.capturedAt}
-                onChange={(event) => patch({ capturedAt: event.target.value })}
+                onChange={(fecha) => patch({ capturedAt: fecha ?? "" })}
               />
               <p className="text-xs text-muted-foreground">
                 Sin fecha no sirve para medir un plazo, así que no cuenta como punto.

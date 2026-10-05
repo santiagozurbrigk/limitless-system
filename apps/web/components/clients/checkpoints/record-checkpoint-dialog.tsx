@@ -17,7 +17,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Input,
   Label,
   Textarea,
 } from "@ai-coo/ui";
@@ -29,11 +28,8 @@ import type {
 import type { FieldDefinition } from "@/types/custom-fields";
 import { resolveMetricSchema } from "@/lib/checkpoints";
 import { FieldValueInput } from "@/components/clients/custom-fields/field-value-input";
-
-/** Hoy → yyyy-mm-dd, para el input date. */
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 
 export function RecordCheckpointDialog({
   open,
@@ -55,13 +51,13 @@ export function RecordCheckpointDialog({
   onClose: () => void;
   onSubmit: (input: { reachedAt: string; metrics: Record<string, unknown>; note: string | null }) => void;
 }) {
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(fechaDeHoyLocal);
   const [note, setNote] = useState("");
   const [metrics, setMetrics] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
     if (!open) return;
-    setDate(existingEvent ? existingEvent.reachedAt.slice(0, 10) : todayISO());
+    setDate(existingEvent ? existingEvent.reachedAt.slice(0, 10) : fechaDeHoyLocal());
     setNote(existingEvent?.note ?? "");
     setMetrics(existingEvent?.metrics ?? {});
   }, [open, existingEvent]);
@@ -95,12 +91,11 @@ export function RecordCheckpointDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="reached-at">Fecha</Label>
-            <Input
+            <CampoFecha
               id="reached-at"
-              type="date"
-              max={todayISO()}
+              max={fechaDeHoyLocal()}
               value={date}
-              onChange={(event) => setDate(event.target.value)}
+              onChange={(fecha) => setDate(fecha ?? "")}
             />
           </div>
 

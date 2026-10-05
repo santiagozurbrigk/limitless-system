@@ -22,7 +22,13 @@ import {
 import { esNivelValido } from "@/lib/clients/satisfaction";
 import type { Client, ClientTracking } from "@/types/clients";
 import type { ClientJourneyStatus } from "@/types/checkpoints";
-import { buildWeeklyReview, type WeeklyReview } from "@/lib/clients/weekly-review";
+import {
+  buildWeeklyReview,
+  hasOverduePayment,
+  type WeeklyReview,
+} from "@/lib/clients/weekly-review";
+import { fechaDeHoyEnZona, fechaEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { deriveClientCase, groupWinsByClient } from "@/lib/wins";
 import { listClientsAction } from "@/app/clients/actions";
 import { getClientsJourneyStatusAction } from "@/app/clients/checkpoint-derived-actions";
@@ -87,19 +93,26 @@ export type WeeklyReviewPageData = {
  *
  * ⭐ Todo se trae de una y se cruza en memoria: preguntar el recorrido, los wins
  * y las cuotas por cliente sería una consulta por fila de la lista.
+ *
+ * "Hoy" es el de la organización (`organizations.timezone`, una sola consulta):
+ * el servidor corre en UTC y de noche en Argentina ya sería mañana, con lo que
+ * una cuota que vence hoy salía como atrasada (SCRUM-493).
  */
 export async function getWeeklyReviewAction(): Promise<WeeklyReviewPageData> {
-  const [clients, statuses, wins, baselines, tracking, lastEvents] = await Promise.all([
-    listClientsAction(),
-    getClientsJourneyStatusAction(),
-    listWinsAction(),
-    listClientBaselinesAction(),
-    listClientTrackingAction(),
-    lastCheckpointEventByClient(),
-  ]);
+  const [clients, statuses, wins, baselines, tracking, checkpointEvents, zona] =
+    await Promise.all([
+      listClientsAction(),
+      getClientsJourneyStatusAction(),
+      listWinsAction(),
+      listClientBaselinesAction(),
+      listClientTrackingAction(),
+      listCheckpointEventDates(),
+      organizationTimezone(),
+    ]);
 
   const winsByClient = groupWinsByClient(wins);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = fechaDeHoyEnZona(zona);
+  const lastEvents = lastCheckpointEventByClient(checkpointEvents, zona);
 
   const review = buildWeeklyReview(
     clients.map((client) => {
@@ -125,9 +138,10 @@ export async function getWeeklyReviewAction(): Promise<WeeklyReviewPageData> {
         lastActivityAt: maxDate(lastWinAt, lastEventAt),
         joinDate: client.joinDate,
         exitDate: tracking[client.id]?.exitDate ?? null,
-        hasOverduePayment: hasOverduePayment(client, today),
+        hasOverduePayment: hasOverduePayment(client.installments, today),
       };
-    })
+    }),
+    today
   );
 
   return { review, clients, tracking };
@@ -283,8 +297,10 @@ function toNumber(raw: number | string | null): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-/** La fecha del último hito registrado de cada cliente. */
-async function lastCheckpointEventByClient(): Promise<Record<string, string>> {
+type CheckpointEventDateRow = { client_id: string; reached_at: string | null };
+
+/** Cuándo se registró cada hito de la organización. */
+async function listCheckpointEventDates(): Promise<CheckpointEventDateRow[]> {
   try {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
@@ -293,30 +309,44 @@ async function lastCheckpointEventByClient(): Promise<Record<string, string>> {
       .select("client_id, reached_at")
       .eq("organization_id", organizationId);
 
-    if (error) return {};
-
-    const result: Record<string, string> = {};
-    for (const row of data as { client_id: string; reached_at: string }[]) {
-      const date = row.reached_at?.slice(0, 10);
-      if (!date) continue;
-      if (!result[row.client_id] || date > result[row.client_id]!) {
-        result[row.client_id] = date;
-      }
-    }
-    return result;
+    if (error) return [];
+    return (data ?? []) as CheckpointEventDateRow[];
   } catch {
-    return {};
+    return [];
   }
 }
 
-/** Una cuota pendiente con vencimiento pasado. Es la señal de pago atrasado. */
-function hasOverduePayment(client: Client, today: string): boolean {
-  return (client.installments ?? []).some(
-    (installment) =>
-      installment.status === "pending" &&
-      typeof installment.dueDate === "string" &&
-      installment.dueDate.slice(0, 10) < today
-  );
+/** La zona horaria de la organización (null si no eligió una o no se pudo leer). */
+async function organizationTimezone(): Promise<string | null> {
+  try {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+    return await leerZonaHorariaDeLaOrganizacion(supabase, organizationId);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * La fecha del último hito registrado de cada cliente, en el día de la
+ * organización: `reached_at` es un instante, y su fecha de UTC podía caer en
+ * el día siguiente y achicar en uno los días sin novedades.
+ */
+function lastCheckpointEventByClient(
+  rows: readonly CheckpointEventDateRow[],
+  zona: string | null
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const row of rows) {
+    if (!row.reached_at) continue;
+    const instante = new Date(row.reached_at);
+    if (Number.isNaN(instante.getTime())) continue;
+    const date = fechaEnZona(instante, zona);
+    if (!result[row.client_id] || date > result[row.client_id]!) {
+      result[row.client_id] = date;
+    }
+  }
+  return result;
 }
 
 function maxDate(a: string | null, b: string | null): string | null {

@@ -4,7 +4,7 @@ import { newClientFromOnboarding } from "@/lib/client-onboarding/assign";
 describe("newClientFromOnboarding", () => {
   it("crea un cliente pendiente de onboarding, sin facturación inventada", () => {
     expect(
-      newClientFromOnboarding("org", "  Martín  ", new Date("2026-09-23T15:00:00Z"))
+      newClientFromOnboarding("org", "  Martín  ", "2026-09-23")
     ).toEqual({
       organization_id: "org",
       name: "Martín",

@@ -39,6 +39,8 @@ import {
 import type { FieldDefinition } from "@/types/custom-fields";
 import { activeFields } from "@/lib/custom-fields";
 import { FieldValueInput } from "@/components/clients/custom-fields/field-value-input";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
 import {
   deleteWinAttachmentAction,
   finalizeWinAttachmentAction,
@@ -66,14 +68,10 @@ export type WinDraft = {
   needsScreenshot: boolean;
 };
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function draftFrom(win: ClientWin | null, defaultClientId?: string): WinDraft {
   return {
     clientId: win?.clientId ?? defaultClientId ?? "",
-    winDate: win?.winDate ?? todayISO(),
+    winDate: win?.winDate ?? fechaDeHoyLocal(),
     achievement: win?.achievement ?? "",
     metricKey: win?.metric?.key ?? "",
     metricValue: win?.metric ? String(win.metric.value) : "",
@@ -221,12 +219,11 @@ export function WinFormModal({
 
             <div className="space-y-1.5">
               <Label htmlFor="win-date">Fecha</Label>
-              <Input
+              <CampoFecha
                 id="win-date"
-                type="date"
-                max={todayISO()}
+                max={fechaDeHoyLocal()}
                 value={draft.winDate}
-                onChange={(event) => patch({ winDate: event.target.value })}
+                onChange={(fecha) => patch({ winDate: fecha ?? "" })}
               />
             </div>
           </div>
