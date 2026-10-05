@@ -14,6 +14,7 @@ import {
   cn,
 } from "@ai-coo/ui";
 import { saveWeeklyInputAction } from "@/app/operations/actions";
+import { correrMutacion } from "@/lib/operations/correr-accion";
 import { Panel } from "@/components/shared/panel";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { useToast } from "@/providers/toast-provider";
@@ -181,16 +182,7 @@ export function WeeklyInputForm({
       return;
     }
 
-    setSubmitting(true);
-    try {
-      if (useSupabase) {
-        await saveWeeklyInputAction({
-          department,
-          content: content || undefined,
-          rating: data.rating > 0 ? data.rating : undefined,
-        });
-      }
-
+    const alGuardar = () => {
       onSaved?.();
       setFields((prev) => ({
         ...prev,
@@ -206,12 +198,25 @@ export function WeeklyInputForm({
       if (useSupabase) {
         router.refresh();
       }
-    } catch (error) {
-      push({
-        title: "No se pudo guardar",
-        description:
-          error instanceof Error ? error.message : "Error al guardar el input.",
-        variant: "default",
+    };
+
+    setSubmitting(true);
+    try {
+      if (!useSupabase) {
+        alGuardar();
+        return;
+      }
+      await correrMutacion({
+        accion: () =>
+          saveWeeklyInputAction({
+            department,
+            content: content || undefined,
+            rating: data.rating > 0 ? data.rating : undefined,
+          }),
+        avisar: push,
+        tituloError: "No se pudo guardar",
+        etiqueta: "[WeeklyInputForm] guardar",
+        alExito: alGuardar,
       });
     } finally {
       setSubmitting(false);

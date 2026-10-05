@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Send } from "lucide-react";
 import { Button, FormField, Textarea, cn } from "@ai-coo/ui";
 import { saveWeeklyInputAction } from "@/app/operations/actions";
+import { correrMutacion } from "@/lib/operations/correr-accion";
 import { Panel } from "@/components/shared/panel";
 import { useToast } from "@/providers/toast-provider";
 import type { Department } from "@/types/operations";
@@ -28,21 +29,21 @@ export function TeamInputForm() {
     if (!text.trim()) return;
     setSubmitting(true);
     try {
-      await saveWeeklyInputAction({ department, content: text.trim() });
-      setText("");
-      push({
-        title: "Input guardado",
-        description:
-          "Quedó registrado en el contexto semanal — la IA lo tendrá en cuenta en sus análisis.",
-        variant: "success",
-      });
-      router.refresh();
-    } catch (error) {
-      push({
-        title: "No se pudo guardar el input",
-        description:
-          error instanceof Error ? error.message : "Intentá de nuevo.",
-        variant: "default",
+      await correrMutacion({
+        accion: () => saveWeeklyInputAction({ department, content: text.trim() }),
+        avisar: push,
+        tituloError: "No se pudo guardar el input",
+        etiqueta: "[TeamInputForm] guardar",
+        alExito: () => {
+          setText("");
+          push({
+            title: "Input guardado",
+            description:
+              "Quedó registrado en el contexto semanal — la IA lo tendrá en cuenta en sus análisis.",
+            variant: "success",
+          });
+          router.refresh();
+        },
       });
     } finally {
       setSubmitting(false);

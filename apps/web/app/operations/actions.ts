@@ -12,6 +12,7 @@ import {
   organizacionSigueActiva,
 } from "@/lib/intelligence/organizaciones-activas";
 import type { ResultadoReporteSemanal } from "@/lib/operations/resultado-reporte-semanal";
+import type { MutationResult } from "@/lib/server/action-result";
 import { buildOrgContextText, getOrgContext } from "@/lib/ai/org-context";
 import { wrapUntrustedContent } from "@/lib/ai/wrap-untrusted-content";
 import { ingestDocument } from "@/lib/rag/ingest";
@@ -39,14 +40,20 @@ function mapWeeklyError(msg: string): string {
   return msg;
 }
 
-export async function saveWeeklyInputAction(input: unknown): Promise<{ ok: true }> {
+/**
+ * Las tres acciones de inputs semanales devuelven sus errores esperables
+ * (validación, input ajeno o inexistente, fallas de la base) como valor: en
+ * producción Next no le manda al cliente el mensaje de un error lanzado por una
+ * server action, sólo un digest. Sólo lo inesperado (sin sesión) sigue lanzando.
+ */
+export async function saveWeeklyInputAction(input: unknown): Promise<MutationResult> {
   if (!isSupabaseConfigured()) {
-    throw new Error("Supabase no configurado.");
+    return { success: false, error: "Supabase no configurado." };
   }
 
   const parsed = saveWeeklyInputSchema.safeParse(input);
   if (!parsed.success) {
-    throw new Error(firstZodError(parsed.error));
+    return { success: false, error: firstZodError(parsed.error) };
   }
 
   const data = parsed.data;
@@ -72,7 +79,7 @@ export async function saveWeeklyInputAction(input: unknown): Promise<{ ok: true 
     { onConflict: "organization_id,week_start,department,submitted_by" }
   );
 
-  if (error) throw new Error(mapWeeklyError(error.message));
+  if (error) return { success: false, error: mapWeeklyError(error.message) };
 
   void ingestDocument({
     organizationId: orgId,
@@ -93,7 +100,7 @@ export async function saveWeeklyInputAction(input: unknown): Promise<{ ok: true 
   revalidatePath(paths.platform.operations.overview);
   revalidatePath(paths.platform.dashboard);
 
-  return { ok: true };
+  return { success: true, data: undefined };
 }
 
 const updateWeeklyInputSchema = saveWeeklyInputSchema;
@@ -101,16 +108,16 @@ const updateWeeklyInputSchema = saveWeeklyInputSchema;
 export async function updateWeeklyInputAction(
   id: string,
   input: unknown
-): Promise<{ ok: true }> {
+): Promise<MutationResult> {
   if (!isSupabaseConfigured()) {
-    throw new Error("Supabase no configurado.");
+    return { success: false, error: "Supabase no configurado." };
   }
 
   const idParsed = uuidSchema.safeParse(id);
-  if (!idParsed.success) throw new Error(firstZodError(idParsed.error));
+  if (!idParsed.success) return { success: false, error: firstZodError(idParsed.error) };
 
   const parsed = updateWeeklyInputSchema.safeParse(input);
-  if (!parsed.success) throw new Error(firstZodError(parsed.error));
+  if (!parsed.success) return { success: false, error: firstZodError(parsed.error) };
 
   const { user, orgId, role, supabase } = await requireAuthContext();
   const data = parsed.data;
@@ -124,11 +131,11 @@ export async function updateWeeklyInputAction(
     .maybeSingle();
 
   if (readError || !existing) {
-    throw new Error("Input no encontrado.");
+    return { success: false, error: "Input no encontrado." };
   }
 
   if (role !== "founder" && existing.submitted_by !== user.id) {
-    throw new Error("Solo podés editar tus propios inputs.");
+    return { success: false, error: "Solo podés editar tus propios inputs." };
   }
 
   const content = data.content?.trim() || null;
@@ -145,22 +152,22 @@ export async function updateWeeklyInputAction(
     .eq("id", idParsed.data)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(mapWeeklyError(error.message));
+  if (error) return { success: false, error: mapWeeklyError(error.message) };
 
   revalidatePath(paths.platform.operations.weeklyInputs);
   revalidatePath(paths.platform.operations.teamInputs);
   revalidatePath(paths.platform.operations.overview);
 
-  return { ok: true };
+  return { success: true, data: undefined };
 }
 
-export async function deleteWeeklyInputAction(id: string): Promise<{ ok: true }> {
+export async function deleteWeeklyInputAction(id: string): Promise<MutationResult> {
   if (!isSupabaseConfigured()) {
-    throw new Error("Supabase no configurado.");
+    return { success: false, error: "Supabase no configurado." };
   }
 
   const idParsed = uuidSchema.safeParse(id);
-  if (!idParsed.success) throw new Error(firstZodError(idParsed.error));
+  if (!idParsed.success) return { success: false, error: firstZodError(idParsed.error) };
 
   const { user, orgId, role, supabase } = await requireAuthContext();
 
@@ -172,11 +179,11 @@ export async function deleteWeeklyInputAction(id: string): Promise<{ ok: true }>
     .maybeSingle();
 
   if (readError || !existing) {
-    throw new Error("Input no encontrado.");
+    return { success: false, error: "Input no encontrado." };
   }
 
   if (role !== "founder" && existing.submitted_by !== user.id) {
-    throw new Error("Solo podés eliminar tus propios inputs.");
+    return { success: false, error: "Solo podés eliminar tus propios inputs." };
   }
 
   const { error } = await supabase
@@ -185,13 +192,13 @@ export async function deleteWeeklyInputAction(id: string): Promise<{ ok: true }>
     .eq("id", idParsed.data)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(mapWeeklyError(error.message));
+  if (error) return { success: false, error: mapWeeklyError(error.message) };
 
   revalidatePath(paths.platform.operations.weeklyInputs);
   revalidatePath(paths.platform.operations.teamInputs);
   revalidatePath(paths.platform.operations.overview);
 
-  return { ok: true };
+  return { success: true, data: undefined };
 }
 
 export async function getWeeklyInputsForWeekAction(
