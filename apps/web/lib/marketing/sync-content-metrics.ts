@@ -161,7 +161,8 @@ export async function syncContentMetricsForOrg(
             metrics,
             metrics_updated_at: lastUpdated ?? ahora,
             metrics_intentos_sin_dato: 0,
-            metrics_reintentar_desde: null,
+            // Una historia vencida ya tiene sus números finales: no vuelve a la cola.
+            metrics_reintentar_desde: esHistoriaVencida(piece, momento) ? NUNCA : null,
           };
         } else {
           const intentos = (piece.metrics_intentos_sin_dato ?? 0) + 1;

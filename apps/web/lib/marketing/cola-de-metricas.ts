@@ -13,7 +13,9 @@
  * publicada no se reintenta más (`NUNCA`): Meta sólo expone las historias vigentes,
  * 24 h, y Zernio guarda sus métricas con el webhook `story_insights` al vencer
  * (`lib/zernio/client.ts`: `ZernioInstagramStory`, `listInstagramStories` y
- * `syncExternalStories`). Si a las 48 h no llegaron, no van a llegar.
+ * `syncExternalStories`). Si a las 48 h no llegaron, no van a llegar. Por lo mismo,
+ * una historia que se mide pasadas las 48 h ya tiene sus números finales y
+ * tampoco vuelve a la cola.
  */
 
 export const TAMANO_DEL_LOTE = 50;

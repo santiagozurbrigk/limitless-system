@@ -277,6 +277,37 @@ describe("syncContentMetricsForOrg · la cola no se diluye", () => {
     expect(buscar("vacia").metrics).toBeNull();
   });
 
+  it("⭐ una historia con métricas medida pasadas las 48 h no vuelve a ocupar lugares del lote", async () => {
+    estado.piezas = [
+      medida("historia-vieja", "2026-10-01T00:00:00.000Z", { type: "story", published_at: hace(5 * 24 * HORA) }),
+      medida("historia-joven", "2026-10-04T20:00:00.000Z", { type: "story", published_at: hace(20 * HORA) }),
+      medida("reel", "2026-10-02T00:00:00.000Z"),
+    ];
+    estado.analytics = {
+      "ig-historia-vieja": { likes: 30 },
+      "ig-historia-joven": { likes: 5 },
+      "ig-reel": { likes: 9 },
+    };
+
+    await correrCron(0);
+    expect(intentadas().sort()).toEqual(["historia-joven", "historia-vieja", "reel"]);
+    expect(buscar("historia-vieja")).toMatchObject({
+      metrics: expect.objectContaining({ likes: 30 }),
+      metrics_reintentar_desde: "infinity",
+    });
+    expect(buscar("historia-joven").metrics_reintentar_desde).toBeNull();
+
+    // Al día siguiente la joven (ya con 44 h) se refresca; la vieja no vuelve.
+    await correrCron(1);
+    expect(intentadas().sort()).toEqual(["historia-joven", "reel"]);
+
+    // Y cuando la joven se mide pasadas las 48 h, tampoco vuelve.
+    await correrCron(2);
+    expect(buscar("historia-joven").metrics_reintentar_desde).toBe("infinity");
+    await correrCron(3);
+    expect(intentadas()).toEqual(["reel"]);
+  });
+
   it("cuando por fin llegan métricas, se guardan y la pieza vuelve a la cola normal", async () => {
     estado.piezas = [pieza("tardia", { metrics_intentos_sin_dato: 3, metrics_checked_at: hace(5 * DIA), metrics_reintentar_desde: hace(HORA) })];
     estado.analytics = { "ig-tardia": { likes: 7 } };

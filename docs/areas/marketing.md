@@ -244,7 +244,8 @@ como JSON.
     vuelve a 0 y sin espera. Un error del pedido (429, red) marca el intento pero no suma espera.
   - Una historia sin métricas con más de 48 h de publicada no se reintenta más (`metrics_reintentar_desde =
     infinity`): Meta sólo expone historias vigentes (24 h) y Zernio guarda sus métricas con el webhook
-    `story_insights` al vencer (`lib/zernio/client.ts`).
+    `story_insights` al vencer (`lib/zernio/client.ts`). Por lo mismo, una historia que se mide pasadas las 48 h
+    ya tiene sus números finales y tampoco vuelve a la cola.
   - El refresco manual de piezas puntuales (`contentPieceIds`) no mira esperas.
   - La sync de contenido y la de YouTube no tocan estas columnas: una pieza nueva entra con null y el cron la
     mide primero.
