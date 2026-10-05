@@ -181,7 +181,12 @@ export async function syncContentMetricsForOrg(
   if (pieces.length > 0) {
     const client = await getZernioClientForOrganization(organizationId);
 
-    // 1. Pedirle a Zernio todo el lote, sin escribir nada todavía.
+    // 1. Pedirle a Zernio todo el lote, sin escribir nada todavía. Los 50 pedidos
+    // van en paralelo y cada uno se corta a los 15 s (`ZERNIO_TIMEOUT_MS`, un
+    // timeout cuenta como pasajero): esta fase dura a lo sumo 15 s y la corrida
+    // entera (consultas, pedidos, 50 updates en paralelo y el cierre) queda muy
+    // por debajo de los 60 s del worker, así que un pedido colgado no deja el
+    // lote sin escribir.
     const respuestas: Respuesta[] = await Promise.all(
       pieces.map(async (piece): Promise<Respuesta> => {
         const postId = piece.platform_post_id;

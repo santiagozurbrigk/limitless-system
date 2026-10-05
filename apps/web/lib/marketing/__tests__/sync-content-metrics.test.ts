@@ -31,6 +31,8 @@ const estado = vi.hoisted(() => ({
   pedidos: [] as string[],
   analytics: {} as Record<string, unknown>,
   fallaUpdateDe: null as string | null,
+  /** Usar el cliente real de Zernio (con `fetch` simulado) en vez del falso. */
+  clienteReal: false,
 }));
 
 /** Compara como Postgres: `infinity` es mayor que cualquier fecha. */
@@ -168,14 +170,20 @@ vi.mock("@/lib/observability/reportar-falla", () => ({
 
 vi.mock("@/lib/zernio/integration", () => ({
   getZernioIntegrationForOrg: async () => ({ id: "int-1" }),
-  getZernioClientForOrganization: async () => ({
+  getZernioClientForOrganization: async () =>
+    estado.clienteReal
+      ? (await vi.importActual<typeof import("@/lib/zernio/client")>("@/lib/zernio/client")).createZernioClient(
+          "sk_prueba",
+          { timeoutMs: 50 }
+        )
+      : {
     getPostAnalytics: async (postId: string) => {
       estado.pedidos.push(postId);
       const respuesta = estado.analytics[postId];
       if (respuesta instanceof Error) throw respuesta;
       return respuesta;
     },
-  }),
+  },
 }));
 
 import { syncContentMetricsForOrg } from "../sync-content-metrics";
@@ -255,9 +263,12 @@ beforeEach(() => {
   estado.cierres = 0;
   estado.analytics = {};
   estado.fallaUpdateDe = null;
+  estado.clienteReal = false;
   reportes.length = 0;
   dia = 0;
-  vi.useFakeTimers();
+  vi.unstubAllGlobals();
+  // Sólo el reloj: los timers quedan reales para que corra AbortSignal.timeout.
+  vi.useFakeTimers({ toFake: ["Date"] });
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -700,6 +711,41 @@ describe("syncContentMetricsForOrg · cada intento", () => {
       "[syncContentMetrics] Zernio rechazó la clave de la org: corrida cortada sin escribir",
       expect.objectContaining({ organizationId: "org-1" })
     );
+  });
+
+  it("⭐ un pedido a Zernio que se cuelga no impide escribir los demás ni cerrar historias", async () => {
+    // Cliente real de Zernio con timeout de 50 ms y un fetch que, para un post,
+    // no responde nunca (sólo termina si lo corta la señal).
+    estado.clienteReal = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        const postId = new URL(url).searchParams.get("postId");
+        if (postId === "ig-colgada") {
+          return new Promise((_resolver, rechazar) => {
+            init?.signal?.addEventListener("abort", () => rechazar(init.signal?.reason));
+          });
+        }
+        estado.pedidos.push(postId as string);
+        return Promise.resolve(
+          new Response(JSON.stringify({ posts: [{ analytics: { likes: 5 } }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })
+        );
+      })
+    );
+    estado.piezas = [pieza("colgada"), pieza("ok-1"), pieza("ok-2"), historia("vieja", 200)];
+
+    const r = await correrCron(0);
+
+    expect(r).toEqual({ attempted: 3, updated: 2, failed: 1 });
+    expect(buscar("ok-1").metrics).toMatchObject({ likes: 5 });
+    expect(buscar("ok-2").metrics).toMatchObject({ likes: 5 });
+    // El timeout es pasajero: marca el intento sin sumar espera.
+    expect(buscar("colgada")).toMatchObject({ metrics: null, metrics_intentos_sin_dato: 0, metrics_reintentar_desde: null });
+    expect(buscar("colgada").metrics_checked_at).not.toBeNull();
+    expect(buscar("vieja").metrics_reintentar_desde).toBe("infinity");
   });
 
   it("si falla el update de una pieza, cuenta como fallo, se loguea y sigue con el resto", async () => {

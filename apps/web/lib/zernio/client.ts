@@ -269,16 +269,58 @@ export class ZernioHttpError extends Error {
   }
 }
 
-export function createZernioClient(apiKey: string) {
+/**
+ * Zernio no respondió a tiempo: el pedido se cortó con `AbortSignal.timeout`.
+ * Es un error pasajero (como un 429 o un 5xx), no dice nada de la pieza.
+ */
+export class ZernioTimeoutError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(label: string, timeoutMs: number) {
+    super(`Zernio ${label}: sin respuesta en ${timeoutMs / 1000} s`);
+    this.name = "ZernioTimeoutError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+/**
+ * Tiempo máximo de un pedido que pasa por `zernioFetchJson`, incluida la lectura
+ * de la respuesta. 15 s: las respuestas de Zernio son JSON chicos (un post, una
+ * página de posts, una URL firmada) y un pedido que tarda más está colgado. Con
+ * este tope el cron de métricas, que pide su lote de 50 en paralelo, termina la
+ * fase de pedidos en 15 s y le queda margen para escribir dentro de los 60 s del
+ * worker (`/api/queue/process-cron-sync-metrics`, `maxDuration = 60`).
+ */
+export const ZERNIO_TIMEOUT_MS = 15_000;
+
+export function createZernioClient(
+  apiKey: string,
+  opciones: { timeoutMs?: number } = {}
+) {
   const headers = () => buildHeaders(apiKey);
+  const timeoutMs = opciones.timeoutMs ?? ZERNIO_TIMEOUT_MS;
 
   async function zernioFetchJson<T>(
     label: string,
     url: string,
     init?: RequestInit
   ): Promise<T> {
-    const res = await fetch(url, { ...init, cache: "no-store" });
-    const bodyText = await res.text();
+    let res: Response;
+    let bodyText: string;
+    try {
+      res = await fetch(url, {
+        ...init,
+        cache: "no-store",
+        signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
+      });
+      bodyText = await res.text();
+    } catch (err) {
+      if (err instanceof Error && err.name === "TimeoutError") {
+        console.error(`[Zernio] ${label} timeout`, { url, timeoutMs });
+        throw new ZernioTimeoutError(label, timeoutMs);
+      }
+      throw err;
+    }
     const preview = bodyText.slice(0, 200);
 
     if (!res.ok) {

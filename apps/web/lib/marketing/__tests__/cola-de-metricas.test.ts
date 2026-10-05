@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ZernioHttpError } from "@/lib/zernio/client";
+import { ZernioHttpError, ZernioTimeoutError } from "@/lib/zernio/client";
 import {
   armarLote,
   diasDeEspera,
@@ -89,6 +89,8 @@ describe("esErrorPermanente", () => {
       false, false, false, false, false,
     ]);
     expect(esErrorPermanente(new Error("fetch failed"))).toBe(false);
+    expect(esErrorPermanente(new ZernioTimeoutError("getPostAnalytics", 15_000))).toBe(false);
+    expect(esErrorDeAcceso(new ZernioTimeoutError("getPostAnalytics", 15_000))).toBe(false);
     expect(esErrorPermanente(new Error("Zernio getPostAnalytics: HTTP 404"))).toBe(false);
   });
 });

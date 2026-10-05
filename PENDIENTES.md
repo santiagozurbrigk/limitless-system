@@ -995,7 +995,7 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 
 #### [API-TIMEOUTS] (parte Ventas) Sin timeout en Calendly, Fathom y Zernio
 - **Tipo:** deuda técnica
-- **Estado verificado:** auditoría §3 "Confiabilidad" 1. Ningún `AbortSignal.timeout` en `lib/calendly`, `lib/fathom`, `lib/zernio`.
+- **Estado verificado:** auditoría §3 "Confiabilidad" 1. Ningún `AbortSignal.timeout` en `lib/calendly` ni `lib/fathom`. En `lib/zernio`, `zernioFetchJson` corta a los 15 s con `ZernioTimeoutError` desde SCRUM-172 (cubre analytics de posts, comentarios, anuncios, posts, historias y presign); los `fetch` directos de `lib/zernio/client.ts` siguen sin timeout (ver `[AUDITORIA §3 confiabilidad 1]`).
 - **Qué hay que hacer:** agregar timeout en cada fetch.
 - **Dónde:** esos directorios.
 
@@ -1229,8 +1229,8 @@ Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
 
 #### [AUDITORIA §3 confiabilidad 1] Zernio sin timeouts ni defensas uniformes
 - **Tipo:** deuda técnica
-- **Estado verificado:** ningún `fetch` de `lib/zernio/client.ts` usa `AbortSignal.timeout`; `listAccounts`, inbox, `replyToComment`, `hideComment`, `createPost` y los analytics de cuenta no pasan por `zernioFetchJson`.
-- **Qué hay que hacer:** timeout en `zernioFetchJson` y pasar todos los métodos por ahí.
+- **Estado verificado:** `zernioFetchJson` ya tiene timeout de 15 s (`AbortSignal.timeout`, `ZernioTimeoutError`; SCRUM-172). Falta el resto: `listAccounts`, inbox, `replyToComment`, `hideComment`, `createPost` y los analytics de cuenta hacen `fetch` directo, sin timeout ni `ZernioHttpError`.
+- **Qué hay que hacer:** pasar esos métodos por `zernioFetchJson`.
 - **Dónde:** `apps/web/lib/zernio/client.ts`
 
 #### [ZERNIO-DOCS] Zernio no tiene documentación local y sus supuestos casi no están registrados
