@@ -10,7 +10,6 @@ const PLAN_LABEL: Record<string, string> = {
   starter: "Starter",
   growth: "Growth",
   enterprise: "Enterprise",
-  trial: "Trial",
 };
 
 export function AiCostDashboardContent({

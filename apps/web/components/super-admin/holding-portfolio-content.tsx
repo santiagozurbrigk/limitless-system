@@ -5,6 +5,10 @@ import Link from "next/link";
 import { Badge, Button, MetricBand, MetricStat, cn } from "@ai-coo/ui";
 import { Panel } from "@/components/shared/panel";
 import { formatUsd } from "@/lib/super-admin/org-metrics";
+import {
+  ETIQUETA_DE_ESTADO_DE_ORG,
+  VARIANTE_DE_ESTADO_DE_ORG,
+} from "@/lib/super-admin/estado-de-org";
 import type {
   HoldingHealthStatus,
   HoldingKPIs,
@@ -28,13 +32,6 @@ const HEALTH_VARIANT: Record<
   healthy: "success",
   warning: "warning",
   critical: "destructive",
-};
-
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline"> = {
-  active: "success",
-  trial: "secondary",
-  paused: "outline",
-  inactive: "outline",
 };
 
 function marginColor(margin: number): string {
@@ -128,8 +125,8 @@ export function HoldingPortfolioContent({
               contentClassName="space-y-4"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={STATUS_VARIANT[org.status] ?? "outline"}>
-                  {org.status}
+                <Badge variant={VARIANTE_DE_ESTADO_DE_ORG[org.status]}>
+                  {ETIQUETA_DE_ESTADO_DE_ORG[org.status]}
                 </Badge>
                 <Badge variant={HEALTH_VARIANT[org.healthStatus]}>
                   {HEALTH_LABEL[org.healthStatus]} · {org.healthScore}

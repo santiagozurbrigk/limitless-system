@@ -1,6 +1,20 @@
-export type AdminOrgStatus = "active" | "inactive" | "trial";
+import type { OrganizationStatus } from "@ai-coo/types";
 
-export type AdminOrgPlan = "starter" | "growth" | "enterprise" | "trial";
+/**
+ * El estado de la org que muestra el panel: el de la base (`active`, `paused`,
+ * `churned`) o `unknown` si llegara un valor que el check de la base no admite.
+ * `unknown` es sólo del panel: nunca se escribe en la base.
+ */
+export type AdminOrgStatus = OrganizationStatus | "unknown";
+
+/** Plan estimado por MRR (no hay columna de plan en la base). */
+export type AdminOrgPlan = "starter" | "growth" | "enterprise";
+
+/**
+ * Si una persona puede entrar o no (usuario baneado en Auth o perfil
+ * inactivo). Es de la persona, no de su organización.
+ */
+export type AdminUserStatus = "active" | "inactive";
 
 export type AdminOrganizationListRow = {
   id: string;
@@ -30,7 +44,7 @@ export type AdminOrganization = {
   name: string;
   founder: string;
   mrr: string;
-  status: "active" | "trial" | "churned";
+  status: OrganizationStatus;
   aiCostMonth: string;
 };
 
@@ -111,7 +125,7 @@ export type AdminUserRow = {
   organizationName: string;
   organizationTimezone: string | null;
   role: string;
-  status: "active" | "inactive";
+  status: AdminUserStatus;
   lastLogin: string | null;
 };
 
@@ -237,26 +251,6 @@ export type CreateFounderResult = {
     email: string;
     tempPassword: string;
   };
-};
-
-/** @deprecated */
-export type AdminUsageRow = {
-  orgId: string;
-  orgName: string;
-  haikuTokens: number;
-  sonnetTokens: number;
-  opusTokens: number;
-  totalCost: string;
-};
-
-/** @deprecated */
-export type AdminFounder = {
-  id: string;
-  name: string;
-  email: string;
-  organization: string;
-  mrr: string;
-  status: "active" | "trial";
 };
 
 /** @deprecated */

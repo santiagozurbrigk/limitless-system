@@ -127,6 +127,14 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
   empty state del Overview. **Ningún cron** genera `weekly_reports`.
 - La grilla de departamentos del Overview sale de `computeDepartmentStatuses` (`lib/executive-reports/compute-departments.ts`),
   no del reporte semanal.
+- Errores: las cuatro acciones devuelven sus errores esperables como valor y no los lanzan, porque en producción
+  Next no le manda al cliente el mensaje de un error lanzado por una server action (sólo un digest y un párrafo en
+  inglés). Las tres de inputs devuelven `MutationResult` (validación, "Input no encontrado.", "Solo podés editar/eliminar
+  tus propios inputs.", `mapWeeklyError`); `generateWeeklyReportAction` devuelve `ResultadoReporteSemanal`
+  (`lib/operations/resultado-reporte-semanal.ts`, con `motivo` `org-no-activa`, `sin-inputs` o `falla`; una org pausada
+  no genera, SCRUM-210). Sólo lo inesperado (sin sesión) sigue lanzando. Los componentes las corren con
+  `correrAccion`/`correrMutacion` (`lib/operations/correr-accion.ts`): un error devuelto se muestra con su mensaje y uno
+  lanzado se registra en consola y se avisa con "Ocurrió un error inesperado. Intentá de nuevo.".
 
 ### Equipo
 

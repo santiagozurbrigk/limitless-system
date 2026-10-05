@@ -35,7 +35,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 import { listActiveOrganizationIds } from "../organizaciones-activas";
-import { listActiveOrganizationIds as desdeSnapshot } from "../generate-snapshot";
+import * as generateSnapshot from "../generate-snapshot";
 
 beforeEach(() => {
   sim.error = null;
@@ -52,8 +52,10 @@ describe("listActiveOrganizationIds", () => {
     await expect(listActiveOrganizationIds()).resolves.toEqual(["activa"]);
   });
 
-  it("los crons de inteligencia y reportes usan la misma función", () => {
-    expect(desdeSnapshot).toBe(listActiveOrganizationIds);
+  it("hay una sola definición: generate-snapshot ya no la reexporta", () => {
+    // Los crons y generadores la importan de `organizaciones-activas`; si
+    // generate-snapshot volviera a exportar una, podría ser otra copia.
+    expect(generateSnapshot).not.toHaveProperty("listActiveOrganizationIds");
   });
 
   it("si la base falla, el error sube en vez de devolver una lista vacía", async () => {

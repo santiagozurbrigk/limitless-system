@@ -9,6 +9,7 @@ import {
   type AiBrainDocumentRow,
 } from "@/lib/ai-brain/mapper";
 import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import { estadoDeOrg, planPorMrr } from "@/lib/super-admin/estado-de-org";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -28,7 +29,6 @@ import {
 } from "@/lib/super-admin/period";
 import type {
   AdminAiCostDashboard,
-  AdminOrgPlan,
   AdminOrganizationDetail,
   AdminOrganizationListRow,
   AdminProfitabilityOrgRow,
@@ -70,21 +70,6 @@ type FounderProfile = {
   email: string;
   full_name: string | null;
 };
-
-function mapOrgStatus(
-  status: string
-): AdminOrganizationListRow["status"] {
-  if (status === "active") return "active";
-  if (status === "trial") return "trial";
-  return "inactive";
-}
-
-function inferPlan(mrrUsd: number, status: string): AdminOrgPlan {
-  if (status === "trial") return "trial";
-  if (mrrUsd >= 50000) return "enterprise";
-  if (mrrUsd >= 30000) return "growth";
-  return "starter";
-}
 
 type ClaudeStatusRow = {
   id: string;
@@ -515,7 +500,7 @@ export async function loadOrganizationsList(): Promise<
     const clients = clientsByOrg.get(org.id) ?? [];
     const billing = sumBillingInRange(clients, month);
     const mrrUsd = Number(org.mrr_usd ?? 0);
-    const status = mapOrgStatus(org.status);
+    const status = estadoDeOrg(org.status);
     const founderLastLogin = founder ? loginMap.get(founder.id) ?? null : null;
 
     return {
@@ -526,7 +511,7 @@ export async function loadOrganizationsList(): Promise<
       founderEmail: founder?.email ?? "—",
       founderId: founder?.id ?? null,
       status,
-      plan: inferPlan(mrrUsd, org.status),
+      plan: planPorMrr(mrrUsd),
       usersCount: userCounts.get(org.id) ?? 0,
       byokEnabled: byokByOrg.get(org.id) ?? false,
       timezone: (org.timezone as string | null) ?? null,
@@ -709,7 +694,7 @@ export async function loadOrganizationDetail(
 
   const onboarding = onboardingRes.data?.data as Record<string, unknown> | null;
   const mrrUsd = Number(org.mrr_usd ?? 0);
-  const status = mapOrgStatus(org.status);
+  const status = estadoDeOrg(org.status);
 
   const users: OrganizationUser[] = await Promise.all(
     ((usersRes.data ?? []) as { id: string; email: string; full_name: string | null; role: string }[]).map(
@@ -735,7 +720,7 @@ export async function loadOrganizationDetail(
     id: org.id,
     name: org.name,
     status,
-    plan: inferPlan(mrrUsd, org.status),
+    plan: planPorMrr(mrrUsd),
     timezone: (org.timezone as string | null) ?? null,
     createdAt: org.created_at,
     mrrUsd,

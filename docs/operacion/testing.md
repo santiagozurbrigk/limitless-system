@@ -66,12 +66,12 @@ Qué no testear en Vitest: componentes React, actions que sólo hacen `select`, 
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **133 archivos, ~1.430 casos** (recontado el 2026-10-04). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **143 archivos, ~1.510 casos** (recontado el 2026-10-04, después de la revisión integral). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
 | `lib/funnels` | 10 | 185 | motor de embudos puro: compute, spine, períodos, KPIs, fuentes, conformidad de plantillas |
-| `lib/fathom` | 9 | 105 | match con turnos, contraparte, identidades, links compartidos, ventana de sync, reclamo de trabadas |
+| `lib/fathom` | 15 | 132 | match con turnos, contraparte, identidades, links compartidos, ventana de sync, reclamo de trabadas, cliente de la org (filtro por organización) |
 | `lib/checkpoints` | 6 | 94 | recorrido del cliente, etapas, propuestas, trabados |
 | `lib/custom-fields` | 7 | 85 | campos configurables: validación, merge, formato, alertas por fecha |
 | `lib/payments` | 4 | 78 | normalización Whop/Commas, firmas, agregados, retención |
@@ -81,10 +81,10 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/ghl` | 4 | 40 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook |
 | `lib/sales` | 2 | 37 | opciones de seguimiento, hilo del lead |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
-| `lib/super-admin` | 4 | 35 | plan de bajas, progreso de onboarding y chequeo de super admin en las lecturas con service role |
+| `lib/super-admin` | 5 | 43 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role y estado de la org alineado con la base (incluido el desconocido) |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
 | `lib/sops` | 2 | 25 | marcadores de adjuntos, chunks de audio |
-| `lib/auth` | 5 | 25 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log |
+| `lib/auth` | 6 | 33 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log, un solo chequeo de super admin por pedido |
 | `lib/integrations` | 1 | 23 | `health.ts` y completitud del registro |
 | `lib/vturb` | 2 | 23 | normalización de stats, período cerrado |
 | `lib/metrics` | 6 | 79 | etapas del embudo de ventas, match de closer, períodos y prorrateo, ingresos por fecha, resumen de Finanzas, serie de 6 meses (varias zonas horarias) |
@@ -93,7 +93,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/navigation` | 2 | 15 | módulo por path, metadata de página |
 | `lib/marketing` | 1 | 13 | snapshot de métricas de anuncios |
 | `lib/webinarjam` | 1 | 13 | normalización de registrantes |
-| `lib/executive-reports` | 1 | 11 | cadencias |
+| `lib/executive-reports` | 3 | 20 | cadencias, mes que toma el reporte mensual y mensaje del botón de reportes |
 | `lib/hyros` | 1 | 11 | resolución de atribución |
 | `lib/zernio` | 4 | 21 | triggers de comentarios, integración por org, métricas que se guardan y filas de la sync |
 | `lib/security` | 2 | 6 | cifrado, comparación en tiempo constante |
@@ -105,10 +105,14 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/storage` | 1 | 3 | validación de rutas por org |
 | `lib/queue` | 1 | 3 | aviso cuando falla un trabajo de QStash |
 | `lib/unipile` | 1 | 3 | secreto del webhook |
-| `lib/intelligence` | 1 | 3 | organizaciones sobre las que corren los crons de IA |
+| `lib/intelligence` | 2 | 15 | organizaciones sobre las que corren los crons de IA y el chequeo de la org al procesarla (generadores, workers, modo en serie) |
 | `lib/youtube` | 1 | 2 | métricas de video que se guardan |
+| `lib/team` | 1 | 6 | rol de la org (filtro por organización) |
+| `app/__tests__` | 1 | 3 | los catch de páginas y layouts relanzan los errores de Next (`unstable_rethrow`) |
+| `app/executive-reports`, `app/operations` | 4 | 35 | últimos reportes; el botón de reportes y el reporte de Operaciones no llaman a la IA para una org no activa; las acciones de Operaciones (reporte semanal e inputs) devuelven sus errores esperables como valor, relanzan lo inesperado (sin sesión o redirect) y filtran por organización |
+| `lib/operations` | 2 | 12 | mensaje del botón de Inputs semanales, cómo cuenta el pipeline el paso de Operaciones y cómo los componentes corren las acciones (texto fijo ante un error inesperado) |
 
-**Sin ningún test:** `lib/agent` (compaction, JIT, streaming), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`), los gastos y las métricas de ventas, y los parsers de import de clientes. Tampoco hay tests de route handlers ni de Server Actions.
+**Sin ningún test:** `lib/agent` (compaction, JIT, streaming), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`), los gastos y las métricas de ventas, y los parsers de import de clientes. Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`), las actions de reportes a pedido (`app/executive-reports/__tests__`, `app/operations/__tests__`) y las páginas de `app/__tests__`.
 
 ### E2E
 

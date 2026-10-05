@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { SopsOverview } from "@/components/sops";
 import { listSops } from "@/lib/sops/queries";
 import { detectSOPOpportunities } from "@/lib/sops/suggest-sops";
@@ -12,7 +13,8 @@ export default async function OperationsSopsPage() {
     try {
       const organizationId = await requireOrganizationId();
       suggestions = await detectSOPOpportunities(organizationId);
-    } catch {
+    } catch (error) {
+      unstable_rethrow(error);
       suggestions = [];
     }
   }

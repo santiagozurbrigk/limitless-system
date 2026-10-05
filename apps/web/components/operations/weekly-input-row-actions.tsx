@@ -7,6 +7,7 @@ import {
   deleteWeeklyInputAction,
   updateWeeklyInputAction,
 } from "@/app/operations/actions";
+import { correrMutacion } from "@/lib/operations/correr-accion";
 import { useToast } from "@/providers/toast-provider";
 import type { Department } from "@/types/operations";
 
@@ -31,36 +32,37 @@ export function WeeklyInputRowActions({
   function handleDelete() {
     if (!window.confirm("¿Eliminar este input semanal?")) return;
     startTransition(async () => {
-      try {
-        await deleteWeeklyInputAction(inputId);
-        push({ title: "Input eliminado", variant: "success" });
-        onChanged?.();
-      } catch (error) {
-        push({
-          title: "No se pudo eliminar",
-          description: error instanceof Error ? error.message : undefined,
-        });
-      }
+      await correrMutacion({
+        accion: () => deleteWeeklyInputAction(inputId),
+        avisar: push,
+        tituloError: "No se pudo eliminar",
+        etiqueta: "[WeeklyInputRowActions] eliminar",
+        alExito: () => {
+          push({ title: "Input eliminado", variant: "success" });
+          onChanged?.();
+        },
+      });
     });
   }
 
   function handleSave() {
     startTransition(async () => {
-      try {
-        await updateWeeklyInputAction(inputId, {
-          department,
-          content: draft.trim() || undefined,
-          rating,
-        });
-        push({ title: "Input actualizado", variant: "success" });
-        setEditing(false);
-        onChanged?.();
-      } catch (error) {
-        push({
-          title: "No se pudo guardar",
-          description: error instanceof Error ? error.message : undefined,
-        });
-      }
+      await correrMutacion({
+        accion: () =>
+          updateWeeklyInputAction(inputId, {
+            department,
+            content: draft.trim() || undefined,
+            rating,
+          }),
+        avisar: push,
+        tituloError: "No se pudo guardar",
+        etiqueta: "[WeeklyInputRowActions] editar",
+        alExito: () => {
+          push({ title: "Input actualizado", variant: "success" });
+          setEditing(false);
+          onChanged?.();
+        },
+      });
     });
   }
 

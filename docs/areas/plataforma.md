@@ -62,9 +62,11 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 | `/super-admin/waitlist`, `/super-admin/trials` | `lib/super-admin/waitlist-queries.ts` | `waitlist_leads` |
 | `/super-admin/ai-brain/*` | `app/super-admin/actions.ts` | "Cerebro de IA general": documentos globales, import desde Drive del super admin, batch de resúmenes |
 
+Estado de la organización: el de la base, `organizations.status in ('active', 'paused', 'churned')`, con el tipo `OrganizationStatus` de `@ai-coo/types` (también lo usan `AdminOrgStatus` y `organizaciones-activas.ts`). `lib/super-admin/estado-de-org.ts` lo lee (`estadoDeOrg`; un valor desconocido no se convierte en ningún estado: queda `unknown`, se muestra "Desconocido" y no tiene botón de pausar ni activar, `accionDeEstado`), le da texto (Activa, Pausada, Dada de baja, desde `es.status.org`) y color, y estima el plan sólo por MRR (`planPorMrr`; no hay columna de plan). La lista de organizaciones filtra por esos tres estados; "Pausar" deja la org en `paused` y "Activar" la vuelve a `active` (`setOrganizationStatusAction`); ninguna pantalla pasa una org a `churned`. El estado "activo/inactivo" de `/super-admin/users` es otra cosa: si la persona puede entrar (`AdminUserStatus`, baneada en Auth o perfil inactivo).
+
 Guard doble: `app/(super-admin)/super-admin/layout.tsx` (redirect) y `requireSuperAdmin()` dentro de
 cada query/acción (incluidas las de sólo lectura, vía `lib/super-admin/queries.ts`, `org-health.ts` y
-`onboarding-progress.ts` y `getSignedFileUrl`, que lo suman desde SCRUM-111).
+`onboarding-progress.ts` y `getSignedFileUrl`, que lo suman desde SCRUM-111). Los dos guards (`isSuperAdminUser` y `requireSuperAdmin`) comparten una resolución memoizada con `cache` de React (`lib/auth/require-super-admin.ts`): dentro de un mismo render de server components (layout + página, p. ej. `/super-admin/ai-brain/[id]` con imagen, que encadena tres chequeos) se hace un solo `auth.getUser()` y una sola consulta a `super_admin_users`. En server actions y route handlers `cache` no memoiza: cada llamada consulta, como antes. Los mensajes de rechazo no cambiaron.
 
 ## Modelo de datos
 

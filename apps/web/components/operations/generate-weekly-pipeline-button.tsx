@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@ai-coo/ui";
 import { triggerWeeklyPipelineAction } from "@/app/executive-reports/report-generation-actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { mensajeDelPipeline } from "@/lib/executive-reports/mensaje-del-pipeline";
+import { correrAccion } from "@/lib/operations/correr-accion";
 import { useToast } from "@/providers/toast-provider";
 
 export function GenerateWeeklyPipelineButton({
@@ -26,44 +28,16 @@ export function GenerateWeeklyPipelineButton({
 
   function handleGenerate() {
     startTransition(async () => {
-      try {
-        const result = await triggerWeeklyPipelineAction();
-        const generated = [
-          result.operationsReport === "generated" && "Operaciones",
-          result.executiveReport === "generated" && "Reporte ejecutivo",
-          result.intelligence === "generated" && "Inteligencia",
-        ].filter(Boolean);
-
-        if (generated.length > 0) {
-          push({
-            title: "Reportes generados",
-            description: `Listo: ${generated.join(", ")}.`,
-            variant: "success",
-          });
-        } else if (result.errors.length > 0) {
-          push({
-            title: "Generación parcial",
-            description: result.errors[0],
-            variant: "default",
-          });
-        } else {
-          push({
-            title: "Sin datos suficientes",
-            description:
-              "Completá al menos 2 inputs semanales y asegurate de tener actividad en ventas u operaciones.",
-            variant: "default",
-          });
-        }
-
-        router.refresh();
-      } catch (error) {
-        push({
-          title: "No se pudo generar",
-          description:
-            error instanceof Error ? error.message : "Error al generar reportes.",
-          variant: "default",
-        });
-      }
+      await correrAccion({
+        accion: triggerWeeklyPipelineAction,
+        avisar: push,
+        tituloError: "No se pudo generar",
+        etiqueta: "[GenerateWeeklyPipelineButton]",
+        alTerminar: (result) => {
+          push(mensajeDelPipeline(result));
+          router.refresh();
+        },
+      });
     });
   }
 

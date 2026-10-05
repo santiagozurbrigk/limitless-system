@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { KnowledgeBasePage } from "@/components/business-context/knowledge-base-page";
 import { PageHeader } from "@/components/shared/page-header";
 import {
@@ -30,6 +31,9 @@ export default async function BusinessContextDocumentsPage() {
       googleConnected = googleStatus.connected;
       customCategories = cats as CustomCategory[];
     } catch (e) {
+      // El error con el que Next marca la ruta como dinámica (y los de redirect o
+      // notFound) no es una falla: se relanza para que Next lo maneje.
+      unstable_rethrow(e);
       console.error("[KnowledgeBase] load:", e);
     }
   }

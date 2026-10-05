@@ -1,4 +1,6 @@
 import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import type { AdminOrgStatus } from "@/types/super-admin";
+import { estadoDeOrg } from "@/lib/super-admin/estado-de-org";
 import { isMissingTableError } from "@/lib/auth/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { countByOrg } from "@/lib/super-admin/org-metrics";
@@ -9,7 +11,7 @@ export type HoldingHealthStatus = "healthy" | "warning" | "critical";
 export type HoldingPortfolioOrg = {
   id: string;
   name: string;
-  status: string;
+  status: AdminOrgStatus;
   industry: string | null;
   createdAt: string;
   metrics: {
@@ -176,7 +178,7 @@ export async function getHoldingPortfolio(): Promise<{
     return {
       id: org.id,
       name: org.name,
-      status: org.status,
+      status: estadoDeOrg(org.status),
       industry: (org.industry as string | null) ?? null,
       createdAt: org.created_at,
       metrics: {

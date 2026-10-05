@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { getWeeklyReportAction } from "@/app/operations/actions";
 import { getCurrentProfile, requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -20,6 +21,9 @@ async function loadDepartments(): Promise<OperationsDepartment[]> {
     const statuses = await computeDepartmentStatuses(admin, organizationId);
     return departmentStatusesToOperationsDepartments(statuses);
   } catch (error) {
+    // El error con el que Next marca la ruta como dinámica (y los de redirect o
+    // notFound) no es una falla: se relanza para que Next lo maneje.
+    unstable_rethrow(error);
     console.error("[OperationsOverviewPage] loadDepartments", error);
     return [];
   }

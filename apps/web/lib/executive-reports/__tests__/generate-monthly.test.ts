@@ -15,7 +15,10 @@ vi.mock("@/lib/ai/anthropic", () => ({
   getModelForTask: vi.fn(),
 }));
 vi.mock("@/lib/ai/org-context", () => ({ buildOrgContextText: vi.fn(), getOrgContext: vi.fn() }));
-vi.mock("@/lib/intelligence/generate-snapshot", () => ({ listActiveOrganizationIds: vi.fn() }));
+vi.mock("@/lib/intelligence/organizaciones-activas", () => ({
+  listActiveOrganizationIds: vi.fn(),
+  organizacionSigueActiva: vi.fn(),
+}));
 
 import { mesAReportar, monthBounds } from "../generate-monthly";
 
