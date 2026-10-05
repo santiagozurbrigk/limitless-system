@@ -10,7 +10,10 @@ import {
   collectIntelligenceData,
   formatCollectedDataForPrompt,
 } from "@/lib/intelligence/collect-context";
-import { listActiveOrganizationIds } from "@/lib/intelligence/generate-snapshot";
+import {
+  listActiveOrganizationIds,
+  organizacionSigueActiva,
+} from "@/lib/intelligence/organizaciones-activas";
 import {
   getCurrentWeekStart,
   getWeekEndLabel,
@@ -124,9 +127,20 @@ JSON exacto:
   };
 }
 
+/**
+ * Genera y guarda para una org. Antes de tocar la IA comprueba que la org siga
+ * activa (SCRUM-210): una pausada o dada de baja devuelve `"skipped"`. Ese
+ * chequeo va fuera del `try` a propósito: si la base falla, el error sube, no
+ * se procesa la org y el worker responde 500 para que QStash reintente.
+ */
 export async function generateAndSaveWeeklyExecutiveReport(
   organizationId: string
 ): Promise<"generated" | "skipped" | "failed"> {
+  if (!(await organizacionSigueActiva(organizationId))) {
+    console.info(`[executive-reports] Org ${organizationId}: no está activa, se omite el reporte semanal`);
+    return "skipped";
+  }
+
   try {
     const report = await generateWeeklyExecutiveReport(organizationId);
     if (!report) return "skipped";
@@ -154,7 +168,12 @@ export async function generateAllWeeklyExecutiveReports(): Promise<{
   let failed = 0;
 
   for (const orgId of orgIds) {
-    const result = await generateAndSaveWeeklyExecutiveReport(orgId);
+    // El chequeo de org activa puede lanzar si la base falla: en serie se
+    // cuenta como fallida y se sigue con la próxima, como antes.
+    const result = await generateAndSaveWeeklyExecutiveReport(orgId).catch((err: unknown) => {
+      console.error(`[executive-reports] Error comprobando la org ${orgId}:`, err);
+      return "failed" as const;
+    });
     if (result === "generated") generated += 1;
     else if (result === "skipped") skipped += 1;
     else failed += 1;

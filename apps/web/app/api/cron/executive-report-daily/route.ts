@@ -4,7 +4,7 @@ import {
   generateAllDailyExecutiveReports,
   generateAndSaveDailyExecutiveReport,
 } from "@/lib/executive-reports/generate-daily";
-import { listActiveOrganizationIds } from "@/lib/intelligence/generate-snapshot";
+import { listActiveOrganizationIds } from "@/lib/intelligence/organizaciones-activas";
 import {
   isQStashConfigured,
   publishCronFanout,

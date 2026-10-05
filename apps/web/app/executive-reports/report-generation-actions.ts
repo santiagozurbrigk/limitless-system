@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAuthContext } from "@/lib/auth/require-auth";
 import { generateAndSaveIntelligenceSnapshot } from "@/lib/intelligence/generate-snapshot";
 import { generateAndSaveWeeklyExecutiveReport } from "@/lib/executive-reports/generate-weekly";
+import { organizacionSigueActiva } from "@/lib/intelligence/organizaciones-activas";
 import { generateWeeklyReportAction } from "@/app/operations/actions";
 import { paths } from "@/routes";
 
@@ -41,6 +42,17 @@ export async function triggerWeeklyPipelineAction(): Promise<WeeklyPipelineResul
   let operationsReport: PipelineStepResult = "skipped";
   let executiveReport: PipelineStepResult = "skipped";
   let intelligence: PipelineStepResult = "skipped";
+
+  // Una org pausada o dada de baja tampoco gasta IA a pedido (SCRUM-210): los
+  // generadores la omiten con "skipped". Se avisa aquí para que el founder no
+  // vea "Sin datos suficientes". Si la consulta falla, no se avisa nada: los
+  // generadores vuelven a consultar y, si la base sigue caída, quedan "failed".
+  const orgActiva = await organizacionSigueActiva(orgId).catch(() => true);
+  if (!orgActiva) {
+    errors.push(
+      "La organización no está activa: el reporte ejecutivo y la inteligencia no se generan."
+    );
+  }
 
   try {
     await generateWeeklyReportAction();

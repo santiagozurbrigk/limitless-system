@@ -8,7 +8,10 @@ import {
 import { buildOrgContextText, getOrgContext } from "@/lib/ai/org-context";
 import { wrapUntrustedContent } from "@/lib/ai/wrap-untrusted-content";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { listActiveOrganizationIds } from "./organizaciones-activas";
+import {
+  listActiveOrganizationIds,
+  organizacionSigueActiva,
+} from "./organizaciones-activas";
 import { formatDate } from "@/lib/format";
 import {
   collectIntelligenceData,
@@ -213,11 +216,20 @@ export async function saveIntelligenceSnapshot(
   }
 }
 
-export { listActiveOrganizationIds };
-
+/**
+ * Genera y guarda para una org. Antes de tocar la IA comprueba que la org siga
+ * activa (SCRUM-210): una pausada o dada de baja devuelve `"skipped"`. Ese
+ * chequeo va fuera del `try` a propósito: si la base falla, el error sube, no
+ * se procesa la org y el worker responde 500 para que QStash reintente.
+ */
 export async function generateAndSaveIntelligenceSnapshot(
   organizationId: string
 ): Promise<"generated" | "skipped" | "failed"> {
+  if (!(await organizacionSigueActiva(organizationId))) {
+    console.info(`[intelligence] Org ${organizationId}: no está activa, se omite el snapshot`);
+    return "skipped";
+  }
+
   try {
     const snapshot = await generateIntelligenceSnapshot(organizationId);
     if (!snapshot) return "skipped";
@@ -253,7 +265,12 @@ export async function generateAllIntelligenceSnapshots(): Promise<{
   let failed = 0;
 
   for (const orgId of orgIds) {
-    const result = await generateAndSaveIntelligenceSnapshot(orgId);
+    // El chequeo de org activa puede lanzar si la base falla: en serie se
+    // cuenta como fallida y se sigue con la próxima, como antes.
+    const result = await generateAndSaveIntelligenceSnapshot(orgId).catch((err: unknown) => {
+      console.error(`[intelligence] Error comprobando la org ${orgId}:`, err);
+      return "failed" as const;
+    });
     if (result === "generated") generated += 1;
     else if (result === "skipped") skipped += 1;
     else failed += 1;

@@ -4,7 +4,7 @@ import {
   generateAllFounderTones,
   generateAndSaveFounderTone,
 } from "@/lib/founder-tone/analyze-tone";
-import { listActiveOrganizationIds } from "@/lib/intelligence/generate-snapshot";
+import { listActiveOrganizationIds } from "@/lib/intelligence/organizaciones-activas";
 import {
   isQStashConfigured,
   publishCronFanout,

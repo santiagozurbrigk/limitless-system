@@ -34,6 +34,30 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-04 — Hallazgos de la revisión integral del 4-oct (SCRUM-210, SCRUM-111, SCRUM-43, SCRUM-75, tipos de estado de org y pantallas dinámicas)
+
+**Rama:** `fix/revision-integral-4-oct`
+**Commit(s):** uno por apartado (este y los siguientes de la rama)
+**Módulo(s) afectado(s):** Agente de negocio e IA, Plataforma (super admin, tipos), Fathom, Equipo
+
+Los informes de origen son las pruebas integrales del 4-oct (SCRUM-111, 121 y 210, y la regresión de toda la app sobre `b0f154e9`). Ninguno de estos hallazgos era una regresión de los commits revisados.
+
+#### 1. SCRUM-210: la org se comprueba también al procesarla
+
+**Qué se hizo:** `lib/intelligence/organizaciones-activas.ts` suma `organizacionSigueActiva(organizationId)`, que lee `account_type` y `status` de esa org y aplica el mismo criterio que `listActiveOrganizationIds` (founder y `active`). La llaman al principio `generateAndSaveIntelligenceSnapshot`, `generateAndSaveFounderTone` y `generateAndSave{Daily,Weekly,Monthly}ExecutiveReport`: si la org no está activa devuelven `"skipped"` sin llegar a la IA. Los cuatro crons y los tres generadores que importaban `listActiveOrganizationIds` desde `generate-snapshot` la importan de `organizaciones-activas`, y se borró el reexport. La generación manual (`triggerWeeklyPipelineAction`) pasa por los mismos generadores y además avisa en `errors` que la org no está activa. Test nuevo `lib/intelligence/__tests__/org-pausada-al-procesar.test.ts` (generadores, los tres workers con los tres períodos del de reportes y el modo en serie); se ajustaron el mock de `generate-monthly.test.ts` y el caso de identidad de `organizaciones-activas.test.ts`, que ahora comprueba que `generate-snapshot` no exporta otra copia.
+
+**Por qué / finalidad:** el filtro de SCRUM-210 vivía sólo al listar. Un trabajo ya encolado en QStash cuando se pausó la org (o sus reintentos) y una corrida manual con `?organizationId=` procesaban igual una org pausada o dada de baja, con su costo de IA.
+
+**Decisiones de diseño relevantes:**
+- `"skipped"` es lo que ya usan los cinco generadores para "no hay nada que hacer": los workers responden 200 y QStash no reintenta.
+- Si la base falla al comprobar, el chequeo lanza fuera del `try` del generador: no se procesa la org, el worker responde 500 y QStash reintenta (antes de esto los workers de inteligencia y tono respondían 200 ante cualquier `failed`; eso sigue igual, `[INTELIGENCIA-SIN-REINTENTO]`). En el modo en serie esa org cuenta como `failed` y se sigue con la próxima; en `?organizationId=` el cron responde 500; en la acción manual queda `failed` con el mensaje.
+- Mismo criterio que al listar, también para la generación manual: una org pausada no gasta IA ni a pedido. Una cuenta holding que genera para la org holding misma (sin negocio activo) también queda `"skipped"`, igual que nunca entró a los crons.
+- Controles negativos: sacar el chequeo de un generador (fallan sus casos y los de su worker por aserción), meterlo dentro del `try` (falla "si la base falla al comprobar, lanza"), quitar el filtro de founder (falla el caso holding), quitar el `catch` del modo en serie y volver a poner el reexport: cada uno falla por aserción.
+
+**Riesgos / deuda técnica pendiente:** los demás procesos con IA siguen sin mirar el estado de la org (`[CRONS-IA-ORGS-PAUSADAS-RESTO]`, ahora con la función por org lista para reusar).
+
+---
+
 ### 2026-10-04 — La sync de contenido de Zernio no pisa las métricas con ceros (SCRUM-172)
 
 **Rama:** `fix/SCRUM-172-metricas-zernio`

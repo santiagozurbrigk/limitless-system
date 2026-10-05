@@ -3,8 +3,8 @@ import { assertCronAuthorized } from "@/lib/integrations/cron-auth";
 import {
   generateAllIntelligenceSnapshots,
   generateAndSaveIntelligenceSnapshot,
-  listActiveOrganizationIds,
 } from "@/lib/intelligence/generate-snapshot";
+import { listActiveOrganizationIds } from "@/lib/intelligence/organizaciones-activas";
 import {
   isQStashConfigured,
   publishCronFanout,
