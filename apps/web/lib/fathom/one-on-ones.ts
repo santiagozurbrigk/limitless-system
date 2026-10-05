@@ -101,26 +101,26 @@ export async function loadLastOneOnOneByClient(
  * Trae sólo las fechas: el listado completo de las llamadas lo carga aparte la
  * sección que las muestra, y traerlas dos veces sería pagar el transcript de
  * cada una para contar filas.
+ *
+ * `zona` es la de la organización (`leerZonaHorariaDeLaOrganizacion`, null = la
+ * de por defecto): "hace cuántos días" se cuenta con el día de cada llamada y el
+ * de hoy en esa zona, no con los de UTC del servidor (SCRUM-493). La lee quien
+ * llama, una vez por pedido, y la reusa para el resto de la pantalla.
  */
 export async function loadClientOneOnOneStats(
   organizationId: string,
-  clientId: string
+  clientId: string,
+  zona: string | null
 ): Promise<OneOnOneStats> {
   const admin = createAdminClient();
 
-  // "Hace cuántos días" se cuenta en la zona de la organización: el día de
-  // cada llamada y el de hoy, no los de UTC del servidor (SCRUM-493). Una
-  // lectura de la zona por pedido.
-  const [{ data, error }, zona] = await Promise.all([
-    admin
-      .from("fathom_calls")
-      .select("call_date")
-      .eq("organization_id", organizationId)
-      .eq("client_id", clientId)
-      .eq("purpose", "delivery")
-      .not("call_date", "is", null),
-    leerZonaHorariaDeLaOrganizacion(admin, organizationId),
-  ]);
+  const { data, error } = await admin
+    .from("fathom_calls")
+    .select("call_date")
+    .eq("organization_id", organizationId)
+    .eq("client_id", clientId)
+    .eq("purpose", "delivery")
+    .not("call_date", "is", null);
   const hoy = fechaDeHoyEnZona(zona);
 
   if (error) {

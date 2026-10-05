@@ -8,6 +8,8 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractOneOnOneTasks } from "@/lib/fathom/one-on-one-tasks";
+import { fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 
 /**
  * Extrae los compromisos de una 1-1 y los guarda como tareas del cliente.
@@ -48,12 +50,17 @@ export async function maybeExtractOneOnOneTasks(params: {
 
     if (call?.one_on_one_tasks_extracted_at && !params.force) return 0;
 
-    const { data: client } = await admin
-      .from("clients")
-      .select("name")
-      .eq("id", params.clientId)
-      .eq("organization_id", params.organizationId)
-      .maybeSingle();
+    // La zona de la org, una lectura por llamada procesada: el día de la
+    // llamada que va en el prompt es el de esa zona (SCRUM-493).
+    const [{ data: client }, zona] = await Promise.all([
+      admin
+        .from("clients")
+        .select("name")
+        .eq("id", params.clientId)
+        .eq("organization_id", params.organizationId)
+        .maybeSingle(),
+      leerZonaHorariaDeLaOrganizacion(admin, params.organizationId),
+    ]);
 
     // SCRUM-43: un cliente que no es de la organización no recibe tareas.
     if (!client) return 0;
@@ -62,7 +69,7 @@ export async function maybeExtractOneOnOneTasks(params: {
       organizationId: params.organizationId,
       transcript: params.transcript,
       clientName: client.name ?? null,
-      callDate: params.callDate ?? null,
+      fechaDeLaLlamada: fechaDeInstanteEnZona(params.callDate, zona) || null,
     });
 
     /**

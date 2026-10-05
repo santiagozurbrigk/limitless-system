@@ -15,6 +15,8 @@ import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { loadClientOneOnOneStats } from "@/lib/fathom/one-on-ones";
+import { fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { maybeExtractOneOnOneTasks } from "@/lib/clients/client-tasks";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import type { OneOnOneStats } from "@/lib/fathom/one-on-one-types";
@@ -76,16 +78,22 @@ export async function getClientOneOnOnesAction(
   if (!client) return EMPTY;
 
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("fathom_calls")
-    .select(
-      "id, title, call_date, duration_seconds, fathom_url, ai_situation_summary, ai_next_steps, ingest_source, transcript"
-    )
-    .eq("organization_id", organizationId)
-    .eq("client_id", clientId)
-    .eq("purpose", "delivery")
-    .order("call_date", { ascending: false })
-    .limit(LIMITE);
+  // La zona de la org, una sola lectura para la lista y el contador: el día de
+  // cada llamada es el de esa zona (una 1-1 de las 22:00 en Argentina es de
+  // ese día, aunque en UTC ya sea mañana).
+  const [{ data, error }, zona] = await Promise.all([
+    admin
+      .from("fathom_calls")
+      .select(
+        "id, title, call_date, duration_seconds, fathom_url, ai_situation_summary, ai_next_steps, ingest_source, transcript"
+      )
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      .eq("purpose", "delivery")
+      .order("call_date", { ascending: false })
+      .limit(LIMITE),
+    leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
+  ]);
 
   if (error) {
     console.error("[fathom:one-on-ones] ficha", error.message);
@@ -127,11 +135,11 @@ export async function getClientOneOnOnesAction(
   }
 
   return {
-    stats: await loadClientOneOnOneStats(organizationId, clientId),
+    stats: await loadClientOneOnOneStats(organizationId, clientId, zona),
     calls: rows.map((row) => ({
       id: row.id,
       title: row.title ?? "Sesión 1-1",
-      date: row.call_date ? row.call_date.slice(0, 10) : null,
+      date: fechaDeInstanteEnZona(row.call_date, zona) || null,
       // Sin duración conocida queda `null`: una llamada no dura cero minutos.
       durationMinutes:
         row.duration_seconds != null && row.duration_seconds > 0

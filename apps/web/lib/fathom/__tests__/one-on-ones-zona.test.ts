@@ -54,10 +54,9 @@ describe("⭐ loadClientOneOnOneStats en la zona de la organización", () => {
     // 2-oct 15:00 ART = 18:00 UTC.
     vi.setSystemTime(new Date("2026-10-02T18:00:00Z"));
     sim.llamadas = [{ call_date: "2026-10-02T01:00:00Z" }];
-    const stats = await loadClientOneOnOneStats("org-1", "cliente-1");
+    const stats = await loadClientOneOnOneStats("org-1", "cliente-1", sim.zona);
     expect(stats.lastDate).toBe("2026-10-01");
     expect(stats.daysSinceLast).toBe(1);
-    expect(sim.filtrosDeLaZona).toEqual([["id", "org-1"]]);
   });
 
   it("mirada a las 22:00 del mismo día, es de hace 0 días", async () => {
@@ -65,7 +64,7 @@ describe("⭐ loadClientOneOnOneStats en la zona de la organización", () => {
     // 1-oct 23:00 ART = 2-oct 02:00 UTC.
     vi.setSystemTime(new Date("2026-10-02T02:00:00Z"));
     sim.llamadas = [{ call_date: "2026-10-02T01:00:00Z" }];
-    expect((await loadClientOneOnOneStats("org-1", "cliente-1")).daysSinceLast).toBe(0);
+    expect((await loadClientOneOnOneStats("org-1", "cliente-1", sim.zona)).daysSinceLast).toBe(0);
   });
 });
 

@@ -16,6 +16,7 @@
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
 import { loadClientOneOnOneStats } from "@/lib/fathom/one-on-ones";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { summarizeJourneyPosition } from "@/lib/checkpoints/progress";
 import { getClientJourneyAction } from "@/app/clients/checkpoint-event-actions";
 
@@ -61,7 +62,10 @@ export async function getClientOverviewAction(clientId: string): Promise<ClientO
   if (!client) return VACIO;
 
   const [stats, tareas, journey] = await Promise.all([
-    loadClientOneOnOneStats(organizationId, clientId),
+    // La zona de la org, una lectura por pedido: el contador de 1-1 cuenta en ella.
+    leerZonaHorariaDeLaOrganizacion(supabase, organizationId).then((zona) =>
+      loadClientOneOnOneStats(organizationId, clientId, zona)
+    ),
     supabase
       .from("client_tasks")
       .select("owner")
