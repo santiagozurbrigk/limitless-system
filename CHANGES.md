@@ -34,6 +34,47 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · Fix-pack de la revisión adversarial de SCRUM-493: el próximo paso de Closing vence por día
+
+**Rama:** `fix/SCRUM-493-fechas-utc`
+**Commit(s):** `d0c628f2` (utilidad), `969cd5cf` (Closing), `a0d0d922` (hitos), `c81f0ca5` (Fathom) y este (docs)
+**Módulo(s) afectado(s):** Closing (`lib/sales/lead-thread.ts`, `app/sales/lead-actions.ts`, tabla, cajón y panel
+de seguimiento), Clientes (nuevo `lib/checkpoints/fecha-del-hito.ts`, diálogo de hito, recorrido de la ficha,
+revisión semanal), Fathom (`one-on-one-types.ts`, `one-on-ones.ts`, `deep-call-analysis.ts`), `lib/fechas/calendario.ts`
+y Finanzas (`payment-platforms-section.tsx`).
+
+**Qué se hizo:**
+- **MAYOR-1, estado del lead:** `buildLeadThread(intentos, ahora, zona)` compara `next_action_at` por día contra el hoy
+  de la organización (`fechaDeValorGuardado`, con la regla de medianoche UTC para las filas viejas del seguimiento).
+  Antes lo comparaba como instante y un paso que vencía hoy pasaba a "Seguimiento vencido" al mediodía. La zona se
+  lee una vez por pedido en `listLeadsTableAction` y `getLeadThreadAction`, y viaja en `LeadTableResult.timezone` para
+  que la tabla recalcule igual en el navegador. El cajón y el panel muestran sólo la fecha del paso.
+- **MENOR-1, fecha de un hito:** una sola convención para `reached_at` (`lib/checkpoints/fecha-del-hito.ts`). El
+  diálogo guarda el día a las 12:00 locales (hoy antes de las 12, cinco minutos antes de ahora, porque la action
+  rechaza un hito futuro); la revisión semanal lo lee en la zona de la org y la ficha en la del navegador. Las filas
+  del diálogo viejo (12:00:00.000 UTC exactas) se leen con su fecha de UTC, que en UTC+12 ya no se corre un día.
+- **MENOR-2:** `fechaVencida` y `diaLocal` sólo aceptan `YYYY-MM-DD`; un instante se convierte antes con
+  `fechaDeValorGuardado` o `aFechaDeInput`. Nuevo `formatearFechaGuardada`.
+- **MENOR-3:** el formato de la última transacción de una plataforma de pago usa `formatearFechaGuardada` y queda
+  debajo de los imports.
+- **MENOR-4, Fathom:** `computeOneOnOneStats(fechas, hoy)` recibe el hoy de la org (`computeOneOnOneRhythm` para la
+  tabla, que no lo necesita) y `formatDateLabel` guarda la fecha de la llamada en la zona de la org. Salen de
+  `[FECHAS-UTC-RESTO]`, donde queda sólo la primera y última 1-1 (día de UTC de cada llamada).
+- Tests nuevos: 4 casos del hilo del lead, 8 de `fecha-del-hito`, 4 de la utilidad, 2 de días desde la última 1-1 y 2
+  de la fecha de la llamada. Control negativo de cada arreglo en la evidencia.
+
+**Por qué / finalidad:** la revisión adversarial encontró el mismo síntoma de la HU ("lo que vence hoy aparece
+vencido") en el estado del lead de Closing, más cuatro detalles de la misma familia.
+
+**Decisiones de diseño relevantes:** el estado del lead usa la zona de la organización tanto en el servidor como al
+recalcular en la tabla; la fecha que se muestra (celda, cajón, panel) es la del navegador, que coincide con la de la
+org para quien está en esa zona o a menos de 11 horas. La regla de las 12:00:00.000 UTC exactas sólo aplica a
+`reached_at`, donde el diálogo viejo escribía así.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Siguen `[FECHAS-UTC-RESTO]` y `[CAMPO-FECHA-MIGRAR]`.
+
+---
+
 ### 2026-10-04 · Fechas por defecto y vencimientos con el día local o de la organización, no el de UTC (SCRUM-493)
 
 **Rama:** `fix/SCRUM-493-fechas-utc`

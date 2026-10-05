@@ -271,6 +271,12 @@ Orden sugerido: (1) sacar `conversations` del provider y de métricas/embudo, (2
 - **`next_action_at` es `timestamptz` pero se elige una fecha:** se guarda ese día a las 12:00 locales
   (`fechaAInstanteLocal`) y la celda de la tabla lo lee con `CampoFecha`, que lo muestra con el mismo día. Las
   filas que el seguimiento del lead guardó a medianoche UTC (antes de SCRUM-493) se leen con su día de UTC.
+  El cajón del lead y el panel de seguimiento muestran sólo la fecha, leída igual que la celda.
+- **El próximo paso vence por día, en la zona de la organización.** `buildLeadThread(intentos, ahora, zona)` lee
+  `next_action_at` con `fechaDeValorGuardado` en `organizations.timezone`: lo que vence hoy es "Seguimiento
+  agendado" todo el día y pasa a "Seguimiento vencido" al día siguiente. `listLeadsTableAction` lee la zona una vez
+  por pedido y la devuelve en `timezone`, que la tabla usa para recalcular el estado en el navegador. Los turnos
+  (`scheduled_at`) sí son instantes.
 - **Una grabación sólo se asigna a un cliente sin confirmación si el resolvedor es determinista**
   (mail o alias aprendido); los candidatos por nombre piden confirmación.
 - **Sin participantes (`calendar_invitees` vacío) no se clasifica** — vacío es "no sabemos", no "no

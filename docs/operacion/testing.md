@@ -67,21 +67,21 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **162 archivos, ~1.640 casos** (recontado el 2026-10-04 con SCRUM-493). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **164 archivos, ~1.660 casos** (recontado el 2026-10-05 con el fix-pack de SCRUM-493). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
 | `lib/funnels` | 10 | 186 | motor de embudos puro: compute, spine, períodos, KPIs, fuentes, conformidad de plantillas |
-| `lib/fathom` | 15 | 132 | match con turnos, contraparte, identidades, links compartidos, ventana de sync, reclamo de trabadas, cliente de la org (filtro por organización) |
-| `lib/checkpoints` | 6 | 94 | recorrido del cliente, etapas, propuestas, trabados |
+| `lib/fathom` | 16 | 136 | match con turnos, contraparte, identidades, links compartidos, ventana de sync, reclamo de trabadas, cliente de la org (filtro por organización), días desde la última 1-1 y fecha de la llamada con el hoy de la org |
+| `lib/checkpoints` | 7 | 102 | recorrido del cliente, etapas, propuestas, trabados, fecha de un hito (una convención, incluida UTC+12) |
 | `lib/custom-fields` | 7 | 85 | campos configurables: validación, merge, formato, alertas por fecha |
 | `lib/payments` | 5 | 85 | normalización Whop/Commas, firmas, agregados, retención |
 | `lib/clients` | 8 | 97 | próxima tarea (vencida con el hoy local y el de la org), facturación, satisfacción, señales, sub-clientes, revisión semanal, fecha de alta por defecto del import de Excel |
-| `lib/fechas` | 2 | 31 | fechas calendario: hoy local y en una zona, suma de días (fin de mes, año y horario de verano), vencida, valor del campo de fecha (ida y vuelta), zona de la organización con fallback |
+| `lib/fechas` | 2 | 35 | fechas calendario: hoy local y en una zona, suma de días (fin de mes, año y horario de verano), vencida (sólo `YYYY-MM-DD`), valor guardado leído en el navegador o en la zona de la org (ida y vuelta), formato de fecha guardada, zona de la organización con fallback |
 | `lib/onboarding` | 4 | 61 | derivación, gate de routing, ítems, tours |
 | `lib/discord` | 5 | 60 | actividad, canales, clasificador, perfil, identidades |
 | `lib/ghl` | 5 | 45 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook, fecha de alta de un contacto en la zona de la org |
-| `lib/sales` | 2 | 40 | opciones de seguimiento (incluida la fecha propuesta del próximo paso), hilo del lead |
+| `lib/sales` | 2 | 44 | opciones de seguimiento (incluida la fecha propuesta del próximo paso), hilo del lead (el próximo paso vence por día en la zona de la org) |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
 | `lib/super-admin` | 5 | 43 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role y estado de la org alineado con la base (incluido el desconocido) |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
