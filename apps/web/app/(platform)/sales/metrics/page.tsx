@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { getFrequentObjections, mockFrequentObjectionSummaries } from "@/lib/metrics/frequent-objections";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -22,7 +23,8 @@ async function loadSnapshots(): Promise<MetricsSnapshot[]> {
   if (!isSupabaseConfigured()) return [];
   try {
     return await getSalesMetricsSnapshotsAction();
-  } catch {
+  } catch (error) {
+    unstable_rethrow(error);
     return [];
   }
 }

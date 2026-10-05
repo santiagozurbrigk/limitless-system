@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, unstable_rethrow } from "next/navigation";
 import { getContentPieceAction, getContentPiecesAction } from "@/app/marketing/content/actions";
 import { listReelVariationJobsForPieceAction } from "@/app/marketing/content/reel-variation-actions";
 
@@ -47,14 +47,23 @@ export default async function MarketingContentDetailPage({
   let data: Awaited<ReturnType<typeof getContentPieceAction>>;
   try {
     data = await getContentPieceAction(id);
-  } catch {
+  } catch (error) {
+    // El error con el que Next marca la ruta como dinámica (y los de redirect o
+    // notFound) no es una falla: se relanza para que Next lo maneje.
+    unstable_rethrow(error);
     notFound();
   }
 
   // Fetch org pieces y reel jobs en paralelo (no bloqueantes)
   const [allPieces, initialReelJobs] = await Promise.all([
-    getContentPiecesAction({ limit: 50 }).catch(() => []),
-    listReelVariationJobsForPieceAction(id).catch(() => []),
+    getContentPiecesAction({ limit: 50 }).catch((error: unknown) => {
+      unstable_rethrow(error);
+      return [];
+    }),
+    listReelVariationJobsForPieceAction(id).catch((error: unknown) => {
+      unstable_rethrow(error);
+      return [];
+    }),
   ]);
   const orgAvg = computeOrgAvgMetrics(allPieces);
 

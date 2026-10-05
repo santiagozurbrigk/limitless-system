@@ -34,7 +34,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
-### 2026-10-04 — Hallazgos de la revisión integral del 4-oct (SCRUM-210, SCRUM-111, SCRUM-43, SCRUM-75, tipos de estado de org y pantallas dinámicas)
+### 2026-10-04 · Hallazgos de la revisión integral del 4-oct (SCRUM-210, SCRUM-111, SCRUM-43, SCRUM-75, tipos de estado de org y pantallas dinámicas)
 
 **Rama:** `fix/revision-integral-4-oct`
 **Commit(s):** uno por apartado (este y los siguientes de la rama)
@@ -88,6 +88,16 @@ Los informes de origen son las pruebas integrales del 4-oct (SCRUM-111, 121 y 21
 **Decisiones de diseño relevantes:** un valor desconocido (imposible hoy por el check) se muestra como pausada y deja un aviso en consola: nunca como activa. El plan sigue siendo una estimación por MRR porque no hay columna de plan. `packages/types` no lo usa ninguna otra app (bot, worker): sólo `apps/web`; typecheck de `apps/web`, `packages/types` y `packages/ui` en 0. Los tipos deprecados `AdminFounder` y `AdminUsageRow` no se tocaron (no los usa nadie); `AdminOrganization.status` (deprecado, sin usos) pasa a `OrganizationStatus`. Controles negativos: volver al mapeo viejo (falla "los tres estados de la base pasan tal cual"), tratar un desconocido como activa y meter una rama extra en el plan: cada uno falla por aserción.
 
 **Riesgos / deuda técnica pendiente:** ninguna pantalla pasa una org a `churned`; si se quiere esa transición, es una funcionalidad aparte.
+
+#### 5. Las pantallas ya no esconden el error con el que Next marca una ruta como dinámica
+
+**Qué se hizo:** cada catch de `app/(platform)/operations/overview/page.tsx`, `app/(platform)/business-context/documents/page.tsx` y `getSalesCallsAction` (`app/fathom/actions.ts`, la usa `/sales/llamadas`) empieza con `unstable_rethrow(error)` de `next/navigation` (existe en Next 15.5.18). Lo mismo en los otros catch de páginas que envuelven lecturas con sesión: `marketing/content/[id]` (el `try` que terminaba en `notFound()` y los dos `.catch(() => [])`), `marketing/content`, `operations/sops`, `sales/metrics`, `sales/closing` y `super-admin/infrastructure`. Test nuevo `app/__tests__/errores-de-next-se-relanzan.test.ts`: en las tres pantallas, un `DynamicServerError` se relanza sin loguear y un error real se sigue atrapando y logueando; además recorre todos los `page.tsx` y `layout.tsx` de `app/` y falla si un catch no empieza relanzando.
+
+**Por qué / finalidad:** durante el prerender, Next lanza `DYNAMIC_SERVER_USAGE` cuando una página usa `cookies()`. Esos catch lo atrapaban y lo escribían con `console.error`: cada build dejaba tres "Error: Dynamic server usage" en el log, y el mismo catch podía tapar un `redirect` o un `notFound` legítimo (en `marketing/content/[id]` cualquier error, incluido un redirect al login, se convertía en 404).
+
+**Decisiones de diseño relevantes:** `unstable_rethrow` y no comparar `digest` a mano, porque además de la ruta dinámica relanza `redirect`, `notFound` y los demás errores internos de Next (también si vienen como `cause`). Cambio de comportamiento buscado: si una de esas lecturas pide redirigir (por ejemplo, sesión vencida), ahora redirige en vez de mostrar la pantalla vacía. Verificación: `next build` con las variables de `.env.example` terminó en 0, sin ningún "Dynamic server usage" en el log, y la tabla de rutas es idéntica a la del build del 4-oct (191 filas, mismas rutas y mismo tipo; las 9 pantallas tocadas siguen `ƒ (Dynamic)`). Controles negativos: sacar el `unstable_rethrow` de cualquiera de las tres pantallas hace fallar su caso ("promise resolved … instead of rejecting"); sacarlo de `operations/sops` o de `sales/closing` hace fallar el recorrido de páginas.
+
+**Riesgos / deuda técnica pendiente:** el recorrido mira sólo `page.tsx` y `layout.tsx`. Las server actions con try/catch amplio que se llaman desde una página (además de `getSalesCallsAction`) no se revisaron una por una; el build ya no muestra ninguna que atrape el error de ruta dinámica.
 
 ---
 

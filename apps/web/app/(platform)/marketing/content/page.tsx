@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { getContentPiecesAction, getContentDraftsAction } from "@/app/marketing/content/actions";
 import { maybeSyncZernioContentAction } from "@/app/marketing/content/sync-actions";
 import { ContentPieceGrid } from "@/components/marketing/content-piece-grid";
@@ -17,7 +18,8 @@ export default async function MarketingContentPage({
   try {
     await maybeSyncZernioContentAction();
     syncedAt = new Date();
-  } catch {
+  } catch (error) {
+    unstable_rethrow(error);
     // No bloquear la página si Zernio falla
   }
 

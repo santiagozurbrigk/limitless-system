@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { ClosingOverview } from "@/components/closing";
 import { PageLoading } from "@/components/shared/page-loading";
@@ -10,7 +11,10 @@ async function ClosingPageContent() {
     getGHLIntegrationStatusAction(),
     listLeadsTableAction(),
     // El equipo es para asignar responsables: si falla, la tabla igual sirve.
-    getTeamMembersAction().catch(() => []),
+    getTeamMembersAction().catch((error: unknown) => {
+      unstable_rethrow(error);
+      return [];
+    }),
   ]);
 
   return (

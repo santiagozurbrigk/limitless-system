@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { requireAuthContext } from "@/lib/auth/require-auth";
 import {
@@ -374,6 +375,9 @@ export async function getSalesCallsAction(): Promise<SalesCallsResult> {
 
     return { ok: true, calls: attachCallAnalyses(rows, analyses) };
   } catch (err) {
+    // El error con el que Next marca la ruta como dinámica (y los de redirect o
+    // notFound) no es una falla: se relanza para que Next lo maneje.
+    unstable_rethrow(err);
     console.error("[getSalesCallsAction]", err);
     return { ok: false, error: "No se pudieron cargar las llamadas." };
   }

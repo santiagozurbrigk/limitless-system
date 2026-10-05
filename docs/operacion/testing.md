@@ -66,12 +66,12 @@ Qué no testear en Vitest: componentes React, actions que sólo hacen `select`, 
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **133 archivos, ~1.430 casos** (recontado el 2026-10-04). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **137 archivos, ~1.460 casos** (recontado el 2026-10-04, después de la revisión integral). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
 | `lib/funnels` | 10 | 185 | motor de embudos puro: compute, spine, períodos, KPIs, fuentes, conformidad de plantillas |
-| `lib/fathom` | 9 | 105 | match con turnos, contraparte, identidades, links compartidos, ventana de sync, reclamo de trabadas |
+| `lib/fathom` | 15 | 132 | match con turnos, contraparte, identidades, links compartidos, ventana de sync, reclamo de trabadas, cliente de la org (filtro por organización) |
 | `lib/checkpoints` | 6 | 94 | recorrido del cliente, etapas, propuestas, trabados |
 | `lib/custom-fields` | 7 | 85 | campos configurables: validación, merge, formato, alertas por fecha |
 | `lib/payments` | 4 | 78 | normalización Whop/Commas, firmas, agregados, retención |
@@ -93,7 +93,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/navigation` | 2 | 15 | módulo por path, metadata de página |
 | `lib/marketing` | 1 | 13 | snapshot de métricas de anuncios |
 | `lib/webinarjam` | 1 | 13 | normalización de registrantes |
-| `lib/executive-reports` | 1 | 11 | cadencias |
+| `lib/executive-reports` | 2 | 16 | cadencias y mes que toma el reporte mensual |
 | `lib/hyros` | 1 | 11 | resolución de atribución |
 | `lib/zernio` | 4 | 21 | triggers de comentarios, integración por org, métricas que se guardan y filas de la sync |
 | `lib/security` | 2 | 6 | cifrado, comparación en tiempo constante |
@@ -107,8 +107,10 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/unipile` | 1 | 3 | secreto del webhook |
 | `lib/intelligence` | 2 | 14 | organizaciones sobre las que corren los crons de IA y el chequeo de la org al procesarla (generadores, workers, modo en serie) |
 | `lib/youtube` | 1 | 2 | métricas de video que se guardan |
+| `lib/team` | 1 | 6 | rol de la org (filtro por organización) |
+| `app/__tests__` | 1 | 3 | los catch de páginas y layouts relanzan los errores de Next (`unstable_rethrow`) |
 
-**Sin ningún test:** `lib/agent` (compaction, JIT, streaming), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`), los gastos y las métricas de ventas, y los parsers de import de clientes. Tampoco hay tests de route handlers ni de Server Actions.
+**Sin ningún test:** `lib/agent` (compaction, JIT, streaming), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`), los gastos y las métricas de ventas, y los parsers de import de clientes. Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`) y las páginas de `app/__tests__`.
 
 ### E2E
 
