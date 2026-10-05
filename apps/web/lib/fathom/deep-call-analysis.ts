@@ -1,6 +1,8 @@
 import { callClaudeJson } from "@/lib/ai/anthropic";
 import { buildOrgContextText, getOrgContext } from "@/lib/ai/org-context";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fechaDeHoyEnZona, fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import type { DeepCallAnalysis } from "@/types/call-analysis";
 import type { ObjectionCategory } from "@/types/sales";
 import type { ClientLinkedCall } from "@/types/clients";
@@ -138,9 +140,19 @@ function formatDurationLabel(minutes?: number): string {
   return `${minutes} min`;
 }
 
-function formatDateLabel(iso?: string | null): string {
-  if (!iso) return new Date().toISOString().slice(0, 10);
-  return iso.slice(0, 10);
+/**
+ * La fecha de la llamada (`YYYY-MM-DD`) que se guarda en `linked_calls`, en el
+ * día de la organización. Sin fecha (o con una que no se entiende), hoy en la
+ * organización. Antes las dos salían del día de UTC: una llamada de las 22:00
+ * en Argentina quedaba con fecha de mañana (SCRUM-493). `callDate` es un
+ * instante real: se lee sin la regla de medianoche UTC de las fechas elegidas.
+ */
+export function formatDateLabel(
+  iso: string | null | undefined,
+  zona: string | null,
+  ahora: Date = new Date()
+): string {
+  return fechaDeInstanteEnZona(iso, zona) || fechaDeHoyEnZona(zona, ahora);
 }
 
 async function syncClientLinkedCalls(params: {
@@ -156,12 +168,15 @@ async function syncClientLinkedCalls(params: {
 }): Promise<void> {
   const admin = createAdminClient();
 
-  const { data: client } = await admin
-    .from("clients")
-    .select("linked_calls")
-    .eq("id", params.clientId)
-    .eq("organization_id", params.organizationId)
-    .maybeSingle();
+  const [{ data: client }, zona] = await Promise.all([
+    admin
+      .from("clients")
+      .select("linked_calls")
+      .eq("id", params.clientId)
+      .eq("organization_id", params.organizationId)
+      .maybeSingle(),
+    leerZonaHorariaDeLaOrganizacion(admin, params.organizationId),
+  ]);
 
   // SCRUM-43: nunca sumar la llamada a un cliente de otra organización.
   if (!client) return;
@@ -173,7 +188,7 @@ async function syncClientLinkedCalls(params: {
     id: params.fathomCallId,
     fathomCallId: params.fathomCallId,
     title: params.title,
-    date: formatDateLabel(params.callDate),
+    date: formatDateLabel(params.callDate, zona),
     duration: formatDurationLabel(params.durationMinutes),
     url: params.fathomUrl ?? "#",
     closerName: params.closerName,

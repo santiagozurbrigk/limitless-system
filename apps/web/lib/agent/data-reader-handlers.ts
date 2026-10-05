@@ -5,6 +5,9 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { fechaDeHoyEnZona, fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
+import { getCurrentWeekStart } from "@/lib/operations/weekly-utils";
 import {
   SIN_METRICAS,
   engagementDe,
@@ -244,6 +247,10 @@ export async function handleGetClientsData(
         : 0;
     const totalRevenue = revenues.reduce((a, b) => a + b, 0);
 
+
+    // Las fechas que ve el agente son las del día de la organización (SCRUM-493).
+    const zona = await leerZonaHorariaDeLaOrganizacion(supabase, organizationId);
+
     // Últimos 5 incorporados
     const recent = [...all]
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -251,7 +258,7 @@ export async function handleGetClientsData(
       .map((c) => ({
         nombre: c.name,
         estado: c.status,
-        fecha: c.created_at.slice(0, 10),
+        fecha: fechaDeInstanteEnZona(c.created_at, zona),
       }));
 
     return JSON.stringify({
@@ -433,11 +440,14 @@ export async function handleGetClosingCalls(
       });
     }
 
+    // Las fechas que ve el agente son las del día de la organización (SCRUM-493).
+    const zona = await leerZonaHorariaDeLaOrganizacion(supabase, organizationId);
+
     return JSON.stringify({
       success: true,
       total: calls.length,
       llamadas: calls.map((c) => ({
-        fecha: c.call_date?.slice(0, 10) ?? "sin fecha",
+        fecha: fechaDeInstanteEnZona(c.call_date, zona) || "sin fecha",
         closer: c.closer_name ?? "Desconocido",
         resultado: c.sold ? "GANADA" : c.booked ? "AGENDADO" : "PERDIDA",
         score_fathom: c.overall_score ?? "sin análisis",
@@ -739,6 +749,9 @@ export async function handleGetLeadMagnetsData(
       }
     }
 
+    // Las fechas que ve el agente son las del día de la organización (SCRUM-493).
+    const zona = await leerZonaHorariaDeLaOrganizacion(supabase, organizationId);
+
     const totalLeads = leads.length;
     const totalConverted = leads.filter((l) => l.attributed_client_id).length;
 
@@ -767,7 +780,7 @@ export async function handleGetLeadMagnetsData(
             stats.total > 0
               ? `${Math.round((stats.converted / stats.total) * 100)}%`
               : "0%",
-          ultimo_lead: stats.lastCapture?.slice(0, 10) ?? "nunca",
+          ultimo_lead: fechaDeInstanteEnZona(stats.lastCapture, zona) || "nunca",
           tiene_url: !!lm.asset_url,
         };
       }),
@@ -789,14 +802,11 @@ export async function handleGetOperationsSummary(
   if (!isSupabaseConfigured()) return notConfigured("operaciones");
 
   try {
-    // Semana actual (lunes)
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - daysFromMonday);
-    weekStart.setHours(0, 0, 0, 0);
-    const weekStartStr = weekStart.toISOString().slice(0, 10);
+    // Semana actual (lunes) de la organización: la misma cuenta que usan los
+    // inputs semanales, con su zona y no con el reloj del servidor (UTC). Las
+    // fechas de los SOPs también van en el día de la organización.
+    const zona = await leerZonaHorariaDeLaOrganizacion(supabase, organizationId);
+    const weekStartStr = getCurrentWeekStart(fechaDeHoyEnZona(zona));
 
     const [weeklyRes, sopsRes, snapshotRes] = await Promise.all([
       supabase
@@ -848,7 +858,7 @@ export async function handleGetOperationsSummary(
           titulo: s.title,
           area: s.department,
           estado: s.status,
-          ultima_actualizacion: s.updated_at?.slice(0, 10),
+          ultima_actualizacion: fechaDeInstanteEnZona(s.updated_at, zona) || undefined,
         })),
       },
       ultimo_snapshot_inteligencia: snapshot

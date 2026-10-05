@@ -34,6 +34,216 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · Cuarto fix-pack de SCRUM-493: el rango de métricas de ventas en días de la organización
+
+**Rama:** `fix/SCRUM-493-fechas-utc`
+**Commit(s):** `64613368` (rango), `561b1fe8` (docs) y `6a261dcb` (tests sin `children` como prop, que rompía `next lint` y el build)
+**Módulo(s) afectado(s):** Ventas (`components/sales/metrics/date-range-picker.tsx`, `components/sales/sales-metrics-redesign.tsx`,
+nuevo `lib/sales/rango-de-metricas.ts`) y `lib/fechas/calendario.ts`.
+
+**Qué se hizo:**
+- **MENOR-G:** el selector de rango de métricas de ventas mezclaba el tope (hoy de la org) con bordes y valor por
+  defecto del navegador. Ahora todo sale de la zona de la org: el valor por defecto ("este mes") y los atajos terminan
+  hoy en la org; "desde" empieza a las 00:00 de la org y "hasta" termina a las 23:59:59.999 de la org; los campos
+  muestran esos días. Los consumidores (`use-sales-metrics.ts` y `getSalesPerformanceMetricsAction`) ya filtraban
+  con instantes y no cambian. Se borró `fechaLocal`, que quedó sin uso.
+- El agrupado por semanas de la misma pantalla (`use-sales-metrics.ts:74,90`) quedó anotado en `[FECHAS-UTC-RESTO]`.
+- Nuevo `[MANYCHAT-CTA-DUPLICADOS]` en `PENDIENTES.md` (Ventas, P2): la búsqueda de "ya se registró este CTA hoy"
+  usa `gte` sin tope y `maybeSingle()`, y con dos o más filas inserta un duplicado. Es previo a esta HU.
+- Test con un miembro en Madrid a las 00:30 del 6-oct y la org en Argentina: el "hasta" por defecto y el tope son el
+  5, se puede elegir el 5 y el rango cubre ese día entero de la org. Control negativo en
+  `control-negativo-fixpack-4.txt`.
+
+**Por qué / finalidad:** era la última incoherencia de zonas dentro de una misma pantalla que encontró la revisión
+adversarial.
+
+**Decisiones de diseño relevantes:** `DateRange` sigue siendo un par de instantes, que es lo que esperan sus
+consumidores; sólo cambia cómo se arman y se muestran.
+
+**Riesgos / deuda técnica pendiente:** `[FECHAS-UTC-RESTO]`, `[CAMPO-FECHA-MIGRAR]` y `[MANYCHAT-CTA-DUPLICADOS]`.
+
+---
+
+### 2026-10-05 · Tercer fix-pack de SCRUM-493: una sola regla de fechas para toda la app, la zona de la organización
+
+**Rama:** `fix/SCRUM-493-fechas-utc`
+**Commit(s):** `6f29a1a9` (Fathom), `0a6b582f` (regla única en el cliente e hitos), `4ac2ac22` (búsqueda ampliada) y
+este (docs)
+**Módulo(s) afectado(s):** transversal. Nuevos `providers/zona-de-la-organizacion-provider.tsx` y
+`lib/fechas/organizacion-activa.ts`; cambian el layout de la plataforma, `lib/fechas/calendario.ts`, `CampoFecha`,
+Clientes (tareas, wins, baseline, alta, ficha, cobros, hitos), Closing, Ventas, Workboard, Lanzamientos, Panel,
+Finanzas, Fathom, el agente, Discord y ManyChat. Se borran `lib/hooks/use-fecha-de-hoy-local.ts`, `fechaDeHoyLocal`
+y `aFechaDeInput`.
+
+**Qué se hizo:**
+- **MENOR-E, Fathom:** las tareas que salen de una 1-1 se calculan desde el día de la llamada en la zona de la org
+  (antes, el día de UTC: una 1-1 del jueves a las 22:00 de Argentina iba al prompt como viernes y corría todos los
+  vencimientos). La lista de 1-1 de la ficha muestra ese día, el mismo del resumen; una lectura de zona para la lista
+  y el contador.
+- **MENOR-F, regla única:** el "hoy" y las fechas calendario de un dato de la organización son los de su zona, para
+  todos los miembros. El layout lee la zona una vez y la reparte `ZonaDeLaOrganizacionProvider`;
+  `useHoyDeLaOrganizacion()` reemplaza al hoy del navegador en valores por defecto, topes y "vencida" (tareas, wins,
+  baseline, alta de cliente, cobros incluido el cierre de SCRUM-104, sprint, métrica de lanzamiento, filtro de
+  facturación, rango de métricas, calendario y tablero de Workboard, días restantes del programa y gráfico de ingresos
+  del Panel). `CampoFecha` lee en la zona de la org por defecto. Closing y la ficha toman la zona del provider.
+- **Hitos:** "vence el" y "trabado hace N días" se cuentan en días calendario de la zona de la org; sale de
+  `[FECHAS-UTC-RESTO]`.
+- **Búsqueda ampliada** (`.slice(0, 10)`, `.substring`, `.split("T")`, `getUTC*` y `date-fns` sobre instantes): se
+  arreglaron las fechas del agente, el win que nace de un testimonio de Discord, el corte diario de ManyChat, el
+  promedio diario del equipo en Ventas, el día de creación de las tareas del tablero y la fecha de la 1-1 de las
+  tareas de cliente. Lo que queda (períodos de reporte, mes actual, super admin, ClickUp) está en `[FECHAS-UTC-RESTO]`.
+- `app/sales/actions.ts:47`: `aggregateTeamAverageByDate` sí tiene llamadores (`getTeamAverageEvolutionAction`,
+  usado en la ficha), así que se arregló en vez de borrarse.
+- Tests con un miembro en Madrid y la org en Argentina a las 22:00, y control negativo de cada arreglo
+  (`control-negativo-fixpack-3.txt` en la evidencia).
+
+**Por qué / finalidad:** la tercera pasada de la revisión adversarial encontró dos fechas de Fathom cortadas en UTC
+(una escribe vencimientos de tareas) y pantallas donde convivían el hoy del navegador y el de la org.
+
+**Decisiones de diseño relevantes:** una sola zona por dato, la de su dueño. Los contadores del servidor necesitan
+la de la org, así que el navegador también la usa. La agenda de turnos de Closing sigue mostrando los instantes en la
+hora de quien mira, porque son reuniones con hora.
+
+**Riesgos / deuda técnica pendiente:** `[FECHAS-UTC-RESTO]` (períodos de reporte) y `[CAMPO-FECHA-MIGRAR]`.
+
+---
+
+### 2026-10-05 · Segundo fix-pack de SCRUM-493: hitos, Fathom y Closing, todo en la zona de la organización
+
+**Rama:** `fix/SCRUM-493-fechas-utc`
+**Commit(s):** `c151b82d` (Closing y utilidad), `32b08266` (hitos), `0e430114` (Fathom) y este (docs)
+**Módulo(s) afectado(s):** `lib/fechas/calendario.ts`, `components/shared/campo-fecha.tsx`, Closing (tabla, cajón,
+panel, modal de resultado, `app/sales/lead-actions.ts`, `lib/sales/follow-up-options.ts`), Clientes
+(`lib/checkpoints/fecha-del-hito.ts`, `app/clients/checkpoint-event-actions.ts`, diálogo y recorrido de la ficha) y
+Fathom (`one-on-one-types.ts`, `one-on-ones.ts`, `deep-call-analysis.ts`).
+
+**Qué se hizo:**
+- **MENOR-A, hitos:** `recordCheckpointAction` rechaza un hito de un **día** futuro en la zona de la org
+  (`hitoEsFuturo`), no un instante futuro. Con eso se borró el atajo de "cinco minutos antes de ahora" del diálogo,
+  que guarda siempre el mediodía de la zona de la org. La ficha, el diálogo y la revisión semanal leen `reached_at` en
+  esa zona (`getClientJourneyAction` devuelve `timezone`).
+- **MENOR-C, Fathom:** el día de cada llamada es el de la zona de la org (`fechaDeInstanteEnZona`, sin la regla de
+  medianoche UTC, que es para fechas elegidas): primera y última 1-1, "hace cuántos días" y la fecha que se guarda en
+  `linked_calls`. Una lectura de la zona por pedido. Sale la línea de Fathom de `[FECHAS-UTC-RESTO]`.
+- **MENOR-B, Closing:** la fecha del próximo paso se propone (hoy de la org más dos días), se guarda (mediodía de la
+  zona de la org, `fechaAInstanteEnZona`), se muestra (`CampoFecha` con `zona`, `formatearFechaGuardada` con `zona`) y
+  vence en la zona de la org. Se borró `fechaAInstanteLocal`, que quedó sin uso.
+- Tests: hito en Auckland entre las 00:00 y las 00:05, Argentina leído desde Ciudad de México, reloj adelantado y
+  mañana rechazado; 1-1 de las 22:00 mirada al día siguiente (función y llamador real con la base simulada); llamada
+  de las 21:00 en punto; Closing con el navegador en Madrid y en Tokio. Control negativo de cada arreglo
+  (`control-negativo-fixpack-2.txt` en la evidencia). La suite pasa también con `TZ=Pacific/Auckland`.
+
+**Por qué / finalidad:** la segunda pasada de la revisión adversarial encontró un atajo en el diálogo de hitos (que
+corría un día un hito cargado a la medianoche de Auckland y dependía del reloj del navegador), el día de UTC de las
+llamadas en Fathom y una diferencia de zonas entre la fecha que se ve en Closing y el estado del lead.
+
+**Decisiones de diseño relevantes:** un dato de la organización (próximo paso, hito) tiene una sola zona, la de la
+org, para todos los miembros. Los contadores del servidor la necesitan, así que "cada uno ve su día" no cierra. Los
+instantes reales (llamadas) se leen sin la regla de medianoche UTC.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Siguen `[FECHAS-UTC-RESTO]` (sin Fathom) y `[CAMPO-FECHA-MIGRAR]`.
+
+---
+
+### 2026-10-05 · Fix-pack de la revisión adversarial de SCRUM-493: el próximo paso de Closing vence por día
+
+**Rama:** `fix/SCRUM-493-fechas-utc`
+**Commit(s):** `d0c628f2` (utilidad), `969cd5cf` (Closing), `a0d0d922` (hitos), `c81f0ca5` (Fathom) y este (docs)
+**Módulo(s) afectado(s):** Closing (`lib/sales/lead-thread.ts`, `app/sales/lead-actions.ts`, tabla, cajón y panel
+de seguimiento), Clientes (nuevo `lib/checkpoints/fecha-del-hito.ts`, diálogo de hito, recorrido de la ficha,
+revisión semanal), Fathom (`one-on-one-types.ts`, `one-on-ones.ts`, `deep-call-analysis.ts`), `lib/fechas/calendario.ts`
+y Finanzas (`payment-platforms-section.tsx`).
+
+**Qué se hizo:**
+- **MAYOR-1, estado del lead:** `buildLeadThread(intentos, ahora, zona)` compara `next_action_at` por día contra el hoy
+  de la organización (`fechaDeValorGuardado`, con la regla de medianoche UTC para las filas viejas del seguimiento).
+  Antes lo comparaba como instante y un paso que vencía hoy pasaba a "Seguimiento vencido" al mediodía. La zona se
+  lee una vez por pedido en `listLeadsTableAction` y `getLeadThreadAction`, y viaja en `LeadTableResult.timezone` para
+  que la tabla recalcule igual en el navegador. El cajón y el panel muestran sólo la fecha del paso.
+- **MENOR-1, fecha de un hito:** una sola convención para `reached_at` (`lib/checkpoints/fecha-del-hito.ts`). El
+  diálogo guarda el día a las 12:00 locales (hoy antes de las 12, cinco minutos antes de ahora, porque la action
+  rechaza un hito futuro); la revisión semanal lo lee en la zona de la org y la ficha en la del navegador. Las filas
+  del diálogo viejo (12:00:00.000 UTC exactas) se leen con su fecha de UTC, que en UTC+12 ya no se corre un día.
+- **MENOR-2:** `fechaVencida` y `diaLocal` sólo aceptan `YYYY-MM-DD`; un instante se convierte antes con
+  `fechaDeValorGuardado` o `aFechaDeInput`. Nuevo `formatearFechaGuardada`.
+- **MENOR-3:** el formato de la última transacción de una plataforma de pago usa `formatearFechaGuardada` y queda
+  debajo de los imports.
+- **MENOR-4, Fathom:** `computeOneOnOneStats(fechas, hoy)` recibe el hoy de la org (`computeOneOnOneRhythm` para la
+  tabla, que no lo necesita) y `formatDateLabel` guarda la fecha de la llamada en la zona de la org. Salen de
+  `[FECHAS-UTC-RESTO]`, donde queda sólo la primera y última 1-1 (día de UTC de cada llamada).
+- Tests nuevos: 4 casos del hilo del lead, 8 de `fecha-del-hito`, 4 de la utilidad, 2 de días desde la última 1-1 y 2
+  de la fecha de la llamada. Control negativo de cada arreglo en la evidencia.
+
+**Por qué / finalidad:** la revisión adversarial encontró el mismo síntoma de la HU ("lo que vence hoy aparece
+vencido") en el estado del lead de Closing, más cuatro detalles de la misma familia.
+
+**Decisiones de diseño relevantes:** el estado del lead usa la zona de la organización tanto en el servidor como al
+recalcular en la tabla; la fecha que se muestra (celda, cajón, panel) es la del navegador, que coincide con la de la
+org para quien está en esa zona o a menos de 11 horas. La regla de las 12:00:00.000 UTC exactas sólo aplica a
+`reached_at`, donde el diálogo viejo escribía así.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Siguen `[FECHAS-UTC-RESTO]` y `[CAMPO-FECHA-MIGRAR]`.
+
+---
+
+### 2026-10-04 · Fechas por defecto y vencimientos con el día local o de la organización, no el de UTC (SCRUM-493)
+
+**Rama:** `fix/SCRUM-493-fechas-utc`
+**Commit(s):** `942b88cb` (utilidad y `CampoFecha`), `433828c4` (Closing), `6d40761c` (Clientes), `e84fde89` (Operaciones),
+`e0a00f06` (Finanzas), `9b0a137f` (imports) y este (docs)
+**Módulo(s) afectado(s):** transversal. Nuevos `lib/fechas/calendario.ts`, `lib/fechas/organizacion.ts`,
+`lib/hooks/use-fecha-de-hoy-local.ts` y `components/shared/campo-fecha.tsx`; cambian Closing (modal de resultado,
+seguimiento del lead, tabla de leads), Clientes (tabla, tareas, revisión semanal, diálogos de alta, win, hito y
+baseline, alta desde onboarding), Workboard, Operaciones (inputs y reporte semanal, reporte ejecutivo semanal, tool
+del agente), Lanzamientos, Finanzas (plataformas de pago, filtro de facturación), Ventas (rango de métricas), Panel
+(gráfico de ingresos) e imports (Excel, ClickUp, GHL).
+
+**Qué se hizo:**
+- **Una sola fuente para las fechas calendario** (`lib/fechas/calendario.ts`): `fechaDeHoyLocal` (se mudó de
+  `lib/clients/payment-utils.ts`, sin re-export), `fechaDeHoyEnZona` y `fechaEnZona` con `Intl.DateTimeFormat` y
+  fallback a `America/Argentina/Buenos_Aires` si la zona es nula o no existe, `sumarDias` sobre el calendario (no lo
+  corre un cambio de horario de verano), `fechaVencida`, `aFechaDeInput` (lo guardado, `date` o `timestamptz`, como
+  `YYYY-MM-DD` sin correrlo de día) y `fechaAInstanteLocal` (una fecha elegida, guardada al mediodía local).
+- **Servidor:** `fechaDeHoyDeLaOrganizacion` lee `organizations.timezone` (sin default desde `20260831130000`, puede
+  ser null) con una consulta filtrada por el id de la org, una vez por pedido. La usan la revisión semanal, la semana
+  de Operaciones, el reporte ejecutivo semanal, `get_operations_summary`, Finanzas y los imports.
+- **`isOverdue(task, hoy)`** recibe el hoy como fecha calendario. En el navegador se arma con `useFechaDeHoyLocal`,
+  que da null en el render del servidor para no marcar "vencida" con el día de UTC en el HTML que se hidrata.
+- **`CampoFecha`:** `Input type="date"` que recibe lo guardado y emite la fecha elegida. Se usa en los 13 campos que
+  tenían el bug (11 archivos); los 14 restantes, que funcionan bien, quedan en `[CAMPO-FECHA-MIGRAR]`.
+- **Closing:** la fecha propuesta del próximo paso (`fechaPropuestaDelProximoPaso`) es hoy local más dos días en los
+  tres lugares; el seguimiento del lead guarda al mediodía local (antes a medianoche UTC, el día anterior a las 21 en
+  Argentina); la tabla de leads muestra y guarda lo mismo.
+- **Finanzas:** `rowToPaymentPlatform` ya no inventa el hoy de UTC; la última transacción se muestra con su día.
+- Tests nuevos: `lib/fechas` (2 archivos, 31 casos), `components/shared/__tests__/campo-fecha.test.ts` (7, primer
+  test de un componente: `vitest.config.ts` compila JSX con el runtime automático), `lib/hooks` (2), y casos en
+  `next-task`, `weekly-review`, `follow-up-options`, `weekly-utils`, `sync-contacts` de GHL, `derive-dashboard-data`
+  y los parsers de Excel. Todos arman el instante en UTC (las 22:00 de Argentina) y fijan la zona del proceso con
+  `conZona`, así fallan con el código viejo en cualquier máquina. Control negativo de cada arreglo en la evidencia.
+
+**Por qué / finalidad:** varias pantallas y procesos calculaban "hoy" con `toISOString().slice(0, 10)`, que es el día
+de UTC: después de las 21:00 en Argentina ya es mañana. Una fecha propuesta salía corrida un día, una tarea que vence
+hoy aparecía vencida, la tabla de leads podía mostrar y guardar otro día, los inputs del domingo a la noche caían en la
+semana siguiente y los imports daban de alta con fecha de mañana. Cierra `[OPS-SEMANA-UTC]`.
+
+**Decisiones de diseño relevantes:**
+- Una fecha elegida que va a una columna `timestamptz` (`next_action_at`) se guarda al mediodía local: es el punto
+  más lejos de los dos bordes del día. `aFechaDeInput` lee un instante a las 00:00:00 UTC exactas como una fecha sin
+  hora (así guarda Postgres un `YYYY-MM-DD` en `timestamptz`, y así lo guardaba el seguimiento del lead).
+- Sin defaults escondidos: `isOverdue`, `buildWeeklyReview`, `getCurrentWeekStart`, los parsers de Excel,
+  `newClientFromOnboarding` y `rowToPaymentPlatform` reciben el hoy de quien llama, para que nadie vuelva a usar el
+  reloj del proceso sin querer.
+- El tablero de Workboard ya calculaba bien (fin del día local); se pasó a la regla común igual, para que haya una.
+- Revisión completa de `apps/*` con la clasificación de cada lugar (bug del mismo tipo, instante correcto o fuera de
+  alcance) en la evidencia de SCRUM-493.
+
+**Riesgos / deuda técnica pendiente:** lo que se dejó afuera con motivo quedó en `[FECHAS-UTC-RESTO]` (ventanas de
+reportes y de anuncios, fecha límite de hitos, fechas de Fathom, fecha importada de ClickUp), `[EMBUDOS-TIMEZONE]` y
+`[FIN-MESES-UTC]`/`[AUD-CONF-10]`. Los campos de fecha que funcionan bien se migran a `CampoFecha` al tocar cada
+pantalla (`[CAMPO-FECHA-MIGRAR]`). Falta verlo en el navegador de noche: bloque `V-INFRA-14` de `docs/operacion/verificacion-manual.md`.
+
+---
+
 ### 2026-10-04 — La cola del cron de métricas ya no se traba ni se diluye con piezas sin dato (SCRUM-172, reabierta)
 
 **Rama:** `fix/SCRUM-172-cola-de-metricas`

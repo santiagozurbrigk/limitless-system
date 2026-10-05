@@ -3,6 +3,7 @@
 import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { createClient } from "@/lib/supabase/server";
 import { parseClientsExcel, type ColumnMapping, type ClientImportRow } from "@/lib/clients/excel-parser";
@@ -171,7 +172,8 @@ export async function importClientsFromExcelAction(
     const supabase = await createClient();
 
     const buffer = Buffer.from(fileBase64, "base64");
-    const { rows, errors } = parseClientsExcel(buffer, columnMapping, sheetName);
+    const hoy = await fechaDeHoyDeLaOrganizacion(supabase, organizationId);
+    const { rows, errors } = parseClientsExcel(buffer, hoy, columnMapping, sheetName);
 
     if (!rows.length) {
       return { inserted: 0, skipped: 0, errors: errors.length ? errors : [{ row: 0, message: "El archivo no contiene clientes para importar." }] };
@@ -212,7 +214,6 @@ export async function importClientsFromExcelAction(
       installmentSystems: p.installment_systems ?? [],
     }));
 
-    const today = new Date().toISOString().split("T")[0];
     const insertPayload = toInsert.map((row: ClientImportRow) => {
       // Intentar match automático del producto con un plan existente
       const matchedPlan = row.product ? matchPlanByName(row.product, plans) : null;
@@ -222,7 +223,7 @@ export async function importClientsFromExcelAction(
       return {
         organization_id:              organizationId,
         name:                         row.name,
-        join_date:                    row.joinDate || today,
+        join_date:                    row.joinDate || hoy,
         payment_type:                 "upfront" as const,
         platform:                     "other" as const,
         total_amount:                 row.totalAmount ?? 0,
@@ -325,7 +326,8 @@ export async function importSalesMetricsFromExcelAction(
     const supabase = await createClient();
 
     const buffer = Buffer.from(fileBase64, "base64");
-    const { rows, errors } = parseSalesMetricsExcel(buffer, columnMapping, sheetName);
+    const hoy = await fechaDeHoyDeLaOrganizacion(supabase, organizationId);
+    const { rows, errors } = parseSalesMetricsExcel(buffer, hoy, columnMapping, sheetName);
 
     if (!rows.length) {
       return {
@@ -370,7 +372,8 @@ export async function importFinanceMetricsFromExcelAction(
     const supabase = await createClient();
 
     const buffer = Buffer.from(fileBase64, "base64");
-    const { rows, errors } = parseFinanceMetricsExcel(buffer, columnMapping, sheetName);
+    const hoy = await fechaDeHoyDeLaOrganizacion(supabase, organizationId);
+    const { rows, errors } = parseFinanceMetricsExcel(buffer, hoy, columnMapping, sheetName);
 
     if (!rows.length) {
       return {
@@ -416,7 +419,8 @@ export async function importSalesMetricsTransposedAction(
     const supabase = await createClient();
 
     const buffer = Buffer.from(fileBase64, "base64");
-    const { rows, errors } = parseSalesMetricsTransposed(buffer, rowMapping, sheetName);
+    const hoy = await fechaDeHoyDeLaOrganizacion(supabase, organizationId);
+    const { rows, errors } = parseSalesMetricsTransposed(buffer, hoy, rowMapping, sheetName);
 
     if (!rows.length) {
       return {
@@ -462,7 +466,8 @@ export async function importFinanceMetricsTransposedAction(
     const supabase = await createClient();
 
     const buffer = Buffer.from(fileBase64, "base64");
-    const { rows, errors } = parseFinanceMetricsTransposed(buffer, rowMapping, sheetName);
+    const hoy = await fechaDeHoyDeLaOrganizacion(supabase, organizationId);
+    const { rows, errors } = parseFinanceMetricsTransposed(buffer, hoy, rowMapping, sheetName);
 
     if (!rows.length) {
       return {

@@ -21,6 +21,7 @@ import {
   type TeamCompensationRow,
 } from "@/lib/expenses/mapper";
 import { createClient } from "@/lib/supabase/server";
+import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { listOrganizationPaymentsAction } from "@/app/sales/payment-actions";
 import { matchesCloser } from "@/lib/metrics/match-closer";
@@ -54,9 +55,14 @@ async function requireFounderRole(): Promise<void> {
   }
 }
 
+/**
+ * Lo recibido por cada plataforma y su última transacción. Sin transacciones,
+ * la última es `hoy`, el de la organización.
+ */
 function paymentPlatformTotals(
   platforms: PaymentPlatformRow[],
-  payments: Awaited<ReturnType<typeof listOrganizationPaymentsAction>>
+  payments: Awaited<ReturnType<typeof listOrganizationPaymentsAction>>,
+  hoy: string
 ): PaymentPlatformConfig[] {
   const byPlatform = new Map<string, { total: number; lastAt: string }>();
 
@@ -75,8 +81,7 @@ function paymentPlatformTotals(
     const totals = byPlatform.get(row.id);
     return rowToPaymentPlatform(row, {
       totalReceived: totals?.total ?? 0,
-      lastTransactionAt:
-        totals?.lastAt || new Date().toISOString().slice(0, 10),
+      lastTransactionAt: totals?.lastAt || hoy,
     });
   });
 }
@@ -109,7 +114,7 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
 
     const payments = await listOrganizationPaymentsAction();
 
-  const [fixedRes, subsRes, teamRes, platRes] = await Promise.all([
+  const [fixedRes, subsRes, teamRes, platRes, hoy] = await Promise.all([
     supabase
       .from("fixed_expenses")
       .select("*")
@@ -131,6 +136,7 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
       .select("*")
       .eq("organization_id", organizationId)
       .order("name"),
+    fechaDeHoyDeLaOrganizacion(supabase, organizationId),
   ]);
 
   const err =
@@ -152,7 +158,8 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
       ),
       paymentPlatforms: paymentPlatformTotals(
         (platRes.data ?? []) as PaymentPlatformRow[],
-        payments
+        payments,
+        hoy
       ),
     };
   } catch (e) {
@@ -409,7 +416,11 @@ export async function createPaymentPlatformAction(
       .single();
 
     if (error || !data) throw new Error(mapFinanceError(error?.message ?? "Error"));
-    return rowToPaymentPlatform(data as PaymentPlatformRow);
+    // Una plataforma recién creada no tiene transacciones: la última es hoy.
+    return rowToPaymentPlatform(data as PaymentPlatformRow, {
+      totalReceived: 0,
+      lastTransactionAt: await fechaDeHoyDeLaOrganizacion(supabase, organizationId),
+    });
   });
 }
 
@@ -436,8 +447,11 @@ export async function updatePaymentPlatformAction(
       .single();
 
     if (error || !data) throw new Error(mapFinanceError(error?.message ?? "Error"));
-    const payments = await listOrganizationPaymentsAction();
-    return paymentPlatformTotals([data as PaymentPlatformRow], payments)[0];
+    const [payments, hoy] = await Promise.all([
+      listOrganizationPaymentsAction(),
+      fechaDeHoyDeLaOrganizacion(supabase, organizationId),
+    ]);
+    return paymentPlatformTotals([data as PaymentPlatformRow], payments, hoy)[0];
   });
 }
 

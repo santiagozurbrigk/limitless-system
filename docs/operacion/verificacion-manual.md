@@ -19,7 +19,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 11 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | 12 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | 8 |
-| [Infraestructura](#infraestructura) | 13 |
+| [Infraestructura](#infraestructura) | 14 |
 
 ---
 
@@ -1178,6 +1178,19 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 1. Integraciones → "Sincronizar mis llamadas" con ese miembro.
 
 **Resultado esperado:** sincroniza sin error. Si dice que no se puede leer la credencial, el miembro reconecta su key (la nueva se guarda cifrada) y se anota acá.
+
+### V-INFRA-14 · Fechas de noche con la hora de Argentina ⭐ · SCRUM-493
+
+**Prerrequisitos:** preview o producción, una org con zona `America/Argentina/Buenos_Aires` (Ajustes), probar entre las 21:00 y las 23:59 de Argentina (o con el reloj de la computadora en esa franja y esa zona).
+
+1. Closing: marcar una llamada como "no cerró" y elegir un próximo paso con fecha. Resultado: propone pasado mañana contando desde hoy, no un día más.
+2. Seguimiento del lead: guardar un próximo paso con fecha. En la tabla de leads la celda muestra la misma fecha; cambiarla, recargar y ver que quedó la elegida.
+3. Clientes: una tarea que vence hoy no aparece en rojo en la columna «Próxima tarea», en la ficha ni en el tablero de Workboard; una de ayer sí.
+4. Revisión semanal (`/clients/revision`): un cliente con una cuota pendiente que vence hoy no figura con "pago atrasado".
+5. Operaciones → Inputs semanales, un domingo a la noche: la semana que muestra es la que termina ese domingo.
+6. Nuevo cliente, nuevo win, registrar hito, nuevo sprint y métrica de un lanzamiento: la fecha que aparece cargada es la de hoy.
+
+**Resultado esperado:** en todos los pasos el día es el de Argentina. Si alguno muestra el día siguiente, anotar la pantalla y abrir el ítem en `PENDIENTES.md`.
 
 ## Escondido para el release de octubre (SCRUM-490)
 

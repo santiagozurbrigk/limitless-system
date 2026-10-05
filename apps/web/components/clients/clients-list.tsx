@@ -73,6 +73,7 @@ import {
 import { ACCION_DE_FILA } from "@/components/clients/ficha-section";
 import { FilterPills } from "@/components/marketing/filter-pills";
 import { isOverdue } from "@/lib/clients/next-task";
+import { useHoyDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import {
   formatPeriodShort,
   formatRevenue,
@@ -865,11 +866,13 @@ function NextTaskCell({
   canCheck: boolean;
   onCheck: () => void;
 }) {
+  const hoy = useHoyDeLaOrganizacion();
+
   if (!task) {
     return <span className="text-xs text-muted-foreground">Sin tareas</span>;
   }
 
-  const vencida = isOverdue(task);
+  const vencida = hoy !== null && isOverdue(task, hoy);
 
   return (
     <div className="flex min-w-[170px] items-start gap-2">

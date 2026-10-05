@@ -6,6 +6,8 @@ import {
 } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import {
   getTeamAverageEvolution,
   mockCallAnalyses,
@@ -37,14 +39,20 @@ function mockCloserEvolutionForName(closerName: string): number[] {
   return mockCloserEvolution[key] ?? mockCloserEvolution.carlos;
 }
 
+/**
+ * El promedio del equipo por día. El día de cada llamada es el de la zona de la
+ * organización (`zona`): con el de UTC, una llamada de las 22:00 en Argentina
+ * se sumaba al día siguiente (SCRUM-493).
+ */
 function aggregateTeamAverageByDate(
-  rows: Array<{ overall_score: number | null; call_date?: string | null }>
+  rows: Array<{ overall_score: number | null; call_date?: string | null }>,
+  zona: string | null
 ): number[] {
   const byDate = new Map<string, number[]>();
 
   for (const row of rows) {
     if (row.overall_score == null) continue;
-    const date = row.call_date?.slice(0, 10) ?? "unknown";
+    const date = fechaDeInstanteEnZona(row.call_date, zona) || "unknown";
     const bucket = byDate.get(date) ?? [];
     bucket.push(row.overall_score);
     byDate.set(date, bucket);
@@ -191,12 +199,15 @@ export async function getTeamAverageEvolutionAction(): Promise<number[]> {
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("call_analyses")
-    .select("overall_score, call_date")
-    .eq("organization_id", organizationId)
-    .order("call_date", { ascending: true })
-    .limit(200);
+  const [{ data, error }, zona] = await Promise.all([
+    supabase
+      .from("call_analyses")
+      .select("overall_score, call_date")
+      .eq("organization_id", organizationId)
+      .order("call_date", { ascending: true })
+      .limit(200),
+    leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
+  ]);
 
   if (error) {
     if (isMissingTableError(error.message)) return [];
@@ -206,7 +217,7 @@ export async function getTeamAverageEvolutionAction(): Promise<number[]> {
 
   if (!data?.length) return [];
 
-  return aggregateTeamAverageByDate(data);
+  return aggregateTeamAverageByDate(data, zona);
 }
 
 /** Expuesto para validar mocks en desarrollo */

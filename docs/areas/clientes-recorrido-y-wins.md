@@ -150,6 +150,17 @@ Ficha: acceptCheckpointProposalAction → recordCheckpointAction (mismas validac
 - **`used`/`unused` se derivan de `win_usages`**; sólo `reserved` se declara.
 - **Revisión semanal:** «en riesgo» exige **dos** señales de tres (trabado, ≥30 días sin win ni hito, cuota vencida en
   `clients.installments`). Un cliente sin dato para una lista no aparece en ella; no se inventa el motivo.
+- **El "hoy" de la revisión semanal es el de la organización** (`organizations.timezone`, una consulta por pedido):
+  una cuota que vence hoy no es pago atrasado y la fecha de cada hito se cuenta en esa zona (SCRUM-493).
+- **La fecha de un hito (`reached_at`) tiene una sola convención, en la zona de la organización**
+  (`lib/checkpoints/fecha-del-hito.ts`): el diálogo guarda el día elegido a las 12:00 de la zona de la org, la ficha
+  y la revisión semanal lo leen en esa zona (en el cliente, `useZonaDeLaOrganizacion()`), y la action rechaza un
+  hito **de un día futuro** en esa zona (`hitoEsFuturo`), no por instante: un hito de hoy se acepta a cualquier hora.
+  Las filas del diálogo viejo (12:00:00.000 UTC exactas) se leen con su fecha de UTC, así no se corren en UTC+12.
+- **"Vence el" y "trabado hace N días" se cuentan en días calendario de la zona de la org** (`lib/checkpoints/stalled.ts`):
+  el día del hito anterior más el plazo es el día del vencimiento, y el atraso son los días desde ahí hasta hoy.
+- **Los "hoy" de la ficha son los de la org** (`useHoyDeLaOrganizacion()`): valor por defecto y tope del win, del hito
+  y del baseline, "vencida" de las tareas y la fecha de la 1-1 de la que salió cada tarea, para todos los miembros.
 - **Fechas `YYYY-MM-DD` se formatean partiendo el string**, no con `new Date()`: en UTC-3 se corre un día.
 
 ## Limitaciones conocidas y deuda
@@ -174,9 +185,9 @@ Vitest, lógica pura (entorno `node`):
 | Carpeta | Archivos | Casos aprox. |
 |---|---|---|
 | `lib/custom-fields/__tests__/` | key, validate, merge, resolve, format, date-alert, onboarding-config | ~85 |
-| `lib/checkpoints/__tests__/` | journey, progress, stalled, effective-stage, metric-schema, match-proposal | ~94 |
+| `lib/checkpoints/__tests__/` | journey, progress, stalled, effective-stage, metric-schema, match-proposal, fecha-del-hito | ~104 |
 | `lib/wins/__tests__/` | derive-case, consent | ~34 |
-| `lib/clients/__tests__/weekly-review.test.ts` | revisión semanal | ~22 |
+| `lib/clients/__tests__/weekly-review.test.ts` | revisión semanal, incluido el hoy de la organización | ~24 |
 
 No cubierto: server actions (upsert de eventos, `applyClientStatus`, aceptar propuesta), `propose-from-texts.ts` (IO),
 `usage-state.ts`, flujo de capturas, ninguna pantalla (sin Playwright).

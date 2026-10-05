@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { conZona, restaurarZona } from "@/lib/fechas/__tests__/zona";
+import { fechaAInstanteEnZona, fechaDeValorGuardado } from "@/lib/fechas/calendario";
 import {
   BUILT_IN_CATALOG,
+  DIAS_HASTA_EL_PROXIMO_PASO,
+  fechaPropuestaDelProximoPaso,
   buildFollowUpCatalog,
   closesThread,
   closingActionSlugs,
@@ -125,5 +129,53 @@ describe("el slug que sale de lo que escribe el usuario", () => {
     const slug = slugifyOptionLabel("🔥");
     expect(slug).not.toBe("");
     expect(slug.startsWith("valor_")).toBe(true);
+  });
+});
+
+/**
+ * SCRUM-493: la fecha que proponen el modal de resultado de la llamada, el
+ * seguimiento del lead y la tabla de leads. A las 22:00 de Argentina UTC ya es
+ * el día siguiente: con `toISOString()` la propuesta salía un día corrida.
+ */
+describe("⭐ fecha propuesta del próximo paso", () => {
+  /** 1-oct-2026, 22:00 en Buenos Aires = 2-oct, 01:00 UTC. */
+  const lasVeintidos = new Date("2026-10-02T01:00:00Z");
+  const argentina = "America/Argentina/Buenos_Aires";
+
+  afterEach(restaurarZona);
+
+  it("a las 22:00 de Argentina es ese día más los días del paso, en cualquier navegador", () => {
+    expect(DIAS_HASTA_EL_PROXIMO_PASO).toBe(2);
+    for (const zonaDelNavegador of [argentina, "UTC", "Europe/Madrid", "Asia/Tokyo"]) {
+      conZona(zonaDelNavegador);
+      expect(fechaPropuestaDelProximoPaso(argentina, lasVeintidos), zonaDelNavegador).toBe(
+        "2026-10-03"
+      );
+    }
+  });
+
+  it("cruza fin de mes y de año", () => {
+    conZona("UTC");
+    // 30-dic 22:00 en Buenos Aires = 31-dic 01:00 UTC.
+    expect(fechaPropuestaDelProximoPaso(argentina, new Date("2026-12-31T01:00:00Z"))).toBe(
+      "2027-01-01"
+    );
+    // 30-sep 23:30 en Buenos Aires = 1-oct 02:30 UTC.
+    expect(fechaPropuestaDelProximoPaso(argentina, new Date("2026-10-01T02:30:00Z"))).toBe(
+      "2026-10-02"
+    );
+  });
+
+  it("organización sin zona: la de por defecto", () => {
+    conZona("UTC");
+    expect(fechaPropuestaDelProximoPaso(null, lasVeintidos)).toBe("2026-10-03");
+  });
+
+  it("guardada como timestamptz, la tabla de leads la muestra igual", () => {
+    conZona("Asia/Tokyo");
+    const propuesta = fechaPropuestaDelProximoPaso(argentina, lasVeintidos);
+    expect(fechaDeValorGuardado(fechaAInstanteEnZona(propuesta, argentina), argentina)).toBe(
+      propuesta
+    );
   });
 });

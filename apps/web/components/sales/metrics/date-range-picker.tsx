@@ -1,19 +1,30 @@
 "use client";
 
-import { CalendarDays, ChevronDown } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { cn } from "@ai-coo/ui";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import {
+  diasDelRango,
+  PRESETS_DE_RANGO,
+  rangoDeDias,
+  rangoDelPreset,
+  rangoPorDefecto,
+  type DateRange,
+} from "@/lib/sales/rango-de-metricas";
+import {
+  useHoyDeLaOrganizacion,
+  useZonaDeLaOrganizacion,
+} from "@/providers/zona-de-la-organizacion-provider";
 
-export interface DateRange {
-  from: Date;
-  to: Date;
-}
+/** Las clases para que `CampoFecha` quede sin caja propia dentro del recuadro del rango. */
+const CLASE_CAMPO =
+  "h-auto w-auto rounded-none border-0 bg-transparent p-0 text-sm tabular-nums shadow-none outline-none focus-visible:ring-0 dark:bg-transparent";
 
-/** Retorna el rango "este mes" (día 1 hasta hoy) como valor inicial */
-export function getDefaultDateRange(): DateRange {
-  const from = new Date();
-  from.setDate(1);
-  from.setHours(0, 0, 0, 0);
-  return { from, to: new Date() };
+export type { DateRange };
+
+/** El rango "este mes" (del día 1 a hoy) en la zona de la organización, como valor inicial. */
+export function getDefaultDateRange(zona: string | null): DateRange {
+  return rangoPorDefecto(zona);
 }
 
 interface DateRangePickerProps {
@@ -28,42 +39,41 @@ interface DateRangePickerProps {
  * Usa inputs nativos del browser — sin dependencias externas.
  */
 export function DateRangePicker({ value, onChange, className }: DateRangePickerProps) {
-  const toInputValue = (d: Date) => d.toISOString().split("T")[0];
+  // El rango se elige, se muestra y se filtra en días de la zona de la
+  // organización (`lib/sales/rango-de-metricas.ts`): "desde" empieza a las
+  // 00:00 de la org y "hasta" termina a las 23:59:59.999 de la org (SCRUM-493).
+  const zona = useZonaDeLaOrganizacion();
+  const { desde, hasta } = diasDelRango(value, zona);
 
-  const handleFrom = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const from = new Date(e.target.value + "T00:00:00");
-    if (!Number.isNaN(from.getTime()) && from <= value.to) {
-      onChange({ ...value, from });
-    }
+  const handleFrom = (fecha: string | null) => {
+    if (!fecha || fecha > hasta) return;
+    onChange(rangoDeDias(fecha, hasta, zona));
   };
 
-  const handleTo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const to = new Date(e.target.value + "T23:59:59");
-    if (!Number.isNaN(to.getTime()) && to >= value.from) {
-      onChange({ ...value, to });
-    }
+  const handleTo = (fecha: string | null) => {
+    if (!fecha || fecha < desde) return;
+    onChange(rangoDeDias(desde, fecha, zona));
   };
 
-  const today = toInputValue(new Date());
+  // El tope es el hoy de la org; `null` en el render del servidor (sin tope).
+  const today = useHoyDeLaOrganizacion() ?? undefined;
 
   return (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
       <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 shadow-sm">
         <CalendarDays size={13} className="shrink-0 text-muted-foreground" />
-        <input
-          type="date"
-          value={toInputValue(value.from)}
+        <CampoFecha
+          value={desde}
           max={today}
           onChange={handleFrom}
-          className="bg-transparent text-sm tabular-nums outline-none"
+          className={CLASE_CAMPO}
         />
         <span className="text-muted-foreground">—</span>
-        <input
-          type="date"
-          value={toInputValue(value.to)}
+        <CampoFecha
+          value={hasta}
           max={today}
           onChange={handleTo}
-          className="bg-transparent text-sm tabular-nums outline-none"
+          className={CLASE_CAMPO}
         />
       </div>
 
@@ -75,36 +85,6 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
 
 // ─── Presets rápidos ─────────────────────────────────────────────────────────
 
-const PRESETS = [
-  {
-    label: "Este mes",
-    range: (): DateRange => {
-      const from = new Date();
-      from.setDate(1);
-      from.setHours(0, 0, 0, 0);
-      return { from, to: new Date() };
-    },
-  },
-  {
-    label: "Últimos 30 d",
-    range: (): DateRange => {
-      const from = new Date();
-      from.setDate(from.getDate() - 30);
-      from.setHours(0, 0, 0, 0);
-      return { from, to: new Date() };
-    },
-  },
-  {
-    label: "Últimos 90 d",
-    range: (): DateRange => {
-      const from = new Date();
-      from.setDate(from.getDate() - 90);
-      from.setHours(0, 0, 0, 0);
-      return { from, to: new Date() };
-    },
-  },
-] as const;
-
 function QuickPresets({
   value,
   onChange,
@@ -112,21 +92,20 @@ function QuickPresets({
   value: DateRange;
   onChange: (r: DateRange) => void;
 }) {
-  const isActive = (preset: (typeof PRESETS)[number]) => {
-    const r = preset.range();
-    return (
-      r.from.toDateString() === value.from.toDateString() &&
-      r.to.toDateString() === value.to.toDateString()
-    );
+  const zona = useZonaDeLaOrganizacion();
+  const actual = diasDelRango(value, zona);
+  const isActive = (preset: (typeof PRESETS_DE_RANGO)[number]) => {
+    const r = diasDelRango(rangoDelPreset(preset, zona), zona);
+    return r.desde === actual.desde && r.hasta === actual.hasta;
   };
 
   return (
     <div className="flex gap-1 rounded-lg border border-border bg-muted/30 p-0.5">
-      {PRESETS.map((p) => (
+      {PRESETS_DE_RANGO.map((p) => (
         <button
           key={p.label}
           type="button"
-          onClick={() => onChange(p.range())}
+          onClick={() => onChange(rangoDelPreset(p, zona))}
           className={cn(
             "rounded-md px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
             isActive(p)

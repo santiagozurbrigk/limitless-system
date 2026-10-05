@@ -1,21 +1,5 @@
 import type { ClosePaymentPayload } from "@/types/closing";
 
-/**
- * La fecha de hoy (YYYY-MM-DD) en la zona horaria de quien registra el pago.
- * `toISOString()` da la de UTC: de noche en Argentina ya es el día siguiente
- * y el pago quedaba registrado con fecha de mañana (SCRUM-104).
- *
- * Sólo tiene sentido en el navegador: en el servidor (Vercel, UTC) daría la
- * fecha de UTC. Si una server action necesita "hoy", que lo reciba armado
- * desde el cliente.
- */
-export function fechaDeHoyLocal(ahora: Date = new Date()): string {
-  const y = ahora.getFullYear();
-  const m = String(ahora.getMonth() + 1).padStart(2, "0");
-  const d = String(ahora.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 export function getPaidAmountFromClosePayload(payment: ClosePaymentPayload): number {
   if (payment.paidAmount > 0) return payment.paidAmount;
   if (payment.paymentType === "upfront") return payment.totalAmount ?? 0;
@@ -29,12 +13,21 @@ export function getPaidAmountFromClosePayload(payment: ClosePaymentPayload): num
   return payment.upfrontAmount ?? 0;
 }
 
-export function getPaymentDateFromClosePayload(payment: ClosePaymentPayload): string {
+/**
+ * La fecha del pago que se registra. Sin fecha en el payload, `hoy`: el de la
+ * zona de la organización (`fechaDeHoyEnZona`), que arma quien llama. Antes
+ * era el del navegador (SCRUM-104); para quien está en la zona de la org da lo
+ * mismo, y así coincide para todos los miembros (SCRUM-493).
+ */
+export function getPaymentDateFromClosePayload(
+  payment: ClosePaymentPayload,
+  hoy: string
+): string {
   if (payment.paymentDate) return payment.paymentDate;
   if (payment.paymentType === "installments" && payment.firstInstallmentDate) {
     return payment.firstInstallmentDate;
   }
-  return fechaDeHoyLocal();
+  return hoy;
 }
 
 export function installmentNumberForClosePayload(

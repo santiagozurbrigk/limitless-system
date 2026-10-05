@@ -5,7 +5,7 @@
 | Archivo | Uso |
 |--------|-----|
 | `index.ts` | Solo exports **sin** `"use client"`. ESLint prohíbe importarlo (`@/components/shared`) en todo `apps/web`: usá el import directo por archivo. |
-| `client.ts` | Solo exports con `"use client"` (`ModuleSubnav`, `HashTabLink`, `ToastViewport`). |
+| `client.ts` | Solo exports con `"use client"` (`ModuleSubnav`, `HashTabLink`, `ToastViewport`, `CampoFecha`). |
 | `@/components/shared/<archivo>` | Forma **recomendada** en componentes `"use client"`. |
 
 **Nunca** exportes un componente `"use client"` desde `index.ts`. Rompe el manifest de React Server Components y provoca:
@@ -23,3 +23,14 @@ En App Router, `<Link href="/ruta#tab">` en la **misma** ruta no dispara `hashch
 - `ModuleSubnav` (ya lo gestiona), o
 - `HashTabLink` desde `@/components/shared/client`, o
 - `pushHashTab(href)` en un `onClick` con `preventDefault`.
+
+## Campo de fecha (`CampoFecha`)
+
+Todo campo de fecha nuevo usa `CampoFecha` (`campo-fecha.tsx`), no un `<input type="date">` suelto. Recibe lo
+guardado tal como viene de la base (fecha `YYYY-MM-DD` de una columna `date` o instante de una `timestamptz`) y lo
+muestra con el día que se eligió, leído en la zona de la organización (`ZonaDeLaOrganizacionProvider`): todos los
+miembros ven el mismo día. `onChange` emite la fecha elegida (`YYYY-MM-DD`) o `null`. Si va a una columna
+`timestamptz`, guardala con `fechaAInstanteEnZona` en la zona de la organización (`lib/fechas/calendario.ts`). Los
+valores por defecto y el `max` salen de `useHoyDeLaOrganizacion()`, nunca del hoy del navegador. Acepta las props
+de `Input`; `zona` sólo se pasa para leer en otra zona.
+Los campos viejos se migran al tocar su pantalla (`[CAMPO-FECHA-MIGRAR]` en `PENDIENTES.md`).

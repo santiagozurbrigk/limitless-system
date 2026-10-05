@@ -12,7 +12,10 @@
  * acompañamiento el día que se firmó el contrato.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fechaDeHoyEnZona, fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import {
+  computeOneOnOneRhythm,
   computeOneOnOneStats,
   type LastOneOnOne,
   type OneOnOneStats,
@@ -32,14 +35,19 @@ export async function loadLastOneOnOneByClient(
 ): Promise<Record<string, LastOneOnOne>> {
   const admin = createAdminClient();
 
-  const { data, error } = await admin
-    .from("fathom_calls")
-    .select("client_id, call_date, resolution_method, title, fathom_url")
-    .eq("organization_id", organizationId)
-    .eq("purpose", "delivery")
-    .not("client_id", "is", null)
-    .not("call_date", "is", null)
-    .order("call_date", { ascending: false });
+  // El día de cada llamada es el de la zona de la organización (SCRUM-493): una
+  // lectura de la zona por pedido, no por cliente.
+  const [{ data, error }, zona] = await Promise.all([
+    admin
+      .from("fathom_calls")
+      .select("client_id, call_date, resolution_method, title, fathom_url")
+      .eq("organization_id", organizationId)
+      .eq("purpose", "delivery")
+      .not("client_id", "is", null)
+      .not("call_date", "is", null)
+      .order("call_date", { ascending: false }),
+    leerZonaHorariaDeLaOrganizacion(admin, organizationId),
+  ]);
 
   if (error) {
     // Sin esta columna la tabla muestra un guion. No se rompe la pantalla
@@ -66,7 +74,7 @@ export async function loadLastOneOnOneByClient(
     // Vienen ordenadas: la primera de cada cliente es la más reciente.
     if (result[row.client_id]) continue;
     result[row.client_id] = {
-      date: row.call_date.slice(0, 10),
+      date: fechaDeInstanteEnZona(row.call_date, zona),
       resolutionMethod: row.resolution_method,
       title: row.title,
       fathomUrl: row.fathom_url,
@@ -77,7 +85,7 @@ export async function loadLastOneOnOneByClient(
   }
 
   for (const [clientId, fechas] of Object.entries(fechasPorCliente)) {
-    const stats = computeOneOnOneStats(fechas);
+    const stats = computeOneOnOneRhythm(fechas, zona);
     const entrada = result[clientId];
     if (!entrada) continue;
     entrada.totalCalls = stats.totalCalls;
@@ -93,10 +101,16 @@ export async function loadLastOneOnOneByClient(
  * Trae sólo las fechas: el listado completo de las llamadas lo carga aparte la
  * sección que las muestra, y traerlas dos veces sería pagar el transcript de
  * cada una para contar filas.
+ *
+ * `zona` es la de la organización (`leerZonaHorariaDeLaOrganizacion`, null = la
+ * de por defecto): "hace cuántos días" se cuenta con el día de cada llamada y el
+ * de hoy en esa zona, no con los de UTC del servidor (SCRUM-493). La lee quien
+ * llama, una vez por pedido, y la reusa para el resto de la pantalla.
  */
 export async function loadClientOneOnOneStats(
   organizationId: string,
-  clientId: string
+  clientId: string,
+  zona: string | null
 ): Promise<OneOnOneStats> {
   const admin = createAdminClient();
 
@@ -107,13 +121,16 @@ export async function loadClientOneOnOneStats(
     .eq("client_id", clientId)
     .eq("purpose", "delivery")
     .not("call_date", "is", null);
+  const hoy = fechaDeHoyEnZona(zona);
 
   if (error) {
     console.error("[fathom:one-on-ones] stats", error.message);
-    return computeOneOnOneStats([]);
+    return computeOneOnOneStats([], hoy, zona);
   }
 
   return computeOneOnOneStats(
-    ((data ?? []) as { call_date: string }[]).map((row) => row.call_date)
+    ((data ?? []) as { call_date: string }[]).map((row) => row.call_date),
+    hoy,
+    zona
   );
 }

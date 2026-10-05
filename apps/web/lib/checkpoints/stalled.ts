@@ -16,9 +16,9 @@ import type {
   JourneyStageWithCheckpoints,
 } from "@/types/checkpoints";
 import { buildClientProgress } from "@/lib/checkpoints/progress";
+import { fechaDelHitoEnZona } from "@/lib/checkpoints/fecha-del-hito";
+import { diasEntre, fechaEnZona, sumarDias } from "@/lib/fechas/calendario";
 import type { CheckpointEvent } from "@/types/checkpoints";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * El estado del recorrido de un cliente.
@@ -36,11 +36,19 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * El caso 3 es el límite consciente del diseño: un cliente que compró y nunca
  * arrancó **no aparece como trabado** hasta que se registre su primer hito.
  * Anclarlo a la fecha de alta sería otra decisión, no una corrección.
+ *
+ * ⭐ Los días se cuentan como **días calendario en la zona de la organización**
+ * (`zona`; null = la de por defecto): el día del hito anterior más el plazo es
+ * el día en que vence, y el atraso son los días que pasaron desde ahí hasta
+ * hoy. Antes se contaban bloques de 24 horas y la fecha límite se cortaba en
+ * UTC, así que un hito registrado de noche en Argentina corría un día el
+ * "vence el" (SCRUM-493). Sin default de zona a propósito.
  */
 export function deriveClientJourneyStatus(
   clientId: string,
   progress: readonly CheckpointWithEvent[],
-  now: Date = new Date()
+  now: Date,
+  zona: string | null
 ): ClientJourneyStatus {
   const total = progress.length;
   const reached = progress.filter((entry) => entry.event !== null).length;
@@ -112,11 +120,8 @@ export function deriveClientJourneyStatus(
   const previous = nextIndex > 0 ? progress[nextIndex - 1] : null;
   if (!previous || previous.event === null) return withNext;
 
-  const anchor = new Date(previous.event.reachedAt).getTime();
-  if (Number.isNaN(anchor)) return withNext;
-
-  const elapsedDays = Math.floor((now.getTime() - anchor) / DAY_MS);
-  const overdueDays = elapsedDays - next.checkpoint.expectedDays;
+  const anchorDay = fechaDelHitoEnZona(previous.event.reachedAt, zona);
+  if (!anchorDay) return withNext;
 
   /**
    * La fecha límite es el mismo cálculo que el atraso, mirado al revés: el hito
@@ -128,11 +133,12 @@ export function deriveClientJourneyStatus(
    * horas: decir "vence el 12 a las 14:32" fingiría una precisión que el dato
    * no tiene.
    */
-  const dueAt = new Date(anchor + next.checkpoint.expectedDays * DAY_MS);
+  const dueDay = sumarDias(anchorDay, next.checkpoint.expectedDays);
+  const overdueDays = diasEntre(dueDay, fechaEnZona(now, zona));
 
   return {
     ...withNext,
-    nextCheckpointDueAt: dueAt.toISOString().slice(0, 10),
+    nextCheckpointDueAt: dueDay,
     overdueDays,
     stalled: overdueDays > 0,
   };
@@ -148,14 +154,16 @@ export function deriveJourneyStatuses(
   stages: readonly JourneyStageWithCheckpoints[],
   eventsByClient: ReadonlyMap<string, readonly CheckpointEvent[]>,
   clientIds: readonly string[],
-  now: Date = new Date()
+  now: Date,
+  /** La zona de la organización (null = la de por defecto). */
+  zona: string | null
 ): Map<string, ClientJourneyStatus> {
   const result = new Map<string, ClientJourneyStatus>();
 
   for (const clientId of clientIds) {
     const events = eventsByClient.get(clientId) ?? [];
     const progress = buildClientProgress(stages, events);
-    result.set(clientId, deriveClientJourneyStatus(clientId, progress, now));
+    result.set(clientId, deriveClientJourneyStatus(clientId, progress, now, zona));
   }
 
   return result;

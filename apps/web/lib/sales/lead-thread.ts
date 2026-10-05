@@ -1,6 +1,7 @@
 import type { ClosingCallStatus } from "@/types/closing";
 import { callIsSale, needsDisposition } from "@/lib/closing/call-status";
 import { BUILT_IN_CATALOG, closingActionSlugs } from "@/lib/sales/follow-up-options";
+import { fechaDeValorGuardado, fechaEnZona } from "@/lib/fechas/calendario";
 
 /**
  * El hilo de un lead: todos sus intentos, y qué necesita ahora.
@@ -119,10 +120,18 @@ function time(iso: string | null): number {
  * Arma el hilo y deriva su estado.
  *
  * Puro: recibe los intentos ya consultados.
+ *
+ * ⭐ El próximo paso (`next_action_at`) es una **fecha elegida**, no una hora:
+ * vence el día después de esa fecha, contado en la zona de la organización
+ * (`zona`, `organizations.timezone`; null = la de por defecto). Compararlo como
+ * instante lo marcaba vencido al mediodía del mismo día en que vencía
+ * (SCRUM-493). Los turnos (`scheduledAt`) sí son instantes y se comparan con
+ * `now`. `zona` no tiene default a propósito: el servidor corre en UTC.
  */
 export function buildLeadThread(
   attempts: LeadAttempt[],
-  now: Date = new Date(),
+  now: Date,
+  zona: string | null,
   /**
    * Qué próximos pasos cierran el hilo. Se pasa el catálogo de la organización
    * para que un valor propio como "Derivado a socio" cierre igual que `lost`.
@@ -168,6 +177,9 @@ export function buildLeadThread(
   }
 
   const nowMs = now.getTime();
+  const hoy = fechaEnZona(now, zona);
+  /** El día del próximo paso en la zona de la org; `""` si no hay o no se entiende. */
+  const diaDelPaso = (a: LeadAttempt): string => fechaDeValorGuardado(a.nextActionAt, zona);
 
   // ── Trabajo pendiente ──────────────────────────────────────────────────────
   //
@@ -175,8 +187,8 @@ export function buildLeadThread(
   // incumplido, y pesa más que un resultado sin cargar.
   const overdue = sorted.find((a) => {
     if (!a.nextAction || closes(a.nextAction)) return false;
-    const due = time(a.nextActionAt);
-    return !Number.isNaN(due) && due <= nowMs;
+    const dia = diaDelPaso(a);
+    return dia !== "" && dia < hoy;
   });
   if (overdue) {
     return { ...base, state: "follow_up_due", actionableAttemptId: overdue.id };
@@ -204,8 +216,8 @@ export function buildLeadThread(
 
   const planned = sorted.find((a) => {
     if (!a.nextAction || closes(a.nextAction)) return false;
-    const due = time(a.nextActionAt);
-    return !Number.isNaN(due) && due > nowMs;
+    const dia = diaDelPaso(a);
+    return dia !== "" && dia >= hoy;
   });
   if (planned) {
     return { ...base, state: "follow_up_planned", actionableAttemptId: null };

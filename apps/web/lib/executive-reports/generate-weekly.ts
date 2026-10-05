@@ -6,6 +6,8 @@ import {
 import { buildOrgContextText, getOrgContext } from "@/lib/ai/org-context";
 import { wrapUntrustedContent } from "@/lib/ai/wrap-untrusted-content";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sumarDias } from "@/lib/fechas/calendario";
+import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import {
   collectIntelligenceData,
   formatCollectedDataForPrompt,
@@ -106,10 +108,12 @@ JSON exacto:
     throw new Error("Respuesta de IA con formato inválido");
   }
 
-  const weekStart = getCurrentWeekStart();
-  const periodEndDate = new Date(`${weekStart}T12:00:00`);
-  periodEndDate.setDate(periodEndDate.getDate() + 6);
-  const periodEnd = periodEndDate.toISOString().slice(0, 10);
+  // La semana de la organización, igual que la de sus inputs semanales: el
+  // reloj del servidor (UTC) el domingo de noche ya está en la siguiente.
+  const weekStart = getCurrentWeekStart(
+    await fechaDeHoyDeLaOrganizacion(admin, organizationId)
+  );
+  const periodEnd = sumarDias(weekStart, 6);
   const weekLabel = `${getWeekStartLabel(weekStart)} – ${getWeekEndLabel(weekStart)}`;
 
   return {

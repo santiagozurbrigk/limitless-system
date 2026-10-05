@@ -1,12 +1,15 @@
 /**
  * Qué es una "última 1-1" y cuán confiable es su vínculo.
  *
- * ⭐ Vive en su propio módulo, sin importar nada, porque **la tabla de clientes
+ * ⭐ Vive en su propio módulo, sin importar nada de servidor (sólo la utilidad
+ * pura de fechas), porque **la tabla de clientes
  * también lo necesita** y es un componente cliente. Importarlo de
  * `one-on-ones.ts` arrastraría al bundle del navegador el módulo que crea el
  * cliente admin de Supabase — el que bypassea RLS y lleva la service role key.
  * Es el mismo motivo por el que `lib/discord/limits.ts` existe aparte.
  */
+
+import { fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
 
 export type LastOneOnOne = {
   /** Fecha de la llamada (`YYYY-MM-DD`). */
@@ -35,10 +38,17 @@ export type OneOnOneStats = {
 
 const MS_POR_DIA = 86_400_000;
 
-function aFecha(valor: string): number | null {
-  // Mediodía UTC: un `YYYY-MM-DD` a medianoche cae en el día anterior en
-  // cualquier huso al oeste de Greenwich, que es donde está todo el mercado.
-  const ms = Date.parse(`${valor.slice(0, 10)}T12:00:00Z`);
+/**
+ * El día de una llamada como número, para contar días entre dos fechas.
+ *
+ * `call_date` es un instante: su día es el de la zona de la organización (una
+ * 1-1 de las 22:00 en Argentina es de ese día, aunque en UTC ya sea mañana).
+ * Se pasa al mediodía UTC de ese día sólo para restar fechas sin husos.
+ */
+function aFecha(valor: string, zona: string | null): number | null {
+  const fecha = fechaDeInstanteEnZona(valor, zona);
+  if (!fecha) return null;
+  const ms = Date.parse(`${fecha}T12:00:00Z`);
   return Number.isFinite(ms) ? ms : null;
 }
 
@@ -54,25 +64,44 @@ function aFecha(valor: string): number | null {
  * ⭐ Con **una sola** llamada el ritmo es `null`, no cero ni "cada 0 días": con
  * un solo punto no hay ritmo que medir, y cualquier número ahí sería inventado.
  *
+ * `hoy` es la fecha calendario (`YYYY-MM-DD`) de la organización y `zona`, su
+ * zona horaria (null = la de por defecto): el día de cada llamada y el de hoy
+ * se cuentan en la misma zona. Sin defaults a propósito: el servidor corre en
+ * UTC y de noche en Argentina su día ya es mañana (SCRUM-493).
+ *
  * Lógica pura: no toca base ni red.
  */
 export function computeOneOnOneStats(
   dates: readonly string[],
-  hoy: Date = new Date()
+  hoy: string,
+  zona: string | null
 ): OneOnOneStats {
+  const ritmo = computeOneOnOneRhythm(dates, zona);
+  const ultima = ritmo.lastDate ? aFecha(ritmo.lastDate, zona) : null;
+  // Misma escala que `aFecha`: el mediodía UTC de cada fecha.
+  const hoyMs = Date.parse(`${hoy}T12:00:00Z`);
+  return {
+    ...ritmo,
+    daysSinceLast:
+      ultima === null ? null : Math.max(0, Math.round((hoyMs - ultima) / MS_POR_DIA)),
+  };
+}
+
+/**
+ * Lo que no depende de hoy: total, primera, última y ritmo. Es lo que usa la
+ * tabla de clientes, que no muestra "hace cuántos días".
+ */
+export function computeOneOnOneRhythm(
+  dates: readonly string[],
+  zona: string | null
+): Omit<OneOnOneStats, "daysSinceLast"> {
   const ordenadas = dates
-    .map(aFecha)
+    .map((valor) => aFecha(valor, zona))
     .filter((ms): ms is number => ms != null)
     .sort((a, b) => a - b);
 
   if (ordenadas.length === 0) {
-    return {
-      totalCalls: 0,
-      firstDate: null,
-      lastDate: null,
-      everyDays: null,
-      daysSinceLast: null,
-    };
+    return { totalCalls: 0, firstDate: null, lastDate: null, everyDays: null };
   }
 
   const primera = ordenadas[0];
@@ -83,16 +112,11 @@ export function computeOneOnOneStats(
       ? Math.max(1, Math.round((ultima - primera) / MS_POR_DIA / (ordenadas.length - 1)))
       : null;
 
-  const hoyMs = Date.parse(
-    `${new Date(hoy).toISOString().slice(0, 10)}T12:00:00Z`
-  );
-
   return {
     totalCalls: ordenadas.length,
     firstDate: new Date(primera).toISOString().slice(0, 10),
     lastDate: new Date(ultima).toISOString().slice(0, 10),
     everyDays,
-    daysSinceLast: Math.max(0, Math.round((hoyMs - ultima) / MS_POR_DIA)),
   };
 }
 

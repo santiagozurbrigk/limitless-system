@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { isOverdue, pickNextTask } from "@/lib/clients/next-task";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { conZona, restaurarZona } from "@/lib/fechas/__tests__/zona";
 import type { ClientTask } from "@/types/client-tasks";
 
 function task(partial: Partial<ClientTask> & { id: string }): ClientTask {
@@ -13,7 +15,7 @@ function task(partial: Partial<ClientTask> & { id: string }): ClientTask {
     source: "manual",
     sourceCallId: null,
     sourceCallTitle: null,
-    sourceCallDate: null,
+    sourceCallAt: null,
     workboardTaskId: null,
     completedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
@@ -86,7 +88,7 @@ describe("⭐ cuál es la próxima tarea del cliente", () => {
 });
 
 describe("tareas vencidas", () => {
-  const hoy = new Date("2026-09-21T10:00:00Z");
+  const hoy = "2026-09-21";
 
   it("vencida es la de ayer o antes", () => {
     expect(isOverdue(task({ id: "a", dueDate: "2026-09-20" }), hoy)).toBe(true);
@@ -101,5 +103,42 @@ describe("tareas vencidas", () => {
     expect(
       isOverdue(task({ id: "a", dueDate: "2020-01-01", status: "done" }), hoy)
     ).toBe(false);
+  });
+});
+
+/**
+ * SCRUM-493: de noche en Argentina, UTC ya está en el día siguiente. Una tarea
+ * que vence hoy no puede aparecer vencida ni en el navegador ni en el servidor.
+ * El instante se arma en UTC y la zona del proceso se fija, así que con el
+ * código viejo (`toISOString().slice(0, 10)`) estos casos fallan en cualquier
+ * máquina.
+ */
+describe("⭐ a las 22:00 de Argentina", () => {
+  /** 1-oct-2026, 22:00 en Buenos Aires = 2-oct, 01:00 UTC. */
+  const ahora = new Date("2026-10-02T01:00:00Z");
+  const deHoy = task({ id: "hoy", dueDate: "2026-10-01" });
+  const deAyer = task({ id: "ayer", dueDate: "2026-09-30" });
+
+  afterEach(restaurarZona);
+
+  it("en el navegador de un miembro en Madrid (ya es el 2), con el hoy de la org: igual", () => {
+    conZona("Europe/Madrid");
+    const hoy = fechaDeHoyEnZona("America/Argentina/Buenos_Aires", ahora);
+    expect(isOverdue(deHoy, hoy)).toBe(false);
+    expect(isOverdue(deAyer, hoy)).toBe(true);
+  });
+
+  it("en el servidor (UTC), con la zona de la organización: igual", () => {
+    conZona("UTC");
+    const hoy = fechaDeHoyEnZona("America/Argentina/Buenos_Aires", ahora);
+    expect(isOverdue(deHoy, hoy)).toBe(false);
+    expect(isOverdue(deAyer, hoy)).toBe(true);
+  });
+
+  it("en el servidor, una organización sin zona usa la de por defecto", () => {
+    conZona("UTC");
+    const hoy = fechaDeHoyEnZona(null, ahora);
+    expect(isOverdue(deHoy, hoy)).toBe(false);
+    expect(isOverdue(deAyer, hoy)).toBe(true);
   });
 });

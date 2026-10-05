@@ -4,3 +4,4 @@
 export { ModuleSubnav, type ModuleSubnavTab } from "./module-subnav";
 export { HashTabLink } from "./hash-tab-link";
 export { ToastViewport } from "./toast-viewport";
+export { CampoFecha, type CampoFechaProps } from "./campo-fecha";

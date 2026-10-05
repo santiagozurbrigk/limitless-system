@@ -1,3 +1,4 @@
+import { diaLocal, sumarDias } from "@/lib/fechas/calendario";
 import { formatMoney } from "@/lib/finance/format";
 import { deriveFinanceSummary } from "@/lib/metrics/derive-finance-summary";
 import { collectRevenueEvents } from "@/lib/metrics/revenue-events";
@@ -25,19 +26,24 @@ function formatMinutes(min: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-/** Ingresos cobrados por día (últimos 7 días) para el gráfico del panel. */
+/**
+ * Ingresos cobrados por día (últimos 7 días) para el gráfico del panel.
+ *
+ * `hoy` es el de la zona de la organización (`useHoyDeLaOrganizacion`): los
+ * días son fechas calendario, igual que las fechas de cobro. Con la de UTC, de
+ * noche en Argentina el último punto ya era mañana y lo cobrado hoy no aparecía;
+ * con la del navegador, un miembro en otra zona veía otra semana (SCRUM-493).
+ */
 export function deriveDashboardRevenueTrend(
-  clients: Client[]
+  clients: Client[],
+  hoy: string
 ): { label: string; value: number }[] {
   const events = collectRevenueEvents(clients);
-  const now = new Date();
   const points: { label: string; value: number }[] = [];
 
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
-    const label = d.toLocaleDateString("es", { weekday: "short" });
+    const key = sumarDias(hoy, -i);
+    const label = diaLocal(key).toLocaleDateString("es", { weekday: "short" });
     const total = events
       .filter((e) => e.date === key)
       .reduce((sum, e) => sum + e.amount, 0);
@@ -87,6 +93,8 @@ export function deriveDashboardData(
   expenses: ExpensesSummary,
   paymentPlatforms: PaymentPlatformConfig[],
   salesMetrics: SalesMetricsData,
+  /** Hoy en la zona de la organización (`YYYY-MM-DD`), para el gráfico de 7 días. */
+  hoy: string,
   frequentObjections: FrequentObjectionSummary[] = [],
   payments?: ClientPayment[],
   /** Pre-computed finance summary (con baseline ya aplicado) del provider. Si se pasa y
@@ -130,7 +138,7 @@ export function deriveDashboardData(
         value: formatMoney(finance.facturacion),
         trend: finance.facturacion > 0 ? "up" : "neutral",
       },
-      deriveDashboardRevenueTrend(clients).map((p) => p.value)
+      deriveDashboardRevenueTrend(clients, hoy).map((p) => p.value)
     ),
     {
       id: "m2",

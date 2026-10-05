@@ -15,12 +15,14 @@ import {
 } from "@ai-coo/ui";
 import { createSprintAction } from "@/app/workboard/actions";
 import { SPRINT_AREA_FOCUS_OPTIONS } from "@/lib/workboard/constants";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaDeHoyEnZona, sumarDias } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import type { SprintAreaFocus, WorkboardSprint } from "@/types/workboard";
 
-function defaultEndDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 14);
-  return d.toISOString().slice(0, 10);
+/** Un sprint dura dos semanas por defecto: termina 14 días después de hoy (en la org). */
+function defaultEndDate(zona: string | null): string {
+  return sumarDias(fechaDeHoyEnZona(zona), 14);
 }
 
 export function CreateSprintModal({
@@ -35,18 +37,17 @@ export function CreateSprintModal({
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [areaFocus, setAreaFocus] = useState<SprintAreaFocus>("general");
-  const [startDate, setStartDate] = useState(() =>
-    new Date().toISOString().slice(0, 10)
-  );
-  const [endDate, setEndDate] = useState(defaultEndDate);
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const [startDate, setStartDate] = useState(() => fechaDeHoyEnZona(zonaDeLaOrganizacion));
+  const [endDate, setEndDate] = useState(() => defaultEndDate(zonaDeLaOrganizacion));
   const [pending, startTransition] = useTransition();
 
   function resetForm() {
     setName("");
     setGoal("");
     setAreaFocus("general");
-    setStartDate(new Date().toISOString().slice(0, 10));
-    setEndDate(defaultEndDate());
+    setStartDate(fechaDeHoyEnZona(zonaDeLaOrganizacion));
+    setEndDate(defaultEndDate(zonaDeLaOrganizacion));
   }
 
   function handleCreate() {
@@ -113,20 +114,18 @@ export function CreateSprintModal({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="sprint-start">Fecha inicio</Label>
-              <Input
+              <CampoFecha
                 id="sprint-start"
-                type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(fecha) => setStartDate(fecha ?? "")}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="sprint-end">Fecha fin</Label>
-              <Input
+              <CampoFecha
                 id="sprint-end"
-                type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(fecha) => setEndDate(fecha ?? "")}
               />
             </div>
           </div>

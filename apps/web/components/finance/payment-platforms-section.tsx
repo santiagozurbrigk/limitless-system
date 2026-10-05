@@ -18,7 +18,17 @@ import { PLATFORM_SUGGESTIONS } from "@/mocks/finance";
 import { useFinanceData } from "@/providers";
 import { useToast } from "@/providers/toast-provider";
 import { formatMoney } from "@/lib/finance/format";
+import { formatearFechaGuardada } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import type { PaymentPlatformConfig } from "@/types/finance";
+
+/**
+ * La fecha de la última transacción, con su día. `new Date("2026-10-04")` es
+ * medianoche de UTC y en Argentina se mostraba como el día anterior.
+ */
+function formatearUltimaTransaccion(valor: string, zona: string | null): string {
+  return formatearFechaGuardada(valor, { zona, idioma: "es-ES" }) ?? valor;
+}
 
 const selectClass =
   "flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm";
@@ -26,6 +36,7 @@ const selectClass =
 const CURRENCIES = ["USD", "ARS", "EUR", "Other"] as const;
 
 export function PaymentPlatformsSection() {
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const {
     paymentPlatforms,
     addPaymentPlatform,
@@ -81,7 +92,7 @@ export function PaymentPlatformsSection() {
             </div>
             <p className="text-xs text-muted-foreground">
               Última transacción:{" "}
-              {new Date(platform.lastTransactionAt).toLocaleDateString("es-ES")}
+              {formatearUltimaTransaccion(platform.lastTransactionAt, zonaDeLaOrganizacion)}
             </p>
             <div className="flex gap-2 pt-1">
               <Button

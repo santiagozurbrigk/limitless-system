@@ -3,6 +3,7 @@
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
+import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import {
   fetchClickUpWorkspaces,
   fetchClickUpLists,
@@ -167,6 +168,10 @@ export async function importClickUpClientsAction(
   let skipped = 0;
   let insertErrors = 0;
 
+  // Alta por defecto: hoy en la organización (el servidor corre en UTC y de
+  // noche en Argentina ya sería mañana). Una sola consulta para todo el lote.
+  const hoy = await fechaDeHoyDeLaOrganizacion(supabase, organizationId);
+
   console.log(`[clickup import] total tasks: ${tasks.length}, first task name: "${tasks[0]?.name}", keys: ${Object.keys(tasks[0] ?? {}).join(",")}`);
 
   for (const task of tasks) {
@@ -189,7 +194,7 @@ export async function importClickUpClientsAction(
       if (coerced !== null) clientRow[m.clientField] = coerced;
     }
 
-    if (!clientRow.join_date) clientRow.join_date = new Date().toISOString().slice(0, 10);
+    if (!clientRow.join_date) clientRow.join_date = hoy;
     if (!clientRow.status) clientRow.status = "active";
     if (clientRow.total_amount == null) clientRow.total_amount = 0;
     if (!clientRow.payment_type) clientRow.payment_type = "upfront";

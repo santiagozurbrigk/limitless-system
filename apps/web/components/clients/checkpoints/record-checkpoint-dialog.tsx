@@ -17,7 +17,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Input,
   Label,
   Textarea,
 } from "@ai-coo/ui";
@@ -29,17 +28,16 @@ import type {
 import type { FieldDefinition } from "@/types/custom-fields";
 import { resolveMetricSchema } from "@/lib/checkpoints";
 import { FieldValueInput } from "@/components/clients/custom-fields/field-value-input";
-
-/** Hoy → yyyy-mm-dd, para el input date. */
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { fechaDelHitoEnZona, instanteDelHito } from "@/lib/checkpoints/fecha-del-hito";
 
 export function RecordCheckpointDialog({
   open,
   checkpoint,
   checkpointFields,
   existingEvent,
+  zona,
   saving,
   error,
   onClose,
@@ -50,21 +48,26 @@ export function RecordCheckpointDialog({
   checkpointFields: FieldDefinition[];
   /** El evento ya registrado, si se está editando. */
   existingEvent: CheckpointEvent | null;
+  /**
+   * La zona de la organización (null = la de por defecto). La fecha del hito
+   * se elige, se valida y se guarda en ese día (`lib/checkpoints/fecha-del-hito.ts`).
+   */
+  zona: string | null;
   saving: boolean;
   error: string | null;
   onClose: () => void;
   onSubmit: (input: { reachedAt: string; metrics: Record<string, unknown>; note: string | null }) => void;
 }) {
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(() => fechaDeHoyEnZona(zona));
   const [note, setNote] = useState("");
   const [metrics, setMetrics] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
     if (!open) return;
-    setDate(existingEvent ? existingEvent.reachedAt.slice(0, 10) : todayISO());
+    setDate(existingEvent ? fechaDelHitoEnZona(existingEvent.reachedAt, zona) : fechaDeHoyEnZona(zona));
     setNote(existingEvent?.note ?? "");
     setMetrics(existingEvent?.metrics ?? {});
-  }, [open, existingEvent]);
+  }, [open, existingEvent, zona]);
 
   // Sólo las métricas que este checkpoint pide y que todavía existen en C0. Una
   // referencia rota se cuenta aparte para avisar, no se pide.
@@ -95,12 +98,11 @@ export function RecordCheckpointDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="reached-at">Fecha</Label>
-            <Input
+            <CampoFecha
               id="reached-at"
-              type="date"
-              max={todayISO()}
+              max={fechaDeHoyEnZona(zona)}
               value={date}
-              onChange={(event) => setDate(event.target.value)}
+              onChange={(fecha) => setDate(fecha ?? "")}
             />
           </div>
 
@@ -151,9 +153,9 @@ export function RecordCheckpointDialog({
             disabled={saving}
             onClick={() =>
               onSubmit({
-                // El input date da yyyy-mm-dd; se ancla a mediodía UTC para que
-                // no se corra de día por zona horaria.
-                reachedAt: new Date(`${date}T12:00:00Z`).toISOString(),
+                // El input date da yyyy-mm-dd; `instanteDelHito` lo guarda con la
+                // convención del campo (ver `lib/checkpoints/fecha-del-hito.ts`).
+                reachedAt: instanteDelHito(date, zona),
                 metrics,
                 note: note.trim() || null,
               })

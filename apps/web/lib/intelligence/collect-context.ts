@@ -10,6 +10,7 @@ import {
 } from "@/lib/expenses/mapper";
 import { computeExpensesSummary } from "@/lib/metrics/compute-expenses-summary";
 import { deriveFinanceSummary } from "@/lib/metrics/derive-finance-summary";
+import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import type { FrequentObjectionSummary, ObjectionCategory } from "@/types/sales";
 
 const PERIOD_DAYS = 14;
@@ -181,6 +182,7 @@ export async function collectIntelligenceData(
     callAnalysesRes,
     frequentObjections,
     baselineSnapshotRes,
+    hoy,
   ] = await Promise.all([
     admin
       .from("conversations")
@@ -257,6 +259,7 @@ export async function collectIntelligenceData(
       .order("period_start", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    fechaDeHoyDeLaOrganizacion(admin, organizationId),
   ]);
 
   const conversations = conversationsRes.data ?? [];
@@ -280,7 +283,9 @@ export async function collectIntelligenceData(
     rowToTeamCompensation(row as Parameters<typeof rowToTeamCompensation>[0])
   );
   const paymentPlatforms = (platformsRes.data ?? []).map((row) =>
-    rowToPaymentPlatform(row as PaymentPlatformRow)
+    // Este contexto no usa la última transacción; va el hoy de la organización
+    // como en Finanzas, para no inventar otro valor.
+    rowToPaymentPlatform(row as PaymentPlatformRow, { totalReceived: 0, lastTransactionAt: hoy })
   );
   const expenses = computeExpensesSummary(
     fixedExpenses,

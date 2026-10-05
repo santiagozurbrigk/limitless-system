@@ -24,6 +24,8 @@ import {
 } from "@/lib/operations/weekly-utils";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { firstZodError, saveWeeklyInputSchema, uuidSchema } from "@/lib/validations";
 import { paths } from "@/routes";
 import type {
@@ -32,6 +34,28 @@ import type {
   WeeklyReportJson,
   WeeklyReportRow,
 } from "@/types/operations";
+
+/**
+ * El lunes de la semana actual **de la organización**. El servidor corre en
+ * UTC: con su reloj, el domingo de noche en Argentina ya era lunes y los inputs
+ * caían en la semana siguiente (SCRUM-493).
+ */
+async function semanaActualDeLaOrganizacion(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string
+): Promise<string> {
+  return getCurrentWeekStart(await fechaDeHoyDeLaOrganizacion(supabase, organizationId));
+}
+
+/** El lunes de la semana actual de la organización activa (para la pantalla de inputs). */
+export async function getCurrentWeekStartAction(): Promise<string> {
+  // Sin base o sin organización no hay zona que leer: la de por defecto.
+  if (!isSupabaseConfigured()) return getCurrentWeekStart(fechaDeHoyEnZona(null));
+  const organizationId = await tryRequireOrganizationId();
+  if (!organizationId) return getCurrentWeekStart(fechaDeHoyEnZona(null));
+  const supabase = await createClient();
+  return semanaActualDeLaOrganizacion(supabase, organizationId);
+}
 
 function mapWeeklyError(msg: string): string {
   if (isMissingTableError(msg)) {
@@ -59,7 +83,7 @@ export async function saveWeeklyInputAction(input: unknown): Promise<MutationRes
   const data = parsed.data;
 
   const { user, orgId, supabase } = await requireAuthContext();
-  const weekStart = getCurrentWeekStart();
+  const weekStart = await semanaActualDeLaOrganizacion(supabase, orgId);
   const dbDepartment = UI_TO_DB_DEPARTMENT[data.department];
 
   const content = data.content?.trim() || null;
@@ -216,7 +240,7 @@ export async function getWeeklyInputsAction(
   if (!organizationId) return [];
 
   const supabase = await createClient();
-  const week = weekStart ?? getCurrentWeekStart();
+  const week = weekStart ?? (await semanaActualDeLaOrganizacion(supabase, organizationId));
 
   const { data, error } = await supabase
     .from("weekly_inputs")
@@ -292,7 +316,7 @@ export async function generateWeeklyReportAction(): Promise<ResultadoReporteSema
     return { success: false, error: AVISO_ORG_NO_ACTIVA, motivo: "org-no-activa" };
   }
 
-  const weekStart = getCurrentWeekStart();
+  const weekStart = await semanaActualDeLaOrganizacion(supabase, orgId);
 
   const { data: inputs, error: inputsError } = await supabase
     .from("weekly_inputs")
@@ -435,7 +459,7 @@ export async function getWeeklyReportAction(
   if (!organizationId) return null;
 
   const supabase = await createClient();
-  const week = weekStart ?? getCurrentWeekStart();
+  const week = weekStart ?? (await semanaActualDeLaOrganizacion(supabase, organizationId));
 
   const { data, error } = await supabase
     .from("weekly_reports")

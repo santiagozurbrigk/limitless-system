@@ -31,6 +31,9 @@ import {
 } from "@ai-coo/ui";
 import { UserPlus } from "lucide-react";
 import { createClientAction } from "@/app/clients/actions";
+import { CampoFecha } from "@/components/shared/campo-fecha";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { usePlatformData } from "@/providers";
 import { useToast } from "@/providers/toast-provider";
 import type { Client, ClientStatus } from "@/types/clients";
@@ -60,15 +63,12 @@ const PLATAFORMAS: { value: PaymentPlatform; label: string }[] = [
   { value: "other", label: "Otra" },
 ];
 
-function hoy(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function vacio() {
+/** El formulario en blanco; la fecha de alta es hoy en la organización. */
+function vacio(hoy: string) {
   return {
     name: "",
     email: "",
-    joinDate: hoy(),
+    joinDate: hoy,
     totalAmount: "",
     status: "active" as ClientStatus,
     paymentType: "upfront" as ClientPaymentType,
@@ -77,10 +77,11 @@ function vacio() {
 }
 
 export function NewClientDialog() {
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const { refreshClients } = usePlatformData();
   const { push } = useToast();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(vacio);
+  const [form, setForm] = useState(() => vacio(fechaDeHoyEnZona(zonaDeLaOrganizacion)));
   const [error, setError] = useState<string | null>(null);
   const [cargados, setCargados] = useState(0);
   const [pending, startTransition] = useTransition();
@@ -92,7 +93,7 @@ export function NewClientDialog() {
   function cerrar(abierto: boolean) {
     setOpen(abierto);
     if (!abierto) {
-      setForm(vacio());
+      setForm(vacio(fechaDeHoyEnZona(zonaDeLaOrganizacion)));
       setError(null);
       setCargados(0);
     }
@@ -135,7 +136,7 @@ export function NewClientDialog() {
         push({ title: `"${form.name.trim()}" cargado`, variant: "success" });
 
         // Se limpia y queda abierto: cargar una cartera es una tanda.
-        setForm(vacio());
+        setForm(vacio(fechaDeHoyEnZona(zonaDeLaOrganizacion)));
       } catch (fallo) {
         setError(
           fallo instanceof Error ? fallo.message : "No se pudo cargar el cliente."
@@ -189,11 +190,10 @@ export function NewClientDialog() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="cliente-fecha">Desde cuándo es cliente</Label>
-                <Input
+                <CampoFecha
                   id="cliente-fecha"
-                  type="date"
                   value={form.joinDate}
-                  onChange={(evento) => patch({ joinDate: evento.target.value })}
+                  onChange={(fecha) => patch({ joinDate: fecha ?? "" })}
                 />
               </div>
             </div>

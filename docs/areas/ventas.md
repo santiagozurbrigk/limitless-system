@@ -265,7 +265,24 @@ Orden sugerido: (1) sacar `conversations` del provider y de métricas/embudo, (2
 - **Lo manual gana a los syncs** (`status_source`). Filas previas a la Fase 0 quedaron en `sync`.
 - **Valores de seguimiento propios:** preguntá por `behavior` (`closesThread`, `needsDate`), nunca
   compares contra `"lost"`. Archivar no blanquea el dato en filas existentes.
-- **Fecha por defecto:** un próximo paso que pide fecha sin fecha se guarda a pasado mañana (deliberado).
+- **Fecha por defecto:** un próximo paso que pide fecha sin fecha se guarda a pasado mañana (deliberado),
+  contado desde el día local de quien lo carga (`fechaPropuestaDelProximoPaso` en
+  `lib/sales/follow-up-options.ts`, la misma para el modal de resultado, el seguimiento del lead y la tabla).
+- **`next_action_at` es `timestamptz` pero se elige una fecha, y la fecha es de la organización:** se propone
+  (pasado mañana desde el hoy de la org), se guarda (ese día a las 12:00 de la zona de la org,
+  `fechaAInstanteEnZona`), se muestra (`CampoFecha`, cajón y panel con `formatearFechaGuardada`) y vence en la
+  zona de la org (`organizations.timezone`), así todos los miembros ven el mismo día estén donde estén. En el
+  cliente la zona sale de `useZonaDeLaOrganizacion()` (la lee una vez el layout); el servidor la lee una vez por
+  pedido para derivar el estado. El cobro del cierre (modal de pago) usa también el hoy de la org. Las filas que el seguimiento del lead guardó a medianoche UTC (antes de SCRUM-493) se leen con su día
+  de UTC.
+- **El rango de métricas de ventas se corta en días de la zona de la org** (`lib/sales/rango-de-metricas.ts`): "desde"
+  empieza a las 00:00 de la org y "hasta" termina a las 23:59:59.999 de la org; el valor por defecto ("este mes"), los
+  atajos y el tope son el hoy de la org. El agrupado por semanas de la misma pantalla sigue en `[FECHAS-UTC-RESTO]`.
+- **El próximo paso vence por día, en la zona de la organización.** `buildLeadThread(intentos, ahora, zona)` lee
+  `next_action_at` con `fechaDeValorGuardado` en `organizations.timezone`: lo que vence hoy es "Seguimiento
+  agendado" todo el día y pasa a "Seguimiento vencido" al día siguiente. `listLeadsTableAction` lee la zona una vez
+  por pedido; la tabla recalcula el estado en el navegador con la misma zona (la del provider). Los turnos
+  (`scheduled_at`) sí son instantes.
 - **Una grabación sólo se asigna a un cliente sin confirmación si el resolvedor es determinista**
   (mail o alias aprendido); los candidatos por nombre piden confirmación.
 - **Sin participantes (`calendar_invitees` vacío) no se clasifica** — vacío es "no sabemos", no "no

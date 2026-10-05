@@ -242,27 +242,39 @@ export function parseOneOnOneTasks(raw: string): OneOnOneParseResult {
  * crudo**. Sin eso, "no salieron tareas" es indistinguible de "no había tareas",
  * y la única forma de saber cuál de las dos fue es adivinar.
  */
+/**
+ * El contexto que va antes del transcript en el prompt.
+ *
+ * ⭐ La fecha de la llamada va en el prompt porque sin ella "para el viernes"
+ * no se puede convertir en una fecha. Con la fecha de hoy en vez de la de la
+ * llamada, una grabación de hace dos semanas produciría vencimientos ya
+ * pasados. `fechaDeLaLlamada` es el día (`YYYY-MM-DD`) en la zona de la
+ * organización: cortar el instante en UTC corría un día una 1-1 de la noche en
+ * Argentina, y con ella todos los vencimientos (SCRUM-493).
+ */
+export function contextoDelPrompt(params: {
+  clientName?: string | null;
+  fechaDeLaLlamada?: string | null;
+}): string {
+  return [
+    params.clientName ? `Cliente: ${params.clientName}` : null,
+    params.fechaDeLaLlamada ? `Fecha de la llamada: ${params.fechaDeLaLlamada}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export async function extractOneOnOneTasks(params: {
   organizationId: string;
   transcript: string;
   clientName?: string | null;
-  callDate?: string | null;
+  /** El día de la llamada (`YYYY-MM-DD`) en la zona de la organización. */
+  fechaDeLaLlamada?: string | null;
 }): Promise<OneOnOneParseResult> {
   const transcript = params.transcript.trim();
   if (!transcript) return { tasks: [], outcome: "vacio" };
 
-  /**
-   * ⭐ La fecha de la llamada va en el prompt porque sin ella "para el viernes"
-   * no se puede convertir en una fecha. Con la fecha de hoy en vez de la de la
-   * llamada, una grabación de hace dos semanas produciría vencimientos ya
-   * pasados.
-   */
-  const contexto = [
-    params.clientName ? `Cliente: ${params.clientName}` : null,
-    params.callDate ? `Fecha de la llamada: ${params.callDate.slice(0, 10)}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const contexto = contextoDelPrompt(params);
 
   const rawText = await callClaudeText({
     organizationId: params.organizationId,

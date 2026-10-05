@@ -72,8 +72,9 @@ function resolveAmount(raw: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
-function resolveDate(raw: unknown): string {
-  if (!raw) return new Date().toISOString().split("T")[0];
+/** La fecha de una celda (`YYYY-MM-DD`). Vacía o que no se entiende: `hoy`. */
+function resolveDate(raw: unknown, hoy: string): string {
+  if (!raw) return hoy;
   // Excel dates can be serial numbers or strings
   if (typeof raw === "number") {
     const d = XLSX.SSF.parse_date_code(raw);
@@ -92,13 +93,19 @@ function resolveDate(raw: unknown): string {
   }
   // ISO YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  return new Date().toISOString().split("T")[0];
+  return hoy;
 }
 
 // ─── Parse con mapeo de columnas ─────────────────────────────────────────────
 
+/**
+ * `hoy` (`YYYY-MM-DD`, el de la organización) es la fecha de alta de las filas
+ * sin fecha o con una que no se entiende. Lo arma quien llama: el servidor
+ * corre en UTC y de noche en Argentina su día ya es mañana (SCRUM-493).
+ */
 export function parseClientsExcel(
   buffer: Buffer | ArrayBuffer,
+  hoy: string,
   columnMapping?: ColumnMapping,
   sheetName?: string
 ): ParseExcelResult {
@@ -202,7 +209,7 @@ export function parseClientsExcel(
       status:      resolveStatus(statusCol ? String(r[statusCol]) : undefined),
       product:     productCol   ? String(r[productCol] ?? "").trim() || undefined : undefined,
       totalAmount: resolveAmount(amountCol ? r[amountCol] : undefined),
-      joinDate:    resolveDate(joinDateCol ? r[joinDateCol] : undefined),
+      joinDate:    resolveDate(joinDateCol ? r[joinDateCol] : undefined, hoy),
       notes:       notesCol     ? String(r[notesCol] ?? "").trim()   || undefined : undefined,
     });
   });

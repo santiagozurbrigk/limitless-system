@@ -12,7 +12,6 @@ import {
 import { mapWeeklyInputRowsToTeamInputs } from "@/lib/operations/weekly-input-mapper";
 import { manejarReporteSemanal } from "@/lib/operations/resultado-reporte-semanal";
 import { correrAccion } from "@/lib/operations/correr-accion";
-import { getCurrentWeekStart } from "@/lib/operations/weekly-utils";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { paths } from "@/routes";
 import { useToast } from "@/providers/toast-provider";
@@ -25,12 +24,13 @@ export function WeeklyInputsPageContent({
   initialInputs = [],
   initialCompleted = [],
   initialInputCount = 0,
-  weekStart = getCurrentWeekStart(),
+  weekStart,
 }: {
   initialInputs?: WeeklyInputRow[];
   initialCompleted?: Department[];
   initialInputCount?: number;
-  weekStart?: string;
+  /** El lunes de la semana de la organización (lo resuelve el servidor con su zona). */
+  weekStart: string;
 }) {
   const router = useRouter();
   const { push } = useToast();

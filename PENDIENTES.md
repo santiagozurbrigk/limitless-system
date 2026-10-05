@@ -84,12 +84,12 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 |---|---|---|---|---|---|
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 14 | 31 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
-| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 12 | 0 | 16 | 8 |
+| [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 12 | 0 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 19 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
-| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 10 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 19 | 42 | 13 |
+| [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 19 | 44 | 13 |
 
 ---
 
@@ -908,6 +908,18 @@ Prioridad sugerida P1: pérdida permanente y silenciosa de datos que el negocio 
 - **Dónde:** `team_roles.permissions`.
 
 ### Ventas · P2
+
+#### [MANYCHAT-CTA-DUPLICADOS] Un CTA de ManyChat puede guardarse dos veces el mismo día
+- **Tipo:** bug
+- **Estado verificado:** `app/manychat/cta-actions.ts:125-133` busca si el CTA ya se registró con
+  `.gte("triggered_at", inicio del día)` **sin tope** y `.maybeSingle()`. Si desde ese corte hay dos o más filas
+  (por ejemplo, el mismo tag registrado en días posteriores, o un duplicado viejo), `maybeSingle` devuelve error,
+  `existing` queda en `null` y el insert de `:137-143` agrega otra fila. Pasaba igual antes de SCRUM-493 (que sólo
+  movió el corte del día a la zona de la org).
+- **Qué hay que hacer:** acotar la búsqueda al día del evento (`.lt("triggered_at", inicio del día siguiente)` con
+  `inicioDelDiaEnZona`) y no depender de `maybeSingle` para saber si existe (`.limit(1)` y mirar la lista, o un índice
+  único por organización, suscriptor, tag y día con `upsert`). Limpiar los duplicados que ya existan.
+- **Dónde:** `apps/web/app/manychat/cta-actions.ts`, tabla `manychat_events`.
 
 #### [PAGO-SIN-IDEMPOTENCIA] Registrar un pago puede duplicarlo y la cuota puede quedar impaga
 - **Tipo:** bug
@@ -2027,13 +2039,6 @@ Doc del área: [`docs/areas/operaciones.md`](./docs/areas/operaciones.md)
 - **Qué hay que hacer:** decidir y alinear.
 - **Dónde:** `apps/web/app/team/actions.ts`.
 
-#### [OPS-SEMANA-UTC] La semana de los inputs se calcula en UTC [Operaciones y equipo]
-- **Tipo:** bug
-- **Estado verificado:** `getCurrentWeekStart` usa el reloj del servidor; el domingo después de las 21 h ART ya es
-  la semana siguiente.
-- **Qué hay que hacer:** calcular en la zona de la org.
-- **Dónde:** `apps/web/lib/operations/weekly-utils.ts`.
-
 ---
 
 ## Infraestructura, seguridad y tests (transversal)
@@ -2551,6 +2556,48 @@ Prioridad sugerida P2: no hay una filtración conocida; el procedimiento se nece
 - **Estado verificado:** `playwright.config.ts` tiene rama de CI; el workflow no lo invoca; necesita una cuenta de test y una base.
 - **Qué hay que hacer:** decidir cuenta/base de test (proyecto Supabase aparte) y agregar el job.
 - **Dónde:** `.github/workflows/ci.yml`.
+
+#### [CAMPO-FECHA-MIGRAR] 14 campos de fecha todavía no usan `CampoFecha`
+- **Tipo:** deuda técnica
+- **Estado verificado:** SCRUM-493 creó `CampoFecha` (`apps/web/components/shared/campo-fecha.tsx`), que muestra el
+  valor guardado (columna `date` o `timestamptz`) con el día que se eligió, y lo usa en los 13 campos que tenían el
+  bug de UTC (11 archivos). Quedan 14 campos `type="date"` en 11 archivos que hoy funcionan bien:
+  `client-onboarding/onboarding-form.tsx` (1), `clients/client-tasks-section.tsx` (1),
+  `clients/custom-fields/field-value-input.tsx` (1), `clients/wins/client-baseline-dialog.tsx` (1, fecha de egreso),
+  `closing/payment-modal.tsx` (1), `fathom/fathom-task-proposal-modal.tsx` (1),
+  `finance/facturacion-period-filter.tsx` (2, rango personalizado), `lanzamientos/create-launch-modal.tsx` (2),
+  `sales/client-payments-section.tsx` (2), `workboard/workboard-shell.tsx` (1) y
+  `workboard/workboard-task-detail-dialog.tsx` (1), todos bajo `apps/web/components/`.
+- **Qué hay que hacer:** pasarlos a `CampoFecha` al tocar cada pantalla (regla en
+  `docs/arquitectura/vision-general.md` § Convenciones), sin cambiar lo que guardan.
+- **Dónde:** los archivos citados.
+
+#### [FECHAS-UTC-RESTO] Períodos de reporte que todavía se cortan en UTC o en el navegador, fuera del alcance de SCRUM-493
+- **Tipo:** bug
+- **Estado verificado:** SCRUM-493 dejó una regla para toda la app: el "hoy" y las fechas calendario de un dato de
+  la organización son los de su zona (`organizations.timezone`). Quedan afuera, con motivo, los **períodos de
+  reporte** (ventanas de días, "mes actual"), porque se cortan todos juntos y en algunos la zona no es la de la org:
+  - Anuncios: el día lo define la zona de la cuenta de Meta, no la de la org
+    (`components/marketing/ads-dashboard.tsx:101`, `app/(platform)/marketing/anuncios/page.tsx:10`,
+    `app/api/cron/capture-ad-metrics/route.ts:56`, `lib/marketing/ad-metrics-snapshot.ts:42`).
+  - Reportes por cron: `lib/executive-reports/generate-daily.ts:144`, `compute-departments.ts:61`,
+    `lib/intelligence/collect-context.ts:198,298`.
+  - Ventanas de los últimos días y del mes en pantallas y actions: sparklines de conversaciones del Panel y de Ventas
+    (`lib/metrics/derive-dashboard-data.ts:64,158-168`, `derive-sales-metrics.ts:25`), agrupado por semanas de las
+    métricas de ventas (`components/sales/metrics/use-sales-metrics.ts:74,90`, semanas de 7 días desde el reloj del
+    navegador; el rango elegido ya se corta en la zona de la org), `app/sales/metrics-actions.ts:43-59`, `app/manychat/cta-actions.ts:19-36` y `lib/metrics/custom-metrics.ts:109`.
+  - "Mes actual" con el reloj del navegador o del servidor: `lib/metrics/derive-dashboard-data.ts:127-130` (clientes
+    nuevos del mes), `lib/metrics/enrich-team-compensation.ts:5-11`, `lib/metrics/derive-monthly-series.ts:36` (serie de 6 meses),
+    `lib/product/offer-metrics.ts:34,43,87`. Los
+    meses de Finanzas están en `[FIN-MESES-UTC]` y `[AUD-CONF-10]`; Embudos, VTurb y Hyros, en `[EMBUDOS-TIMEZONE]`.
+  - Super admin, que cruza organizaciones y necesita decidir una zona: `lib/super-admin/period.ts`,
+    `lib/super-admin/queries.ts:682,990`, `lib/super-admin/org-metrics.ts:73` y la biblioteca global del AI Brain
+    (`lib/ai-brain/mapper.ts:114,145,200`).
+  - ClickUp: la fecha de alta importada se corta en UTC y además no entiende los timestamps en milisegundos que
+    manda ClickUp (`app/integrations/clickup/import-actions.ts:230`).
+- **Qué hay que hacer:** decidir en qué zona se cortan los períodos de reporte (la de la org, salvo anuncios: la de la
+  cuenta; super admin: una fija) y pasarlos juntos a `lib/fechas` (`inicioDelDiaEnZona`, `fechaDeInstanteEnZona`).
+- **Dónde:** los archivos citados.
 
 ### Infraestructura, seguridad y tests (transversal) · P3
 

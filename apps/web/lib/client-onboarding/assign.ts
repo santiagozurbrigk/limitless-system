@@ -13,16 +13,20 @@
  * (pago único, transferencia) con monto cero y estado *pendiente de
  * onboarding*: queda a la vista como un cliente a completar, y no suma
  * facturación inventada.
+ *
+ * `joinDate` es la fecha de alta (`YYYY-MM-DD`): hoy en la organización. La
+ * arma quien llama con su zona; con `toISOString()` del servidor (UTC), un
+ * alta de noche en Argentina quedaba con fecha de mañana (SCRUM-493).
  */
 export function newClientFromOnboarding(
   organizationId: string,
   name: string,
-  now: Date
+  joinDate: string
 ): Record<string, unknown> {
   return {
     organization_id: organizationId,
     name: name.trim(),
-    join_date: now.toISOString().slice(0, 10),
+    join_date: joinDate,
     payment_type: "upfront",
     platform: "bank_transfer",
     total_amount: 0,

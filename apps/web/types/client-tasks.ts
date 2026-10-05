@@ -27,9 +27,14 @@ export type ClientTask = {
   source: ClientTaskSource;
   /** La llamada de la que salió, si salió de una. */
   sourceCallId: string | null;
-  /** Título y fecha de esa llamada, para poder decir de dónde salió. */
+  /** Título de esa llamada, para poder decir de dónde salió. */
   sourceCallTitle: string | null;
-  sourceCallDate: string | null;
+  /**
+   * Cuándo fue esa llamada: el instante tal cual (`call_date`). Su día se lee
+   * en la zona de la organización (`fechaDeInstanteEnZona`) al mostrarlo: un
+   * mapper no conoce la zona, y cortar el texto daba el día de UTC (SCRUM-493).
+   */
+  sourceCallAt: string | null;
   /** Cuando se mandó al tablero del equipo, cuál es allá. */
   workboardTaskId: string | null;
   completedAt: string | null;
@@ -73,7 +78,7 @@ export function rowToClientTask(row: ClientTaskRow): ClientTask {
     source: row.source === "fathom_call" ? "fathom_call" : "manual",
     sourceCallId: row.source_call_id,
     sourceCallTitle: call?.title ?? null,
-    sourceCallDate: call?.call_date ? call.call_date.slice(0, 10) : null,
+    sourceCallAt: call?.call_date ?? null,
     workboardTaskId: row.workboard_task_id,
     completedAt: row.completed_at,
     createdAt: row.created_at,

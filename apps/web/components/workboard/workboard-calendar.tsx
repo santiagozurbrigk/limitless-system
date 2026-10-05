@@ -18,6 +18,11 @@ import {
 } from "@/lib/workboard/calendar-grid";
 import { filterTasksByDoneVisibility, filterWorkboardTasks } from "@/lib/workboard/group-tasks";
 import { useWorkboard } from "@/providers/workboard-provider";
+import { diaLocal, fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import {
+  useHoyDeLaOrganizacion,
+  useZonaDeLaOrganizacion,
+} from "@/providers/zona-de-la-organizacion-provider";
 import type { WorkboardTask } from "@/types/workboard";
 
 const WEEKDAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -25,7 +30,9 @@ const WEEKDAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 export function WorkboardCalendar() {
   const { tasks, areaFilter, sprintFilterId, launchFilterId, assigneeFilterId, setSelectedTask } =
     useWorkboard();
-  const [anchor, setAnchor] = useState(() => new Date());
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  // El mes que se abre es el de hoy en la organización.
+  const [anchor, setAnchor] = useState(() => diaLocal(fechaDeHoyEnZona(zonaDeLaOrganizacion)));
   const [showDoneTasks, setShowDoneTasks] = useState(false);
 
   const filtered = useMemo(() => {
@@ -39,9 +46,13 @@ export function WorkboardCalendar() {
     return filterTasksByDoneVisibility(base, showDoneTasks);
   }, [tasks, areaFilter, sprintFilterId, launchFilterId, assigneeFilterId, showDoneTasks]);
 
-  const byDate = useMemo(() => groupTasksByDateKey(filtered), [filtered]);
+  const byDate = useMemo(
+    () => groupTasksByDateKey(filtered, zonaDeLaOrganizacion),
+    [filtered, zonaDeLaOrganizacion]
+  );
   const cells = useMemo(() => buildMonthGrid(anchor), [anchor]);
-  const todayKey = toDateKey(new Date());
+  // "Hoy" es el de la organización; `null` en el render del servidor.
+  const todayKey = useHoyDeLaOrganizacion();
 
   return (
     <div className="space-y-4">

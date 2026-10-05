@@ -15,6 +15,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@ai-coo/ui";
+import { fechaVencida } from "@/lib/fechas/calendario";
+import {
+  useHoyDeLaOrganizacion,
+  useZonaDeLaOrganizacion,
+} from "@/providers/zona-de-la-organizacion-provider";
 import { TASK_AREA_LABELS } from "@/lib/workboard/constants";
 import { filterKanbanDoneTasks, filterWorkboardTasks, groupTasksIntoColumns } from "@/lib/workboard/group-tasks";
 import {
@@ -25,11 +30,6 @@ import {
 } from "@/lib/workboard/styles";
 import { useWorkboard } from "@/providers/workboard-provider";
 import type { TaskStatus, WorkboardTask } from "@/types/workboard";
-
-function isOverdue(dueDate?: string): boolean {
-  if (!dueDate) return false;
-  return new Date(dueDate + "T23:59:59") < new Date();
-}
 
 /**
  * ⭐ El "+" de cada columna **abre el formulario**, no crea una tarea.
@@ -49,6 +49,7 @@ export function WorkboardKanban({
 }) {
   const { tasks, areaFilter, sprintFilterId, launchFilterId, assigneeFilterId, moveTask, deleteTask, setSelectedTask, kanbanDoneVisibleUntil } =
     useWorkboard();
+  const hoy = useHoyDeLaOrganizacion();
   const [draggedTask, setDraggedTask] = useState<{
     task: WorkboardTask;
     status: TaskStatus;
@@ -64,7 +65,11 @@ export function WorkboardKanban({
     );
     return filterKanbanDoneTasks(base, kanbanDoneVisibleUntil);
   }, [tasks, areaFilter, sprintFilterId, launchFilterId, assigneeFilterId, kanbanDoneVisibleUntil]);
-  const columns = useMemo(() => groupTasksIntoColumns(filtered), [filtered]);
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const columns = useMemo(
+    () => groupTasksIntoColumns(filtered, zonaDeLaOrganizacion),
+    [filtered, zonaDeLaOrganizacion]
+  );
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -109,7 +114,8 @@ export function WorkboardKanban({
               </p>
             ) : (
               column.tasks.map((task) => {
-                const overdue = isOverdue(task.dueDate) && task.status !== "done";
+                const overdue =
+                  hoy !== null && task.status !== "done" && fechaVencida(task.dueDate, hoy);
                 return (
                   <Card
                     key={task.id}

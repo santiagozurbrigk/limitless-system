@@ -25,6 +25,8 @@ import {
   updateTeamCompensationAction,
 } from "@/app/finance/actions";
 import { listOrganizationPaymentsAction } from "@/app/sales/payment-actions";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { getSalesMetricsSnapshotsAction } from "@/app/sales/metrics-actions";
 import {
   mockFinanceSummary,
@@ -103,6 +105,7 @@ type FinanceDataContextValue = {
 const FinanceDataContext = createContext<FinanceDataContextValue | null>(null);
 
 export function FinanceDataProvider({ children }: { children: ReactNode }) {
+  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const { clients, closingCalls, clientsLoading, closingCallsLoading } =
     usePlatformData();
 
@@ -197,12 +200,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           ...platform,
           id: `pp-${Date.now()}`,
           totalReceived: 0,
-          lastTransactionAt: new Date().toISOString().slice(0, 10),
+          lastTransactionAt: fechaDeHoyEnZona(zonaDeLaOrganizacion),
         },
       ]);
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [refreshFinanceConfig, runFinanceMutation, zonaDeLaOrganizacion]
   );
 
   const updatePaymentPlatform = useCallback(

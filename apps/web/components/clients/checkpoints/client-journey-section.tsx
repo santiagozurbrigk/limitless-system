@@ -51,6 +51,24 @@ import {
 } from "@/app/clients/checkpoint-derived-actions";
 import { paths } from "@/routes";
 import { RecordCheckpointDialog } from "@/components/clients/checkpoints/record-checkpoint-dialog";
+import { fechaDelHitoEnZona } from "@/lib/checkpoints/fecha-del-hito";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
+import { diaLocal } from "@/lib/fechas/calendario";
+
+/**
+ * La fecha de un hito (o de una propuesta), en el día de la organización: ver
+ * la convención de `reached_at` en `lib/checkpoints/fecha-del-hito.ts`. Antes
+ * se mostraba con el día de UTC, que de noche en Argentina ya es mañana.
+ */
+function formatearFechaDelHito(reachedAt: string, zona: string | null): string {
+  const fecha = fechaDelHitoEnZona(reachedAt, zona);
+  if (!fecha) return "";
+  return diaLocal(fecha).toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 type JourneyData = Awaited<ReturnType<typeof getClientJourneyAction>>;
 
@@ -106,6 +124,8 @@ export function ClientJourneySection({
   const [dialogError, setDialogError] = useState<string | null>(null);
 
   const { progress, checkpointFields, journeyConfigured } = data;
+  // La zona de la org: las fechas de los hitos se muestran y se eligen en ella.
+  const timezone = useZonaDeLaOrganizacion();
   const summary = summarizeJourneyPosition(progress);
 
   // Mientras carga no se muestra nada. Si el recorrido no está configurado,
@@ -307,6 +327,7 @@ export function ClientJourneySection({
             <ProposalCard
               key={proposal.id}
               proposal={proposal}
+              zona={timezone}
               checkpointName={
                 progress.find((entry) => entry.checkpoint.id === proposal.checkpointId)
                   ?.checkpoint.name ?? "un checkpoint"
@@ -391,6 +412,7 @@ export function ClientJourneySection({
                       <CheckpointLine
                         key={entry.checkpoint.id}
                         entry={entry}
+                        zona={timezone}
                         checkpointFields={checkpointFields}
                         salteado={salteados.has(entry.checkpoint.id)}
                         pending={pending}
@@ -418,6 +440,7 @@ export function ClientJourneySection({
         checkpoint={dialog.checkpoint}
         checkpointFields={checkpointFields}
         existingEvent={dialog.event}
+        zona={timezone}
         saving={pending}
         error={dialogError}
         onClose={() => setDialog({ open: false, checkpoint: null, event: null })}
@@ -429,6 +452,7 @@ export function ClientJourneySection({
 
 function CheckpointLine({
   entry,
+  zona,
   checkpointFields,
   salteado,
   pending,
@@ -436,6 +460,8 @@ function CheckpointLine({
   onUndo,
 }: {
   entry: CheckpointWithEvent;
+  /** La zona de la organización: la fecha del hito se muestra en ese día. */
+  zona: string | null;
   checkpointFields: FieldDefinition[];
   /** De una fase anterior a la actual y sin registrar: el cliente ya pasó. */
   salteado: boolean;
@@ -484,12 +510,7 @@ function CheckpointLine({
 
         {reached ? (
           <p className="text-xs text-muted-foreground">
-            {new Date(event.reachedAt).toLocaleDateString("es-AR", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-              timeZone: "UTC",
-            })}
+            {formatearFechaDelHito(event.reachedAt, zona)}
           </p>
         ) : null}
 
@@ -588,12 +609,15 @@ const PROPOSAL_SOURCE_LABEL: Record<CheckpointProposal["source"], string> = {
  */
 function ProposalCard({
   proposal,
+  zona,
   checkpointName,
   pending,
   onAccept,
   onReject,
 }: {
   proposal: CheckpointProposal;
+  /** La zona de la organización. */
+  zona: string | null;
   checkpointName: string;
   pending: boolean;
   onAccept: () => void;
@@ -615,12 +639,7 @@ function ProposalCard({
           ) : null}
           {proposal.suggestedReachedAt ? (
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {new Date(proposal.suggestedReachedAt).toLocaleDateString("es-AR", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-                timeZone: "UTC",
-              })}
+              {formatearFechaDelHito(proposal.suggestedReachedAt, zona)}
             </p>
           ) : null}
         </div>
