@@ -11,6 +11,7 @@
 import { resolverVentanaDeSync } from "@/lib/fathom/sync-window";
 import { calcularNuevoCursor, type ResultadoDeReunion } from "@/lib/fathom/cursor";
 import { leerVentanaDeFathom, reportarDecisionDeCursor } from "@/lib/fathom/leer-ventana";
+import { marcarDescartadas, registrarFallasDeSync } from "@/lib/fathom/fallas-de-sync";
 import { mensajeDeFathom } from "@/lib/fathom/api";
 import { upsertFathomCallFromMeeting } from "@/lib/fathom/sync";
 import { readMemberFathomKey } from "@/lib/fathom/member-key";
@@ -90,12 +91,17 @@ export async function sincronizarMiembroFathom(
   // ⭐ La misma regla que la sync de la organización (SCRUM-36): el cursor
   // avanza con el `created_at` de lo guardado, nunca pasa de una que falló ni
   // de lo que quedó sin leer por el tope de páginas.
+  // Cuenta las fallas por reunión desde la primera (`fathom_sync_fallas`): con
+  // eso se decide cuándo dejar de reintentar una que falla siempre.
+  const conexion = { organizationId: fila.organization_id, userId: fila.user_id };
+  const conFallas = await registrarFallasDeSync(admin, conexion, resultados, ahora);
   const decision = calcularNuevoCursor({
     cursorAnterior: ventana.desde,
     lectura,
-    resultados,
+    resultados: conFallas,
     ahora,
   });
+  await marcarDescartadas(admin, conexion, decision.descartadas, ahora);
   reportarDecisionDeCursor(decision, {
     organizationId: fila.organization_id,
     conexion: "miembro",

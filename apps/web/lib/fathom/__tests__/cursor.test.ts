@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { FathomMeetingRecord } from "@/lib/fathom/api";
 import {
+  INTENTOS_MINIMOS,
   PLAZO_DE_REINTENTOS_MS,
   SOLAPE_MS,
   TRAMO_MS,
   calcularNuevoCursor,
+  debeDescartarse,
   fechaDeCreacion,
   inicioDelTramoSiguiente,
   ordenDeLlegada,
@@ -19,7 +21,7 @@ import {
  */
 
 const AHORA = new Date("2026-10-05T12:00:00.000Z");
-const ANTERIOR = "2026-10-05T08:00:00.000Z";
+const ANTERIOR = "2026-10-05T04:00:00.000Z";
 
 function reunion(id: string, createdAt?: string, recordingStart?: string): FathomMeetingRecord {
   return {
@@ -87,9 +89,10 @@ describe("calcularNuevoCursor", () => {
     expect(decision.motivo).toContain("lectura completa");
   });
 
-  it("⭐ el solape: la corrida siguiente vuelve a pedir lo de los últimos minutos", () => {
+  it("⭐ el solape: la corrida siguiente vuelve a pedir las últimas 2 horas", () => {
     const decision = decidir([{ meeting: R3, guardada: true }]);
     const cursor = new Date(decision.cursor!).getTime();
+    expect(SOLAPE_MS).toBe(2 * 60 * 60 * 1000);
     expect(new Date(R3.created_at!).getTime() - cursor).toBe(SOLAPE_MS);
   });
 
@@ -98,16 +101,16 @@ describe("calcularNuevoCursor", () => {
       { meeting: R1, guardada: false },
       { meeting: R2, guardada: false },
     ]);
-    // R1 - solape (08:30) es posterior al anterior (08:00): avanza hasta ahí y no más.
+    // R1 - solape (07:00) es posterior al anterior (04:00): avanza hasta ahí y no más.
     expect(decision.cursor).toBe(menosSolape(R1.created_at!));
-    const pegada = reunion("p", "2026-10-05T08:10:00.000Z");
+    const pegada = reunion("p", "2026-10-05T05:30:00.000Z");
     const otra = decidir([{ meeting: pegada, guardada: false }]);
     expect(otra.avanza).toBe(false);
     expect(otra.cursor).toBe(ANTERIOR);
   });
 
   it("nunca retrocede", () => {
-    const vieja = reunion("v", "2026-10-05T08:05:00.000Z");
+    const vieja = reunion("v", "2026-10-05T05:00:00.000Z");
     const decision = decidir([{ meeting: vieja, guardada: true }]);
     expect(decision.avanza).toBe(false);
     expect(decision.cursor).toBe(ANTERIOR);
@@ -230,52 +233,63 @@ describe("calcularNuevoCursor", () => {
 
   describe("una reunión que falla siempre", () => {
     const vieja = reunion("corrupta", "2026-10-03T10:00:00.000Z");
-    const anteriorFrenado = menosSolape(vieja.created_at!);
+    const HACE_25_H = new Date(AHORA.getTime() - 25 * 60 * 60 * 1000).toISOString();
 
-    it("⭐ pasado el plazo y si ya frenaba el cursor: se descarta, se reporta y se sigue", () => {
-      const decision = calcularNuevoCursor({
-        cursorAnterior: anteriorFrenado,
+    function conFalla(primeraFallaAt: string, intentos: number) {
+      return calcularNuevoCursor({
+        cursorAnterior: "2026-10-03T00:00:00.000Z",
         lectura: COMPLETA,
         resultados: [
-          { meeting: vieja, guardada: false },
+          { meeting: vieja, guardada: false, falla: { primeraFallaAt, intentos } },
           { meeting: R2, guardada: true },
         ],
         ahora: AHORA,
       });
-      expect(AHORA.getTime() - new Date(vieja.created_at!).getTime()).toBeGreaterThan(
-        PLAZO_DE_REINTENTOS_MS
-      );
+    }
+
+    it("⭐ 24 h desde la primera falla y 6 intentos: se descarta, se reporta y se sigue", () => {
+      const decision = conFalla(HACE_25_H, INTENTOS_MINIMOS);
       expect(decision.descartadas).toEqual([vieja]);
       expect(decision.cursor).toBe(menosSolape(R2.created_at!));
     });
 
-    it("dentro del plazo: sigue frenando aunque ya frenaba", () => {
-      const reciente = reunion("r", "2026-10-05T09:00:00.000Z");
-      const decision = calcularNuevoCursor({
-        cursorAnterior: menosSolape(reciente.created_at!),
-        lectura: COMPLETA,
-        resultados: [
-          { meeting: reciente, guardada: false },
-          { meeting: R3, guardada: true },
-        ],
-        ahora: AHORA,
-      });
+    it("⭐ reunión vieja que falla por primera vez (puesta al día tras una caída): frena, no se descarta", () => {
+      // El plazo se mide desde la primera falla, no desde el created_at de la reunión.
+      expect(AHORA.getTime() - new Date(vieja.created_at!).getTime()).toBeGreaterThan(
+        PLAZO_DE_REINTENTOS_MS
+      );
+      const decision = conFalla(AHORA.toISOString(), 1);
       expect(decision.descartadas).toEqual([]);
-      expect(decision.avanza).toBe(false);
+      expect(decision.cursor).toBe(menosSolape(vieja.created_at!));
     });
 
-    it("vieja pero fallando por primera vez (el cursor venía más atrás): frena, no se descarta", () => {
+    it("pasó el plazo pero con pocos intentos (el cron estuvo parado): frena", () => {
+      const decision = conFalla("2026-10-01T00:00:00.000Z", INTENTOS_MINIMOS - 1);
+      expect(decision.descartadas).toEqual([]);
+      expect(decision.cursor).toBe(menosSolape(vieja.created_at!));
+    });
+
+    it("muchos intentos dentro del plazo (alguien apretó sincronizar varias veces): frena", () => {
+      const hace23h = new Date(AHORA.getTime() - 23 * 60 * 60 * 1000).toISOString();
+      expect(conFalla(hace23h, 20).descartadas).toEqual([]);
+    });
+
+    it("sin registro de fallas (no se pudo leer la tabla): frena, no se descarta", () => {
       const decision = calcularNuevoCursor({
-        cursorAnterior: "2026-10-02T00:00:00.000Z",
+        cursorAnterior: "2026-10-03T00:00:00.000Z",
         lectura: COMPLETA,
-        resultados: [
-          { meeting: vieja, guardada: false },
-          { meeting: R2, guardada: true },
-        ],
+        resultados: [{ meeting: vieja, guardada: false }],
         ahora: AHORA,
       });
       expect(decision.descartadas).toEqual([]);
-      expect(decision.cursor).toBe(anteriorFrenado);
+      expect(decision.cursor).toBe(menosSolape(vieja.created_at!));
+    });
+
+    it("debeDescartarse: bordes exactos y fecha ilegible", () => {
+      const justo = new Date(AHORA.getTime() - PLAZO_DE_REINTENTOS_MS).toISOString();
+      expect(debeDescartarse({ primeraFallaAt: justo, intentos: INTENTOS_MINIMOS }, AHORA)).toBe(true);
+      expect(debeDescartarse({ primeraFallaAt: "nunca", intentos: 99 }, AHORA)).toBe(false);
+      expect(debeDescartarse(undefined, AHORA)).toBe(false);
     });
   });
 });

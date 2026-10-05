@@ -21,18 +21,30 @@ const MINUTO_MS = 60 * 1000;
 const HORA_MS = 60 * MINUTO_MS;
 
 /**
- * Cuánto se retrocede desde la última reunión leída. Cubre reuniones con la
- * misma hora y las que Fathom lista unos minutos después de su `created_at`.
- * Volver a leerlas no cuesta trabajo caro: el guardado no las vuelve a analizar
- * (`debeReasociarAlSincronizar` en `lib/fathom/sync.ts`).
+ * Cuánto se retrocede desde la última reunión leída: 2 horas.
+ *
+ * Cubre reuniones con la misma hora y, sobre todo, las que Fathom lista un rato
+ * después de su `created_at` (la reunión se crea al terminar de grabar, pero el
+ * transcript y el resumen de una llamada larga pueden tardar en estar listos).
+ * Ese retraso no está documentado; dos horas cubren con margen una llamada larga
+ * y el procesamiento. Volver a leer cuesta poco: el guardado sólo refresca los
+ * datos de Fathom y no vuelve a mandar a análisis una llamada ya procesada
+ * (`debeReasociarAlSincronizar` en `lib/fathom/sync.ts`). Más solape no suma: el
+ * pedido abierto ya relee como mucho 12 h (`siguienteTramo`).
  */
-export const SOLAPE_MS = 30 * MINUTO_MS;
+export const SOLAPE_MS = 2 * HORA_MS;
 
 /**
- * Mientras una reunión que no se pudo guardar tenga menos de esto, frena el
- * cursor y se reintenta en cada corrida (el cron es horario: unos 24 intentos).
+ * Una reunión que no se pudo guardar se deja de reintentar sólo cuando se
+ * cumplen las dos cosas: pasó este plazo **desde su primera falla** (no desde su
+ * `created_at`: después de una caída, todo lo atrasado ya sería "viejo") y falló
+ * por lo menos `INTENTOS_MINIMOS` veces. El plazo cubre un error de fin de
+ * semana a medias; los intentos, que el cron haya estado parado.
  */
 export const PLAZO_DE_REINTENTOS_MS = 24 * HORA_MS;
+
+/** Corridas con falla antes de poder descartar una reunión. Ver `PLAZO_DE_REINTENTOS_MS`. */
+export const INTENTOS_MINIMOS = 6;
 
 /**
  * Tamaño de cada tramo cuando la sincronización viene atrasada. Ver
@@ -121,6 +133,12 @@ export type LecturaDeVentana = {
 export type ResultadoDeReunion = {
   meeting: FathomMeetingRecord;
   guardada: boolean;
+  /**
+   * Sólo en las que fallaron: el registro persistido de sus fallas
+   * (`fathom_sync_fallas`), ya contando la de esta corrida. Sin registro (no se
+   * pudo leer ni escribir) la reunión frena el cursor y no se descarta.
+   */
+  falla?: { primeraFallaAt: string; intentos: number };
 };
 
 export type OrdenDeLlegada = "ascendente" | "descendente" | "desconocido";
@@ -148,13 +166,26 @@ export function ordenDeLlegada(meetings: FathomMeetingRecord[]): OrdenDeLlegada 
   return "desconocido";
 }
 
+/** ¿Se deja de reintentar una reunión que sigue fallando? Ver `PLAZO_DE_REINTENTOS_MS`. */
+export function debeDescartarse(
+  falla: ResultadoDeReunion["falla"],
+  ahora: Date
+): boolean {
+  if (!falla) return false;
+  const primera = aMs(falla.primeraFallaAt);
+  if (primera === null) return false;
+  return (
+    falla.intentos >= INTENTOS_MINIMOS && ahora.getTime() - primera >= PLAZO_DE_REINTENTOS_MS
+  );
+}
+
 export type DecisionDeCursor = {
   /** El valor para `last_sync_at`. Igual al anterior si no avanza. */
   cursor: string | null;
   avanza: boolean;
   /**
-   * Fallaron y ya no frenan el cursor: superaron el plazo de reintentos y ya lo
-   * venían frenando. Se reportan a Sentry.
+   * Fallaron y ya no frenan el cursor: cumplieron el plazo y los intentos de
+   * `debeDescartarse`. Se marcan en `fathom_sync_fallas` y se reportan a Sentry.
    */
   descartadas: FathomMeetingRecord[];
   /** Fallaron y no tienen fecha: no hay dónde frenar el cursor. Se reportan. */
@@ -188,12 +219,10 @@ function maximo(fechas: Array<number | null>): number | null {
  *      más viejo que lo leído y no se cuenta.
  * 2. **Fallas**: una reunión que no se guardó frena el cursor en su fecha.
  *    Deja de frenarlo (y se reporta) cuando tiene más de
- *    `PLAZO_DE_REINTENTOS_MS` **y** ya lo venía frenando (el cursor anterior
- *    quedó a la altura de esa reunión, menos el solape). Así un dato corrupto
- *    no traba la sync para siempre, y una caída de la base durante una puesta
- *    al día no descarta de un saque las reuniones viejas que fallaron por
- *    primera vez: esas frenan el cursor y se reintentan en la corrida
- *    siguiente.
+ *    `PLAZO_DE_REINTENTOS_MS` desde su primera falla **y** falló por lo menos
+ *    `INTENTOS_MINIMOS` veces (ver `debeDescartarse`). Así un dato corrupto no
+ *    traba la sync para siempre, y ni una caída larga ni una puesta al día
+ *    descartan una reunión que todavía se puede recuperar.
  * 3. Al menor de los dos se le resta `SOLAPE_MS`.
  * 4. **Nunca retrocede.** Si no se guardó ni falló nada, no hay techo y el
  *    cursor queda donde estaba; la ventana no crece sin límite porque, cuando
@@ -208,7 +237,6 @@ export function calcularNuevoCursor(params: {
 }): DecisionDeCursor {
   const { lectura, resultados } = params;
   const anterior = aMs(params.cursorAnterior);
-  const ahora = params.ahora.getTime();
   const completaHasta = aMs(lectura.completaHasta);
 
   let techo: number | null;
@@ -227,16 +255,14 @@ export function calcularNuevoCursor(params: {
   const descartadas: FathomMeetingRecord[] = [];
   const sinFecha: FathomMeetingRecord[] = [];
   let limiteDeFallas: number | null = null;
-  for (const { meeting, guardada } of resultados) {
+  for (const { meeting, guardada, falla } of resultados) {
     if (guardada) continue;
     const fecha = fechaDeCreacion(meeting);
     if (fecha === null) {
       sinFecha.push(meeting);
       continue;
     }
-    const vencida = ahora - fecha > PLAZO_DE_REINTENTOS_MS;
-    const yaFrenaba = anterior !== null && anterior >= fecha - SOLAPE_MS;
-    if (vencida && yaFrenaba) {
+    if (debeDescartarse(falla, params.ahora)) {
       descartadas.push(meeting);
       continue;
     }

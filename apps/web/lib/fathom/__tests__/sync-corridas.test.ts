@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const ORG = "org-1";
 const OTRA_ORG = "org-2";
 const USER = "user-1";
-const CONEXION = "2026-10-05T06:00:00.000Z";
+const CONEXION = "2026-10-05T00:00:00.000Z";
 
 type Fila = Record<string, unknown>;
 type Consulta = { tabla: string; op: string; filtros: Record<string, unknown> };
@@ -48,10 +48,12 @@ vi.mock("@/lib/observability/reportar-falla", () => ({
 }));
 
 function coincide(fila: Fila, filtros: Record<string, unknown>) {
-  return Object.entries(filtros).every(([col, val]) => fila[col] === val);
+  return Object.entries(filtros).every(([col, val]) =>
+    Array.isArray(val) ? val.includes(fila[col]) : (fila[col] ?? null) === val
+  );
 }
 
-/** Supabase mínimo: lo que usan la sync de la org, la del miembro y el upsert. */
+/** Supabase mínimo: lo que usan la sync de la org, la del miembro, el upsert y el registro de fallas. */
 function crearAdmin() {
   return {
     from(tabla: string) {
@@ -68,6 +70,14 @@ function crearAdmin() {
           filtros[col] = val;
           return builder;
         },
+        is: (col: string, val: null) => {
+          filtros[col] = val;
+          return builder;
+        },
+        in: (col: string, vals: unknown[]) => {
+          filtros[col] = vals;
+          return builder;
+        },
         maybeSingle: async () => {
           registrar();
           return { data: filas().find((f) => coincide(f, filtros)) ?? null, error: null };
@@ -77,26 +87,36 @@ function crearAdmin() {
           cambios = row;
           return builder;
         },
+        delete: () => {
+          op = "delete";
+          return builder;
+        },
         insert: (row: Fila) => {
           op = "insert";
           registrar();
-          const falla = sim.fallarInsert.has(String(row.fathom_call_id));
-          const nueva = { id: `call-${filas().length + 1}`, processed_at: null, ...row };
+          const falla = tabla === "fathom_calls" && sim.fallarInsert.has(String(row.fathom_call_id));
+          const nueva = { id: `${tabla}-${filas().length + 1}`, processed_at: null, ...row };
           if (!falla) filas().push(nueva);
+          const resultado = falla
+            ? { data: null, error: { message: "insert simulado que falla" } }
+            : { data: { id: nueva.id }, error: null };
           return {
-            select: () => ({
-              single: async () =>
-                falla
-                  ? { data: null, error: { message: "insert simulado que falla" } }
-                  : { data: { id: nueva.id }, error: null },
-            }),
+            select: () => ({ single: async () => resultado }),
+            then: (resolve: (v: { error: unknown }) => void) => resolve({ error: resultado.error }),
           };
         },
-        // `await admin.from(...).update(...).eq(...)` resuelve acá.
-        then(resolve: (v: { error: null }) => void) {
+        // `await` de un select, update o delete encadenado resuelve aquí.
+        then(resolve: (v: { data?: unknown; error: null }) => void) {
+          registrar();
           if (op === "update" && cambios) {
-            registrar();
             for (const fila of filas()) if (coincide(fila, filtros)) Object.assign(fila, cambios);
+          }
+          if (op === "delete") {
+            sim.tablas[tabla] = filas().filter((f) => !coincide(f, filtros));
+          }
+          if (op === "select") {
+            resolve({ data: filas().filter((f) => coincide(f, filtros)), error: null });
+            return;
           }
           resolve({ error: null });
         },
@@ -206,7 +226,55 @@ describe("sync de la organización: dos corridas", () => {
     for (const c of sim.consultas.filter((c) => c.tabla === "fathom_calls" && c.op === "select")) {
       expect(c.filtros.organization_id).toBe(ORG);
     }
+    // El registro de fallas es el de la conexión de la org (user_id nulo), y se
+    // borró al guardarse la reunión.
+    for (const c of sim.consultas.filter((c) => c.tabla === "fathom_sync_fallas" && c.op !== "delete" && c.op !== "insert")) {
+      expect(c.filtros).toMatchObject({ organization_id: ORG, user_id: null });
+    }
+    expect(sim.tablas.fathom_sync_fallas).toEqual([]);
     expect(sim.reportes).toEqual([]);
+  });
+
+  it("⭐ una reunión que falla siempre: se reintenta 24 h desde su primera falla y 6 corridas, después se sigue sin ella", async () => {
+    const { syncFathomMeetingsForOrganization } = await import("@/lib/fathom/sync");
+    const integracion = () => sim.tablas.fathom_integrations.find((f) => f.organization_id === ORG)!;
+    sim.fallarInsert.add("101");
+    const registro = () => (sim.tablas.fathom_sync_fallas ?? []).find((f) => f.fathom_call_id === "101");
+
+    // Corrida 1 y, tras una caída de 25 h, corrida 2: la reunión ya es "vieja"
+    // pero sólo falló dos veces. Sigue frenando el cursor (esto era M-1).
+    await syncFathomMeetingsForOrganization(ORG);
+    const frenado = integracion().last_sync_at as string;
+    vi.setSystemTime(new Date("2026-10-06T10:00:00Z"));
+    await syncFathomMeetingsForOrganization(ORG);
+    expect(registro()).toMatchObject({ intentos: 2, primera_falla_at: "2026-10-05T09:00:00.000Z", descartada_at: null });
+    expect(integracion().last_sync_at).toBe(frenado);
+    expect(sim.reportes).toEqual([]);
+
+    // Corridas 3 a 5: todavía no llega a 6 intentos.
+    for (const hora of ["11", "12", "13"]) {
+      vi.setSystemTime(new Date(`2026-10-06T${hora}:00:00Z`));
+      await syncFathomMeetingsForOrganization(ORG);
+    }
+    expect(registro()!.intentos).toBe(5);
+    expect(integracion().last_sync_at).toBe(frenado);
+
+    // Corrida 6: se descarta, se marca, se reporta y el cursor pasa.
+    vi.setSystemTime(new Date("2026-10-06T14:00:00Z"));
+    await syncFathomMeetingsForOrganization(ORG);
+    expect(registro()).toMatchObject({ intentos: 6, descartada_at: "2026-10-06T14:00:00.000Z" });
+    expect(Date.parse(integracion().last_sync_at as string)).toBeGreaterThan(Date.parse(FALLA.created_at));
+    expect(sim.reportes).toHaveLength(1);
+    expect(sim.reportes[0].contexto).toMatchObject({ organizationId: ORG, extra: { recording_id: "101" } });
+
+    // Recuperación a mano: se arregla la causa y se rebobina el cursor. La reunión
+    // entra y su registro se borra.
+    sim.fallarInsert.clear();
+    integracion().last_sync_at = "2026-10-05T06:00:00.000Z";
+    vi.setSystemTime(new Date("2026-10-06T15:00:00Z"));
+    await syncFathomMeetingsForOrganization(ORG);
+    expect(llamada(undefined, "101")).toMatchObject({ organization_id: ORG });
+    expect(registro()).toBeUndefined();
   });
 
   it("⭐ el solape vuelve a traer una llamada ya procesada y no la manda de nuevo al análisis", async () => {
@@ -342,9 +410,40 @@ describe("sync del miembro: dos corridas", () => {
     for (const c of filtroDeOrgEnTodo("team_member_integrations")) {
       expect(c.filtros).toMatchObject({ organization_id: ORG, user_id: USER, integration_type: "fathom" });
     }
+    for (const c of sim.consultas.filter((c) => c.tabla === "fathom_sync_fallas" && c.op === "select")) {
+      expect(c.filtros).toMatchObject({ organization_id: ORG, user_id: USER });
+    }
+    expect(sim.tablas.fathom_sync_fallas).toEqual([]);
     for (const c of sim.consultas.filter((c) => c.tabla === "fathom_calls" && c.op === "select")) {
       expect(c.filtros.organization_id).toBe(ORG);
     }
+  });
+
+  it("⭐ una reunión que falla siempre: el miembro tiene su propio registro y la descarta a las 24 h y 6 corridas", async () => {
+    sim.fallarInsert.add("101");
+    const registro = () => (sim.tablas.fathom_sync_fallas ?? []).find((f) => f.fathom_call_id === "101");
+
+    await correr();
+    const frenado = filaMiembro().last_sync_at as string;
+    expect(registro()).toMatchObject({ organization_id: ORG, user_id: USER, intentos: 1 });
+
+    // Tras una caída de 25 h: segundo intento, sigue frenando.
+    for (const hora of ["10", "11", "12", "13"]) {
+      vi.setSystemTime(new Date(`2026-10-06T${hora}:00:00Z`));
+      await correr();
+      expect(filaMiembro().last_sync_at).toBe(frenado);
+    }
+    expect(registro()!.intentos).toBe(5);
+
+    vi.setSystemTime(new Date("2026-10-06T14:00:00Z"));
+    await correr();
+    expect(registro()).toMatchObject({ intentos: 6, descartada_at: "2026-10-06T14:00:00.000Z" });
+    expect(Date.parse(filaMiembro().last_sync_at as string)).toBeGreaterThan(Date.parse(FALLA.created_at));
+    expect(sim.reportes).toHaveLength(1);
+    expect(sim.reportes[0].contexto).toMatchObject({
+      organizationId: ORG,
+      extra: { conexion: "miembro", user_id: USER, recording_id: "101" },
+    });
   });
 
   it("⭐ una lectura cortada por el tope de 5 páginas no adelanta el cursor", async () => {
@@ -363,11 +462,12 @@ describe("sync del miembro: dos corridas", () => {
     filaMiembro().connected_at = "2026-10-01T00:00:00.000Z";
     sim.reuniones = [];
     await correr();
-    // Con 5 páginas recorre 5 tramos cerrados de 6 h y deja el cursor al final del último.
-    expect(sim.pedidos).toHaveLength(5);
+    // Recorre como mucho 4 tramos cerrados de 6 h por corrida (cuota de pedidos
+    // pesados de Fathom) y deja el cursor al final del último, menos el solape.
+    expect(sim.pedidos).toHaveLength(4);
     expect(sim.pedidos[0].searchParams.get("created_before")).toBe("2026-10-01T06:00:00.000Z");
-    expect(new Date(filaMiembro().last_sync_at as string).getTime()).toBeGreaterThan(
-      Date.parse("2026-10-02T00:00:00Z")
-    );
+    const cursor = Date.parse(filaMiembro().last_sync_at as string);
+    expect(cursor).toBeGreaterThan(Date.parse("2026-10-01T21:00:00Z"));
+    expect(cursor).toBeLessThan(Date.parse("2026-10-02T00:00:00Z"));
   });
 });

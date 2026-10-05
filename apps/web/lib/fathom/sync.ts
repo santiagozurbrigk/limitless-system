@@ -3,6 +3,7 @@ import { isManualFathomLink } from "@/lib/fathom/client-matcher";
 import { resolverVentanaDeSync } from "@/lib/fathom/sync-window";
 import { calcularNuevoCursor, type ResultadoDeReunion } from "@/lib/fathom/cursor";
 import { leerVentanaDeFathom, reportarDecisionDeCursor } from "@/lib/fathom/leer-ventana";
+import { marcarDescartadas, registrarFallasDeSync } from "@/lib/fathom/fallas-de-sync";
 import {
   FathomApiError,
   mensajeDeFathom,
@@ -331,12 +332,17 @@ export async function syncFathomMeetingsForOrganization(
    * guardar una llamada para escribir `new Date()`, y las que habían fallado
    * quedaban atrás para siempre.
    */
+  // Cuenta las fallas por reunión desde la primera (`fathom_sync_fallas`): con
+  // eso se decide cuándo dejar de reintentar una que falla siempre.
+  const conexion = { organizationId, userId: null };
+  const conFallas = await registrarFallasDeSync(admin, conexion, resultados, ahora);
   const decision = calcularNuevoCursor({
     cursorAnterior: ventana.desde,
     lectura,
-    resultados,
+    resultados: conFallas,
     ahora,
   });
+  await marcarDescartadas(admin, conexion, decision.descartadas, ahora);
   reportarDecisionDeCursor(decision, { organizationId, conexion: "organizacion" });
 
   if (decision.avanza) {

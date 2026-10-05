@@ -10,7 +10,9 @@ export const FATHOM_LEGACY_CALLS_URL = "https://api.fathom.ai/v1/calls";
 export class FathomApiError extends Error {
   constructor(
     message: string,
-    readonly status?: number
+    readonly status?: number,
+    /** Segundos de espera que pidió Fathom en `Retry-After` (sólo en un 429). */
+    readonly retryAfterSeconds?: number
   ) {
     super(message);
     this.name = "FathomApiError";
@@ -44,6 +46,19 @@ export function mensajeDeFathom(fallo: unknown): string {
     return fallo.message;
   }
   return fallo instanceof Error ? fallo.message : "No se pudo sincronizar con Fathom.";
+}
+
+/**
+ * `Retry-After` en segundos. La doc de Fathom lo manda en segundos; también se
+ * acepta la forma de fecha HTTP. Ilegible o ausente: `undefined`.
+ */
+export function leerRetryAfter(valor: string | null, ahora = Date.now()): number | undefined {
+  if (!valor?.trim()) return undefined;
+  const segundos = Number(valor.trim());
+  if (Number.isFinite(segundos) && segundos >= 0) return segundos;
+  const fecha = Date.parse(valor);
+  if (Number.isNaN(fecha)) return undefined;
+  return Math.max(0, Math.ceil((fecha - ahora) / 1000));
 }
 
 function fathomHeaders(apiKey: string): HeadersInit {
@@ -491,7 +506,8 @@ export async function listFathomMeetings(
       const detail = await parseFathomErrorFromText(rawText, res.statusText);
       throw new FathomApiError(
         `Error al listar reuniones de Fathom (${endpoint}): ${detail}`,
-        res.status
+        res.status,
+        res.status === 429 ? leerRetryAfter(res.headers.get("retry-after")) : undefined
       );
     }
 
