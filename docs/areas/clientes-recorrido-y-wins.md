@@ -154,9 +154,13 @@ Ficha: acceptCheckpointProposalAction → recordCheckpointAction (mismas validac
   una cuota que vence hoy no es pago atrasado y la fecha de cada hito se cuenta en esa zona (SCRUM-493).
 - **La fecha de un hito (`reached_at`) tiene una sola convención, en la zona de la organización**
   (`lib/checkpoints/fecha-del-hito.ts`): el diálogo guarda el día elegido a las 12:00 de la zona de la org, la ficha
-  y la revisión semanal lo leen en esa zona (`getClientJourneyAction` devuelve `timezone`), y la action rechaza un
+  y la revisión semanal lo leen en esa zona (en el cliente, `useZonaDeLaOrganizacion()`), y la action rechaza un
   hito **de un día futuro** en esa zona (`hitoEsFuturo`), no por instante: un hito de hoy se acepta a cualquier hora.
   Las filas del diálogo viejo (12:00:00.000 UTC exactas) se leen con su fecha de UTC, así no se corren en UTC+12.
+- **"Vence el" y "trabado hace N días" se cuentan en días calendario de la zona de la org** (`lib/checkpoints/stalled.ts`):
+  el día del hito anterior más el plazo es el día del vencimiento, y el atraso son los días desde ahí hasta hoy.
+- **Los "hoy" de la ficha son los de la org** (`useHoyDeLaOrganizacion()`): valor por defecto y tope del win, del hito
+  y del baseline, "vencida" de las tareas y la fecha de la 1-1 de la que salió cada tarea, para todos los miembros.
 - **Fechas `YYYY-MM-DD` se formatean partiendo el string**, no con `new Date()`: en UTC-3 se corre un día.
 
 ## Limitaciones conocidas y deuda

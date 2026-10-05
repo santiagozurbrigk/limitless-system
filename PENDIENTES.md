@@ -2560,28 +2560,31 @@ Prioridad sugerida P2: no hay una filtración conocida; el procedimiento se nece
   `docs/arquitectura/vision-general.md` § Convenciones), sin cambiar lo que guardan.
 - **Dónde:** los archivos citados.
 
-#### [FECHAS-UTC-RESTO] Fechas que todavía se cortan en UTC, fuera del alcance de SCRUM-493
+#### [FECHAS-UTC-RESTO] Períodos de reporte que todavía se cortan en UTC o en el navegador, fuera del alcance de SCRUM-493
 - **Tipo:** bug
-- **Estado verificado:** la revisión de SCRUM-493 arregló los "hoy", vencimientos y fechas por defecto que se
-  calculaban en UTC y dejó afuera, con motivo, lo que es otra decisión de cada área:
-  - Ventanas de reportes y de proveedores, que agrupan instantes por día de UTC: anuncios
+- **Estado verificado:** SCRUM-493 dejó una regla para toda la app: el "hoy" y las fechas calendario de un dato de
+  la organización son los de su zona (`organizations.timezone`). Quedan afuera, con motivo, los **períodos de
+  reporte** (ventanas de días, "mes actual"), porque se cortan todos juntos y en algunos la zona no es la de la org:
+  - Anuncios: el día lo define la zona de la cuenta de Meta, no la de la org
     (`components/marketing/ads-dashboard.tsx:101`, `app/(platform)/marketing/anuncios/page.tsx:10`,
-    `app/api/cron/capture-ad-metrics/route.ts:56`, `lib/marketing/ad-metrics-snapshot.ts:42`; el día lo define la
-    zona de la cuenta de Meta), reportes ejecutivos (`lib/executive-reports/generate-daily.ts:144`,
-    `compute-departments.ts:61`), contexto de inteligencia (`lib/intelligence/collect-context.ts:298`) y las
-    sparklines de conversaciones del Panel y de Ventas (`lib/metrics/derive-dashboard-data.ts:65`,
-    `derive-sales-metrics.ts:25`). Embudos, VTurb y Hyros ya están en `[EMBUDOS-TIMEZONE]`; los meses de Finanzas,
-    en `[FIN-MESES-UTC]` y `[AUD-CONF-10]`. Del mismo tipo: el mes actual de una oferta
-    (`lib/product/offer-metrics.ts:43,87`) y los períodos del panel de super admin (`lib/super-admin/period.ts`),
-    que se arman con el reloj del servidor; el de super admin cruza organizaciones, así que primero hay que decidir
-    en qué zona se corta.
-  - Hitos: la fecha límite del próximo hito es el instante del anterior más su plazo, cortado en UTC
-    (`lib/checkpoints/stalled.ts:135`). Cambiarlo toca la regla de "trabado", que se mide en días de 24 horas. (La
-    lectura y escritura de la fecha del hito ya tienen una sola convención: `lib/checkpoints/fecha-del-hito.ts`.)
+    `app/api/cron/capture-ad-metrics/route.ts:56`, `lib/marketing/ad-metrics-snapshot.ts:42`).
+  - Reportes por cron: `lib/executive-reports/generate-daily.ts:144`, `compute-departments.ts:61`,
+    `lib/intelligence/collect-context.ts:198,298`.
+  - Ventanas de los últimos días y del mes en pantallas y actions: sparklines de conversaciones del Panel y de Ventas
+    (`lib/metrics/derive-dashboard-data.ts:64,158-168`, `derive-sales-metrics.ts:25`), rango de métricas de ventas
+    (`components/sales/metrics/date-range-picker.tsx`, bordes del día del navegador; el tope ya es el hoy de la org),
+    `app/sales/metrics-actions.ts:43-59`, `app/manychat/cta-actions.ts:19-36` y `lib/metrics/custom-metrics.ts:109`.
+  - "Mes actual" con el reloj del navegador o del servidor: `lib/metrics/derive-dashboard-data.ts:127-130` (clientes
+    nuevos del mes), `lib/metrics/enrich-team-compensation.ts:5-11`, `lib/metrics/derive-monthly-series.ts:36` (serie de 6 meses),
+    `lib/product/offer-metrics.ts:34,43,87`. Los
+    meses de Finanzas están en `[FIN-MESES-UTC]` y `[AUD-CONF-10]`; Embudos, VTurb y Hyros, en `[EMBUDOS-TIMEZONE]`.
+  - Super admin, que cruza organizaciones y necesita decidir una zona: `lib/super-admin/period.ts`,
+    `lib/super-admin/queries.ts:682,990`, `lib/super-admin/org-metrics.ts:73` y la biblioteca global del AI Brain
+    (`lib/ai-brain/mapper.ts:114,145,200`).
   - ClickUp: la fecha de alta importada se corta en UTC y además no entiende los timestamps en milisegundos que
     manda ClickUp (`app/integrations/clickup/import-actions.ts:230`).
-- **Qué hay que hacer:** pasar cada uno a `lib/fechas` con la zona que corresponda (la de la organización; en
-  anuncios, la de la cuenta publicitaria), decidiendo en cada área si su día se corta en la zona de la org.
+- **Qué hay que hacer:** decidir en qué zona se cortan los períodos de reporte (la de la org, salvo anuncios: la de la
+  cuenta; super admin: una fija) y pasarlos juntos a `lib/fechas` (`inicioDelDiaEnZona`, `fechaDeInstanteEnZona`).
 - **Dónde:** los archivos citados.
 
 ### Infraestructura, seguridad y tests (transversal) · P3

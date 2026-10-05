@@ -34,6 +34,50 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · Tercer fix-pack de SCRUM-493: una sola regla de fechas para toda la app, la zona de la organización
+
+**Rama:** `fix/SCRUM-493-fechas-utc`
+**Commit(s):** `6f29a1a9` (Fathom), `0a6b582f` (regla única en el cliente e hitos), `4ac2ac22` (búsqueda ampliada) y
+este (docs)
+**Módulo(s) afectado(s):** transversal. Nuevos `providers/zona-de-la-organizacion-provider.tsx` y
+`lib/fechas/organizacion-activa.ts`; cambian el layout de la plataforma, `lib/fechas/calendario.ts`, `CampoFecha`,
+Clientes (tareas, wins, baseline, alta, ficha, cobros, hitos), Closing, Ventas, Workboard, Lanzamientos, Panel,
+Finanzas, Fathom, el agente, Discord y ManyChat. Se borran `lib/hooks/use-fecha-de-hoy-local.ts`, `fechaDeHoyLocal`
+y `aFechaDeInput`.
+
+**Qué se hizo:**
+- **MENOR-E, Fathom:** las tareas que salen de una 1-1 se calculan desde el día de la llamada en la zona de la org
+  (antes, el día de UTC: una 1-1 del jueves a las 22:00 de Argentina iba al prompt como viernes y corría todos los
+  vencimientos). La lista de 1-1 de la ficha muestra ese día, el mismo del resumen; una lectura de zona para la lista
+  y el contador.
+- **MENOR-F, regla única:** el "hoy" y las fechas calendario de un dato de la organización son los de su zona, para
+  todos los miembros. El layout lee la zona una vez y la reparte `ZonaDeLaOrganizacionProvider`;
+  `useHoyDeLaOrganizacion()` reemplaza al hoy del navegador en valores por defecto, topes y "vencida" (tareas, wins,
+  baseline, alta de cliente, cobros incluido el cierre de SCRUM-104, sprint, métrica de lanzamiento, filtro de
+  facturación, rango de métricas, calendario y tablero de Workboard, días restantes del programa y gráfico de ingresos
+  del Panel). `CampoFecha` lee en la zona de la org por defecto. Closing y la ficha toman la zona del provider.
+- **Hitos:** "vence el" y "trabado hace N días" se cuentan en días calendario de la zona de la org; sale de
+  `[FECHAS-UTC-RESTO]`.
+- **Búsqueda ampliada** (`.slice(0, 10)`, `.substring`, `.split("T")`, `getUTC*` y `date-fns` sobre instantes): se
+  arreglaron las fechas del agente, el win que nace de un testimonio de Discord, el corte diario de ManyChat, el
+  promedio diario del equipo en Ventas, el día de creación de las tareas del tablero y la fecha de la 1-1 de las
+  tareas de cliente. Lo que queda (períodos de reporte, mes actual, super admin, ClickUp) está en `[FECHAS-UTC-RESTO]`.
+- `app/sales/actions.ts:47`: `aggregateTeamAverageByDate` sí tiene llamadores (`getTeamAverageEvolutionAction`,
+  usado en la ficha), así que se arregló en vez de borrarse.
+- Tests con un miembro en Madrid y la org en Argentina a las 22:00, y control negativo de cada arreglo
+  (`control-negativo-fixpack-3.txt` en la evidencia).
+
+**Por qué / finalidad:** la tercera pasada de la revisión adversarial encontró dos fechas de Fathom cortadas en UTC
+(una escribe vencimientos de tareas) y pantallas donde convivían el hoy del navegador y el de la org.
+
+**Decisiones de diseño relevantes:** una sola zona por dato, la de su dueño. Los contadores del servidor necesitan
+la de la org, así que el navegador también la usa. La agenda de turnos de Closing sigue mostrando los instantes en la
+hora de quien mira, porque son reuniones con hora.
+
+**Riesgos / deuda técnica pendiente:** `[FECHAS-UTC-RESTO]` (períodos de reporte) y `[CAMPO-FECHA-MIGRAR]`.
+
+---
+
 ### 2026-10-05 · Segundo fix-pack de SCRUM-493: hitos, Fathom y Closing, todo en la zona de la organización
 
 **Rama:** `fix/SCRUM-493-fechas-utc`
