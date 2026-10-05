@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   fetchYouTubeVideoDetails,
+  metricasDeVideoParaGuardar,
   youtubeMetricsToAssetFields,
 } from "@/lib/youtube/video-metrics";
 
@@ -115,26 +116,10 @@ export async function syncYoutubeChannelAndVideos(
     const snippet = item.snippet;
     const title = snippet?.title ?? "Video";
     const caption = snippet?.description ?? "";
-    const nativeFields = videoDetails.get(videoId)
-      ? youtubeMetricsToAssetFields(videoDetails.get(videoId)!)
-      : {
-          views: 0,
-          likes: 0,
-          comments: 0,
-          duration_seconds: null as number | null,
-          thumbnail_url: snippet?.thumbnails?.medium?.url ?? null,
-          platform_metadata: {},
-        };
-
-    const metrics = {
-      views: nativeFields.views,
-      likes: nativeFields.likes,
-      comments: nativeFields.comments,
-      shares: 0,
-      saves: 0,
-      reach: 0,
-      impressions: 0,
-    };
+    const detalle = videoDetails.get(videoId);
+    const thumbnailUrl = detalle
+      ? youtubeMetricsToAssetFields(detalle).thumbnail_url
+      : null;
 
     await admin.from("content_pieces").upsert(
       {
@@ -147,11 +132,11 @@ export async function syncYoutubeChannelAndVideos(
         title,
         caption,
         hashtags: [],
-        thumbnail_url: nativeFields.thumbnail_url ?? snippet?.thumbnails?.medium?.url ?? null,
-        published_at: videoDetails.get(videoId)?.published_at ?? snippet?.publishedAt ?? null,
+        thumbnail_url: thumbnailUrl ?? snippet?.thumbnails?.medium?.url ?? null,
+        published_at: detalle?.published_at ?? snippet?.publishedAt ?? null,
         status: "published",
-        metrics,
-        metrics_updated_at: now,
+        // Sin el detalle del video (cuota o token) no se pisan las métricas guardadas con ceros.
+        ...metricasDeVideoParaGuardar(detalle, now),
       },
       { onConflict: "organization_id,platform_post_id" }
     );

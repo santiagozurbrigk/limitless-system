@@ -1967,7 +1967,7 @@ Fuente: PENDIENTES.md [UTM-PUBLICO-ORG-EN-CUERPO] · Doc del área: docs/areas/m
 
 *Estado verificado:* {{syncContentMetricsForOrg}} lanza hasta 50 {{getPostAnalytics}} en paralelo ({{lib/marketing/sync-content-metrics.ts:8,56-77}}); {{zernioFetchJson}} ({{lib/zernio/client.ts:268-284}}) no reintenta. Zernio responde 429 con {{limit: 6}} y {{retryAfterSeconds: 1}}: 849 rechazos en {{/api/queue/process-cron-sync-metrics}} en 7 días (agregado de Vercel, 2026-09-23).
 
-*Riesgo:* Si una org tiene más de ~6 piezas, entonces la mayoría no se actualiza, y como el orden es ""más viejas primero"", las mismas vuelven a chocar al día siguiente.
+*Riesgo:* Si una org tiene más de ~6 piezas, entonces la mayoría no se actualiza, y como el orden es ""más viejas primero"", las mismas vuelven a chocar al día siguiente. Lo mismo pasa con las piezas cuyo analytics nunca se reconoce (por ejemplo, historias que Zernio trae sin analytics): quedan con {{metrics_updated_at}} en null o viejo, el cron las toma primero cada día y, si son 50 o más, el resto de la org no se actualiza. Hace falta registrar el último intento fallido o un tope de reintentos.
 
 *Impacto:* Métricas de contenido desactualizadas en Marketing para las orgs con más publicaciones (3 afectadas en la ventana).
 
@@ -1976,15 +1976,6 @@ Fuente: PENDIENTES.md [UTM-PUBLICO-ORG-EN-CUERPO] · Doc del área: docs/areas/m
 *Dónde:* {{apps/web/lib/marketing/sync-content-metrics.ts}}, {{apps/web/lib/zernio/client.ts}}.
 
 Fuente: PENDIENTES.md [ZERNIO-METRICAS-429] · Doc del área: docs/areas/marketing.md",ZERNIO-METRICAS-429,Marketing,P2,Media,bug
-[AUDITORIA §3 confiabilidad 11] La sync de contenido escribe ceros si el analytics no se reconoce,Bug,Medium,marketing,p2,bug,,,,"*Tipo:* bug
-
-*Estado verificado:* {{mapExternalPostToRow}} usa {{resolvePostAnalytics(post.analytics).metrics}} sin mirar {{recognized}}, y el update de existentes pisa {{metrics}} y {{metrics_updated_at}}.
-
-*Qué hay que hacer:* si {{recognized=false}}, no incluir {{metrics}} en el update (y en el insert, dejar {{null}}).
-
-*Dónde:* {{apps/web/app/marketing/content/sync-actions.ts}}
-
-Fuente: PENDIENTES.md [AUDITORIA §3 confiabilidad 11] · Doc del área: docs/areas/marketing.md",AUDITORIA §3 confiabilidad 11,Marketing,P2,,bug
 [TRIAL-CLEANUP-LOOP] cleanup-trial-reels reprocesa los mismos jobs siempre,Task,Medium,marketing,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
 
 *Estado verificado:* el cron selecciona {{done|failed}} con {{updated_at < 30 días}} y nunca marca el job ni vacía {{variations}}. Auditoría §3 confiabilidad 8.
@@ -2911,7 +2902,7 @@ Fuente: PENDIENTES.md [T-9] · Doc del área: docs/arquitectura/vision-general.m
 Fuente: PENDIENTES.md [T-10] · Doc del área: docs/arquitectura/vision-general.md",T-10,"Infraestructura, seguridad y tests (transversal)",P2,,tests
 [T-11] lib/zernio/resolve-analytics.ts,Task,Medium,infra,p2,tests,,,,"*Tipo:* tests
 
-*Estado verificado:* {{lib/zernio/__tests__/}} sólo tiene {{triggers.test.ts}}.
+*Estado verificado:* {{lib/zernio/__tests__/}} no tiene tests de {{resolve-analytics.ts}}; {{metricas-para-guardar.test.ts}} y {{filas-de-contenido.test.ts}} (SCRUM-172) cubren de forma indirecta que un analytics vacío o desconocido da {{recognized: false}}.
 
 *Qué hay que hacer:* vacío/inválido → ceros; plano; anidado ({{{instagram}}} y {{{platforms:{instagram}}}}) suma; campos faltantes.
 

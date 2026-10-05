@@ -7,113 +7,19 @@ import {
 } from "@/lib/zernio/client";
 import { getZernioClientForOrganization, getZernioIntegrationForOrg } from "@/lib/zernio/integration";
 import { resolvePostAnalytics } from "@/lib/zernio/resolve-analytics";
+import {
+  cambiosParaActualizar,
+  externalPlatformPostId,
+  mapExternalPostToRow,
+  type ContentPieceSyncRow,
+} from "@/lib/zernio/filas-de-contenido";
 import { syncContentMetricsForOrg } from "@/lib/marketing/sync-content-metrics";
 import {
   persistContentThumbnail,
   isInstagramCdnUrl,
 } from "@/lib/marketing/story-thumbnail-storage";
-import type {
-  ContentMetrics,
-  ContentPieceSource,
-  ContentPieceStatus,
-  ContentPieceType,
-} from "@/types/content";
 
 const SYNC_INTERVAL_MS = 30 * 60 * 1000;
-
-type ContentPieceSyncRow = {
-  organization_id: string;
-  type: ContentPieceType;
-  source: ContentPieceSource;
-  platform: string;
-  platform_post_id: string;
-  platform_post_url: string | null;
-  title: string | null;
-  caption: string | null;
-  hashtags: string[];
-  thumbnail_url: string | null;
-  published_at: string | null;
-  status: ContentPieceStatus;
-  metrics: ContentMetrics;
-  metrics_updated_at: string;
-};
-
-function mapZernioType(
-  platform: string,
-  postType?: string,
-  mediaType?: string
-): ContentPieceType {
-  if (platform === "youtube") return "youtube";
-  const resolvedType = postType ?? mediaType;
-  if (resolvedType === "reel" || resolvedType === "video") return "reel";
-  if (resolvedType === "story") return "story";
-  if (resolvedType === "carousel" || resolvedType === "album") return "carousel";
-  return "post";
-}
-
-function isZernioInternalId(id: string): boolean {
-  return /^[a-f0-9]{24}$/i.test(id);
-}
-
-function externalPlatformPostId(post: ZernioPost): string | null {
-  const platformPostId = post.platformPostId?.trim();
-  if (platformPostId) return platformPostId;
-
-  const fallback = post.id ?? post._id;
-  if (!fallback) return null;
-
-  const id = String(fallback).trim();
-  if (!id) return null;
-
-  // Para posts/reels/carousels descartamos IDs internos de Zernio (MongoDB ObjectID)
-  // ya que siempre deben tener un platformPostId de Instagram/YouTube.
-  // Para historias (stories) Instagram asigna IDs numéricos que Zernio puede guardar
-  // solo en `id`/`_id`; si es MongoDB-shaped lo prefijamos para no confundirlo con
-  // IDs reales de Instagram pero aun así lo persistimos.
-  const postType = (post.postType ?? post.mediaType ?? "").toLowerCase();
-  if (postType === "story" && isZernioInternalId(id)) {
-    return `zstory_${id}`;
-  }
-
-  if (isZernioInternalId(id)) return null;
-
-  return id;
-}
-
-function mapExternalPostToRow(
-  post: ZernioPost,
-  organizationId: string,
-  metricsUpdatedAt: string
-): ContentPieceSyncRow | null {
-  const platform = post.platform?.trim().toLowerCase();
-  if (!platform || (platform !== "instagram" && platform !== "youtube")) {
-    return null;
-  }
-
-  const platformPostId = externalPlatformPostId(post);
-  if (!platformPostId) return null;
-
-  const postType = post.postType?.trim();
-  const mediaType = post.mediaType?.trim();
-  const { metrics, lastUpdated } = resolvePostAnalytics(post.analytics);
-
-  return {
-    organization_id: organizationId,
-    type: mapZernioType(platform, postType, mediaType),
-    source: "zernio",
-    platform,
-    platform_post_id: platformPostId,
-    platform_post_url: post.platformPostUrl?.trim() || null,
-    title: post.title?.trim() || null,
-    caption: post.content?.trim() || null,
-    hashtags: Array.isArray(post.hashtags) ? post.hashtags : [],
-    thumbnail_url: post.thumbnailUrl?.trim() || null,
-    published_at: post.publishedAt ?? post.createdAt ?? null,
-    status: "published",
-    metrics,
-    metrics_updated_at: lastUpdated ?? metricsUpdatedAt,
-  };
-}
 
 function dedupeExternalPosts(posts: ZernioPost[]): ZernioPost[] {
   const seen = new Set<string>();
@@ -400,19 +306,7 @@ export async function syncZernioContentAction(): Promise<{ synced: number }> {
 
       const { error } = await supabase
         .from("content_pieces")
-        .update({
-          type: row.type,
-          platform: row.platform,
-          platform_post_url: row.platform_post_url,
-          title: row.title,
-          caption: row.caption,
-          hashtags: row.hashtags,
-          thumbnail_url: thumbnailUrl,
-          published_at: row.published_at,
-          status: row.status,
-          metrics: row.metrics,
-          metrics_updated_at: row.metrics_updated_at,
-        })
+        .update(cambiosParaActualizar(row, thumbnailUrl))
         .eq("id", id)
         .eq("organization_id", organizationId);
 

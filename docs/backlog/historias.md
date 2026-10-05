@@ -496,7 +496,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un usuario de un holding que cambió al negocio activo, cuando abre Contenido, entonces ve las publicaciones de ese negocio y la actualización corre contra ese negocio (hoy ve la biblioteca vacía o un aviso de "Zernio no está conectado").
   - Dada una empresa que no conectó Zernio, cuando entra a la biblioteca, entonces ve el aviso de "no conectado" y nunca contenido de otra cuenta.
   - Cuando Zernio devuelve una publicación sin números reconocibles, entonces la biblioteca conserva los números que ya tenía en vez de mostrarla en cero.
-- **Tareas técnicas:** `[MKT-CONTENT-LIMITE-50]`, `[MKT-HOLDING-ORG]`, `[AUDITORIA §3 confiabilidad 11]`
+- **Tareas técnicas:** `[MKT-CONTENT-LIMITE-50]`, `[MKT-HOLDING-ORG]`, AUDITORIA §3 confiabilidad 11 (resuelta en SCRUM-172)
 - **Para confirmar:** Martín: la solución de las 150 piezas puede ser paginar o filtrar por tipo y fecha; que Agustín elija cuál prefiere ver en pantalla.
 
 ### [H-MKT-02] Ver mis historias de Instagram como historias
