@@ -12,7 +12,9 @@
  * acompañamiento el día que se firmó el contrato.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import {
+  computeOneOnOneRhythm,
   computeOneOnOneStats,
   type LastOneOnOne,
   type OneOnOneStats,
@@ -77,7 +79,7 @@ export async function loadLastOneOnOneByClient(
   }
 
   for (const [clientId, fechas] of Object.entries(fechasPorCliente)) {
-    const stats = computeOneOnOneStats(fechas);
+    const stats = computeOneOnOneRhythm(fechas);
     const entrada = result[clientId];
     if (!entrada) continue;
     entrada.totalCalls = stats.totalCalls;
@@ -100,20 +102,26 @@ export async function loadClientOneOnOneStats(
 ): Promise<OneOnOneStats> {
   const admin = createAdminClient();
 
-  const { data, error } = await admin
-    .from("fathom_calls")
-    .select("call_date")
-    .eq("organization_id", organizationId)
-    .eq("client_id", clientId)
-    .eq("purpose", "delivery")
-    .not("call_date", "is", null);
+  // "Hace cuántos días" se cuenta desde el hoy de la organización, no desde el
+  // de UTC del servidor (SCRUM-493). Una lectura de la zona por pedido.
+  const [{ data, error }, hoy] = await Promise.all([
+    admin
+      .from("fathom_calls")
+      .select("call_date")
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      .eq("purpose", "delivery")
+      .not("call_date", "is", null),
+    fechaDeHoyDeLaOrganizacion(admin, organizationId),
+  ]);
 
   if (error) {
     console.error("[fathom:one-on-ones] stats", error.message);
-    return computeOneOnOneStats([]);
+    return computeOneOnOneStats([], hoy);
   }
 
   return computeOneOnOneStats(
-    ((data ?? []) as { call_date: string }[]).map((row) => row.call_date)
+    ((data ?? []) as { call_date: string }[]).map((row) => row.call_date),
+    hoy
   );
 }

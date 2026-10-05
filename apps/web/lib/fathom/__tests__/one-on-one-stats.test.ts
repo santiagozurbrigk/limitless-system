@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeOneOnOneStats } from "@/lib/fathom/one-on-one-types";
+import { computeOneOnOneRhythm, computeOneOnOneStats } from "@/lib/fathom/one-on-one-types";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
 
-const HOY = new Date("2026-09-20T10:00:00Z");
+/** El día de la organización. */
+const HOY = "2026-09-20";
 
 describe("⭐ el contador de 1-1 del cliente", () => {
   it("sin llamadas no inventa nada", () => {
@@ -79,5 +81,27 @@ describe("⭐ el contador de 1-1 del cliente", () => {
     const stats = computeOneOnOneStats(["2026-09-20"], HOY);
     expect(stats.lastDate).toBe("2026-09-20");
     expect(stats.daysSinceLast).toBe(0);
+  });
+});
+
+/**
+ * SCRUM-493: "hace cuántos días" se cuenta desde el hoy de la organización. A
+ * las 22:00 de Argentina el servidor (UTC) ya está en el día siguiente.
+ */
+describe("⭐ días desde la última 1-1 con el hoy de la organización", () => {
+  it("una 1-1 de hoy a las 15:00, mirada a las 22:00 de Argentina, es de hace 0 días", () => {
+    // 1-oct 15:00 ART = 18:00 UTC; 1-oct 22:00 ART = 2-oct 01:00 UTC.
+    const hoy = fechaDeHoyEnZona("America/Argentina/Buenos_Aires", new Date("2026-10-02T01:00:00Z"));
+    expect(hoy).toBe("2026-10-01");
+    expect(computeOneOnOneStats(["2026-10-01T18:00:00Z"], hoy).daysSinceLast).toBe(0);
+  });
+
+  it("el ritmo no depende de hoy", () => {
+    expect(computeOneOnOneRhythm(["2026-09-01", "2026-09-15"])).toEqual({
+      totalCalls: 2,
+      firstDate: "2026-09-01",
+      lastDate: "2026-09-15",
+      everyDays: 14,
+    });
   });
 });

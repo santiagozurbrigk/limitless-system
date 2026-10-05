@@ -54,25 +54,41 @@ function aFecha(valor: string): number | null {
  * ⭐ Con **una sola** llamada el ritmo es `null`, no cero ni "cada 0 días": con
  * un solo punto no hay ritmo que medir, y cualquier número ahí sería inventado.
  *
+ * `hoy` es la fecha calendario (`YYYY-MM-DD`) de la organización, para
+ * `daysSinceLast`. Sin default a propósito: el servidor corre en UTC y de noche
+ * en Argentina su día ya es mañana (SCRUM-493).
+ *
  * Lógica pura: no toca base ni red.
  */
 export function computeOneOnOneStats(
   dates: readonly string[],
-  hoy: Date = new Date()
+  hoy: string
 ): OneOnOneStats {
+  const ritmo = computeOneOnOneRhythm(dates);
+  const ultima = ritmo.lastDate ? aFecha(ritmo.lastDate) : null;
+  // Misma escala que `aFecha`: el mediodía UTC de cada fecha.
+  const hoyMs = Date.parse(`${hoy}T12:00:00Z`);
+  return {
+    ...ritmo,
+    daysSinceLast:
+      ultima === null ? null : Math.max(0, Math.round((hoyMs - ultima) / MS_POR_DIA)),
+  };
+}
+
+/**
+ * Lo que no depende de hoy: total, primera, última y ritmo. Es lo que usa la
+ * tabla de clientes, que no muestra "hace cuántos días".
+ */
+export function computeOneOnOneRhythm(
+  dates: readonly string[]
+): Omit<OneOnOneStats, "daysSinceLast"> {
   const ordenadas = dates
     .map(aFecha)
     .filter((ms): ms is number => ms != null)
     .sort((a, b) => a - b);
 
   if (ordenadas.length === 0) {
-    return {
-      totalCalls: 0,
-      firstDate: null,
-      lastDate: null,
-      everyDays: null,
-      daysSinceLast: null,
-    };
+    return { totalCalls: 0, firstDate: null, lastDate: null, everyDays: null };
   }
 
   const primera = ordenadas[0];
@@ -83,16 +99,11 @@ export function computeOneOnOneStats(
       ? Math.max(1, Math.round((ultima - primera) / MS_POR_DIA / (ordenadas.length - 1)))
       : null;
 
-  const hoyMs = Date.parse(
-    `${new Date(hoy).toISOString().slice(0, 10)}T12:00:00Z`
-  );
-
   return {
     totalCalls: ordenadas.length,
     firstDate: new Date(primera).toISOString().slice(0, 10),
     lastDate: new Date(ultima).toISOString().slice(0, 10),
     everyDays,
-    daysSinceLast: Math.max(0, Math.round((hoyMs - ultima) / MS_POR_DIA)),
   };
 }
 
