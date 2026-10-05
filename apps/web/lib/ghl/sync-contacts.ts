@@ -5,6 +5,8 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { esFechaCalendario, fechaDeHoyEnZona, fechaEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import type { GHLContact } from "./client";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -14,12 +16,19 @@ function resolveContactName(c: GHLContact): string {
   return parts.length > 0 ? parts.join(" ") : "Sin nombre";
 }
 
-function resolveJoinDate(c: GHLContact): string {
+/**
+ * La fecha de alta del contacto en el día de la organización. `dateAdded` es un
+ * instante: su fecha de UTC caía en el día siguiente para un contacto creado de
+ * noche en Argentina, y sin fecha se usaba el "hoy" de UTC (SCRUM-493).
+ */
+export function resolveJoinDate(c: GHLContact, zona: string | null, ahora: Date = new Date()): string {
   if (c.dateAdded) {
-    const d = new Date(c.dateAdded);
-    if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+    const texto = c.dateAdded.trim();
+    if (esFechaCalendario(texto)) return texto;
+    const d = new Date(texto);
+    if (!isNaN(d.getTime())) return fechaEnZona(d, zona);
   }
-  return new Date().toISOString().split("T")[0];
+  return fechaDeHoyEnZona(zona, ahora);
 }
 
 function buildNotes(c: GHLContact): Array<{ question: string; answer: string }> {
@@ -80,10 +89,13 @@ export async function syncGHLContactsForOrganization(
 
   if (!toInsert.length) return result;
 
+  // Una sola consulta por organización, no una por contacto.
+  const zona = await leerZonaHorariaDeLaOrganizacion(supabase, organizationId);
+
   const rows = toInsert.map(({ contact, name }) => ({
     organization_id:  organizationId,
     name,
-    join_date:        resolveJoinDate(contact),
+    join_date:        resolveJoinDate(contact, zona),
     payment_type:     "upfront" as const,
     platform:         "other" as const,
     total_amount:     0,

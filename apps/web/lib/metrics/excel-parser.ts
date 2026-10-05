@@ -75,8 +75,8 @@ function parseNum(raw: string | undefined): number | null {
  * Convierte un valor de celda a fecha YYYY-MM-DD.
  * Acepta: número serial Excel, ISO string, DD/MM/YYYY, "Semana X", texto libre.
  */
-function parseDate(raw: string | undefined): string {
-  if (!raw) return new Date().toISOString().split("T")[0];
+function parseDate(raw: string | undefined, hoy: string): string {
+  if (!raw) return hoy;
   const s = raw.toString().trim();
 
   // Número serial de Excel (días desde 1900-01-01)
@@ -101,7 +101,7 @@ function parseDate(raw: string | undefined): string {
   }
 
   // Texto libre → usar como label, fecha = hoy (se ordenará por inserción)
-  return new Date().toISOString().split("T")[0];
+  return hoy;
 }
 
 // ─── Parser genérico ──────────────────────────────────────────────────────────
@@ -110,6 +110,7 @@ type AnyMapping = SalesMetricsColumnMapping | FinanceMetricsColumnMapping;
 
 function parseMetricsExcel(
   buffer: Buffer,
+  hoy: string,
   mapping: AnyMapping,
   metricKeys: string[],
   metricDbNames: Record<string, string>,
@@ -144,7 +145,7 @@ function parseMetricsExcel(
     const periodRaw = String(data[periodCol] ?? "").trim();
     if (!periodRaw) continue; // fila vacía
 
-    const periodStart = parseDate(periodRaw);
+    const periodStart = parseDate(periodRaw, hoy);
     const periodLabel = periodRaw;
 
     const metrics: Record<string, number> = {};
@@ -265,12 +266,18 @@ const SALES_DB_NAMES: Record<string, string> = {
   tiempoRespuesta: "tiempo_respuesta",
 };
 
+/**
+ * `hoy` (`YYYY-MM-DD`, el de la organización) es la fecha de las filas cuyo
+ * período no es una fecha. Lo arma quien llama: el servidor corre en UTC
+ * (SCRUM-493).
+ */
 export function parseSalesMetricsExcel(
   buffer: Buffer,
+  hoy: string,
   mapping: SalesMetricsColumnMapping,
   sheetName?: string
 ) {
-  const result = parseMetricsExcel(buffer, mapping, SALES_METRIC_KEYS, SALES_DB_NAMES, sheetName);
+  const result = parseMetricsExcel(buffer, hoy, mapping, SALES_METRIC_KEYS, SALES_DB_NAMES, sheetName);
   return {
     ...result,
     rows: result.rows.map((row) => ({ ...row, metrics: deriveSalesMetrics(row.metrics) })),
@@ -291,12 +298,14 @@ const FINANCE_DB_NAMES: Record<string, string> = {
   gastos:        "gastos",
 };
 
+/** Como `parseSalesMetricsExcel`: `hoy` es el de la organización. */
 export function parseFinanceMetricsExcel(
   buffer: Buffer,
+  hoy: string,
   mapping: FinanceMetricsColumnMapping,
   sheetName?: string
 ) {
-  const result = parseMetricsExcel(buffer, mapping, FINANCE_METRIC_KEYS, FINANCE_DB_NAMES, sheetName);
+  const result = parseMetricsExcel(buffer, hoy, mapping, FINANCE_METRIC_KEYS, FINANCE_DB_NAMES, sheetName);
   return {
     ...result,
     rows: result.rows.map((row) => ({ ...row, metrics: deriveFinanceMetrics(row.metrics) })),
@@ -496,6 +505,7 @@ const FINANCE_ROW_LABEL_MAP: Record<string, string> = {
 
 function parseTransposedMetrics(
   buffer: Buffer,
+  hoy: string,
   rowLabelMap: Record<string, string>,
   dbNames: Record<string, string>,
   /**
@@ -530,8 +540,9 @@ function parseTransposedMetrics(
   const headerRow = rawArrays[headerRowIdx].map((v) => String(v ?? "").trim());
   const dataRows = rawArrays.slice(headerRowIdx + 1);
 
-  // Inferir año del encabezado si viene explícito (ej. "Marzo 2025")
-  let inferredYear = new Date().getFullYear();
+  // Inferir año del encabezado si viene explícito (ej. "Marzo 2025"); si no,
+  // el año de hoy en la organización.
+  let inferredYear = Number(hoy.slice(0, 4));
   for (let ci = 1; ci < headerRow.length; ci++) {
     const m = (headerRow[ci] ?? "").match(/20\d{2}/);
     if (m) { inferredYear = parseInt(m[0], 10); break; }
@@ -601,24 +612,28 @@ function parseTransposedMetrics(
  *                    Si se provee, reemplaza el diccionario automático.
  *                    Si se omite, usa el diccionario de sinónimos como fallback.
  */
+/** `hoy` (el de la organización) da el año de los meses sin año. */
 export function parseSalesMetricsTransposed(
   buffer: Buffer,
+  hoy: string,
   rowMapping?: Record<string, string>,
   sheetName?: string
 ) {
-  const result = parseTransposedMetrics(buffer, SALES_ROW_LABEL_MAP, SALES_DB_NAMES, rowMapping, sheetName);
+  const result = parseTransposedMetrics(buffer, hoy, SALES_ROW_LABEL_MAP, SALES_DB_NAMES, rowMapping, sheetName);
   return {
     ...result,
     rows: result.rows.map((row) => ({ ...row, metrics: deriveSalesMetrics(row.metrics) })),
   };
 }
 
+/** `hoy` (el de la organización) da el año de los meses sin año. */
 export function parseFinanceMetricsTransposed(
   buffer: Buffer,
+  hoy: string,
   rowMapping?: Record<string, string>,
   sheetName?: string
 ) {
-  const result = parseTransposedMetrics(buffer, FINANCE_ROW_LABEL_MAP, FINANCE_DB_NAMES, rowMapping, sheetName);
+  const result = parseTransposedMetrics(buffer, hoy, FINANCE_ROW_LABEL_MAP, FINANCE_DB_NAMES, rowMapping, sheetName);
   return {
     ...result,
     rows: result.rows.map((row) => ({ ...row, metrics: deriveFinanceMetrics(row.metrics) })),
