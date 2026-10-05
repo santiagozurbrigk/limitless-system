@@ -55,7 +55,7 @@ export function mensajeDelPipeline(result: ResultadoDelPipeline): MensajeDelPipe
   return {
     title: "Sin datos suficientes",
     description:
-      "Completa al menos 2 inputs semanales y asegúrate de tener actividad en ventas u operaciones.",
+      "Completá al menos 2 inputs semanales y asegurate de tener actividad en ventas u operaciones.",
     variant: "default",
   };
 }

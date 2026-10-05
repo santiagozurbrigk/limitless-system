@@ -10,6 +10,7 @@ import {
   getWeeklyInputsAction,
 } from "@/app/operations/actions";
 import { mapWeeklyInputRowsToTeamInputs } from "@/lib/operations/weekly-input-mapper";
+import { mensajeDelReporteSemanal } from "@/lib/operations/resultado-reporte-semanal";
 import { getCurrentWeekStart } from "@/lib/operations/weekly-utils";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { paths } from "@/routes";
@@ -64,14 +65,12 @@ export function WeeklyInputsPageContent({
 
     startGenerate(async () => {
       try {
-        await generateWeeklyReportAction();
-        push({
-          title: "Reporte generado",
-          description: "El reporte ejecutivo está listo en Operaciones.",
-          variant: "success",
-        });
-        router.push(paths.platform.operations.overview);
-        router.refresh();
+        const resultado = await generateWeeklyReportAction();
+        push(mensajeDelReporteSemanal(resultado));
+        if (resultado.success) {
+          router.push(paths.platform.operations.overview);
+          router.refresh();
+        }
       } catch (error) {
         push({
           title: "No se pudo generar el reporte",

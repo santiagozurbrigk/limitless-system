@@ -11,6 +11,7 @@ import {
   AVISO_ORG_NO_ACTIVA,
   organizacionSigueActiva,
 } from "@/lib/intelligence/organizaciones-activas";
+import type { ResultadoReporteSemanal } from "@/lib/operations/resultado-reporte-semanal";
 import { buildOrgContextText, getOrgContext } from "@/lib/ai/org-context";
 import { wrapUntrustedContent } from "@/lib/ai/wrap-untrusted-content";
 import { ingestDocument } from "@/lib/rag/ingest";
@@ -264,9 +265,16 @@ export async function countWeeklyInputsForWeek(
   return new Set(rows.map((row) => row.department)).size;
 }
 
-export async function generateWeeklyReportAction(): Promise<{ ok: true }> {
+/**
+ * Genera el reporte semanal de Operaciones con Claude a partir de los inputs
+ * de la semana. Los errores esperables (org no activa, sin inputs, fallas de
+ * la base o de la IA) vuelven como valor con su motivo, para que el founder
+ * vea el mensaje (ver `ResultadoReporteSemanal`); sólo lo inesperado (sin
+ * sesión, la base caída al comprobar la org) sigue lanzando.
+ */
+export async function generateWeeklyReportAction(): Promise<ResultadoReporteSemanal> {
   if (!isSupabaseConfigured()) {
-    throw new Error("Supabase no configurado.");
+    return { success: false, error: "Supabase no configurado.", motivo: "falla" };
   }
 
   const { orgId, supabase } = await requireAuthContext();
@@ -274,7 +282,7 @@ export async function generateWeeklyReportAction(): Promise<{ ok: true }> {
   // Una org pausada o dada de baja no gasta IA a pedido (SCRUM-210). Va antes
   // de marcar el reporte como "generating", para no dejarlo trabado.
   if (!(await organizacionSigueActiva(orgId))) {
-    throw new Error(AVISO_ORG_NO_ACTIVA);
+    return { success: false, error: AVISO_ORG_NO_ACTIVA, motivo: "org-no-activa" };
   }
 
   const weekStart = getCurrentWeekStart();
@@ -285,9 +293,11 @@ export async function generateWeeklyReportAction(): Promise<{ ok: true }> {
     .eq("organization_id", orgId)
     .eq("week_start", weekStart);
 
-  if (inputsError) throw new Error(mapWeeklyError(inputsError.message));
+  if (inputsError) {
+    return { success: false, error: mapWeeklyError(inputsError.message), motivo: "falla" };
+  }
   if (!inputs?.length) {
-    throw new Error("No hay inputs para esta semana todavía.");
+    return { success: false, error: "No hay inputs para esta semana todavía.", motivo: "sin-inputs" };
   }
 
   const { error: upsertError } = await supabase.from("weekly_reports").upsert(
@@ -299,7 +309,9 @@ export async function generateWeeklyReportAction(): Promise<{ ok: true }> {
     { onConflict: "organization_id,week_start" }
   );
 
-  if (upsertError) throw new Error(mapWeeklyError(upsertError.message));
+  if (upsertError) {
+    return { success: false, error: mapWeeklyError(upsertError.message), motivo: "falla" };
+  }
 
   try {
     const inputsText = inputs
@@ -390,7 +402,7 @@ JSON:
     revalidatePath(paths.platform.operations.overview);
     revalidatePath(paths.platform.dashboard);
 
-    return { ok: true };
+    return { success: true, data: undefined };
   } catch (err) {
     await supabase
       .from("weekly_reports")
@@ -398,7 +410,12 @@ JSON:
       .eq("organization_id", orgId)
       .eq("week_start", weekStart);
 
-    throw err instanceof Error ? err : new Error("Error al generar reporte");
+    console.error("[generateWeeklyReportAction]", err);
+    return {
+      success: false,
+      error: err instanceof Error && err.message ? err.message : "Error al generar reporte",
+      motivo: "falla",
+    };
   }
 }
 

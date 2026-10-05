@@ -33,7 +33,12 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 const reportes = vi.hoisted(() => ({
-  operaciones: vi.fn(async () => ({ ok: true as const })),
+  operaciones: vi.fn(
+    async (): Promise<
+      | { success: true; data: undefined }
+      | { success: false; error: string; motivo: "org-no-activa" | "sin-inputs" | "falla" }
+    > => ({ success: true, data: undefined })
+  ),
   ejecutivo: vi.fn(async () => "generated" as const),
   inteligencia: vi.fn(async () => "generated" as const),
 }));
@@ -52,6 +57,7 @@ beforeEach(() => {
   sim.status = "active";
   sim.errorAlChequear = null;
   reportes.operaciones.mockClear();
+  reportes.operaciones.mockImplementation(async () => ({ success: true, data: undefined }));
   reportes.ejecutivo.mockClear();
   reportes.inteligencia.mockClear();
 });
@@ -86,5 +92,44 @@ describe("triggerWeeklyPipelineAction", () => {
     const r = await triggerWeeklyPipelineAction();
     expect(r.errors).not.toContain(AVISO_ORG_NO_ACTIVA);
     expect(reportes.ejecutivo).toHaveBeenCalled();
+  });
+});
+
+describe("cómo cuenta el paso de Operaciones (igual que antes)", () => {
+  it("⭐ sin inputs queda omitido, con el mensaje en errors", async () => {
+    reportes.operaciones.mockImplementation(async () => ({
+      success: false,
+      error: "No hay inputs para esta semana todavía.",
+      motivo: "sin-inputs",
+    }));
+    const r = await triggerWeeklyPipelineAction();
+    expect(r.operationsReport).toBe("skipped");
+    expect(r.errors).toContain("No hay inputs para esta semana todavía.");
+  });
+
+  it("⭐ otra falla queda fallida, con su mensaje", async () => {
+    reportes.operaciones.mockImplementation(async () => ({
+      success: false,
+      error: "La IA no devolvió un reporte válido.",
+      motivo: "falla",
+    }));
+    const r = await triggerWeeklyPipelineAction();
+    expect(r.operationsReport).toBe("failed");
+    expect(r.errors).toContain("La IA no devolvió un reporte válido.");
+  });
+
+  it("un error inesperado (lanzado) también queda fallido y el resto sigue", async () => {
+    reportes.operaciones.mockImplementation(async () => {
+      throw new Error("Unauthorized");
+    });
+    const r = await triggerWeeklyPipelineAction();
+    expect(r.operationsReport).toBe("failed");
+    expect(r.errors).toContain("Unauthorized");
+    expect(reportes.ejecutivo).toHaveBeenCalled();
+  });
+
+  it("generado cuando la acción devuelve éxito", async () => {
+    const r = await triggerWeeklyPipelineAction();
+    expect(r.operationsReport).toBe("generated");
   });
 });
