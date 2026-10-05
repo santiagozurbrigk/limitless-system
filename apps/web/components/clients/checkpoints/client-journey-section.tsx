@@ -51,6 +51,23 @@ import {
 } from "@/app/clients/checkpoint-derived-actions";
 import { paths } from "@/routes";
 import { RecordCheckpointDialog } from "@/components/clients/checkpoints/record-checkpoint-dialog";
+import { fechaDelHitoLocal } from "@/lib/checkpoints/fecha-del-hito";
+import { diaLocal } from "@/lib/fechas/calendario";
+
+/**
+ * La fecha de un hito (o de una propuesta), con el día que se eligió: ver la
+ * convención de `reached_at` en `lib/checkpoints/fecha-del-hito.ts`. Antes se
+ * mostraba con el día de UTC, que de noche en Argentina ya es mañana.
+ */
+function formatearFechaDelHito(reachedAt: string): string {
+  const fecha = fechaDelHitoLocal(reachedAt);
+  if (!fecha) return "";
+  return diaLocal(fecha).toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 type JourneyData = Awaited<ReturnType<typeof getClientJourneyAction>>;
 
@@ -484,12 +501,7 @@ function CheckpointLine({
 
         {reached ? (
           <p className="text-xs text-muted-foreground">
-            {new Date(event.reachedAt).toLocaleDateString("es-AR", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-              timeZone: "UTC",
-            })}
+            {formatearFechaDelHito(event.reachedAt)}
           </p>
         ) : null}
 
@@ -615,12 +627,7 @@ function ProposalCard({
           ) : null}
           {proposal.suggestedReachedAt ? (
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {new Date(proposal.suggestedReachedAt).toLocaleDateString("es-AR", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-                timeZone: "UTC",
-              })}
+              {formatearFechaDelHito(proposal.suggestedReachedAt)}
             </p>
           ) : null}
         </div>

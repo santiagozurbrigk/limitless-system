@@ -27,7 +27,8 @@ import {
   hasOverduePayment,
   type WeeklyReview,
 } from "@/lib/clients/weekly-review";
-import { fechaDeHoyEnZona, fechaEnZona } from "@/lib/fechas/calendario";
+import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { ultimoHitoPorCliente } from "@/lib/checkpoints/fecha-del-hito";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { deriveClientCase, groupWinsByClient } from "@/lib/wins";
 import { listClientsAction } from "@/app/clients/actions";
@@ -112,7 +113,7 @@ export async function getWeeklyReviewAction(): Promise<WeeklyReviewPageData> {
 
   const winsByClient = groupWinsByClient(wins);
   const today = fechaDeHoyEnZona(zona);
-  const lastEvents = lastCheckpointEventByClient(checkpointEvents, zona);
+  const lastEvents = ultimoHitoPorCliente(checkpointEvents, zona);
 
   const review = buildWeeklyReview(
     clients.map((client) => {
@@ -325,28 +326,6 @@ async function organizationTimezone(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/**
- * La fecha del último hito registrado de cada cliente, en el día de la
- * organización: `reached_at` es un instante, y su fecha de UTC podía caer en
- * el día siguiente y achicar en uno los días sin novedades.
- */
-function lastCheckpointEventByClient(
-  rows: readonly CheckpointEventDateRow[],
-  zona: string | null
-): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const row of rows) {
-    if (!row.reached_at) continue;
-    const instante = new Date(row.reached_at);
-    if (Number.isNaN(instante.getTime())) continue;
-    const date = fechaEnZona(instante, zona);
-    if (!result[row.client_id] || date > result[row.client_id]!) {
-      result[row.client_id] = date;
-    }
-  }
-  return result;
 }
 
 function maxDate(a: string | null, b: string | null): string | null {

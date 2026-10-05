@@ -30,6 +30,7 @@ import { resolveMetricSchema } from "@/lib/checkpoints";
 import { FieldValueInput } from "@/components/clients/custom-fields/field-value-input";
 import { CampoFecha } from "@/components/shared/campo-fecha";
 import { fechaDeHoyLocal } from "@/lib/fechas/calendario";
+import { fechaDelHitoLocal, instanteDelHito } from "@/lib/checkpoints/fecha-del-hito";
 
 export function RecordCheckpointDialog({
   open,
@@ -57,7 +58,7 @@ export function RecordCheckpointDialog({
 
   useEffect(() => {
     if (!open) return;
-    setDate(existingEvent ? existingEvent.reachedAt.slice(0, 10) : fechaDeHoyLocal());
+    setDate(existingEvent ? fechaDelHitoLocal(existingEvent.reachedAt) : fechaDeHoyLocal());
     setNote(existingEvent?.note ?? "");
     setMetrics(existingEvent?.metrics ?? {});
   }, [open, existingEvent]);
@@ -146,9 +147,9 @@ export function RecordCheckpointDialog({
             disabled={saving}
             onClick={() =>
               onSubmit({
-                // El input date da yyyy-mm-dd; se ancla a mediodía UTC para que
-                // no se corra de día por zona horaria.
-                reachedAt: new Date(`${date}T12:00:00Z`).toISOString(),
+                // El input date da yyyy-mm-dd; `instanteDelHito` lo guarda con la
+                // convención del campo (ver `lib/checkpoints/fecha-del-hito.ts`).
+                reachedAt: instanteDelHito(date),
                 metrics,
                 note: note.trim() || null,
               })
