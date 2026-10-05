@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { fetchManyChatSubscriberTags } from "@/lib/manychat/client";
 import { getManyChatIntegrationForOrganization } from "@/lib/manychat/integration";
+import { fechaDeInstanteEnZona, inicioDelDiaEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -32,6 +34,15 @@ function periodBounds(from?: string, to?: string) {
     ? parseDateSafe(from)
     : new Date(end.getFullYear(), end.getMonth(), 1);
   return { from: start.toISOString(), to: end.toISOString() };
+}
+
+/**
+ * El primer instante del día (en la zona de la organización) en que ocurrió el
+ * evento. Es el corte del "una vez por día" del CTA.
+ */
+function inicioDelDiaDelEvento(instante: string, zona: string | null): string {
+  const dia = fechaDeInstanteEnZona(instante, zona);
+  return dia ? inicioDelDiaEnZona(dia, zona) : instante;
 }
 
 export async function updateManyChatCtaTagsAction(
@@ -88,6 +99,10 @@ export async function syncManyChatCtaEventsAction(): Promise<{ synced: number }>
 
   let synced = 0;
 
+  // Un CTA cuenta una vez por día de la organización: el corte del día es el de
+  // su zona, no el de UTC (SCRUM-493). Una lectura de la zona por sync.
+  const zona = await leerZonaHorariaDeLaOrganizacion(admin, organizationId);
+
   for (const conversation of conversations ?? []) {
     const externalRef = conversation.external_ref as string;
     const subscriberId = externalRef.replace(/^manychat:/, "");
@@ -114,7 +129,7 @@ export async function syncManyChatCtaEventsAction(): Promise<{ synced: number }>
         .eq("subscriber_id", subscriberId)
         .eq("event_type", "cta_response")
         .eq("tag", tag)
-        .gte("triggered_at", triggeredAt.slice(0, 10))
+        .gte("triggered_at", inicioDelDiaDelEvento(triggeredAt, zona))
         .maybeSingle();
 
       if (existing) continue;

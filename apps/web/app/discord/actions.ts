@@ -9,6 +9,8 @@ import {
 } from "@/lib/server/action-result";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
+import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { paths } from "@/routes";
 import { summarizeByClient, type ClientActivity } from "@/lib/discord/activity";
 import {
@@ -1599,12 +1601,17 @@ export async function createWinFromTestimonialAction(
       500,
     );
 
+    // La fecha del win es el día del mensaje en la zona de la organización: un
+    // testimonio de las 22:00 en Argentina es de ese día, aunque en UTC ya sea
+    // mañana (SCRUM-493).
+    const zona = await leerZonaHorariaDeLaOrganizacion(supabase, organizationId);
+
     const { data: win, error: insertError } = await supabase
       .from("client_wins")
       .insert({
         organization_id: organizationId,
         client_id: row.client_id,
-        win_date: row.sent_at.slice(0, 10),
+        win_date: fechaDeInstanteEnZona(row.sent_at, zona),
         achievement,
         source: "discord",
         source_ref: row.discord_message_id,
