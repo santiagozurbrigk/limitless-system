@@ -213,6 +213,9 @@ acá: llevan la misma key que el negocio y harían privadas de quien conectó to
     entero hace avanzar el cursor aunque no haya traído nada: una caída de varios días se pone al día sola, a
     razón de 24 h por corrida. Si un solo tramo tiene más reuniones que el presupuesto (más de 200 en 6 h para la
     org, 50 para un miembro), el cursor no puede avanzar y se reporta a Sentry en cada corrida.
+    Sólo ese corte (por el tope de páginas) se reporta como sync trabada: la lectura dice por qué se cortó
+    (`motivoDeCorte`: tope, plazo del cron, límite de tramos o Fathom) y los otros cortes siguen solos en la
+    corrida siguiente.
   - Si Fathom corta a mitad (429 o una falla de su lado) después de algún tramo completo, lo leído se guarda y el
     cursor avanza hasta el último tramo completo. Si el 429 trae un `Retry-After` de hasta 10 s, se espera y se
     reintenta el mismo tramo una vez por conexión, si entra antes del plazo del cron (ver más abajo). Sin ningún tramo completo, la falla se propaga como siempre.
@@ -228,8 +231,10 @@ acá: llevan la misma key que el negocio y harían privadas de quien conectó to
     cortada y el cursor no pasa de lo que faltó leer) y un `Retry-After` sólo se espera si la espera más 8 s
     de margen entran antes del plazo. Los 15 s restantes son para terminar la página en curso y escribir los
     cursores. Para que no queden siempre las mismas afuera, las tandas se alternan cada hora (en las corridas
-    impares van primero los miembros) y dentro de cada tanda el orden rota. La sincronización manual (botones)
-    no tiene plazo.
+    impares van primero los miembros) y dentro de cada tanda el orden rota con la mitad del número de corrida
+    (`ordenDeLaTanda`). Rotar con el mismo número que la alternancia hacía que, con una cantidad par de
+    conexiones, arrancaran primero siempre las de índice par; así, cada conexión arranca primera de toda la
+    corrida una vez cada 2 × n horas. La sincronización manual (botones) no tiene plazo.
   - **Cómo recuperar una reunión descartada** (o una que el bug anterior a SCRUM-36 salteó): arregla primero la
     causa (el error del guardado está en los logs `[Fathom:sync]` y en Sentry). Después, en el SQL Editor de
     Supabase, borra su fila de `fathom_sync_fallas` (si no, sigue descartada) y rebobina el cursor de esa

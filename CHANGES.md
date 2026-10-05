@@ -34,6 +34,39 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · Tercer fix-pack de SCRUM-36: rotación sin paridad compartida y cortes por plazo sin falsa alarma
+
+**Rama:** `fix/SCRUM-36-fathom-cursor`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Integraciones → Fathom. `lib/fathom/plazo-del-cron.ts`, `lib/fathom/sync.ts`,
+`lib/fathom/member-sync.ts`, `lib/fathom/api.ts`, `lib/fathom/leer-ventana.ts`, `lib/fathom/cursor.ts`. Sin cambios en la
+migración.
+
+**Qué se hizo** (tercera pasada de la revisión adversarial):
+- **N-2:** la rotación de cada tanda (`corrida % n`) y la alternancia de tandas usaban la misma paridad. Con una
+  cantidad par de orgs, en las corridas en que las orgs iban primero arrancaba siempre una de índice par, y una
+  org de índice impar podía no sincronizarse nunca si la otra y los miembros se comían el plazo. Ahora cada tanda
+  rota con `Math.floor(corrida / 2)` (`ordenDeLaTanda`): cada conexión arranca primera de toda la corrida una vez
+  cada 2 × n horas.
+- **N-3:** un corte por el plazo del cron en orden descendente se reportaba a Sentry como "tope de páginas, sync
+  trabada". Ahora el motivo del corte viaja de punta a punta: `listFathomMeetings` devuelve `cortadaPorPlazo`,
+  `LecturaDeVentana` lleva `motivoDeCorte` (`tope`, `plazo`, `tramos` o `fathom`) y `calcularNuevoCursor` sólo marca
+  `trabada` cuando el corte fue por el tope de páginas. El motivo también va al log de la sync.
+- Tests: `plazo-del-cron.test.ts` (cada org y cada miembro arranca primero dentro de 2 × n horas, con 1 a 6
+  conexiones, y el caso que fallaba antes), `cursor.test.ts` (sólo el tope cuenta como trabada), `leer-ventana.test.ts`
+  (el motivo de cada corte) y `sync-corridas.test.ts` (corte por plazo sin reporte; corte por tope con reporte).
+  Control negativo: 8 mutaciones, todas detectadas (`control-negativo-fixpack-3.txt` en la evidencia).
+
+**Por qué / finalidad:** que la promesa de "ninguna conexión queda siempre afuera" valga también con cantidades
+pares, y que la alerta de sync trabada sólo suene cuando la sync está trabada de verdad.
+
+**Decisiones de diseño relevantes:** el motivo es opcional en `LecturaDeVentana` y sin dato se trata como `tope`, el
+caso conservador (reporta).
+
+**Riesgos / deuda técnica pendiente:** ninguno.
+
+---
+
 ### 2026-10-05 · Segundo fix-pack de SCRUM-36: plazo del cron de Fathom, limpieza y descartadas que vuelven
 
 **Rama:** `fix/SCRUM-36-fathom-cursor`
