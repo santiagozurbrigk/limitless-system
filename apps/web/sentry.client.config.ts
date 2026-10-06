@@ -3,6 +3,7 @@
  * Se carga automáticamente por @sentry/nextjs si NEXT_PUBLIC_SENTRY_DSN está seteado.
  */
 import * as Sentry from "@sentry/nextjs";
+import { limpiarEventoDeSentry } from "@/lib/observability/limpiar-evento-sentry";
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -18,13 +19,15 @@ Sentry.init({
   // Tasa de muestreo de trazas de performance: 10% para no inflar la cuota.
   tracesSampleRate: 0.1,
 
-  // Ocultar datos personales del usuario en los eventos.
+  // Ocultar datos personales del usuario en los eventos: cookies, query de la
+  // URL (p. ej. el token de /invite), headers y breadcrumbs con datos
+  // (SCRUM-501, `lib/observability/limpiar-evento-sentry.ts`).
   beforeSend(event) {
-    // Eliminar cookies de autenticación antes de enviar.
-    if (event.request?.cookies) {
-      delete event.request.cookies;
-    }
-    return event;
+    return limpiarEventoDeSentry(event);
+  },
+
+  beforeSendTransaction(event) {
+    return limpiarEventoDeSentry(event);
   },
 
   integrations: [
