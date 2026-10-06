@@ -140,4 +140,52 @@ describe("esFallaParaReportar", () => {
   ])("%s → %s", (error, esperado) => {
     expect(esFallaParaReportar(error)).toBe(esperado);
   });
+
+  // MENOR-2 de la AR: fallas comunes de PostgREST, Postgres y del gateway
+  // que un módulo viejo relanza con `new Error(error.message)`.
+  it.each([
+    "Could not find the table 'public.clients' in the schema cache",
+    "Could not find the 'nota' column of 'clients' in the schema cache",
+    "value too long for type character varying(200)",
+    'value "99999999999" is out of range for type integer',
+    "integer out of range",
+    "deadlock detected",
+    "could not serialize access due to concurrent update",
+    "canceling statement due to statement timeout",
+    "sorry, too many clients already",
+    "An invalid response was received from the upstream server",
+    "Bad Gateway",
+    "502 Bad Gateway",
+    "Service Unavailable",
+    "Gateway Timeout",
+    "Internal Server Error",
+  ])("⭐ se reporta: %s", (mensaje) => {
+    expect(esFallaParaReportar(new Error(mensaje))).toBe(true);
+  });
+
+  it.each([
+    ["PGRST205", true],
+    ["PGRST204", true],
+    ["PGRST301", true],
+    ["08006", true],
+    ["22001", true],
+    ["23505", true],
+    ["40P01", true],
+    ["40001", true],
+    ["42501", true],
+    ["53300", true],
+    ["54000", true],
+    ["57014", true],
+    ["58030", true],
+    ["XX000", true],
+    ["PGRST116", false],
+    ["P0001", false],
+  ])("⭐ con code %s y un texto de negocio → %s", (code, esperado) => {
+    const error = Object.assign(new Error("No se pudo guardar el cambio"), { code });
+    expect(esFallaParaReportar(error)).toBe(esperado);
+  });
+
+  it("un rechazo de negocio sin code ni texto de infraestructura no se reporta", () => {
+    expect(esFallaParaReportar(new Error("El nombre de la etapa ya está en uso"))).toBe(false);
+  });
 });
