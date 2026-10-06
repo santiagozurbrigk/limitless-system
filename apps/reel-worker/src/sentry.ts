@@ -8,6 +8,7 @@
  * Sin `SENTRY_DSN` no hace nada: el worker arranca igual.
  */
 import * as Sentry from "@sentry/node";
+import { limpiarEventoDeSentry } from "./limpiar-evento-sentry";
 
 const dsn = process.env.SENTRY_DSN?.trim();
 
@@ -16,6 +17,16 @@ if (dsn) {
     dsn,
     environment: process.env.NODE_ENV ?? "production",
     initialScope: { tags: { app: "reel-worker", proceso_de_fondo: "true" } },
+    // SCRUM-501: sin el cuerpo de los requests (el SDK lo guarda por defecto,
+    // hasta 10 KB) ni cookies, query o headers con secretos.
+    integrations: [
+      Sentry.httpIntegration({ maxIncomingRequestBodySize: "none" }),
+      Sentry.requestDataIntegration({
+        include: { data: false, cookies: false, query_string: false },
+      }),
+    ],
+    beforeSend: (event) => limpiarEventoDeSentry(event),
+    beforeSendTransaction: (event) => limpiarEventoDeSentry(event),
   });
 }
 

@@ -2548,7 +2548,7 @@ Fuente: PENDIENTES.md [WORKBOARD-CARGA-DUPLICADA] · Doc del área: docs/areas/o
 *Dónde:* carpetas citadas.
 
 Fuente: PENDIENTES.md [TESTS-OPS-FIN-PROD] · Doc del área: docs/areas/operaciones.md",TESTS-OPS-FIN-PROD,"Operaciones, Finanzas y Producto",P2,,tests
-[LOGS-DATOS-SENSIBLES] Logs con textos de DMs y filas de clientes; Sentry sin filtro de headers ni query string,Bug,Medium,infra,p2,sev-media,seguridad,,,"*Tipo:* seguridad
+[LOGS-DATOS-SENSIBLES] Logs con textos de DMs y filas de clientes,Bug,Medium,infra,p2,sev-media,seguridad,,,"*Tipo:* seguridad
 
 *Severidad:* Media
 
@@ -2558,9 +2558,9 @@ Fuente: PENDIENTES.md [TESTS-OPS-FIN-PROD] · Doc del área: docs/areas/operacio
 
 *Impacto:* Datos personales de terceros (leads, clientes de los clientes) fuera de la base y fuera de las bajas del super admin.
 
-*Qué hay que hacer:* loguear sólo ids en Unipile y ClickUp; {{beforeSend}} común a los tres configs de Sentry que borre {{authorization}}, {{cookie}}, {{x-worker-secret}}, {{upstash-signature}}, {{unipile-auth}} y limpie de la URL/query {{workerSecret}}, {{secret}}, {{code}}, {{state}}, {{token}}; mirar un evento real de Sentry de una ruta de cola para confirmar.
+*Qué hay que hacer:* loguear sólo ids en Unipile y ClickUp; {{beforeSend}} común a los tres configs de Sentry que borre {{authorization}}, {{cookie}}, {{x-worker-secret}}, {{upstash-signature}}, {{unipile-auth}} y limpie de la URL/query {{workerSecret}}, {{secret}}, {{code}}, {{state}}, {{token}}; mirar un evento real de Sentry de una ruta de cola para confirmar. - *Avance 2026-10-06 (SCRUM-501, hotfix):* la parte de Sentry está resuelta. Un build de producción con un Sentry falso mostró que además se mandaban el cuerpo del request ({{request.data}}: los argumentos de las server actions, con contraseñas y API keys), los headers {{cookie}} (sesión de Supabase), {{authorization}} y el resto, y la query de la URL, en eventos y en transacciones de Performance (también en {{next.span_name}}). Las cinco configs (web servidor, edge y navegador, reel-worker y bot) ya no capturan el cuerpo y pasan todo por {{limpiarEventoDeSentry}}. Queda la parte de los logs (Unipile, ClickUp, publish-reel-variation, Google) y revisar en Sentry los eventos y las transacciones del servidor desde 2026-09-22 para borrar los que tengan {{request.data}}, {{cookie}}, {{authorization}} o query con tokens (decisión de Fernando; detalle en {{docs/operacion/alertas.md}}).
 
-*Dónde:* {{apps/web/lib/unipile/process-message.ts}}, {{apps/web/app/integrations/clickup/import-actions.ts}}, {{apps/web/app/api/queue/publish-reel-variation/route.ts}}, {{apps/web/lib/google/drive-*.ts}}, {{apps/web/sentry.{client,server,edge}.config.ts}}.
+*Dónde:* {{apps/web/lib/unipile/process-message.ts}}, {{apps/web/app/integrations/clickup/import-actions.ts}}, {{apps/web/app/api/queue/publish-reel-variation/route.ts}}, {{apps/web/lib/google/drive-*.ts}}.
 
 Fuente: PENDIENTES.md [LOGS-DATOS-SENSIBLES] · Doc del área: docs/arquitectura/vision-general.md",LOGS-DATOS-SENSIBLES,"Infraestructura, seguridad y tests (transversal)",P2,Media,seguridad
 "[DB-DRIFT-STORAGE-REALTIME] Producción difiere del repo en Storage, Realtime y grants de funciones",Task,Medium,infra,p2,sev-media,deuda-tecnica,,,"*Tipo:* deuda técnica
