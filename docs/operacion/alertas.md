@@ -31,16 +31,17 @@ incidente). Pasa desde que `instrumentation.ts` empezó a cargar Sentry en el se
   llegaba con `request.data` (los argumentos), los headers `cookie` (el token de sesión de Supabase, access y
   refresh), `authorization`, `x-api-key` y cualquier otro, `request.query_string` y la query en `request.url`, en el
   `referer` y en `contexts.nextjs.request_path`.
-- **Transacciones (Performance, 5% de los pedidos del servidor):** lo mismo en `request` (headers `cookie`,
-  `authorization`, `x-api-key` y el resto; `request.cookies`; `query_string`; la query en `url` y `referer`) y,
+- **Transacciones (Performance, 5% de los pedidos del servidor):** lo mismo en `request` (`request.data` con los
+  argumentos de la acción, por ejemplo una contraseña; headers `cookie`, `authorization`, `x-api-key` y el resto;
+  `request.cookies`; `query_string`; la query en `url` y `referer`) y,
   además, la query en `contexts.trace.data` (`next.span_name`, `http.target`) y en el referer de
   `http.request.header.referer`. Una transacción se registra aunque el pedido no falle: cualquier pantalla abierta con
   la sesión pudo dejar la cookie.
 
 Qué hay que revisar y borrar en Sentry, desde el 2026-09-22:
-1. Issues del servidor cuyos eventos tengan `request.data`, el header `cookie` o `authorization`.
-2. Transacciones de Performance con `request.headers.cookie`, `request.cookies`, `request.headers.authorization` o
-   query en `request.url`, `next.span_name` o `http.target` (sobre todo `?token=` de `/invite` y `?code=`/`?state=`
+1. Issues del servidor cuyos eventos tengan `request.data`, el header `cookie`, `authorization` o `x-api-key`.
+2. Transacciones de Performance con `request.data`, `request.headers.cookie`, `request.cookies`,
+   `request.headers.authorization`, `request.headers.x-api-key` o query en `request.url`, `next.span_name` o `http.target` (sobre todo `?token=` de `/invite` y `?code=`/`?state=`
    de OAuth). Si el plan no deja borrar transacciones sueltas, se borra el proyecto o se espera la retención.
 3. Si apareció alguna cookie de sesión, cerrar esas sesiones (o rotar el JWT secret si no se puede saber de quién).
 
