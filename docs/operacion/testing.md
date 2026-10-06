@@ -103,7 +103,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/chart` | 1 | 5 | escala del embudo |
 | `lib/supabase` | 2 | 6 | rutas públicas del middleware, `fetchAllRows` |
 | `lib/release` | 1 | 4 | lo escondido para el release: ⌘K, catálogo de integraciones, canales de Lead Magnets |
-| `lib/observability` | 1 | 4 | aviso a Sentry de los crons |
+| `lib/observability` | 3 | 25 | aviso a Sentry de los crons; lo que se saca de un evento o transacción antes de mandarlo (cuerpo, cookies, query también en nombres de transacciones y spans, headers fuera de la lista blanca, breadcrumbs de consola), las configs de Sentry con el SDK simulado y las copias del reel-worker y del bot; un objeto plano reportado con su `message` y su `code` (SCRUM-501) |
 | `lib/storage` | 1 | 6 | validación de rutas por org |
 | `lib/queue` | 1 | 3 | aviso cuando falla un trabajo de QStash |
 | `lib/unipile` | 2 | 5 | secreto del webhook |

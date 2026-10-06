@@ -15,6 +15,35 @@ Team y crear las reglas de esta página. Decisión del 2026-10-02: las alertas v
 
 Detalle técnico en [`arquitectura/jobs-webhooks-y-colas.md`](../arquitectura/jobs-webhooks-y-colas.md) § Instrumentación y Sentry.
 
+## Qué datos no llegan a Sentry (SCRUM-501)
+
+El SDK de Node guarda por defecto el cuerpo de cada request (hasta 10 KB, aunque `sendDefaultPii` esté apagado) y lo
+adjunta a todo evento; en una server action ese cuerpo son sus argumentos (contraseñas, API keys, datos de clientes).
+Además mandaba el header `cookie` (con la sesión de Supabase) y `authorization`. Desde SCRUM-501 las cinco configs
+(`apps/web/sentry.{server,edge,client}.config.ts`, `apps/reel-worker/src/sentry.ts`, `apps/discord-bot/src/utils/sentry.ts`)
+van sin el cuerpo del request (`maxIncomingRequestBodySize: "none"` y `requestDataIntegration` sin `data`, `cookies` ni `query_string`) y con `beforeSend`/`beforeSendTransaction` que pasan todo evento por `limpiarEventoDeSentry` (`lib/observability/limpiar-evento-sentry.ts`): sin cuerpo, cookies ni query; URL y referer sin query; headers por lista blanca (también los que OpenTelemetry copia a la traza y a los spans); `extra` y `contexts` sin claves de cuerpo o de secreto; sin breadcrumbs de consola; la query del nombre de la transacción, de la traza y de los spans (`next.span_name`). El reel-worker y el bot llevan una copia exacta del módulo (se despliegan solos); un test falla si se
+separan. El mensaje y el stack del error sí viajan: una acción no tiene que meter datos del usuario en el texto de un
+error.
+
+**Antes de SCRUM-501** (verificado con un build de `origin/main` `e8dcb4a7` y un Sentry falso, evidencia del
+incidente). Pasa desde que `instrumentation.ts` empezó a cargar Sentry en el servidor (2026-09-22, `d1a35ccb`):
+- **Eventos (Issues):** todo error lanzado por una server action o un Server Component que capturaba `onRequestError`
+  llegaba con `request.data` (los argumentos), los headers `cookie` (el token de sesión de Supabase, access y
+  refresh), `authorization`, `x-api-key` y cualquier otro, `request.query_string` y la query en `request.url` y en el
+  `referer`.
+- **Transacciones (Performance, 5% de los pedidos del servidor):** lo mismo en `request` (headers `cookie`,
+  `authorization`, `x-api-key` y el resto; `request.cookies`; `query_string`; la query en `url` y `referer`) y,
+  además, la query en `contexts.trace.data` (`next.span_name`, `http.target`) y en el referer de
+  `http.request.header.referer`. Una transacción se registra aunque el pedido no falle: cualquier pantalla abierta con
+  la sesión pudo dejar la cookie.
+
+Qué hay que revisar y borrar en Sentry, desde el 2026-09-22:
+1. Issues del servidor cuyos eventos tengan `request.data`, el header `cookie` o `authorization`.
+2. Transacciones de Performance con `request.headers.cookie`, `request.cookies`, `request.headers.authorization` o
+   query en `request.url`, `next.span_name` o `http.target` (sobre todo `?token=` de `/invite` y `?code=`/`?state=`
+   de OAuth). Si el plan no deja borrar transacciones sueltas, se borra el proyecto o se espera la retención.
+3. Si apareció alguna cookie de sesión, cerrar esas sesiones (o rotar el JWT secret si no se puede saber de quién).
+
 ## Una vez comprado el plan Team
 
 1. **Monitores de crons:** aparecen solos en Sentry → Crons después de la primera corrida de cada uno (19). Cada uno
