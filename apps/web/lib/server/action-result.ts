@@ -36,8 +36,15 @@ export class FallaDeLaBase extends Error {
 
 /**
  * Registra en el servidor y manda a Sentry una falla inesperada de una server
- * action. Sólo el error y la etiqueta: nunca los argumentos de la acción, que
- * pueden traer datos personales o contraseñas.
+ * action, con la etiqueta como tag `server_action`.
+ *
+ * Lo que garantiza que los argumentos de la acción (contraseñas, API keys,
+ * datos personales) no viajen es la config de Sentry, no esta función: el SDK
+ * no captura el cuerpo del request (`maxIncomingRequestBodySize: "none"`,
+ * `requestDataIntegration` sin `data`) y `beforeSend` pasa todo evento por
+ * `limpiarEventoDeSentry` (`lib/observability/limpiar-evento-sentry.ts`). Acá
+ * no se agregan los argumentos al evento. El mensaje del error sí viaja: una
+ * acción no tiene que meter datos del usuario en el texto de un error.
  */
 export function registrarFallaDeAccion(etiqueta: string, error: unknown): void {
   console.error(etiqueta, error);
