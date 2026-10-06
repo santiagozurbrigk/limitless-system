@@ -120,6 +120,22 @@ describe("correrMutacion", () => {
     expect(alExito).toHaveBeenCalledTimes(1);
     expect(avisar).not.toHaveBeenCalled();
   });
+
+  it("⭐ espera a un alExito asíncrono (p. ej. refrescar la lista) antes de terminar", async () => {
+    const pasos: string[] = [];
+    await correrMutacion({
+      accion: async () => ({ success: true, data: undefined }),
+      alExito: async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        pasos.push("refrescó");
+      },
+      avisar: vi.fn(),
+      tituloError: "x",
+      etiqueta: "x",
+    });
+    pasos.push("terminó");
+    expect(pasos).toEqual(["refrescó", "terminó"]);
+  });
 });
 
 describe("datoDeLaMutacion (capa que devuelve el dato o lanza, como PlatformDataProvider)", () => {

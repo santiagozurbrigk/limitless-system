@@ -25,13 +25,14 @@ export type Aviso = {
 
 /**
  * Corre una server action desde un componente. Si devuelve un resultado (los
- * errores esperables vuelven como valor), se lo pasa a `alTerminar`. Si lanza,
- * es inesperado: se registra en la consola con `etiqueta` y se avisa con
+ * errores esperables vuelven como valor), se lo pasa a `alTerminar` y, si este
+ * es asíncrono (por ejemplo, refresca una lista), lo espera. Si la acción
+ * lanza, es inesperado: se registra en la consola con `etiqueta` y se avisa con
  * `tituloError` y el texto fijo.
  */
 export async function correrAccion<R>(opciones: {
   accion: () => Promise<R>;
-  alTerminar: (resultado: R) => void;
+  alTerminar: (resultado: R) => void | Promise<void>;
   avisar: (aviso: Aviso) => void;
   tituloError: string;
   etiqueta: string;
@@ -48,16 +49,17 @@ export async function correrAccion<R>(opciones: {
     opciones.avisar({ title: opciones.tituloError, description: ERROR_INESPERADO, variant: "default" });
     return;
   }
-  opciones.alTerminar(resultado);
+  await opciones.alTerminar(resultado);
 }
 
 /**
  * Lo mismo para una acción que devuelve `MutationResult`: con éxito llama a
- * `alExito`; con un error esperable lo muestra con su mensaje.
+ * `alExito` (y lo espera si es asíncrono); con un error esperable lo muestra
+ * con su mensaje.
  */
 export function correrMutacion<T>(opciones: {
   accion: () => Promise<MutationResult<T>>;
-  alExito: (data: T) => void;
+  alExito: (data: T) => void | Promise<void>;
   avisar: (aviso: Aviso) => void;
   tituloError: string;
   etiqueta: string;
@@ -67,8 +69,8 @@ export function correrMutacion<T>(opciones: {
     avisar: opciones.avisar,
     tituloError: opciones.tituloError,
     etiqueta: opciones.etiqueta,
-    alTerminar: (resultado) => {
-      if (resultado.success) opciones.alExito(resultado.data);
+    alTerminar: async (resultado) => {
+      if (resultado.success) await opciones.alExito(resultado.data);
       else opciones.avisar({ title: opciones.tituloError, description: resultado.error, variant: "default" });
     },
   });
