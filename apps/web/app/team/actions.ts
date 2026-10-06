@@ -133,132 +133,168 @@ async function requireManagerProfileAndParse<T extends z.ZodTypeAny>(
   return { success: true, data: parsed.data, profile };
 }
 
-export async function getTeamMembersAction(): Promise<TeamMember[]> {
-  if (!isSupabaseConfigured()) return [];
+/**
+ * Lo que ve el usuario cuando una lectura de Equipo falla en la base. El
+ * detalle técnico queda en la consola del servidor.
+ */
+const FALLO_AL_LEER_EL_EQUIPO =
+  "Hubo un problema al leer los datos del equipo. Recargá la página para intentar de nuevo.";
 
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
-      `
-      id,
-      full_name,
-      email,
-      role,
-      avatar_url,
-      is_active,
-      last_login_at,
-      hourly_rate,
-      hourly_rate_currency,
-      custom_role_id,
-      created_at,
-      team_roles(name, permissions)
-    `
-    )
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    throw new Error(error.message);
-  }
-
-  return ((data ?? []) as unknown as ProfileRow[]).map(rowToTeamMember);
+function falloDeLectura(etiqueta: string, detalle: string): Error {
+  console.error(etiqueta, detalle);
+  return new Error(FALLO_AL_LEER_EL_EQUIPO);
 }
 
-export async function getTeamRolesAction(): Promise<CustomRole[]> {
-  if (!isSupabaseConfigured()) return [];
+/*
+ * SCRUM-497: las lecturas de Equipo devuelven sus errores como valor
+ * (`MutationResult`). `/team` es un server component y no hay error boundary:
+ * una lectura que lanzaba terminaba en la pantalla de error de Next, con el
+ * párrafo técnico en inglés en producción. Ahora la pantalla dibuja su propio
+ * estado con el motivo (sesión, cuenta desactivada o la falla de la base).
+ */
 
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+export async function getTeamMembersAction(): Promise<MutationResult<TeamMember[]>> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
 
-  const { data, error } = await supabase
-    .from("team_roles")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .order("is_default", { ascending: false })
-    .order("name", { ascending: true });
+  return runMutation(async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    throw new Error(error.message);
-  }
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        `
+        id,
+        full_name,
+        email,
+        role,
+        avatar_url,
+        is_active,
+        last_login_at,
+        hourly_rate,
+        hourly_rate_currency,
+        custom_role_id,
+        created_at,
+        team_roles(name, permissions)
+      `
+      )
+      .eq("organization_id", organizationId)
+      .order("created_at", { ascending: true });
 
-  if (!data?.length) {
-    const { error: rpcError } = await supabase.rpc("create_default_roles", {
-      org_id: organizationId,
-    });
-    if (rpcError && !isMissingTableError(rpcError.message)) {
-      throw new Error(rpcError.message);
+    if (error) {
+      if (isMissingTableError(error.message)) return [];
+      throw falloDeLectura("[getTeamMembers]", error.message);
     }
 
-    const { data: seeded, error: retryError } = await supabase
+    return ((data ?? []) as unknown as ProfileRow[]).map(rowToTeamMember);
+  });
+}
+
+export async function getTeamRolesAction(): Promise<MutationResult<CustomRole[]>> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
+
+  return runMutation(async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
       .from("team_roles")
       .select("*")
       .eq("organization_id", organizationId)
       .order("is_default", { ascending: false })
       .order("name", { ascending: true });
 
-    if (retryError) throw new Error(retryError.message);
-    return ((seeded ?? []) as TeamRoleRow[]).map(rowToCustomRole);
-  }
+    if (error) {
+      if (isMissingTableError(error.message)) return [];
+      throw falloDeLectura("[getTeamRoles]", error.message);
+    }
 
-  return (data as TeamRoleRow[]).map(rowToCustomRole);
+    if (!data?.length) {
+      const { error: rpcError } = await supabase.rpc("create_default_roles", {
+        org_id: organizationId,
+      });
+      if (rpcError && !isMissingTableError(rpcError.message)) {
+        throw falloDeLectura("[getTeamRoles] create_default_roles", rpcError.message);
+      }
+
+      const { data: seeded, error: retryError } = await supabase
+        .from("team_roles")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .order("is_default", { ascending: false })
+        .order("name", { ascending: true });
+
+      if (retryError) throw falloDeLectura("[getTeamRoles] relectura", retryError.message);
+      return ((seeded ?? []) as TeamRoleRow[]).map(rowToCustomRole);
+    }
+
+    return (data as TeamRoleRow[]).map(rowToCustomRole);
+  });
 }
 
-export async function getPendingInvitationsAction(): Promise<TeamInvitation[]> {
-  if (!isSupabaseConfigured()) return [];
+export async function getPendingInvitationsAction(): Promise<
+  MutationResult<TeamInvitation[]>
+> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
 
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+  return runMutation(async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("team_invitations")
-    .select(
+    const { data, error } = await supabase
+      .from("team_invitations")
+      .select(
+        `
+        id,
+        email,
+        role,
+        status,
+        expires_at,
+        created_at,
+        custom_role_id,
+        invited_by,
+        profiles(full_name),
+        team_roles(name)
       `
-      id,
-      email,
-      role,
-      status,
-      expires_at,
-      created_at,
-      custom_role_id,
-      invited_by,
-      profiles(full_name),
-      team_roles(name)
-    `
-    )
-    .eq("organization_id", organizationId)
-    .eq("status", "pending")
-    .gt("expires_at", new Date().toISOString())
-    .order("created_at", { ascending: false });
+      )
+      .eq("organization_id", organizationId)
+      .eq("status", "pending")
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false });
 
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    throw new Error(error.message);
-  }
+    if (error) {
+      if (isMissingTableError(error.message)) return [];
+      throw falloDeLectura("[getPendingInvitations]", error.message);
+    }
 
-  return ((data ?? []) as unknown as TeamInvitationRow[]).map(
-    rowToTeamInvitation
-  );
+    return ((data ?? []) as unknown as TeamInvitationRow[]).map(
+      rowToTeamInvitation
+    );
+  });
 }
 
-export async function getTeamPageContextAction(): Promise<{
+export type TeamPageContext = {
   members: TeamMember[];
   roles: CustomRole[];
   invitations: TeamInvitation[];
   canManage: boolean;
   canEditRates: boolean;
-}> {
+};
+
+/** Todo lo de `/team`, o el primer error de las tres lecturas. */
+export async function getTeamPageContextAction(): Promise<
+  MutationResult<TeamPageContext>
+> {
   if (!isSupabaseConfigured()) {
     return {
-      members: [],
-      roles: [],
-      invitations: [],
-      canManage: false,
-      canEditRates: false,
+      success: true,
+      data: {
+        members: [],
+        roles: [],
+        invitations: [],
+        canManage: false,
+        canEditRates: false,
+      },
     };
   }
 
@@ -269,12 +305,19 @@ export async function getTeamPageContextAction(): Promise<{
     getPendingInvitationsAction(),
   ]);
 
+  if (!members.success) return members;
+  if (!roles.success) return roles;
+  if (!invitations.success) return invitations;
+
   return {
-    members,
-    roles,
-    invitations,
-    canManage: canManageTeam(profile?.role),
-    canEditRates: canManageTeam(profile?.role),
+    success: true,
+    data: {
+      members: members.data,
+      roles: roles.data,
+      invitations: invitations.data,
+      canManage: canManageTeam(profile?.role),
+      canEditRates: canManageTeam(profile?.role),
+    },
   };
 }
 

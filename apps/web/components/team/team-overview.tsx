@@ -43,14 +43,18 @@ export function TeamOverview({
 
   const refresh = useCallback(async () => {
     if (!isSupabaseConfigured()) return;
+    // Refresco de fondo: si falla, queda lo que ya se ve (la carga inicial de
+    // la página es la que muestra el motivo de un error).
     try {
-      const ctx = await getTeamPageContextAction();
+      const resultado = await getTeamPageContextAction();
+      if (!resultado.success) return;
+      const ctx = resultado.data;
       if (ctx.members.length) setMembers(ctx.members);
       setRoles(ctx.roles);
       setInvitations(ctx.invitations);
       setCanManage(ctx.canManage);
-    } catch {
-      /* keep current */
+    } catch (error) {
+      console.error("[TeamOverview] refrescar equipo", error);
     }
   }, []);
 
