@@ -46,6 +46,7 @@ function eventoSucio() {
         },
       },
       payload: { email: "a@b.c" },
+      nextjs: { request_path: "/auth/force-password-change?token=secreto-de-invitacion", router_kind: "App Router" },
     },
     breadcrumbs: [
       { category: "console", message: "guardando clave sk-ant-123" },
@@ -131,6 +132,7 @@ describe("limpiarEventoDeSentry", () => {
           "http.method": "POST",
         },
       },
+      nextjs: { request_path: "/auth/force-password-change", router_kind: "App Router" },
     });
   });
 

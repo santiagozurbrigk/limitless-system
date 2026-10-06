@@ -18,8 +18,9 @@
  *   - en `extra` y en `contexts`, las claves con nombre de cuerpo o de secreto;
  *   - los breadcrumbs de consola (un log puede traer cualquier cosa) y, en los
  *     demás, el cuerpo, los headers y la query de su `data`;
- *   - en los atributos de los spans y de la traza (`contexts.trace.data`), el
- *     cuerpo, la query y los headers fuera de la lista blanca;
+ *   - en los atributos de los spans y de la traza (`contexts.trace.data`) y en
+ *     los demás contextos (`contexts.nextjs.request_path`), el cuerpo, la query
+ *     y los headers fuera de la lista blanca;
  *   - la query del nombre de la transacción (`transaction`), de la descripción
  *     de cada span y de los atributos de nombre (`next.span_name`), cuando
  *     tienen forma de pedido HTTP.
@@ -116,7 +117,7 @@ function limpiarDatos(datos: Diccionario | undefined): Diccionario | undefined {
     }
     if (/query/i.test(clave)) {
       delete limpio[clave];
-    } else if (typeof valor === "string" && /url|target|route|^from$|^to$/i.test(clave)) {
+    } else if (typeof valor === "string" && /url|target|route|path|referr?er|^from$|^to$/i.test(clave)) {
       limpio[clave] = sinQuery(valor);
     } else if (typeof valor === "string" && /name|description|transaction/i.test(clave)) {
       // `next.span_name`, `sentry.transaction`...
@@ -154,11 +155,21 @@ export function limpiarEventoDeSentry<T extends EventoLimpiable>(evento: T): T {
   if (e.request) e.request = limpiarRequest(e.request);
   if (e.extra) e.extra = sinClavesSensibles(e.extra);
   if (e.contexts) {
-    e.contexts = sinClavesSensibles(e.contexts);
-    // La traza de una transacción lleva los atributos del span raíz.
-    const traza = e.contexts?.trace as { data?: Diccionario; description?: unknown } | undefined;
-    if (traza?.data) traza.data = limpiarDatos(traza.data);
-    if (traza && typeof traza.description === "string") traza.description = nombreSinQuery(traza.description);
+    const contextos = sinClavesSensibles(e.contexts) ?? {};
+    e.contexts = contextos;
+    for (const [nombre, contexto] of Object.entries(contextos)) {
+      if (!contexto || typeof contexto !== "object" || Array.isArray(contexto)) continue;
+      if (nombre === "trace") {
+        // La traza de una transacción lleva los atributos del span raíz.
+        const traza = contexto as { data?: Diccionario; description?: unknown };
+        if (traza.data) traza.data = limpiarDatos(traza.data);
+        if (typeof traza.description === "string") traza.description = nombreSinQuery(traza.description);
+      } else {
+        // Los demás (`nextjs.request_path`, `response`...): la misma limpieza
+        // que los atributos de un span.
+        contextos[nombre] = limpiarDatos(contexto as Diccionario);
+      }
+    }
   }
   if (e.breadcrumbs) {
     e.breadcrumbs = e.breadcrumbs
