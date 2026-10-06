@@ -21,7 +21,7 @@ El SDK de Node guarda por defecto el cuerpo de cada request (hasta 10 KB, aunque
 adjunta a todo evento; en una server action ese cuerpo son sus argumentos (contraseñas, API keys, datos de clientes).
 Además mandaba el header `cookie` (con la sesión de Supabase) y `authorization`. Desde SCRUM-501 las cinco configs
 (`apps/web/sentry.{server,edge,client}.config.ts`, `apps/reel-worker/src/sentry.ts`, `apps/discord-bot/src/utils/sentry.ts`)
-van sin el cuerpo del request (`maxIncomingRequestBodySize: "none"` y `requestDataIntegration` sin `data`, `cookies` ni `query_string`) y con `beforeSend`/`beforeSendTransaction` que pasan todo evento por `limpiarEventoDeSentry` (`lib/observability/limpiar-evento-sentry.ts`): sin cuerpo, cookies ni query; URL y referer sin query; headers por lista blanca (también los que OpenTelemetry copia a la traza y a los spans); `extra` y `contexts` sin claves de cuerpo o de secreto; sin breadcrumbs de consola; la query del nombre de la transacción, de la traza y de los spans (`next.span_name`). El reel-worker y el bot llevan una copia exacta del módulo (se despliegan solos); un test falla si se
+van sin el cuerpo del request (`maxIncomingRequestBodySize: "none"` y `requestDataIntegration` sin `data`, `cookies` ni `query_string`) y con `beforeSend`/`beforeSendTransaction` que pasan todo evento por `limpiarEventoDeSentry` (`lib/observability/limpiar-evento-sentry.ts`): sin cuerpo, cookies ni query; URL y referer sin query; headers por lista blanca (también los que OpenTelemetry copia a la traza y a los spans); `extra` y `contexts` sin claves de cuerpo o de secreto; sin breadcrumbs de consola; la query del nombre de la transacción, de la traza y de los spans (`next.span_name`) y de los demás contextos (`contexts.nextjs.request_path`). El reel-worker y el bot llevan una copia exacta del módulo (se despliegan solos); un test falla si se
 separan. El mensaje y el stack del error sí viajan: una acción no tiene que meter datos del usuario en el texto de un
 error.
 
@@ -29,8 +29,8 @@ error.
 incidente). Pasa desde que `instrumentation.ts` empezó a cargar Sentry en el servidor (2026-09-22, `d1a35ccb`):
 - **Eventos (Issues):** todo error lanzado por una server action o un Server Component que capturaba `onRequestError`
   llegaba con `request.data` (los argumentos), los headers `cookie` (el token de sesión de Supabase, access y
-  refresh), `authorization`, `x-api-key` y cualquier otro, `request.query_string` y la query en `request.url` y en el
-  `referer`.
+  refresh), `authorization`, `x-api-key` y cualquier otro, `request.query_string` y la query en `request.url`, en el
+  `referer` y en `contexts.nextjs.request_path`.
 - **Transacciones (Performance, 5% de los pedidos del servidor):** lo mismo en `request` (headers `cookie`,
   `authorization`, `x-api-key` y el resto; `request.cookies`; `query_string`; la query en `url` y `referer`) y,
   además, la query en `contexts.trace.data` (`next.span_name`, `http.target`) y en el referer de
