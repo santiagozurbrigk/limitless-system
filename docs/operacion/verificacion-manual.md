@@ -958,7 +958,19 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 2. Entrar con esas credenciales. → El middleware obliga a cambiar la contraseña.
 3. 🔒 Invocar `inviteTeamMemberAction` con un `customRoleId` de **otra** org. → Esperado: error. Hoy se espera
    que lo acepte `[EQUIPO-CUSTOM-ROLE-ORG]`.
-4. Abrir `/invite?token=cualquiera`. → "Invitación no encontrada" (flujo legado, sin productor).
+4. Abrir `/invite?token=cualquiera`. → "Esta invitación no existe…" (nada crea invitaciones hoy).
+5. 🔒 Aceptar una invitación sin crear cuentas (SCRUM-495; aplicar antes la migración `20261005150000`).
+   Preparar: en Supabase → Authentication, crear una cuenta de prueba con "Auto Confirm User" y **no** entrar con
+   ella (queda sin perfil); en el SQL editor, una fila en `team_invitations` para la org de prueba con ese email
+   (cualquier caja) y un `custom_role_id` de esa org. El link es `/invite?token=<token de la fila>`.
+   - Sin sesión, abrir el link. → Org, rol, quién invitó y el email; botón "Iniciar sesión"; **ningún campo de
+     contraseña**. En Authentication no aparece ninguna cuenta nueva.
+   - "Iniciar sesión" con la cuenta de prueba. → Vuelve a la invitación (no al panel) y muestra "Unirme al equipo".
+   - "Unirme al equipo". → Entra al panel como miembro con el rol de la invitación; la fila queda `accepted`.
+   - Volver a abrir el link. → "Esta invitación ya se usó…".
+   - Con otra fila pendiente, abrir el link con la sesión de **otra** cuenta. → "Iniciaste sesión como…" y botón
+     para cerrar sesión; la fila sigue `pending`.
+   - Al terminar, borrar las filas y la cuenta de prueba.
 
 ---
 

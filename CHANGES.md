@@ -34,6 +34,68 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-05 · El link /invite deja de crear cuentas: sólo acepta a quien ya tiene cuenta con ese email (SCRUM-495)
+
+**Rama:** `fix/SCRUM-495-invite-sin-alta`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma (auth) y Equipo. `app/invite/page.tsx`, `app/invite/aceptar-invitacion.tsx`,
+`app/team/actions.ts`, `app/auth/actions.ts`, `components/auth/supabase-login-form.tsx`, `lib/team/invitacion.ts`,
+`lib/team/cargar-invitacion.ts`, `lib/validations.ts`, `lib/supabase/public-paths.ts`, `routes/paths.ts`,
+`types/team.ts`; migración `20261005150000_aceptar_invitacion_de_equipo`; `supabase/ci/supabase-stubs.sql` y
+`supabase/ci/tests/80_aceptar_invitacion.sql`. Se borraron `app/invite/invite-page-content.tsx` y
+`app/api/invite/validate/route.ts`.
+
+**Qué se hizo** (parte A de `[AUTH-ALTA-EMAIL-AJENO]`; la parte B, invitación por mail en las cuatro altas, es SCRUM-499):
+- `/invite?token=` pasa a ser un Server Component que lee la invitación con el service role y muestra: el motivo si
+  no existe, se usó, venció o se anuló; sin sesión, la invitación (org, rol custom, quién invitó, email) con un botón a
+  `/login?next=/invite?token=…` y, para quien no tiene cuenta, que le pida el alta al founder desde Equipo; con la
+  sesión de otro email, que la cierre; con la del email invitado, "Unirme al equipo". Sin formulario de contraseña.
+- `acceptInvitationAction` (creaba la cuenta confirmada con `createUser`) y `completeInvitationForCurrentUserAction`
+  se reemplazan por `aceptarInvitacionAction(token)`: sin sesión rechaza sin llamar a nada; con sesión llama a
+  `aceptar_invitacion_de_equipo(token, user.id)` y devuelve los rechazos como valor (`motivo` + mensaje en voseo).
+- Función `aceptar_invitacion_de_equipo` (SECURITY DEFINER, EXECUTE sólo para `service_role`): bloquea la invitación
+  (`for update`), exige pendiente y sin vencer, email de la cuenta (de `auth.users`) igual al invitado sin importar
+  mayúsculas ni espacios y con `email_confirmed_at`, rol de la misma org; si la cuenta ya es de esa org la marca usada
+  sin cambiarle el rol; si es de otra org o es el super admin, rechaza sin tocar nada; si no tiene perfil, lo crea
+  como `member` con el rol y el `invited_by` de la invitación y la marca `accepted`, todo en una transacción.
+- El login vuelve a la invitación: el formulario manda el `next` y `signInAction` lo usa sólo si
+  `destinoDeInvitacion` lo reconoce (path interno exactamente `/invite` con token, rearmado; usa `destinoSeguro`).
+  Con ese `next` no corre `ensureUserBootstrap`, como ya hacía `/auth/callback`, para que una cuenta sin perfil no
+  quede en una org propia antes de aceptar.
+- Borrado lo que quedó sin uso: el formulario de alta, `acceptInvitationSchema`, `completeInvitationForCurrentUserSchema`
+  (queda `aceptarInvitacionSchema`), `passwordMinLengthSchema`, el tipo `InviteValidation`, `/api/invite/validate`
+  (que además devolvía el `error.message` de Supabase, `[AUD-SEG-8]`) y su entrada en las rutas públicas.
+- Tests: `lib/team/__tests__/invitacion.test.ts` (estados, emails, open redirect), `app/team/__tests__/aceptar-invitacion.test.ts`
+  (sin sesión no hay alta ni consultas; con sesión, sólo la RPC con el id de la sesión; cada rechazo como valor),
+  `app/invite/__tests__/pagina-invitacion.test.ts` (render de la página en cada estado, sin campos de contraseña),
+  `app/auth/__tests__/login-vuelve-a-la-invitacion.test.ts` y `supabase/ci/tests/80_aceptar_invitacion.sql`
+  (anon y authenticated no la llaman; inexistente, vencida, anulada, sin cuenta, sin confirmar, otro email, otra org,
+  super admin, rol de otra org: todo intacto; acepta con el rol; segundo uso rechazado; ya miembro sin cambio de rol).
+  Concurrencia probada con dos sesiones de Postgres (misma invitación en dos pestañas: la segunda espera el lock y la
+  ve usada; dos invitaciones a la vez: un solo perfil). Control negativo guardado en la evidencia.
+
+**Por qué / finalidad:** cualquiera con el link de una invitación creaba una cuenta ya confirmada para el email
+invitado con la contraseña que eligiera, sin que el dueño del email confirmara nada. Como el alta de founders es
+pública, alguien podía quedarse con una cuenta confirmada usando el email de otra persona.
+
+**Decisiones de diseño relevantes:**
+- La aceptación vive en la base para que sea atómica: leer, crear el perfil y marcar la invitación desde la app en
+  pasos separados dejaba ventanas (perfil sin invitación marcada o al revés) y, sin el lock, la segunda pestaña recibía
+  un "ya era miembro" en vez de "ya se usó". El email y su confirmación se leen de `auth.users`, no de la request.
+- Un usuario es de una sola org (`profiles.id` = usuario): una cuenta de otra org no se mueve, se rechaza con un
+  mensaje claro. Quien ya es de la org no cambia de rol al aceptar (un founder no pasa a member).
+- Se acepta con un botón y no al abrir el link: un GET no cambia datos.
+- El `next` del login sólo vale para invitaciones; el resto del login sigue igual. Cerrar la sesión de otra cuenta usa
+  `signOutAction` tal cual (vuelve a `/login`) y la página pide reabrir el link.
+- Producción tenía 0 filas en `team_invitations` al 2026-10-05: no hay datos que tratar.
+
+**Riesgos / deuda técnica pendiente:** aplicar la migración `20261005150000` antes del deploy (SQL en
+`limitless-auditoria/sql-produccion/scrum-495/`); si el código llega antes, aceptar falla con "No se pudo aceptar la
+invitación" sin crear nada. `[AUTH-ALTA-EMAIL-AJENO]` sigue abierto por la parte B (SCRUM-499) y la del super admin;
+`[EQUIPO-INVITE-LEGADO]` sigue abierto (nada crea invitaciones). Verificación manual: `docs/operacion/verificacion-manual.md`, bloque 4.
+
+---
+
 ### 2026-10-05 · Tercer fix-pack de SCRUM-36: rotación sin paridad compartida y cortes por plazo sin falsa alarma
 
 **Rama:** `fix/SCRUM-36-fathom-cursor`

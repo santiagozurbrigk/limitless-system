@@ -125,10 +125,10 @@ Prioridad sugerida P1: el super admin con contraseña sola es la llave de todas 
 #### [AUTH-ALTA-EMAIL-AJENO] Un founder puede crear cuentas confirmadas para cualquier email, y el super admin se decide por email
 - **Tipo:** seguridad
 - **Severidad:** Crítica
-- **Estado verificado:** `inviteTeamMemberAction` (`apps/web/app/team/actions.ts:263-301`) llama `admin.auth.admin.createUser({ email, password: tempPassword, email_confirm: true })` y devuelve `tempPassword` al founder que invita, sin verificar que el email sea de la persona. Lo mismo hacen `addBusinessToMyHoldingAction` (`app/(platform)/holding/actions.ts:174-204`) y las altas del super admin (`app/super-admin/actions.ts:127,197,724`). Para invitar alcanza con ser founder (`requireManagerProfile`), y con `[SIGNUP-PUBLICO]` cualquiera puede serlo. `isSuperAdminEmail` (`apps/web/lib/auth/require-super-admin.ts:6-17`) da acceso al panel interno a todo usuario cuyo `user.email` esté en `super_admin_users`, sin mirar `email_confirmed_at` ni el id. Prod (conteo agregado, 2026-09-23): 1 email en la allowlist, con cuenta confirmada; 0 sin cuenta.
+- **Estado verificado:** **Parte A resuelta el 2026-10-05 (SCRUM-495):** el link `/invite?token=` ya no crea cuentas. Antes `acceptInvitationAction` hacía `createUser({ email, password, email_confirm: true })` con el email de la invitación y la contraseña de quien tuviera el link; ahora `/invite` sólo muestra la invitación y pide iniciar sesión con la cuenta de ese email, y `aceptarInvitacionAction` acepta con la sesión mediante `aceptar_invitacion_de_equipo` (migración `20261005150000`: email de la cuenta igual al invitado y confirmado, una sola vez, sin mover cuentas de otra org). **Parte B en SCRUM-499:** las cuatro altas de abajo siguen creando cuentas confirmadas con contraseña temporal. `inviteTeamMemberAction` (`apps/web/app/team/actions.ts:263-301`) llama `admin.auth.admin.createUser({ email, password: tempPassword, email_confirm: true })` y devuelve `tempPassword` al founder que invita, sin verificar que el email sea de la persona. Lo mismo hacen `addBusinessToMyHoldingAction` (`app/(platform)/holding/actions.ts:174-204`) y las altas del super admin (`app/super-admin/actions.ts:127,197,724`). Para invitar alcanza con ser founder (`requireManagerProfile`), y con `[SIGNUP-PUBLICO]` cualquiera puede serlo. `isSuperAdminEmail` (`apps/web/lib/auth/require-super-admin.ts:6-17`) da acceso al panel interno a todo usuario cuyo `user.email` esté en `super_admin_users`, sin mirar `email_confirmed_at` ni el id. Prod (conteo agregado, 2026-09-23): 1 email en la allowlist, con cuenta confirmada; 0 sin cuenta.
 - **Riesgo:** Si se agrega a `super_admin_users` un email que todavía no tiene cuenta (p. ej. al sumar a alguien del staff antes de que entre), entonces cualquier founder que lo conozca o lo adivine lo invita a su org, recibe la contraseña temporal, entra y el middleware lo manda a `/super-admin`. Aun sin super admin de por medio, cualquier founder puede ocupar el email de otra persona (cuenta confirmada que esa persona ya no puede crear) y hacerse pasar por ella. Hoy la parte de super admin no es explotable (0 emails sin cuenta).
 - **Impacto:** Toma del panel interno: todas las orgs, bajas, add-ons, claves BYOK de clientes (`[IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN]`). Suplantación de identidad entre equipos.
-- **Qué hay que hacer:** (1) identificar al super admin por `user_id` (FK a `auth.users`) en vez de por email, o como mínimo exigir `email_confirmed_at` y que la cuenta no venga de una invitación de org; (2) hecho: desde el 2026-10-02 (SCRUM-494) el alta sigue `docs/operacion/alta-super-admin.md`, primero la cuenta y después la allowlist; (3) invitaciones por mail (`auth.admin.inviteUserByEmail` o link de un solo uso) en vez de cuentas confirmadas con contraseña visible, o `email_confirm: false` hasta que la persona confirme.
+- **Qué hay que hacer:** (1) identificar al super admin por `user_id` (FK a `auth.users`) en vez de por email, o como mínimo exigir `email_confirmed_at` y que la cuenta no venga de una invitación de org; (2) hecho: desde el 2026-10-02 (SCRUM-494) el alta sigue `docs/operacion/alta-super-admin.md`, primero la cuenta y después la allowlist; (3) parte B (SCRUM-499): invitaciones por mail (`auth.admin.inviteUserByEmail` o link de un solo uso) en vez de cuentas confirmadas con contraseña visible, o `email_confirm: false` hasta que la persona confirme; el link `/invite` ya no crea cuentas (parte A, SCRUM-495).
 - **Criterio de aceptación:** Con un email agregado a `super_admin_users` que no tiene cuenta, un founder que lo invita a su org no obtiene acceso a `/super-admin` (la invitación falla o la cuenta queda sin acceso hasta que el dueño del email confirme); `requireSuperAdmin` rechaza a un usuario con email en la allowlist pero sin `email_confirmed_at` (o con otro `user_id`); invitar a un miembro no entrega una cuenta usable sin que la persona confirme su email; hay un test de `requireSuperAdmin`/`isSuperAdmin` con esos casos
 - **Dónde:** `apps/web/lib/auth/require-super-admin.ts`, `apps/web/app/team/actions.ts`, `apps/web/app/(platform)/holding/actions.ts`, `apps/web/app/super-admin/actions.ts`, `super_admin_users` (migración).
 
@@ -1962,12 +1962,13 @@ Doc del área: [`docs/areas/operaciones.md`](./docs/areas/operaciones.md)
 
 #### [EQUIPO-INVITE-LEGADO] Invitaciones por token sin productor [Operaciones y equipo]
 - **Tipo:** deuda técnica
-- **Estado verificado:** nada inserta en `team_invitations` (0 filas en prod). Siguen vivos `/invite`,
-  `/api/invite/validate` (que además devuelve `error.message` interno, `AUDITORIA_BACKEND` §3.8),
-  `acceptInvitationAction`, `completeInvitationForCurrentUserAction`, `revokeInvitationAction` y la lista de
-  pendientes en Equipo.
-- **Qué hay que hacer:** borrarlos (y la tabla) o volver a ofrecer invitación por link.
-- **Dónde:** `apps/web/app/invite/`, `apps/web/app/api/invite/validate/route.ts`, `apps/web/app/team/actions.ts`.
+- **Estado verificado:** nada inserta en `team_invitations` (0 filas en prod al 2026-10-05). Siguen vivos `/invite`
+  (desde SCRUM-495 sólo acepta con la sesión de la cuenta invitada, vía `aceptarInvitacionAction` y
+  `aceptar_invitacion_de_equipo`), `revokeInvitationAction` y la lista de pendientes en Equipo.
+  `/api/invite/validate`, `acceptInvitationAction` y `completeInvitationForCurrentUserAction` se borraron en SCRUM-495.
+- **Qué hay que hacer:** que SCRUM-499 (invitación por mail en las altas) sea el productor de `team_invitations`;
+  si esa parte no usa la tabla, borrar `/invite`, la función, la tabla y la lista de pendientes.
+- **Dónde:** `apps/web/app/invite/`, `apps/web/app/team/actions.ts`, `apps/web/lib/team/invitacion.ts`.
 
 #### [PRODUCTO-VALUE-LADDER-TABLA] `value_ladder` es una tabla sin productor [Producto]
 - **Tipo:** deuda técnica
@@ -2332,7 +2333,7 @@ Prioridad sugerida P2: no hay una filtración conocida; el procedimiento se nece
 
 #### [AUD-SEG-8] Errores internos devueltos al cliente
 - **Tipo:** seguridad
-- **Estado verificado:** `app/api/invite/validate/route.ts` devuelve `error.message` de Supabase con 500; según la auditoría también Calendly webhook/callback, `rag/ingest`, ManyChat y Unipile; Whop y Commas revelan si la org tiene la integración.
+- **Estado verificado:** según la auditoría, Calendly webhook/callback, `rag/ingest`, ManyChat y Unipile devuelven el `error.message` interno; Whop y Commas revelan si la org tiene la integración. `/api/invite/validate`, que devolvía el de Supabase con 500, se borró en SCRUM-495.
 - **Qué hay que hacer:** mensaje genérico + log/Sentry del detalle; respuesta uniforme en webhooks de pagos.
 - **Dónde:** rutas citadas.
 

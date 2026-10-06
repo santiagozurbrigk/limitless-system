@@ -98,6 +98,7 @@ Excepciones que **sí** son editables por cualquier miembro: `discord_integratio
 | `get_holding_dashboard_stats(uuid)` | Métricas agregadas del holding | sólo service role |
 | `create_default_roles(uuid)` | Siembra roles al crear una org | `authenticated`, service role |
 | `client_last_activity(uuid)` | Última novedad por cliente (onboarding de clientes) | sólo service role |
+| `aceptar_invitacion_de_equipo(text, uuid)` | Acepta una invitación de equipo con la cuenta de la sesión, en una transacción con la invitación bloqueada; devuelve un motivo en texto (SECURITY DEFINER, `20261005150000`, SCRUM-495; ver `docs/arquitectura/auth-organizaciones-y-permisos.md`) | sólo service role (`aceptarInvitacionAction`) |
 | `onboarding_connected_source_count`, `onboarding_org_progress` | Checklist de onboarding | ver `docs/areas/plataforma.md` |
 | `get_current_week_start()` | Semana de weekly inputs | |
 | `set_updated_at()` | Trigger genérico de `updated_at` | trigger |
@@ -120,7 +121,7 @@ Una línea por tabla de producción. Filas = conteo aproximado de prod el 2026-0
 | `organizations` | Raíz multi-tenant: nombre, `account_type` (founder/holding), `status`, `enabled_add_ons`, BYOK de Claude cifrado, preferencias |
 | `profiles` | Usuario (= `auth.users.id`) → `organization_id`, `role`, contraseña temporal, `is_holding_admin` |
 | `team_roles` | Roles custom con `permissions` por módulo |
-| `team_invitations` | Invitaciones por token (`/invite`) |
+| `team_invitations` | Invitaciones por token (`/invite`); aceptarlas no crea cuentas (`aceptar_invitacion_de_equipo`) |
 | `notification_preferences` | Preferencias por usuario |
 | `onboarding_state`, `onboarding_responses` | Estado del onboarding guiado y respuestas del founder |
 | `token_usage` | Consumo de IA por org/feature/modelo (`organization_id` nulo = trabajo de plataforma, p. ej. resúmenes del cerebro en super-admin) |
