@@ -37,6 +37,7 @@ import {
   listClientsAction,
   updateClientAction,
 } from "@/app/clients/actions";
+import { datoDeLaMutacion } from "@/lib/client/correr-accion";
 import { recordClientPaymentAction } from "@/app/sales/payment-actions";
 import { linkLeadToClientAction } from "@/app/sales/lead-actions";
 import {
@@ -539,7 +540,10 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
   const updateClosingCall = useCallback(
     async (id: string, patch: Partial<ClosingCall>) => {
       if (useSupabase) {
-        const saved = await updateClosingCallAction(id, patch);
+        const saved = await datoDeLaMutacion(
+          () => updateClosingCallAction(id, patch),
+          "[PlatformDataProvider] actualizar llamada"
+        );
         setClosingCalls((prev) =>
           prev.map((c) => (c.id === id ? saved : c))
         );
@@ -565,7 +569,10 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
           : client;
 
       if (useSupabase) {
-        const saved = await createClientAction(payload);
+        const saved = await datoDeLaMutacion(
+          () => createClientAction(payload),
+          "[PlatformDataProvider] crear cliente"
+        );
         setClients((prev) => [saved, ...prev.filter((c) => c.id !== saved.id)]);
         return saved;
       }
@@ -582,7 +589,10 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
 
   const updateClient = useCallback(async (id: string, patch: Partial<Client>) => {
     if (useSupabase) {
-      const saved = await updateClientAction(id, patch);
+      const saved = await datoDeLaMutacion(
+        () => updateClientAction(id, patch),
+        "[PlatformDataProvider] actualizar cliente"
+      );
       setClients((prev) => prev.map((c) => (c.id === id ? saved : c)));
       return;
     }

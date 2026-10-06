@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Send } from "lucide-react";
 import { Button, FormField, Textarea, cn } from "@ai-coo/ui";
 import { saveWeeklyInputAction } from "@/app/operations/actions";
-import { correrMutacion } from "@/lib/operations/correr-accion";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import { Panel } from "@/components/shared/panel";
 import { useToast } from "@/providers/toast-provider";
 import type { Department } from "@/types/operations";

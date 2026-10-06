@@ -31,6 +31,7 @@ import {
 } from "@ai-coo/ui";
 import { BookOpen, Settings2, X } from "lucide-react";
 import { assignClientPlanAction } from "@/app/clients/actions";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import { listPlansAction } from "@/app/clients/plan-actions";
 import { getClientsTableEnrichmentAction } from "@/app/clients/plan-duration-actions";
 import { FilterPills } from "@/components/marketing/filter-pills";
@@ -275,16 +276,16 @@ export function CobrosPage({
     const target = assignPlanTarget;
     setAssignPlanTarget(null);
     startTransition(async () => {
-      try {
-        await assignClientPlanAction(target.id, planId);
-        await refreshClients();
-        push({ title: "Plan asignado", variant: "success" });
-      } catch (e) {
-        push({
-          title: "No se pudo asignar el plan",
-          description: e instanceof Error ? e.message : undefined,
-        });
-      }
+      await correrMutacion({
+        accion: () => assignClientPlanAction(target.id, planId),
+        alExito: async () => {
+          await refreshClients();
+          push({ title: "Plan asignado", variant: "success" });
+        },
+        avisar: push,
+        tituloError: "No se pudo asignar el plan",
+        etiqueta: "[CobrosPage] asignar plan",
+      });
     });
   };
 

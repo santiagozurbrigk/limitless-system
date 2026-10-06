@@ -7,7 +7,7 @@ import { Button } from "@ai-coo/ui";
 import { triggerWeeklyPipelineAction } from "@/app/executive-reports/report-generation-actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { mensajeDelPipeline } from "@/lib/executive-reports/mensaje-del-pipeline";
-import { correrAccion } from "@/lib/operations/correr-accion";
+import { correrAccion } from "@/lib/client/correr-accion";
 import { useToast } from "@/providers/toast-provider";
 
 export function GenerateWeeklyPipelineButton({

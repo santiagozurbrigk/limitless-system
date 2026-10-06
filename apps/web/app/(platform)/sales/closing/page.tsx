@@ -11,10 +11,12 @@ async function ClosingPageContent() {
     getGHLIntegrationStatusAction(),
     listLeadsTableAction(),
     // El equipo es para asignar responsables: si falla, la tabla igual sirve.
-    getTeamMembersAction().catch((error: unknown) => {
-      unstable_rethrow(error);
-      return [];
-    }),
+    getTeamMembersAction()
+      .then((resultado) => (resultado.success ? resultado.data : []))
+      .catch((error: unknown) => {
+        unstable_rethrow(error);
+        return [];
+      }),
   ]);
 
   return (

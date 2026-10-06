@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { ErrorEsperable } from "@/lib/server/error-esperable";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 
 /**
  * Roles que pueden hacer cada cosa sensible en la organización activa.
@@ -50,9 +52,17 @@ export async function requireOrgRole(
 
   const resultado = evaluarPermiso(respuesta);
   if (resultado === "error") {
-    throw new Error("No se pudo verificar el permiso.");
+    // Mismo texto que antes para los módulos que lo muestran, pero como falla
+    // de la base: se registra y va a Sentry.
+    console.error("[requireOrgRole] current_user_has_org_role:", respuesta.error?.message);
+    throw new FallaDeLaBase({
+      message: "No se pudo verificar el permiso.",
+      code: respuesta.error?.code,
+    });
   }
+  // Sin el rol es un rechazo esperable; no poder verificarlo es una falla
+  // (SCRUM-497): se registra y el usuario ve el texto fijo.
   if (resultado === "sin_permiso") {
-    throw new Error(mensajeSinPermiso);
+    throw new ErrorEsperable(mensajeSinPermiso);
   }
 }

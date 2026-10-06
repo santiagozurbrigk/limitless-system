@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@ai-coo/ui";
 import { aceptarInvitacionAction } from "@/app/team/actions";
-import { correrAccion } from "@/lib/operations/correr-accion";
+import { correrAccion } from "@/lib/client/correr-accion";
 import { paths } from "@/routes";
 
 /** El botón de `/invite` para quien tiene la sesión del email invitado. */

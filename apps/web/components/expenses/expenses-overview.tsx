@@ -19,6 +19,7 @@ import { useFinanceData } from "@/providers";
 import { getTeamMembersAction } from "@/app/team/actions";
 import { TeamPayrollSection } from "@/components/finance/team-payroll-section";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import { formatMoney, monthlyEquivalent } from "@/lib/finance/format";
 import type {
   CommissionBasis,
@@ -731,6 +732,7 @@ function TeamCompensationModal({
    */
   const [memberId, setMemberId] = useState<string>("");
   const [equipo, setEquipo] = useState<{ id: string; name: string }[]>([]);
+  const { push } = useToast();
   const [roleLabel, setRoleLabel] = useState("");
   const [hasFixed, setHasFixed] = useState(false);
   const [fixedMonthly, setFixedMonthly] = useState("");
@@ -745,10 +747,17 @@ function TeamCompensationModal({
 
   useEffect(() => {
     if (!open) return;
-    void getTeamMembersAction().then((miembros) =>
-      setEquipo(miembros.map((m) => ({ id: m.id, name: m.name })))
-    );
-  }, [open]);
+    // Sin la lista se puede seguir con "otro" y el nombre libre; se avisa
+    // para que no parezca que el equipo está vacío.
+    void correrMutacion({
+      accion: () => getTeamMembersAction(),
+      alExito: (miembros) =>
+        setEquipo(miembros.map((m) => ({ id: m.id, name: m.name }))),
+      avisar: push,
+      tituloError: "No se pudo cargar el equipo",
+      etiqueta: "[TeamCompensationModal] cargar equipo",
+    });
+  }, [open, push]);
 
   useEffect(() => {
     if (!open) return;

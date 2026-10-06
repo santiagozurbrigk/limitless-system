@@ -133,7 +133,7 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
   tus propios inputs.", `mapWeeklyError`); `generateWeeklyReportAction` devuelve `ResultadoReporteSemanal`
   (`lib/operations/resultado-reporte-semanal.ts`, con `motivo` `org-no-activa`, `sin-inputs` o `falla`; una org pausada
   no genera, SCRUM-210). Sólo lo inesperado (sin sesión) sigue lanzando. Los componentes las corren con
-  `correrAccion`/`correrMutacion` (`lib/operations/correr-accion.ts`): un error devuelto se muestra con su mensaje y uno
+  `correrAccion`/`correrMutacion` (`lib/client/correr-accion.ts`, módulo común de cliente): un error devuelto se muestra con su mensaje y uno
   lanzado se registra en consola y se avisa con "Ocurrió un error inesperado. Intentá de nuevo.".
 
 ### Equipo
@@ -146,6 +146,12 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
   13 módulos (`constants/permission-modules.ts`); las claves viejas se traducen al leer.
 - Resolución de permisos: `lib/auth/get-current-permissions.ts`. Founder = todo `full`. Sin rol cargado
   (`hasRoleConfigured = false`) no se bloquea nada.
+- Lecturas: `getTeamMembersAction`, `getTeamRolesAction`, `getPendingInvitationsAction` y
+  `getTeamPageContextAction` devuelven `MutationResult` (SCRUM-497). `/team` es un server component sin error
+  boundary: si la lectura falla, la página muestra "No se pudo cargar el equipo" con el motivo (sesión, cuenta
+  desactivada o un texto fijo si falló la base, con el detalle en la consola del servidor y en Sentry) en vez de la pantalla
+  de error de Next. Closing usa la lista de miembros para asignar responsables y sigue sin ella si falla; el
+  modal de compensación de Gastos avisa con un toast.
 
 ## Integraciones externas
 

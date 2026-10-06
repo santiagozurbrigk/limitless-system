@@ -133,6 +133,11 @@ el log de Zernio (`lib/zernio/client.ts:291,302`) incluye `url`, pero Zernio aut
   defaults no se pudo verificar sin acceso a Sentry; va como paso de verificación en A-5.
 - `onRequestError = Sentry.captureRequestError` (`instrumentation.ts`) captura errores de Server Components, route
   handlers y middleware con los datos de la request.
+- **Actualización 2026-10-06 (SCRUM-501):** verificado con un evento real (build de producción y un Sentry falso):
+  además de lo de arriba, cada evento llevaba el cuerpo del request (`request.data`, los argumentos de la server action)
+  y los headers `cookie` (sesión de Supabase) y `authorization`, en eventos y en transacciones. Resuelto en las cinco
+  configs con `limpiarEventoDeSentry` y sin captura del cuerpo; detalle en `docs/operacion/alertas.md` § Qué datos no
+  llegan a Sentry.
 
 ### A.4 Cifrado de credenciales (`ENCRYPTION_MASTER_KEY`)
 

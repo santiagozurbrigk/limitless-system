@@ -14,7 +14,7 @@ import {
   cn,
 } from "@ai-coo/ui";
 import { saveWeeklyInputAction } from "@/app/operations/actions";
-import { correrMutacion } from "@/lib/operations/correr-accion";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import { Panel } from "@/components/shared/panel";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { useToast } from "@/providers/toast-provider";

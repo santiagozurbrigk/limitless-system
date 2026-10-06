@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot` | sí (`pnpm typecheck`) |
 | Lint | ESLint 9 (`next lint` en web, `eslint src/` en ui) | `apps/web`, `packages/ui` | sí (`pnpm lint`) |
-| Unitarios | Vitest 3, entorno `node` | `apps/web` (89 archivos) | sí (`pnpm test`) |
+| Unitarios | Vitest 3, entorno `node` | `apps/web` (194 archivos) | sí (`pnpm test`) |
 | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
@@ -67,12 +67,12 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **171 archivos, ~1.690 casos** (recontado el 2026-10-05 con el cuarto fix-pack de SCRUM-493). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **194 archivos, ~1.945 casos** (recontado el 2026-10-06 con SCRUM-497 rebasada sobre SCRUM-501; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
 | `lib/funnels` | 10 | 186 | motor de embudos puro: compute, spine, períodos, KPIs, fuentes, conformidad de plantillas |
-| `lib/fathom` | 17 | 142 | match con turnos, contraparte, identidades, links compartidos, ventana de sync, reclamo de trabadas, cliente de la org (filtro por organización), día de cada llamada, días desde la última 1-1 y fecha de la llamada en la zona de la org (incluido el llamador real con la base simulada) |
+| `lib/fathom` | 22 | 226 | match con turnos, contraparte, identidades, links compartidos, ventana de sync, reclamo de trabadas, cliente de la org (filtro por organización), día de cada llamada, días desde la última 1-1 y fecha de la llamada en la zona de la org (incluido el llamador real con la base simulada), cursor y lectura de la ventana con presupuesto, plazo y orden rotativo del cron, fallas de sync registradas y las dos corridas de la sync de la org |
 | `lib/checkpoints` | 7 | 105 | recorrido del cliente, etapas, propuestas, trabados (vence y atraso en días de la zona de la org), fecha de un hito en la zona de la org y validación "no futura" por día (incluidas UTC+12 y UTC-6) |
 | `lib/custom-fields` | 7 | 85 | campos configurables: validación, merge, formato, alertas por fecha |
 | `lib/payments` | 5 | 85 | normalización Whop/Commas, firmas, agregados, retención |
@@ -86,13 +86,13 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/super-admin` | 5 | 43 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role y estado de la org alineado con la base (incluido el desconocido) |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
 | `lib/sops` | 2 | 25 | marcadores de adjuntos, chunks de audio |
-| `lib/auth` | 6 | 33 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log, un solo chequeo de super admin por pedido |
+| `lib/auth` | 7 | 42 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log, un solo chequeo de super admin por pedido, acceso a un módulo por ruta |
 | `lib/integrations` | 2 | 28 | `health.ts` y completitud del registro |
 | `lib/vturb` | 2 | 23 | normalización de stats, período cerrado |
 | `lib/metrics` | 8 | 83 | etapas del embudo de ventas, match de closer, períodos y prorrateo, ingresos por fecha, resumen de Finanzas, serie de 6 meses (varias zonas horarias), gráfico de ingresos del Panel con el hoy de la org, fechas por defecto del import de métricas |
 | `lib/closing` | 1 | 20 | estado de llamadas |
 | `constants` | 2 | 16 | módulos de permisos |
-| `lib/navigation` | 2 | 15 | módulo por path, metadata de página |
+| `lib/navigation` | 2 | 23 | módulo por path, metadata de página |
 | `lib/marketing` | 8 | 74 | snapshot de métricas de anuncios, cola del cron de métricas de contenido (prioridades, espera, historias vencidas), promedios, rankings y orden de la grilla sin ceros inventados, prompt de patrones |
 | `lib/webinarjam` | 1 | 13 | normalización de registrantes |
 | `lib/executive-reports` | 3 | 20 | cadencias, mes que toma el reporte mensual y mensaje del botón de reportes |
@@ -103,22 +103,34 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/chart` | 1 | 5 | escala del embudo |
 | `lib/supabase` | 2 | 6 | rutas públicas del middleware, `fetchAllRows` |
 | `lib/release` | 1 | 4 | lo escondido para el release: ⌘K, catálogo de integraciones, canales de Lead Magnets |
-| `lib/observability` | 3 | 26 | aviso a Sentry de los crons; lo que se saca de un evento o transacción antes de mandarlo (cuerpo, cookies, query también en nombres de transacciones y spans, headers fuera de la lista blanca, breadcrumbs de consola), las configs de Sentry con el SDK simulado y las copias del reel-worker y del bot; un objeto plano reportado con su `message` y su `code` (SCRUM-501) |
+| `lib/observability` | 3 | 26 | aviso a Sentry de los crons; etiquetas de una falla de proceso de fondo o de server action (SCRUM-497); lo que se saca de un evento o transacción antes de mandarlo (cuerpo, cookies, query también en nombres de transacciones y spans, headers fuera de la lista blanca, breadcrumbs de consola), las configs de Sentry con el SDK simulado y las copias del reel-worker y del bot; un objeto plano reportado con su `message` y su `code` (SCRUM-501) |
 | `lib/storage` | 1 | 6 | validación de rutas por org |
+| `lib/server` | 1 | 13 | errores de las server actions: sólo un `ErrorEsperable` vuelve con su mensaje en los módulos arreglados y lo demás se registra, va a Sentry y vuelve con el texto fijo; `runMutation` no cambia el mensaje pero reporta las fallas de infraestructura (clasificación por clase, `code` y texto) |
 | `lib/queue` | 1 | 3 | aviso cuando falla un trabajo de QStash |
 | `lib/unipile` | 2 | 5 | secreto del webhook |
 | `lib/intelligence` | 2 | 15 | organizaciones sobre las que corren los crons de IA y el chequeo de la org al procesarla (generadores, workers, modo en serie) |
 | `lib/youtube` | 1 | 2 | métricas de video que se guardan |
-| `lib/team` | 1 | 6 | rol de la org (filtro por organización) |
-| `app/__tests__` | 1 | 3 | los catch de páginas y layouts relanzan los errores de Next (`unstable_rethrow`) |
+| `lib/team` | 2 | 14 | rol de la org (filtro por organización), estado de una invitación y comparación de emails |
+| `app/__tests__` | 3 | 12 | los catch de páginas y layouts relanzan los errores de Next (`unstable_rethrow`); el layout de la plataforma y las páginas de Inteligencia dibujan «No tenés acceso» sin lanzar |
 | `app/fathom` | 2 | 6 | `getSalesCallsAction` contra una base simulada; la lista de 1-1 de la ficha con el día de la org y una sola lectura de la zona |
 | `app/executive-reports`, `app/operations` | 4 | 35 | últimos reportes; el botón de reportes y el reporte de Operaciones no llaman a la IA para una org no activa; las acciones de Operaciones (reporte semanal e inputs) devuelven sus errores esperables como valor, relanzan lo inesperado (sin sesión o redirect) y filtran por organización |
-| `lib/operations` | 3 | 16 | mensaje del botón de Inputs semanales, cómo cuenta el pipeline el paso de Operaciones, cómo los componentes corren las acciones (texto fijo ante un error inesperado) y el lunes de la semana de la organización |
+| `lib/operations` | 2 | 10 | mensaje del botón de Inputs semanales, cómo cuenta el pipeline el paso de Operaciones y el lunes de la semana de la organización |
+| `lib/client` | 1 | 12 | cómo los componentes corren las server actions (`correr-accion.ts`): mensaje devuelto, texto fijo y consola ante un error inesperado, un redirect no avisa, espera un `alExito` asíncrono, y la capa que devuelve el dato o lanza (`datoDeLaMutacion`) |
 | `providers` | 1 | 5 | zona de la organización en el cliente (`ZonaDeLaOrganizacionProvider`): un miembro en Madrid ve el día de la org; el hoy es null en el render del servidor |
 | `components/shared` | 1 | 10 | `CampoFecha`: muestra lo guardado sin correrlo de día (en la zona de la org si se le pasa) y emite la fecha elegida |
 | `lib/agent` | 3 | 8 | tools de contenido del agente con piezas sin métricas, fechas que lee el agente en la zona de la org |
+| `lib/ai` | 3 | 15 | aviso de la clave de IA, clave rechazada o sin créditos, resolución de la credencial de la org |
+| `lib/calendly` | 1 | 11 | firma del webhook |
+| `lib/forms` | 1 | 6 | paginación de respuestas de Typeform |
+| `lib/webhooks` | 1 | 22 | status HTTP de la ingesta y webhooks que no pierden el evento crudo |
+| `app/api/integrations` | 3 | 14 | callbacks OAuth (sesión y organización), cron de sync de Fathom (plazo y orden), webhook de Fathom por miembro |
+| `app/marketing/content` | 1 | 4 | contenido con mejor rendimiento sobre todas las piezas de la org |
+| `app/auth` | 2 | 11 | el login vuelve a la invitación; el cambio de contraseña obligatorio devuelve sus errores esperables como valor (incluidos los rechazos de Supabase Auth: misma contraseña, débil, sesión, intentos) |
+| `app/invite`, `app/intelligence` | 2 | 10 | la página de invitación sin crear cuentas; el resumen de Inteligencia rechaza como valor a quien no tiene Operaciones |
+| `app/clients`, `app/closing` | 3 | 37 | las mutaciones de Clientes y la de Closing devuelven sus errores esperables como valor, filtran por organización y no muestran crudo lo inesperado (lo registran y reportan); Closing trae todos los turnos de la org |
+| `app/team`, `app/(platform)/team` | 4 | 31 | aceptar una invitación con la sesión; las lecturas de Equipo devuelven sus errores como valor y filtran por organización; `/team` muestra el motivo en vez de la pantalla de error de Next; un rol con nombre repetido vuelve con su mensaje |
 
-**Sin ningún test:** `lib/agent` (compaction, JIT, streaming; sólo las tools de contenido y las fechas de `get_clients_data` tienen test), `lib/ai` (BYOK, `wrap-untrusted-content`), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly`, `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`, salvo el gráfico de ingresos), los gastos y las métricas de ventas, y los parsers de import de clientes (salvo la fecha por defecto). Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`), las actions de reportes a pedido (`app/executive-reports/__tests__`, `app/operations/__tests__`) y las páginas de `app/__tests__`.
+**Sin ningún test:** `lib/agent` (compaction, JIT, streaming; sólo las tools de contenido y las fechas de `get_clients_data` tienen test), `lib/ai` (`wrap-untrusted-content`; la clave de la org sí tiene test), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly` (salvo la firma del webhook), `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`, salvo el gráfico de ingresos), los gastos y las métricas de ventas, y los parsers de import de clientes (salvo la fecha por defecto). Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`), las actions de reportes a pedido (`app/executive-reports/__tests__`, `app/operations/__tests__`), las de Clientes, Closing, Equipo, Inteligencia y el cambio de contraseña obligatorio (`app/clients`, `app/closing`, `app/team`, `app/intelligence`, `app/auth`), y las páginas de `app/__tests__`, `/team` e `/invite`.
 
 ### E2E
 
@@ -131,7 +143,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | Job | Pasos |
 |---|---|
 | `checks` | checkout → pnpm 9.15.0 → Node 20 con caché de pnpm → `pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm lint` → `pnpm test` |
-| `migrations` | servicio `pgvector/pgvector:pg17` → `supabase/ci/check-migrations.sh` (nombres, versiones únicas, las 175 desde cero) |
+| `migrations` | servicio `pgvector/pgvector:pg17` → `supabase/ci/check-migrations.sh` (nombres, versiones únicas, las 190 desde cero) |
 
 No corre `next build`, Playwright ni nada de `apps/reel-worker`. No hay branch protection configurada en el repo (no verificable desde el código).
 

@@ -20,6 +20,9 @@ import {
 } from "@/lib/team/mapper";
 import {
   actionErrorMessage,
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
   runMutation,
   type MutationResult,
 } from "@/lib/server/action-result";
@@ -133,132 +136,169 @@ async function requireManagerProfileAndParse<T extends z.ZodTypeAny>(
   return { success: true, data: parsed.data, profile };
 }
 
-export async function getTeamMembersAction(): Promise<TeamMember[]> {
-  if (!isSupabaseConfigured()) return [];
+/**
+ * Lo que ve el usuario cuando una lectura de Equipo falla en la base. El
+ * detalle técnico se registra en el servidor y va a Sentry.
+ */
+/** Código de Postgres de una restricción de unicidad violada. */
+const VIOLACION_DE_UNICIDAD = "23505";
+const ROL_REPETIDO = "Ya existe un rol con ese nombre.";
 
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+const FALLO_AL_LEER_EL_EQUIPO =
+  "Hubo un problema al leer los datos del equipo. Recargá la página para intentar de nuevo.";
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
+/*
+ * SCRUM-497: las lecturas de Equipo devuelven sus errores como valor
+ * (`MutationResult`). `/team` es un server component y no hay error boundary:
+ * una lectura que lanzaba terminaba en la pantalla de error de Next, con el
+ * párrafo técnico en inglés en producción. Corren dentro de
+ * `mutacionConErroresEsperables`: sesión y cuenta desactivada vuelven con su
+ * motivo; una falla de la base (`FallaDeLaBase`) o cualquier otra excepción se
+ * registra, va a Sentry y vuelve con `FALLO_AL_LEER_EL_EQUIPO`.
+ */
+
+export async function getTeamMembersAction(): Promise<MutationResult<TeamMember[]>> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
+
+  return mutacionConErroresEsperables("[getTeamMembers]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        `
+        id,
+        full_name,
+        email,
+        role,
+        avatar_url,
+        is_active,
+        last_login_at,
+        hourly_rate,
+        hourly_rate_currency,
+        custom_role_id,
+        created_at,
+        team_roles(name, permissions)
       `
-      id,
-      full_name,
-      email,
-      role,
-      avatar_url,
-      is_active,
-      last_login_at,
-      hourly_rate,
-      hourly_rate_currency,
-      custom_role_id,
-      created_at,
-      team_roles(name, permissions)
-    `
-    )
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: true });
+      )
+      .eq("organization_id", organizationId)
+      .order("created_at", { ascending: true });
 
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    throw new Error(error.message);
-  }
-
-  return ((data ?? []) as unknown as ProfileRow[]).map(rowToTeamMember);
-}
-
-export async function getTeamRolesAction(): Promise<CustomRole[]> {
-  if (!isSupabaseConfigured()) return [];
-
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("team_roles")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .order("is_default", { ascending: false })
-    .order("name", { ascending: true });
-
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    throw new Error(error.message);
-  }
-
-  if (!data?.length) {
-    const { error: rpcError } = await supabase.rpc("create_default_roles", {
-      org_id: organizationId,
-    });
-    if (rpcError && !isMissingTableError(rpcError.message)) {
-      throw new Error(rpcError.message);
+    if (error) {
+      if (isMissingTableError(error.message)) return [];
+      throw new FallaDeLaBase(error);
     }
 
-    const { data: seeded, error: retryError } = await supabase
+    return ((data ?? []) as unknown as ProfileRow[]).map(rowToTeamMember);
+  }, FALLO_AL_LEER_EL_EQUIPO);
+}
+
+export async function getTeamRolesAction(): Promise<MutationResult<CustomRole[]>> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
+
+  return mutacionConErroresEsperables("[getTeamRoles]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
       .from("team_roles")
       .select("*")
       .eq("organization_id", organizationId)
       .order("is_default", { ascending: false })
       .order("name", { ascending: true });
 
-    if (retryError) throw new Error(retryError.message);
-    return ((seeded ?? []) as TeamRoleRow[]).map(rowToCustomRole);
-  }
+    if (error) {
+      if (isMissingTableError(error.message)) return [];
+      throw new FallaDeLaBase(error);
+    }
 
-  return (data as TeamRoleRow[]).map(rowToCustomRole);
+    if (!data?.length) {
+      const { error: rpcError } = await supabase.rpc("create_default_roles", {
+        org_id: organizationId,
+      });
+      if (rpcError && !isMissingTableError(rpcError.message)) {
+        throw new FallaDeLaBase(rpcError);
+      }
+
+      const { data: seeded, error: retryError } = await supabase
+        .from("team_roles")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .order("is_default", { ascending: false })
+        .order("name", { ascending: true });
+
+      if (retryError) throw new FallaDeLaBase(retryError);
+      return ((seeded ?? []) as TeamRoleRow[]).map(rowToCustomRole);
+    }
+
+    return (data as TeamRoleRow[]).map(rowToCustomRole);
+  }, FALLO_AL_LEER_EL_EQUIPO);
 }
 
-export async function getPendingInvitationsAction(): Promise<TeamInvitation[]> {
-  if (!isSupabaseConfigured()) return [];
+export async function getPendingInvitationsAction(): Promise<
+  MutationResult<TeamInvitation[]>
+> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
 
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+  return mutacionConErroresEsperables("[getPendingInvitations]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("team_invitations")
-    .select(
+    const { data, error } = await supabase
+      .from("team_invitations")
+      .select(
+        `
+        id,
+        email,
+        role,
+        status,
+        expires_at,
+        created_at,
+        custom_role_id,
+        invited_by,
+        profiles(full_name),
+        team_roles(name)
       `
-      id,
-      email,
-      role,
-      status,
-      expires_at,
-      created_at,
-      custom_role_id,
-      invited_by,
-      profiles(full_name),
-      team_roles(name)
-    `
-    )
-    .eq("organization_id", organizationId)
-    .eq("status", "pending")
-    .gt("expires_at", new Date().toISOString())
-    .order("created_at", { ascending: false });
+      )
+      .eq("organization_id", organizationId)
+      .eq("status", "pending")
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false });
 
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    throw new Error(error.message);
-  }
+    if (error) {
+      if (isMissingTableError(error.message)) return [];
+      throw new FallaDeLaBase(error);
+    }
 
-  return ((data ?? []) as unknown as TeamInvitationRow[]).map(
-    rowToTeamInvitation
-  );
+    return ((data ?? []) as unknown as TeamInvitationRow[]).map(
+      rowToTeamInvitation
+    );
+  }, FALLO_AL_LEER_EL_EQUIPO);
 }
 
-export async function getTeamPageContextAction(): Promise<{
+export type TeamPageContext = {
   members: TeamMember[];
   roles: CustomRole[];
   invitations: TeamInvitation[];
   canManage: boolean;
   canEditRates: boolean;
-}> {
+};
+
+/** Todo lo de `/team`, o el primer error de las tres lecturas. */
+export async function getTeamPageContextAction(): Promise<
+  MutationResult<TeamPageContext>
+> {
   if (!isSupabaseConfigured()) {
     return {
-      members: [],
-      roles: [],
-      invitations: [],
-      canManage: false,
-      canEditRates: false,
+      success: true,
+      data: {
+        members: [],
+        roles: [],
+        invitations: [],
+        canManage: false,
+        canEditRates: false,
+      },
     };
   }
 
@@ -269,12 +309,19 @@ export async function getTeamPageContextAction(): Promise<{
     getPendingInvitationsAction(),
   ]);
 
+  if (!members.success) return members;
+  if (!roles.success) return roles;
+  if (!invitations.success) return invitations;
+
   return {
-    members,
-    roles,
-    invitations,
-    canManage: canManageTeam(profile?.role),
-    canEditRates: canManageTeam(profile?.role),
+    success: true,
+    data: {
+      members: members.data,
+      roles: roles.data,
+      invitations: invitations.data,
+      canManage: canManageTeam(profile?.role),
+      canEditRates: canManageTeam(profile?.role),
+    },
   };
 }
 
@@ -496,7 +543,10 @@ export async function createCustomRoleAction(data: {
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    // `UNIQUE (organization_id, name)`: un nombre repetido es un rechazo
+    // esperable, no una falla (SCRUM-497).
+    if (error?.code === VIOLACION_DE_UNICIDAD) throw new ErrorEsperable(ROL_REPETIDO);
+    if (error) throw new FallaDeLaBase(error);
 
     revalidateTeam();
     return rowToCustomRole(role as TeamRoleRow);

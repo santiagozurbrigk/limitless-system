@@ -11,7 +11,7 @@ import {
 } from "@/app/operations/actions";
 import { mapWeeklyInputRowsToTeamInputs } from "@/lib/operations/weekly-input-mapper";
 import { manejarReporteSemanal } from "@/lib/operations/resultado-reporte-semanal";
-import { correrAccion } from "@/lib/operations/correr-accion";
+import { correrAccion } from "@/lib/client/correr-accion";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { paths } from "@/routes";
 import { useToast } from "@/providers/toast-provider";

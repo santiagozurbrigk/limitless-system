@@ -125,6 +125,12 @@ GHL            ── cron /api/cron/ghl-sync (hora) ─────────
 navegador: `updateClosingCallAction` → tag en `conversations` (legacy, no-op hoy) →
 `createClientAction` → `linkLeadToClientAction` → `recordClientPaymentAction` si hay comprobante.
 No es atómico: si falla a mitad, queda el turno cerrado sin cliente o el cliente sin pago.
+`updateClosingCallAction` y `createClientAction` devuelven sus errores esperables como valor
+(`MutationResult`, SCRUM-497); el provider los pasa por `datoDeLaMutacion` (`lib/client/correr-accion.ts`),
+que lanza en el navegador con el motivo (así llega entero en producción) o con el texto fijo si la acción
+lanzó algo inesperado. Una llamada que no existe o es de otra org vuelve como "No se encontró la llamada.
+Puede que la hayan eliminado."; un error de la base que no se conoce se registra, va a Sentry y vuelve
+con el texto fijo.
 
 ### Fathom → Llamadas
 

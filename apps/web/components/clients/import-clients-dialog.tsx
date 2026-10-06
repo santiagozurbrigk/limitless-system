@@ -15,6 +15,7 @@ import {
   importClientsAction,
   type ImportClientsRowError,
 } from "@/app/clients/actions";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import {
   CLIENT_IMPORT_REQUIRED_HEADERS,
   CLIENT_IMPORT_TEMPLATE,
@@ -55,23 +56,26 @@ export function ImportClientsDialog() {
   const handleImport = async () => {
     setSaving(true);
     try {
-      const result = await importClientsAction(rows);
-      if (result.errors.length > 0) {
-        setErrors(result.errors);
-        return;
-      }
-      await refreshClients();
-      push({
-        title: "Clientes importados",
-        description: `${result.insertedCount} clientes cargados correctamente.`,
-        variant: "success",
-      });
-      setOpen(false);
-      resetForm();
-    } catch (error) {
-      push({
-        title: "No se pudieron importar los clientes",
-        description: error instanceof Error ? error.message : undefined,
+      await correrMutacion({
+        accion: () => importClientsAction(rows),
+        alExito: async (result) => {
+          // Los errores por fila del archivo vienen en el dato, no como error.
+          if (result.errors.length > 0) {
+            setErrors(result.errors);
+            return;
+          }
+          await refreshClients();
+          push({
+            title: "Clientes importados",
+            description: `${result.insertedCount} clientes cargados correctamente.`,
+            variant: "success",
+          });
+          setOpen(false);
+          resetForm();
+        },
+        avisar: push,
+        tituloError: "No se pudieron importar los clientes",
+        etiqueta: "[ImportClientsDialog] importar clientes",
       });
     } finally {
       setSaving(false);
