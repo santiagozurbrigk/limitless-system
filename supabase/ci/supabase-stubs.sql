@@ -17,7 +17,7 @@ end $$;
 grant anon, authenticated, service_role to authenticator;
 create extension if not exists pgcrypto; create extension if not exists vector;
 create schema auth; create schema storage; create schema extensions;
-create table auth.users(id uuid primary key, email text, raw_user_meta_data jsonb, created_at timestamptz default now());
+create table auth.users(id uuid primary key, email text, email_confirmed_at timestamptz, raw_user_meta_data jsonb, created_at timestamptz default now());
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $$;
 create function auth.role() returns text language sql stable as $$ select nullif(current_setting('request.jwt.claim.role', true),'') $$;
 create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true),''),'{}')::jsonb $$;

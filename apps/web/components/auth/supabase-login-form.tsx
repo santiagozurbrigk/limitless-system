@@ -61,6 +61,10 @@ export function SupabaseLoginForm() {
       </div>
 
       <form action={formAction} className="space-y-4">
+        {/* Volver a la invitación de equipo después de entrar (lo valida signInAction). */}
+        {mode === "login" && searchParams.get("next") ? (
+          <input type="hidden" name="next" value={searchParams.get("next") ?? ""} />
+        ) : null}
         {mode === "signup" && (
           <div className="space-y-2">
             <Label htmlFor="fullName">Nombre</Label>

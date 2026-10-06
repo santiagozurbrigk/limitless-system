@@ -14,6 +14,8 @@ export const paths = {
     forcePasswordChange: "/auth/force-password-change",
     updatePassword: "/auth/update-password",
   },
+  /** Aceptar una invitación de equipo (`/invite?token=`), fuera de la plataforma. */
+  invite: "/invite",
   demo: "/demo",
   designSystem: "/design-system",
 

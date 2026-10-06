@@ -26,14 +26,18 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertRolDeLaOrg } from "@/lib/team/rol-de-la-org";
 import {
+  leerMotivoDeLaBase,
+  MENSAJE_INVITACION,
+  type MotivoRechazoInvitacion,
+} from "@/lib/team/invitacion";
+import {
   banParaEstado,
   MOTIVO_BAN_DESACTIVADO,
 } from "@/lib/auth/cuenta-desactivada";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
-  acceptInvitationSchema,
-  completeInvitationForCurrentUserSchema,
+  aceptarInvitacionSchema,
   createCustomRoleSchema,
   deactivateMemberSchema,
   deleteCustomRoleSchema,
@@ -568,173 +572,62 @@ export async function revokeInvitationAction(
   });
 }
 
-export async function acceptInvitationAction(input: {
-  token: string;
-  fullName: string;
-  password: string;
-}): Promise<MutationResult<{ ok: true }>> {
-  const parsed = acceptInvitationSchema.safeParse(input);
-  if (!parsed.success) {
-    return { success: false, error: firstZodError(parsed.error) };
-  }
+export type ResultadoAceptarInvitacion =
+  | { success: true; data: { yaEraMiembro: boolean } }
+  | { success: false; motivo: MotivoRechazoInvitacion; error: string };
 
-  const { token, fullName, password } = parsed.data;
-
-  return runMutation(async () => {
-    const admin = createAdminClient();
-
-    const { data: invitation, error: inviteError } = await admin
-      .from("team_invitations")
-      .select("*")
-      .eq("token", token)
-      .maybeSingle();
-
-    if (inviteError) throw new Error(inviteError.message);
-    if (!invitation) throw new Error("Invitación no encontrada");
-    if (invitation.status !== "pending") {
-      throw new Error("Esta invitación ya fue usada");
-    }
-    if (new Date(invitation.expires_at) < new Date()) {
-      throw new Error("La invitación expiró");
-    }
-
-    const email = invitation.email.toLowerCase();
-
-    // SCRUM-75: el rol de la invitación tiene que ser de su organización.
-    await assertRolDeLaOrg(admin, invitation.custom_role_id, invitation.organization_id);
-
-    const { data: created, error: createError } =
-      await admin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { full_name: fullName },
-      });
-
-    if (createError) {
-      if (
-        createError.message.toLowerCase().includes("already") ||
-        createError.message.toLowerCase().includes("registered")
-      ) {
-        throw new Error(
-          "Ya tenés una cuenta con este email. Iniciá sesión para aceptar la invitación."
-        );
-      }
-      throw new Error(createError.message);
-    }
-
-    if (!created.user) {
-      throw new Error("No se pudo crear la cuenta");
-    }
-
-    const { error: profileError } = await admin.from("profiles").insert({
-      id: created.user.id,
-      organization_id: invitation.organization_id,
-      email,
-      full_name: fullName,
-      role: "member",
-      custom_role_id: invitation.custom_role_id,
-      invited_by: invitation.invited_by,
-      is_active: true,
-    });
-
-    if (profileError) {
-      await admin.auth.admin.deleteUser(created.user.id);
-      throw new Error(profileError.message);
-    }
-
-    await admin
-      .from("team_invitations")
-      .update({ status: "accepted" })
-      .eq("id", invitation.id);
-
-    return { ok: true };
-  });
+function rechazoDeInvitacion(motivo: MotivoRechazoInvitacion): ResultadoAceptarInvitacion {
+  return { success: false, motivo, error: MENSAJE_INVITACION[motivo] };
 }
 
-export async function completeInvitationForCurrentUserAction(
+/**
+ * [AUTH-ALTA-EMAIL-AJENO] parte A (SCRUM-495): acepta una invitación de equipo
+ * con la cuenta de la sesión. No crea cuentas: sin sesión, rechaza. El resto
+ * (email de la cuenta igual al invitado y confirmado, invitación pendiente y
+ * sin vencer, rol de la org, cuenta sin otra org, marcarla usada una sola vez)
+ * lo resuelve `aceptar_invitacion_de_equipo` en una transacción, con el id del
+ * usuario de la sesión.
+ *
+ * No usa `requireOrganizationId()`: quien acepta todavía no es de la org, y
+ * resolverla le crearía una org propia (`ensureUserBootstrap`). Los errores
+ * esperables vuelven como valor, con `motivo`; quien llama redirige.
+ */
+export async function aceptarInvitacionAction(
   token: string
-): Promise<MutationResult<{ ok: true }>> {
-  const parsed = completeInvitationForCurrentUserSchema.safeParse({ token });
-  if (!parsed.success) {
-    return { success: false, error: firstZodError(parsed.error) };
-  }
+): Promise<ResultadoAceptarInvitacion> {
+  const parsed = aceptarInvitacionSchema.safeParse({ token });
+  if (!parsed.success) return rechazoDeInvitacion("no_existe");
 
-  const { token: parsedToken } = parsed.data;
-
-  return runMutation(async () => {
+  try {
     const supabase = await createClient();
-    const admin = createAdminClient();
-
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) return rechazoDeInvitacion("sin_sesion");
 
-    if (!user?.email) throw new Error("Iniciá sesión para continuar");
-
-    const { data: invitation, error: inviteError } = await admin
-      .from("team_invitations")
-      .select("*")
-      .eq("token", parsedToken)
-      .maybeSingle();
-
-    if (inviteError) throw new Error(inviteError.message);
-    if (!invitation) throw new Error("Invitación no encontrada");
-    if (invitation.status !== "pending") {
-      throw new Error("Esta invitación ya fue usada");
-    }
-    if (new Date(invitation.expires_at) < new Date()) {
-      throw new Error("La invitación expiró");
+    const { data, error } = await createAdminClient().rpc(
+      "aceptar_invitacion_de_equipo",
+      { p_token: parsed.data.token, p_user_id: user.id }
+    );
+    if (error) {
+      console.error("[invite] no se pudo aceptar la invitación:", error.message);
+      return rechazoDeInvitacion("error");
     }
 
-    if (user.email.toLowerCase() !== invitation.email.toLowerCase()) {
-      throw new Error("Esta invitación fue enviada a otro email");
+    const motivo = leerMotivoDeLaBase(data);
+    if (motivo === null) {
+      console.error("[invite] respuesta inesperada de aceptar_invitacion_de_equipo:", data);
+      return rechazoDeInvitacion("error");
     }
-
-    const { data: existingProfile } = await admin
-      .from("profiles")
-      .select("organization_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (existingProfile?.organization_id) {
-      if (existingProfile.organization_id === invitation.organization_id) {
-        await admin
-          .from("team_invitations")
-          .update({ status: "accepted" })
-          .eq("id", invitation.id);
-        return { ok: true };
-      }
-      throw new Error(
-        "Tu cuenta ya pertenece a otra organización. Contactá al administrador."
-      );
+    if (motivo === "aceptada" || motivo === "ya_era_miembro") {
+      revalidateTeam();
+      return { success: true, data: { yaEraMiembro: motivo === "ya_era_miembro" } };
     }
-
-    // SCRUM-75: el rol de la invitación tiene que ser de su organización.
-    await assertRolDeLaOrg(admin, invitation.custom_role_id, invitation.organization_id);
-
-    const { error: profileError } = await admin.from("profiles").insert({
-      id: user.id,
-      organization_id: invitation.organization_id,
-      email: user.email,
-      full_name:
-        (user.user_metadata?.full_name as string | undefined) ??
-        user.email.split("@")[0],
-      role: "member",
-      custom_role_id: invitation.custom_role_id,
-      invited_by: invitation.invited_by,
-      is_active: true,
-    });
-
-    if (profileError) throw new Error(profileError.message);
-
-    await admin
-      .from("team_invitations")
-      .update({ status: "accepted" })
-      .eq("id", invitation.id);
-
-    return { ok: true };
-  });
+    return rechazoDeInvitacion(motivo);
+  } catch (error) {
+    console.error("[invite] error al aceptar la invitación:", actionErrorMessage(error));
+    return rechazoDeInvitacion("error");
+  }
 }
 
 export { actionErrorMessage };

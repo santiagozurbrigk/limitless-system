@@ -33,7 +33,6 @@ export function isPublicPath(pathname: string): boolean {
   if (pathname === "/privacidad") return true;
   if (pathname === "/api/trial-confirm") return true;
   if (pathname.startsWith("/invite")) return true;
-  if (pathname.startsWith("/api/invite/")) return true;
   /*
    * El formulario de onboarding que completa el cliente de un growth partner.
    * Lo protege el token del link (`client_onboarding_links`), que valida la
