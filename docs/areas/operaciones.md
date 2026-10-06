@@ -36,7 +36,7 @@ Rutas canónicas en `apps/web/routes/paths.ts` (`paths.platform.{operations,sops
 | `/operations/weekly-inputs`, `/operations/team-inputs` | redirects a `/operations/inputs` | — | — |
 | `/team` | `app/(platform)/team/page.tsx` → `components/team/team-overview.tsx` | Miembros (la tarifa por hora no tiene pantalla de carga: `[EQUIPO-TARIFA-SIN-UI]`), roles custom con grilla de 13 módulos, invitaciones pendientes | Reales. Sin Supabase: todo vacío |
 | `/team/members`, `/team/roles` | redirects a `/team#miembros` / `#roles` | — | — |
-| `/invite?token=` | `app/invite/page.tsx` (fuera de `(platform)`) | Aceptar una invitación de `team_invitations` | Ver "Lo que ya no existe" |
+| `/invite?token=` | `app/invite/page.tsx` (fuera de `(platform)`) | Aceptar una invitación de `team_invitations` con la sesión de la cuenta invitada; no crea cuentas (SCRUM-495) | Ver "Lo que ya no existe" |
 
 **Navegación** (`lib/navigation/sidebar-modules.ts`): Tablero, SOPs y Equipo son ítems fijos. El grupo
 "Operaciones" (Overview, Inputs, Inteligencia, Área del fundador) **sólo aparece con el add-on `operaciones`**
@@ -192,7 +192,9 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
   por eso el versionado nunca se ejercita `[SOPS-EDITAR]`. `sop_versions` tiene 0 filas con 3 SOPs (producción, al 2026-09-23).
 - **Permisos sólo en el render**: actions y RLS abiertas a cualquier miembro `[PERMISOS-SERVER-ACTIONS]`.
 - **Buckets `sop-attachments` y `workboard-task-attachments` no están en migraciones** `[OPS-STORAGE-BUCKETS]` (auditoría §3.9).
-- **`/invite` y `team_invitations` son legado sin productor** `[EQUIPO-INVITE-LEGADO]`.
+- **`/invite` y `team_invitations` no tienen productor** `[EQUIPO-INVITE-LEGADO]`: nada crea invitaciones (la parte B de
+  `[AUTH-ALTA-EMAIL-AJENO]`, SCRUM-499, puede serlo). Desde SCRUM-495 aceptar una no crea cuentas: ver
+  `docs/arquitectura/auth-organizaciones-y-permisos.md` § Aceptar una invitación.
 - `loadWorkboardPageDataAction` lee las tareas dos veces y los miembros tres (`getSprintsAction` vuelve a llamar
   `listWorkboardTasksAction`) `[WORKBOARD-CARGA-DUPLICADA]`.
 
@@ -205,6 +207,7 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
 | `lib/workboard/__tests__/filtrar-por-responsable.test.ts` | Filtro por responsable con `assigneeIds` y fallback |
 | `lib/navigation/__tests__/module-for-path.test.ts` | Qué módulo protege cada ruta (recorre `app/(platform)` en disco) |
 | `constants/__tests__/permisos-consolidados.test.ts` | Traducción de claves viejas de permisos a los 13 módulos (`permissionsFromRow` de `lib/team/mapper.ts`) |
+| `lib/team/__tests__/invitacion.test.ts`, `app/team/__tests__/aceptar-invitacion.test.ts`, `app/invite/__tests__/pagina-invitacion.test.ts`, `app/auth/__tests__/login-vuelve-a-la-invitacion.test.ts`, `supabase/ci/tests/80_aceptar_invitacion.sql` | Aceptar una invitación sin crear cuentas: estados de `/invite`, la action sin sesión, la vuelta desde el login sin open redirect y la función en la base (una sola vez, rol de la org, sin tocar nada al rechazar) |
 
 Sin tests: `parseVideoSopResponse`, `lib/workboard/{mapper,sprint,time-report}` (de `group-tasks` sólo
 `filterTasksByAssignee`), `lib/operations/*`, el resto de `lib/team/mapper.ts`, `suggest-sops.ts`, y ninguna action. No hay e2e del área (`apps/web/e2e/` sólo tiene holding).
@@ -227,7 +230,8 @@ Sin tests: `parseVideoSopResponse`, `lib/workboard/{mapper,sprint,time-report}` 
 ## Lo que ya no existe
 
 - **Invitación por email con token** (`team_invitations` + Resend). Hoy la alta es
-  con contraseña temporal; `/invite`, `/api/invite/validate`, `acceptInvitationAction` y la lista de pendientes
-  siguen en el código pero no hay nada que cree invitaciones.
+  con contraseña temporal; `/invite` (que desde SCRUM-495 sólo acepta con la sesión de la cuenta invitada) y la
+  lista de pendientes siguen en el código pero no hay nada que cree invitaciones. `/api/invite/validate` y el
+  formulario de alta con contraseña de `/invite` se borraron en SCRUM-495.
 - **Grabación de voz en inputs semanales**: ya no está en `weekly-input-form.tsx`.
 - **Fallback a `mocks/sops.ts`** en la biblioteca: con Supabase la biblioteca vacía muestra empty state.

@@ -47,10 +47,3 @@ export type TeamInvitation = {
   customRoleName: string | null;
   invitedByName: string | null;
 };
-
-export type InviteValidation = {
-  email: string;
-  role: string;
-  orgName: string;
-  invitedBy: string | null;
-};

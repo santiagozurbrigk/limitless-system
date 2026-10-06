@@ -126,6 +126,28 @@ Opcional: `SENTRY_DSN` (el mismo de Vercel): con ella cada `logError` va a Sentr
 
 El repo se renombró de `ai-coo-platform` a `limitless-system` el 2026-09-22. No crear nunca un repo nuevo con el nombre viejo: rompe la redirección de GitHub. Copias locales viejas: `git remote set-url origin https://github.com/santiagozurbrigk/limitless-system`.
 
+## Configuración de Supabase Auth
+
+La configuración de Auth (confirmación de email, signups, duración del JWT) no está versionada: no hay
+`supabase/config.toml` (`[AUTH-MFA-Y-POLITICA]`). Lo que el código da por sentado:
+
+- **"Confirm email" activo.** Aceptar una invitación de equipo (`aceptar_invitacion_de_equipo`, SCRUM-495) confía
+  en `auth.users.email_confirmed_at` para saber que la cuenta es de quien recibe el email. Si la confirmación está
+  apagada, Supabase confirma en el acto cualquier email con el que alguien se registre, y esa garantía se cae.
+  - **Dónde se ve:** panel de Supabase del proyecto → Authentication → Sign In / Providers, en la configuración del
+    proveedor Email: "Confirm email" tiene que estar prendido.
+  - **Desde la terminal** (sin secretos: es la misma anon key pública de la app): el endpoint público de
+    configuración de Auth responde `"mailer_autoconfirm": false` cuando la confirmación está activa.
+    ```bash
+    curl -s "$NEXT_PUBLIC_SUPABASE_URL/auth/v1/settings" -H "apikey: $NEXT_PUBLIC_SUPABASE_ANON_KEY" | grep -o '"mailer_autoconfirm":[a-z]*'
+    ```
+  - **Desde SQL** no hay forma confiable: la configuración vive en el servicio de Auth, no en la base. Mirar
+    `auth.users` (p. ej. cuentas con `confirmation_sent_at` vacío) sólo da indicios de cómo se crearon las
+    cuentas, no de la configuración actual.
+  - Propuesta, si se quiere que el código lo controle: que `aceptarInvitacionAction` lea ese endpoint y rechace
+    si `mailer_autoconfirm` es `true` (cerrado ante la duda). No se hizo en SCRUM-495: hoy no hay invitaciones
+    (nada las crea) y la parte B (SCRUM-499) es la que va a decidir cómo se invita.
+
 ## Migraciones en el deploy
 
 Vercel **no aplica migraciones**. El orden es: aplicar la migración en Supabase (reglas en `docs/arquitectura/base-de-datos.md`) y después mergear el código que la usa, o escribir el código tolerante a que la columna todavía no exista (`isMissingColumnError` en `lib/auth/bootstrap.ts`). El job `migrations` del CI garantiza que el set completo arma una base desde cero, no que esté aplicado en producción.

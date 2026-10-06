@@ -357,11 +357,6 @@ export const teamPermissionsSchema = z
 /** El largo mínimo, en un solo lugar: lo usan el login, el reset y Configuración. */
 export const PASSWORD_MIN_LENGTH = 8;
 
-export const passwordMinLengthSchema = z
-  .string()
-  .min(PASSWORD_MIN_LENGTH, `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres`)
-  .max(200, "Máximo 200 caracteres");
-
 const teamPersonNameSchema = z
   .string()
   .trim()
@@ -400,13 +395,7 @@ export const revokeInvitationSchema = z.object({
   invitationId: uuidSchema,
 });
 
-export const acceptInvitationSchema = z.object({
-  token: z.string().trim().min(1, "Token inválido").max(500),
-  fullName: teamPersonNameSchema,
-  password: passwordMinLengthSchema,
-});
-
-export const completeInvitationForCurrentUserSchema = z.object({
+export const aceptarInvitacionSchema = z.object({
   token: z.string().trim().min(1, "Token inválido").max(500),
 });
 

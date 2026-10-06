@@ -20,6 +20,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { paths } from "@/routes";
 import { CUENTA_DESACTIVADA_MESSAGE } from "@/lib/auth/cuenta-desactivada";
+import { destinoDeInvitacion } from "@/lib/team/invitacion";
 
 export type AuthActionState = {
   error?: string;
@@ -72,7 +73,12 @@ async function rejectExpiredTempPasswordSession(
   return null;
 }
 
-async function postAuthRedirect() {
+/**
+ * `invitacion`: la ruta de la invitación de equipo a la que vuelve el login
+ * (`destinoDeInvitacion`, SCRUM-495). Gana sobre el resto de los destinos, salvo
+ * el cambio de contraseña obligatorio.
+ */
+async function postAuthRedirect(invitacion: string | null = null) {
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
     const {
@@ -89,6 +95,10 @@ async function postAuthRedirect() {
       if (profile?.must_change_password) {
         redirect(paths.auth.forcePasswordChange);
       }
+    }
+
+    if (user && invitacion) {
+      redirect(invitacion);
     }
 
     if (user?.email && (await isSuperAdminEmail(user.email))) {
@@ -146,16 +156,23 @@ export async function signInAction(
     if (expired) return expired;
   }
 
-  try {
-    await ensureCurrentUserBootstrap();
-  } catch (e) {
-    return {
-      error:
-        e instanceof Error ? e.message : "No se pudo inicializar tu perfil.",
-    };
+  // SCRUM-495: si se entra para aceptar una invitación de equipo, no se le crea
+  // org propia a una cuenta sin perfil (el perfil lo crea la invitación), igual
+  // que hace `/auth/callback` con un `next` a `/invite`.
+  const invitacion = destinoDeInvitacion(formData.get("next"));
+
+  if (!invitacion) {
+    try {
+      await ensureCurrentUserBootstrap();
+    } catch (e) {
+      return {
+        error:
+          e instanceof Error ? e.message : "No se pudo inicializar tu perfil.",
+      };
+    }
   }
 
-  await postAuthRedirect();
+  await postAuthRedirect(invitacion);
   return {};
 }
 

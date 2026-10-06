@@ -36,7 +36,7 @@ de negocio (clientes, ventas, marketing, etc.).
 |---|---|---|
 | `/` | redirect en `next.config.ts` | Temporal (307) a `/login`. La landing pública se borró el 2026-09-23 |
 | `/login`, `/auth/*` | `app/login`, `app/auth/*` | Login + signup, recuperar, actualizar y forzar cambio de contraseña. Sin Supabase: `MockLoginPage` |
-| `/invite` | `app/invite/page.tsx` | Aceptar invitación de equipo por token (legado: invitar hoy crea la cuenta con contraseña temporal y no genera filas en `team_invitations`) |
+| `/invite` | `app/invite/page.tsx` | Aceptar invitación de equipo por token con la sesión de la cuenta invitada; no crea cuentas (SCRUM-495, ver `docs/arquitectura/auth-organizaciones-y-permisos.md` § Aceptar una invitación). Invitar hoy crea la cuenta con contraseña temporal y no genera filas en `team_invitations` |
 | `/prueba` | `app/(landing)/prueba/page.tsx` | Confirmación de prueba gratis → `POST /api/trial-confirm` → `waitlist_leads` (`source = 'trial'`) |
 | `/privacidad` | `app/(landing)/privacidad/page.tsx` | Política de privacidad, pública (la piden las apps OAuth) |
 | `/demo` | `app/demo/page.tsx` | Tour estático (`components/demo`, `lib/demo/tour-steps.ts`), público |
