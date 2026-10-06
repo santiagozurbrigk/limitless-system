@@ -89,6 +89,7 @@ describe("leerMotivoDeLaBase", () => {
   it("sólo motivos conocidos", () => {
     expect(leerMotivoDeLaBase("aceptada")).toBe("aceptada");
     expect(leerMotivoDeLaBase("otra_org")).toBe("otra_org");
+    expect(leerMotivoDeLaBase("cuenta_de_staff")).toBe("cuenta_de_staff");
     expect(leerMotivoDeLaBase("cualquier cosa")).toBeNull();
     expect(leerMotivoDeLaBase(null)).toBeNull();
     expect(leerMotivoDeLaBase({ motivo: "aceptada" })).toBeNull();

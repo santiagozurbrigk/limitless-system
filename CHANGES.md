@@ -37,7 +37,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 ### 2026-10-05 · El link /invite deja de crear cuentas: sólo acepta a quien ya tiene cuenta con ese email (SCRUM-495)
 
 **Rama:** `fix/SCRUM-495-invite-sin-alta`
-**Commit(s):** este
+**Commit(s):** `6079bbc2` (código y tests), `25ee5837` (docs) y este (fix-pack de la revisión: staff y precondición de Auth)
 **Módulo(s) afectado(s):** Plataforma (auth) y Equipo. `app/invite/page.tsx`, `app/invite/aceptar-invitacion.tsx`,
 `app/team/actions.ts`, `app/auth/actions.ts`, `components/auth/supabase-login-form.tsx`, `lib/team/invitacion.ts`,
 `lib/team/cargar-invitacion.ts`, `lib/validations.ts`, `lib/supabase/public-paths.ts`, `routes/paths.ts`,
@@ -58,6 +58,12 @@ al terminar cada bloque de trabajo, aunque sea chico.
   mayúsculas ni espacios y con `email_confirmed_at`, rol de la misma org; si la cuenta ya es de esa org la marca usada
   sin cambiarle el rol; si es de otra org o es el super admin, rechaza sin tocar nada; si no tiene perfil, lo crea
   como `member` con el rol y el `invited_by` de la invitación y la marca `accepted`, todo en una transacción.
+- Fix-pack de la revisión: la función también rechaza (`cuenta_de_staff`) si el email de la cuenta está en
+  `super_admin_users`, normalizado como en `isSuperAdminEmail`, tenga perfil o no. Antes sólo frenaba al super admin
+  con perfil sin org; uno recién dado de alta (sin perfil, `docs/operacion/alta-super-admin.md`) quedaba como member
+  de la org del founder, que podía desactivarlo y banearlo. Se documentó como precondición que "Confirm email" esté
+  activo en Supabase Auth (`docs/operacion/entorno-y-deploy.md`, con cómo verificarlo) y se aclaró que
+  `02_verificacion.sql` de producción no escribe datos pero llama a la función (no corre en sesión de sólo lectura).
 - El login vuelve a la invitación: el formulario manda el `next` y `signInAction` lo usa sólo si
   `destinoDeInvitacion` lo reconoce (path interno exactamente `/invite` con token, rearmado; usa `destinoSeguro`).
   Con ese `next` no corre `ensureUserBootstrap`, como ya hacía `/auth/callback`, para que una cuenta sin perfil no
@@ -70,7 +76,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
   `app/invite/__tests__/pagina-invitacion.test.ts` (render de la página en cada estado, sin campos de contraseña),
   `app/auth/__tests__/login-vuelve-a-la-invitacion.test.ts` y `supabase/ci/tests/80_aceptar_invitacion.sql`
   (anon y authenticated no la llaman; inexistente, vencida, anulada, sin cuenta, sin confirmar, otro email, otra org,
-  super admin, rol de otra org: todo intacto; acepta con el rol; segundo uso rechazado; ya miembro sin cambio de rol).
+  perfil sin org, staff con y sin perfil, rol de otra org: todo intacto; acepta con el rol; segundo uso rechazado; ya miembro sin cambio de rol).
   Concurrencia probada con dos sesiones de Postgres (misma invitación en dos pestañas: la segunda espera el lock y la
   ve usada; dos invitaciones a la vez: un solo perfil). Control negativo guardado en la evidencia.
 

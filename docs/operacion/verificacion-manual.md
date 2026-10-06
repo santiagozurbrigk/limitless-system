@@ -960,6 +960,10 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
    que lo acepte `[EQUIPO-CUSTOM-ROLE-ORG]`.
 4. Abrir `/invite?token=cualquiera`. → "Esta invitación no existe…" (nada crea invitaciones hoy).
 5. 🔒 Aceptar una invitación sin crear cuentas (SCRUM-495; aplicar antes la migración `20261005150000`).
+   Antes de nada: en el panel de Supabase → Authentication → Sign In / Providers → Email, "Confirm email" tiene
+   que estar **prendido** (o `curl -s "$NEXT_PUBLIC_SUPABASE_URL/auth/v1/settings" -H "apikey: <anon key>"` da
+   `"mailer_autoconfirm":false`). Si está apagado, anotarlo: la aceptación deja de probar que la cuenta es del
+   dueño del email (`docs/operacion/entorno-y-deploy.md` § Configuración de Supabase Auth).
    Preparar: en Supabase → Authentication, crear una cuenta de prueba con "Auto Confirm User" y **no** entrar con
    ella (queda sin perfil); en el SQL editor, una fila en `team_invitations` para la org de prueba con ese email
    (cualquier caja) y un `custom_role_id` de esa org. El link es `/invite?token=<token de la fila>`.
@@ -970,6 +974,8 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
    - Volver a abrir el link. → "Esta invitación ya se usó…".
    - Con otra fila pendiente, abrir el link con la sesión de **otra** cuenta. → "Iniciaste sesión como…" y botón
      para cerrar sesión; la fila sigue `pending`.
+   - Con una invitación para el email de alguien del staff (`super_admin_users`), entrar con esa cuenta y tocar
+     "Unirme al equipo". → "Esta cuenta es del equipo de Limitless…"; la fila sigue `pending` y no se crea perfil.
    - Al terminar, borrar las filas y la cuenta de prueba.
 
 ---

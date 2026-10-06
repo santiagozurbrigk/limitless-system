@@ -136,12 +136,21 @@ invitación, sin que el dueño del email confirmara nada.
 - La función (migración `20261005150000`, `security definer`, EXECUTE sólo para `service_role`) hace todo en
   una transacción con la fila de la invitación bloqueada (`for update`): invitación pendiente y sin vencer;
   email de la cuenta (leído de `auth.users`, no de la request) igual al invitado y con `email_confirmed_at`;
-  rol custom de la misma org (la regla de `assertRolDeLaOrg`); si la cuenta ya tiene perfil, sólo acepta si es
-  de esa misma org (la marca usada y no le cambia el rol); si es de otra org (o es el super admin, sin org),
-  rechaza sin tocar nada, porque un usuario es de una sola org. Si no tiene perfil, lo crea con
+  email que no esté en `super_admin_users` (comparado normalizado, como `isSuperAdminEmail`): una cuenta del staff
+  nunca se suma a una org, tenga perfil o no, porque un super admin recién dado de alta todavía no tiene perfil
+  y como member el founder podría desactivarlo y banearlo; rol custom de la misma org (la regla de
+  `assertRolDeLaOrg`); si la cuenta ya tiene perfil, sólo acepta si es de esa misma org (la marca usada y no le
+  cambia el rol); si es de otra org (o un perfil sin org), rechaza sin tocar nada, porque un usuario es de una
+  sola org. Si no tiene perfil, lo crea con
   `role = 'member'`, el `custom_role_id` y el `invited_by` de la invitación, y la marca `accepted`. Dos
   aceptaciones a la vez se ordenan por el lock: la segunda la ve usada. Los rechazos dejan la invitación y el
   perfil como estaban. Tests: `supabase/ci/tests/80_aceptar_invitacion.sql`.
+- **Precondición: "Confirm email" activo en Supabase Auth.** `email_confirmed_at` sólo prueba que la persona es
+  dueña del email si Supabase exige confirmarlo. Con la confirmación apagada (`mailer_autoconfirm = true`), Auth
+  confirma la cuenta en el acto al registrarse: quien tenga el link podría registrarse con el email invitado por
+  la API pública de Auth, entrar por `/login?next=/invite?token=…` y aceptar. Esa configuración vive en el
+  servicio de Auth, no en la base ni en el repo: no hay forma confiable de leerla desde SQL. Cómo verla:
+  `docs/operacion/entorno-y-deploy.md` § Configuración de Supabase Auth.
 - El login vuelve a la invitación: `SupabaseLoginForm` manda el `next` de la URL y `signInAction` lo acepta sólo
   si `destinoDeInvitacion` lo reconoce (path interno exactamente `/invite` con token, rearmado; nunca otro host:
   usa `destinoSeguro`). Con ese `next` no corre `ensureUserBootstrap`, para que una cuenta sin perfil no quede

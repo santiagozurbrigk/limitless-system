@@ -15,15 +15,25 @@
 -- otro (perfil sin invitación marcada, o invitación marcada sin perfil).
 --
 -- Un usuario pertenece a una sola organización (`profiles.id` = usuario). Si la
--- cuenta ya tiene perfil en otra org (o es el super admin, sin org), no se toca
--- nada: mover a alguien de org rompería sus datos.
+-- cuenta ya tiene perfil en otra org (o un perfil sin org), no se toca nada:
+-- mover a alguien de org rompería sus datos.
+--
+-- Una cuenta del staff (email en `super_admin_users`) nunca se suma a una org por
+-- invitación, tenga perfil o no: un super admin recién dado de alta todavía no
+-- tiene perfil (`docs/operacion/alta-super-admin.md`), y como member de la org de
+-- un founder ese founder podría desactivarlo y banearlo en Auth (SCRUM-8). El
+-- email de la allowlist se compara normalizado, igual que `isSuperAdminEmail`.
+--
+-- Que el email esté confirmado sólo prueba que la persona es su dueña si en
+-- Supabase Auth está activo "Confirm email" (precondición documentada en
+-- `docs/arquitectura/auth-organizaciones-y-permisos.md`).
 --
 -- Devuelve un motivo en texto; la app lo traduce a un mensaje:
 --   aceptada, ya_era_miembro           la cuenta queda en la org (la invitación, usada)
 --   no_existe, usada, vencida          la invitación no sirve
 --   sin_cuenta, email_sin_confirmar,
---   otro_email, otra_org,
---   rol_de_otra_org                    no se acepta y la invitación queda como estaba
+--   otro_email, cuenta_de_staff,
+--   otra_org, rol_de_otra_org          no se acepta y la invitación queda como estaba
 --
 -- Sólo la llama el service role: no hay grant para anon ni authenticated.
 
@@ -70,6 +80,12 @@ begin
   end if;
   if v_email is null or lower(btrim(v_email)) <> lower(btrim(v_inv.email)) then
     return 'otro_email';
+  end if;
+  if exists (
+    select 1 from public.super_admin_users s
+    where lower(btrim(s.email)) = lower(btrim(v_email))
+  ) then
+    return 'cuenta_de_staff';
   end if;
 
   select p.organization_id into v_org_actual

@@ -26,6 +26,7 @@ export type MotivoRechazoInvitacion =
   | "sin_cuenta"
   | "email_sin_confirmar"
   | "otro_email"
+  | "cuenta_de_staff"
   | "otra_org"
   | "rol_de_otra_org"
   | "sin_sesion"
@@ -46,6 +47,7 @@ const MOTIVOS_DE_LA_BASE: ReadonlySet<string> = new Set<MotivoDeLaBase>([
   "sin_cuenta",
   "email_sin_confirmar",
   "otro_email",
+  "cuenta_de_staff",
   "otra_org",
   "rol_de_otra_org",
 ]);
@@ -68,6 +70,8 @@ export const MENSAJE_INVITACION: Record<MotivoRechazoInvitacion, string> = {
     "Tu email todavía no está confirmado. Confirmalo desde el mail que te llegó y volvé a abrir la invitación.",
   otro_email:
     "Esta invitación es para otro email. Cerrá sesión y entrá con la cuenta del email invitado.",
+  cuenta_de_staff:
+    "Esta cuenta es del equipo de Limitless y no se puede sumar a una organización por invitación. Pedile a quien te invitó que use otro email.",
   otra_org:
     "Tu cuenta ya pertenece a otra organización y cada cuenta puede estar en una sola. Pedile a quien te invitó que te dé de alta con otro email.",
   rol_de_otra_org:

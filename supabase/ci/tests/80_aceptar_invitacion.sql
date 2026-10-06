@@ -18,14 +18,23 @@ insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) value
   ('80000000-0000-0000-0000-0000000000a3', 'otro@test',        now(), '{}'),
   ('80000000-0000-0000-0000-0000000000a4', 'deb@test',         now(), '{}'),
   ('80000000-0000-0000-0000-0000000000a5', 'staff@test',       now(), '{}'),
-  ('80000000-0000-0000-0000-0000000000a6', 'rol@test',         now(), '{}');
+  ('80000000-0000-0000-0000-0000000000a6', 'rol@test',         now(), '{}'),
+  ('80000000-0000-0000-0000-0000000000a7', ' Staff2@Test',     now(), '{}'),
+  ('80000000-0000-0000-0000-0000000000a8', 'huerfano@test',    now(), '{}');
+
+-- Staff de Limitless: uno con su perfil sin org y otro recién dado de alta, todavía
+-- sin perfil (docs/operacion/alta-super-admin.md). La allowlist guarda el email en
+-- minúsculas (isSuperAdminEmail compara así).
+insert into public.super_admin_users (email) values ('staff@test'), ('staff2@test');
 
 insert into public.profiles (id, email, organization_id, role, full_name) values
   ('80000000-0000-0000-0000-00000000000f', 'f@test',   '80000000-0000-0000-0000-000000000a00', 'founder', 'F'),
   ('80000000-0000-0000-0000-0000000000a4', 'deb@test', '80000000-0000-0000-0000-000000000b00', 'founder', 'Deb');
--- El super admin tiene perfil sin organización (ensureUserBootstrap).
+-- El super admin tiene perfil sin organización (ensureUserBootstrap); un perfil
+-- sin org que no es del staff también existe (datos viejos).
 insert into public.profiles (id, email, organization_id, role, full_name) values
-  ('80000000-0000-0000-0000-0000000000a5', 'staff@test', null, 'founder', 'Staff');
+  ('80000000-0000-0000-0000-0000000000a5', 'staff@test', null, 'founder', 'Staff'),
+  ('80000000-0000-0000-0000-0000000000a8', 'huerfano@test', null, 'founder', 'Huérfano');
 
 insert into public.team_roles (id, organization_id, name) values
   ('80000000-0000-0000-0000-0000000000e1', '80000000-0000-0000-0000-000000000a00', 'Ventas A'),
@@ -38,6 +47,8 @@ insert into public.team_invitations (organization_id, email, custom_role_id, inv
   ('80000000-0000-0000-0000-000000000a00', 'sinconfirmar@test', null, null, 'tok-sinconf', 'pending', now() + interval '7 days'),
   ('80000000-0000-0000-0000-000000000a00', 'deb@test',       null, null, 'tok-otra-org', 'pending', now() + interval '7 days'),
   ('80000000-0000-0000-0000-000000000a00', 'staff@test',     null, null, 'tok-staff',    'pending', now() + interval '7 days'),
+  ('80000000-0000-0000-0000-000000000a00', 'STAFF2@test',    null, null, 'tok-staff2',   'pending', now() + interval '7 days'),
+  ('80000000-0000-0000-0000-000000000a00', 'huerfano@test',  null, null, 'tok-huerfano', 'pending', now() + interval '7 days'),
   ('80000000-0000-0000-0000-000000000a00', 'f@test',         null, null, 'tok-miembro',  'pending', now() + interval '7 days'),
   ('80000000-0000-0000-0000-000000000a00', 'rol@test',       '80000000-0000-0000-0000-0000000000e2', null, 'tok-rol', 'pending', now() + interval '7 days');
 
@@ -97,14 +108,26 @@ select ci.espera((select count(*) from public.profiles
   where id = '80000000-0000-0000-0000-0000000000a4' and organization_id = '80000000-0000-0000-0000-000000000b00' and role = 'founder'), 1,
   'la cuenta de otra org sigue en su org y con su rol');
 
--- El super admin (perfil sin org) no queda como miembro de la org.
+-- El staff no queda como miembro de la org, tenga perfil o no.
 select ci.espera(
-  (select count(*) from (select public.aceptar_invitacion_de_equipo('tok-staff', '80000000-0000-0000-0000-0000000000a5') as m) x where m = 'otra_org'),
-  1, 'el super admin no se suma a una org por invitación');
+  (select count(*) from (select public.aceptar_invitacion_de_equipo('tok-staff', '80000000-0000-0000-0000-0000000000a5') as m) x where m = 'cuenta_de_staff'),
+  1, 'el super admin con perfil sin org no se suma a una org por invitación');
 select ci.espera((select count(*) from public.profiles where id = '80000000-0000-0000-0000-0000000000a5' and organization_id is null), 1,
   'el perfil del super admin queda sin org');
-select ci.espera((select count(*) from public.team_invitations where token = 'tok-staff' and status = 'pending'), 1,
-  'la invitación al super admin queda pendiente');
+select ci.espera(
+  (select count(*) from (select public.aceptar_invitacion_de_equipo('tok-staff2', '80000000-0000-0000-0000-0000000000a7') as m) x where m = 'cuenta_de_staff'),
+  1, 'un super admin recién dado de alta (sin perfil) no se suma a una org por invitación');
+select ci.espera((select count(*) from public.profiles where id = '80000000-0000-0000-0000-0000000000a7'), 0,
+  'al super admin sin perfil no se le crea perfil');
+select ci.espera((select count(*) from public.team_invitations where token in ('tok-staff', 'tok-staff2') and status = 'pending'), 2,
+  'las invitaciones al staff quedan pendientes');
+
+-- Un perfil sin org que no es del staff tampoco se mueve.
+select ci.espera(
+  (select count(*) from (select public.aceptar_invitacion_de_equipo('tok-huerfano', '80000000-0000-0000-0000-0000000000a8') as m) x where m = 'otra_org'),
+  1, 'un perfil sin org no se pisa');
+select ci.espera((select count(*) from public.profiles where id = '80000000-0000-0000-0000-0000000000a8' and organization_id is null and role = 'founder'), 1,
+  'el perfil sin org queda como estaba');
 
 -- Acepta: email con otra caja y espacios, rol y org de la invitación.
 select ci.espera(

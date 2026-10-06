@@ -131,6 +131,7 @@ describe("aceptarInvitacionAction", () => {
     "sin_cuenta",
     "email_sin_confirmar",
     "otro_email",
+    "cuenta_de_staff",
     "otra_org",
     "rol_de_otra_org",
   ] as const)("el rechazo %s vuelve como valor con su mensaje", async (motivo) => {
