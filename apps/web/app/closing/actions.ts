@@ -12,9 +12,9 @@ import {
 } from "@/lib/closing/mapper";
 import { repairClosingConversationLinks } from "@/lib/conversations/repair-links";
 import { getGHLIntegrationForOrg } from "@/lib/ghl/integration";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import {
   firstZodError,
   updateClosingCallSchema,
@@ -22,6 +22,10 @@ import {
 } from "@/lib/validations";
 import type { ClosingCall } from "@/types/closing";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
+
+/** Código de PostgREST cuando `.single()` no encuentra la fila. */
+const SIN_FILAS = "PGRST116";
+const LLAMADA_NO_ENCONTRADA = "No se encontró la llamada. Puede que la hayan eliminado.";
 
 function mapDbError(msg: string): string {
   if (isMissingTableError(msg)) {
@@ -93,39 +97,49 @@ export async function listClosingCallsAction(): Promise<ClosingCall[]> {
   return rows.map(rowToClosingCall);
 }
 
+/**
+ * SCRUM-497: devuelve sus errores esperables (validación, Supabase no
+ * configurado, sesión, llamada de otra org o inexistente, rechazo de la base)
+ * como valor con `runMutation`: en producción Next no le manda al cliente el
+ * mensaje de un error lanzado por una server action. No redirige.
+ */
 export async function updateClosingCallAction(
   id: string,
   patch: unknown
-): Promise<ClosingCall> {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Supabase no configurado");
-  }
+): Promise<MutationResult<ClosingCall>> {
+  return runMutation(async () => {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase no configurado");
+    }
 
-  const idParsed = uuidSchema.safeParse(id);
-  if (!idParsed.success) {
-    throw new Error(firstZodError(idParsed.error));
-  }
+    const idParsed = uuidSchema.safeParse(id);
+    if (!idParsed.success) {
+      throw new Error(firstZodError(idParsed.error));
+    }
 
-  const patchParsed = updateClosingCallSchema.safeParse(patch);
-  if (!patchParsed.success) {
-    throw new Error(firstZodError(patchParsed.error));
-  }
+    const patchParsed = updateClosingCallSchema.safeParse(patch);
+    if (!patchParsed.success) {
+      throw new Error(firstZodError(patchParsed.error));
+    }
 
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
-  const updateRow = patchToClosingUpdateRow(patchParsed.data);
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+    const updateRow = patchToClosingUpdateRow(patchParsed.data);
 
-  const { data, error } = await supabase
-    .from("closing_calls")
-    .update(updateRow)
-    .eq("id", idParsed.data)
-    .eq("organization_id", organizationId)
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("closing_calls")
+      .update(updateRow)
+      .eq("id", idParsed.data)
+      .eq("organization_id", organizationId)
+      .select()
+      .single();
 
-  if (error || !data) {
-    throw new Error(mapDbError(error?.message ?? "No se pudo actualizar la llamada"));
-  }
+    // `.single()` sin filas: la llamada no existe o es de otra organización.
+    if (error?.code === SIN_FILAS) throw new Error(LLAMADA_NO_ENCONTRADA);
+    if (error || !data) {
+      throw new Error(mapDbError(error?.message ?? "No se pudo actualizar la llamada"));
+    }
 
-  return rowToClosingCall(data as ClosingCallRow);
+    return rowToClosingCall(data as ClosingCallRow);
+  });
 }

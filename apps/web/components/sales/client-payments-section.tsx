@@ -250,8 +250,15 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
           defaultAmount={nextPending.amount}
           installmentLabel={nextPending.label}
           onSuccess={(updatedClient, newPayments) => {
-            void updateClient(updatedClient.id, {
+            // `updateClient` lanza con el motivo (SCRUM-497): sin este catch
+            // quedaba como una promesa rechazada que nadie veía.
+            updateClient(updatedClient.id, {
               installments: updatedClient.installments,
+            }).catch((e: unknown) => {
+              push({
+                title: "No se pudo actualizar el plan de cuotas",
+                description: e instanceof Error ? e.message : undefined,
+              });
             });
             setPayments(newPayments);
             void refreshClientPayments();

@@ -31,6 +31,7 @@ import {
 } from "@ai-coo/ui";
 import { UserPlus } from "lucide-react";
 import { createClientAction } from "@/app/clients/actions";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import { CampoFecha } from "@/components/shared/campo-fecha";
 import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
 import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
@@ -116,32 +117,35 @@ export function NewClientDialog() {
     }
 
     startTransition(async () => {
-      try {
-        await createClientAction({
-          name: form.name.trim(),
-          email: form.email.trim() || null,
-          joinDate: form.joinDate,
-          totalAmount: monto,
-          status: form.status,
-          paymentType: form.paymentType,
-          platform: form.platform,
-          // Lo que el alta no pregunta y el esquema pide.
-          isSuccessCase: form.status === "success_case",
-          aiInsights: [],
-          linkedCalls: [],
-        });
+      await correrMutacion({
+        accion: () =>
+          createClientAction({
+            name: form.name.trim(),
+            email: form.email.trim() || null,
+            joinDate: form.joinDate,
+            totalAmount: monto,
+            status: form.status,
+            paymentType: form.paymentType,
+            platform: form.platform,
+            // Lo que el alta no pregunta y el esquema pide.
+            isSuccessCase: form.status === "success_case",
+            aiInsights: [],
+            linkedCalls: [],
+          }),
+        alExito: async () => {
+          await refreshClients();
+          setCargados((n) => n + 1);
+          push({ title: `"${form.name.trim()}" cargado`, variant: "success" });
 
-        await refreshClients();
-        setCargados((n) => n + 1);
-        push({ title: `"${form.name.trim()}" cargado`, variant: "success" });
-
-        // Se limpia y queda abierto: cargar una cartera es una tanda.
-        setForm(vacio(fechaDeHoyEnZona(zonaDeLaOrganizacion)));
-      } catch (fallo) {
-        setError(
-          fallo instanceof Error ? fallo.message : "No se pudo cargar el cliente."
-        );
-      }
+          // Se limpia y queda abierto: cargar una cartera es una tanda.
+          setForm(vacio(fechaDeHoyEnZona(zonaDeLaOrganizacion)));
+        },
+        // El error se muestra dentro del diálogo, junto al formulario: el
+        // motivo devuelto o, si la acción lanzó, el texto fijo.
+        avisar: (aviso) => setError(aviso.description ?? aviso.title),
+        tituloError: "No se pudo cargar el cliente.",
+        etiqueta: "[NewClientDialog] cargar cliente",
+      });
     });
   }
 

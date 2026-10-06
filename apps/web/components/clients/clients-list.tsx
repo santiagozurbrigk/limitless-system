@@ -59,6 +59,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { deleteClientAction } from "@/app/clients/actions";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import { toggleClientTaskAction } from "@/app/clients/task-actions";
 import { getClientsDiscordActivityAction } from "@/app/discord/actions";
 import type { ClientActivity } from "@/lib/discord/activity";
@@ -412,16 +413,16 @@ export function ClientsList({ clients }: { clients: Client[] }) {
     const target = deleteTarget;
     setDeleteTarget(null);
     startTransition(async () => {
-      try {
-        await deleteClientAction(target.id);
-        await refreshClients();
-        push({ title: `Cliente "${target.name}" eliminado`, variant: "success" });
-      } catch (e) {
-        push({
-          title: "No se pudo eliminar el cliente",
-          description: e instanceof Error ? e.message : undefined,
-        });
-      }
+      await correrMutacion({
+        accion: () => deleteClientAction(target.id),
+        alExito: async () => {
+          await refreshClients();
+          push({ title: `Cliente "${target.name}" eliminado`, variant: "success" });
+        },
+        avisar: push,
+        tituloError: "No se pudo eliminar el cliente",
+        etiqueta: "[ClientsList] eliminar cliente",
+      });
     });
   };
 
