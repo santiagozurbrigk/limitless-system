@@ -62,8 +62,9 @@ al terminar cada bloque de trabajo, aunque sea chico.
   `super_admin_users`, normalizado como en `isSuperAdminEmail`, tenga perfil o no. Antes sólo frenaba al super admin
   con perfil sin org; uno recién dado de alta (sin perfil, `docs/operacion/alta-super-admin.md`) quedaba como member
   de la org del founder, que podía desactivarlo y banearlo. Se documentó como precondición que "Confirm email" esté
-  activo en Supabase Auth (`docs/operacion/entorno-y-deploy.md`, con cómo verificarlo) y se aclaró que
-  `02_verificacion.sql` de producción no escribe datos pero llama a la función (no corre en sesión de sólo lectura).
+  activo en Supabase Auth (`docs/operacion/entorno-y-deploy.md`, con cómo verificarlo). `02_verificacion.sql` de
+  producción ya no llama a la función: compara el md5 del cuerpo (sin retornos de carro) con el del repo y corre en
+  una sesión de sólo lectura.
 - El login vuelve a la invitación: el formulario manda el `next` y `signInAction` lo usa sólo si
   `destinoDeInvitacion` lo reconoce (path interno exactamente `/invite` con token, rearmado; usa `destinoSeguro`).
   Con ese `next` no corre `ensureUserBootstrap`, como ya hacía `/auth/callback`, para que una cuenta sin perfil no
