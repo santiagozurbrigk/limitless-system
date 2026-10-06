@@ -7,6 +7,7 @@ import {
   resolveEffectiveOrganizationId,
 } from "@/lib/holding/resolve-org";
 import { createClient } from "@/lib/supabase/server";
+import { ErrorEsperable } from "@/lib/server/error-esperable";
 import {
   CUENTA_DESACTIVADA_MESSAGE,
   estaDesactivado,
@@ -190,8 +191,10 @@ async function resolveOrganizationId(): Promise<string> {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Sesión y cuenta desactivada son rechazos esperables (SCRUM-497): una
+  // server action los devuelve con su mensaje y no los reporta como falla.
   if (!user) {
-    throw new Error("Sesión no válida");
+    throw new ErrorEsperable("Sesión no válida");
   }
 
   const { organizationId, accountType, isActive } =
@@ -200,7 +203,7 @@ async function resolveOrganizationId(): Promise<string> {
   // SCRUM-8: la org se resuelve con el service role, así que la RLS no la
   // corta; un perfil desactivado no pasa de acá.
   if (estaDesactivado(isActive)) {
-    throw new Error(CUENTA_DESACTIVADA_MESSAGE);
+    throw new ErrorEsperable(CUENTA_DESACTIVADA_MESSAGE);
   }
 
   if (!organizationId) {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * SCRUM-497: las mutaciones de Clientes devuelven sus errores esperables como
@@ -14,23 +14,33 @@ type Fila = Record<string, unknown> & { id: string; organization_id: string };
 type Escritura = { op: string; valores?: unknown; filtros: Array<[string, unknown]> };
 
 const sim = vi.hoisted(() => ({
+  reportes: [] as Array<{ error: unknown; contexto: unknown }>,
   configurado: true,
   sesion: true,
   permiso: true as boolean | "error",
   filas: [] as Fila[],
   errorEscritura: null as { message: string; code?: string } | null,
+  // Si está, `from()` lanza: como un bug o una excepción de la red.
+  lanza: null as unknown,
   escrituras: [] as Escritura[],
 }));
 
+vi.mock("@/lib/observability/reportar-falla", () => ({
+  reportarFalla: (error: unknown, contexto: unknown) => sim.reportes.push({ error, contexto }),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => sim.configurado }));
-vi.mock("@/lib/auth/bootstrap", () => ({
-  requireOrganizationId: async () => {
-    if (!sim.sesion) throw new Error("Sesión no válida");
-    return "org-1";
-  },
-  isMissingTableError: (msg: string) => msg.includes("does not exist"),
-}));
+// Como el real: la sesión que falta es un rechazo esperable.
+vi.mock("@/lib/auth/bootstrap", async () => {
+  const { ErrorEsperable } = await import("@/lib/server/error-esperable");
+  return {
+    requireOrganizationId: async () => {
+      if (!sim.sesion) throw new ErrorEsperable("Sesión no válida");
+      return "org-1";
+    },
+    isMissingTableError: (msg: string) => msg.includes("does not exist"),
+  };
+});
 vi.mock("@/lib/utm/attribute-booking", () => ({ attributeSaleToUTM: async () => undefined }));
 vi.mock("@/lib/marketing/lead-magnets-internal", () => ({
   attributeLeadMagnetToClient: async () => undefined,
@@ -48,6 +58,7 @@ vi.mock("@/lib/supabase/server", () => ({
         : { data: sim.permiso, error: null };
     },
     from(tabla: string) {
+      if (sim.lanza) throw sim.lanza;
       expect(tabla).toBe("clients");
       // Aplica los `.eq` pedidos: si una acción deja de filtrar por
       // organización, toca la fila de otra org y el test lo ve.
@@ -148,12 +159,20 @@ function filaCliente(id: string, organizationId: string): Fila {
   };
 }
 
+const TEXTO_FIJO = "Ocurrió un error inesperado. Intentá de nuevo.";
+
+let consola: ReturnType<typeof vi.spyOn>;
+afterEach(() => consola.mockRestore());
+
 beforeEach(() => {
+  sim.reportes = [];
   sim.configurado = true;
   sim.sesion = true;
   sim.permiso = true;
   sim.filas = [filaCliente(ID, "org-1"), filaCliente(ID_OTRA_ORG, "org-2")];
   sim.errorEscritura = null;
+  sim.lanza = null;
+  consola = vi.spyOn(console, "error").mockImplementation(() => {});
   sim.escrituras = [];
 });
 
@@ -220,12 +239,19 @@ describe("importClientsAction", () => {
     expect(ops()).toEqual([]);
   });
 
-  it("⭐ un rechazo de la base vuelve con su mensaje", async () => {
-    sim.errorEscritura = { message: "duplicate key value violates unique constraint" };
+  it("⭐ una falla de la red que supabase-js devuelve como valor no llega cruda: texto fijo, consola y Sentry", async () => {
+    sim.errorEscritura = { message: "TypeError: fetch failed" };
     await expect(importClientsAction([NUEVO])).resolves.toEqual({
       success: false,
-      error: "duplicate key value violates unique constraint",
+      error: TEXTO_FIJO,
     });
+    expect(consola).toHaveBeenCalledWith(
+      "[importClients]",
+      expect.objectContaining({ name: "FallaDeLaBase", message: "TypeError: fetch failed" })
+    );
+    expect(sim.reportes).toEqual([
+      { error: expect.objectContaining({ message: "TypeError: fetch failed" }), contexto: { accion: "[importClients]" } },
+    ]);
   });
 
   it("sin Supabase configurado devuelve el motivo", async () => {
@@ -260,13 +286,21 @@ describe("deleteClientAction", () => {
     expect(ops()).toEqual([]);
   });
 
-  it("si no se puede verificar el permiso, no borra y lo dice", async () => {
+  it("si no se puede verificar el permiso, no borra: texto fijo y se reporta como falla", async () => {
     sim.permiso = "error";
     await expect(deleteClientAction(ID)).resolves.toEqual({
       success: false,
-      error: "No se pudo verificar el permiso.",
+      error: TEXTO_FIJO,
     });
     expect(ops()).toEqual([]);
+    expect(sim.reportes).toHaveLength(1);
+  });
+
+  it("sin permiso es un rechazo esperable: no se reporta", async () => {
+    sim.permiso = false;
+    await deleteClientAction(ID);
+    expect(sim.reportes).toEqual([]);
+    expect(consola).not.toHaveBeenCalledWith("[deleteClient]", expect.anything());
   });
 
   it("un id inválido vuelve con el mensaje de validación", async () => {
@@ -314,6 +348,43 @@ describe("updateClientAction", () => {
   });
 });
 
+describe("lo inesperado (SCRUM-497)", () => {
+  it.each([
+    ["createClientAction", () => createClientAction(NUEVO), "[createClient]"],
+    ["updateClientAction", () => updateClientAction(ID, { status: "active" }), "[updateClient]"],
+    ["deleteClientAction", () => deleteClientAction(ID), "[deleteClient]"],
+  ] as const)(
+    "⭐ %s: una excepción de la red devuelve el texto fijo, nunca el mensaje crudo, y se registra y reporta",
+    async (_n, correr, etiqueta) => {
+      const falla = new TypeError("fetch failed: connect ECONNREFUSED 10.0.0.5:5432");
+      sim.lanza = falla;
+      const r = await correr();
+      expect(r).toEqual({ success: false, error: TEXTO_FIJO });
+      expect(JSON.stringify(r)).not.toContain("ECONNREFUSED");
+      expect(consola).toHaveBeenCalledWith(etiqueta, falla);
+      expect(sim.reportes).toEqual([{ error: falla, contexto: { accion: etiqueta } }]);
+    }
+  );
+
+  it("un error de la base no listado (RLS) vuelve con el texto fijo y se reporta", async () => {
+    sim.errorEscritura = {
+      message: 'new row violates row-level security policy for table "clients"',
+      code: "42501",
+    };
+    await expect(createClientAction(NUEVO)).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+    expect(sim.reportes).toHaveLength(1);
+  });
+
+  it("los rechazos esperables no se reportan", async () => {
+    await createClientAction({ ...NUEVO, name: "" });
+    await updateClientAction(ID_OTRA_ORG, { status: "active" });
+    sim.sesion = false;
+    await createClientAction(NUEVO);
+    expect(sim.reportes).toEqual([]);
+    expect(consola).not.toHaveBeenCalled();
+  });
+});
+
 describe("assignClientPlanAction", () => {
   it("asigna el plan con la misma escritura filtrada por organización", async () => {
     const PLAN = "33333333-3333-4333-8333-333333333333";
@@ -321,6 +392,20 @@ describe("assignClientPlanAction", () => {
     expect(r.success).toBe(true);
     expect(sim.escrituras[0].valores).toMatchObject({ plan_id: PLAN });
     expect(sim.escrituras[0].filtros).toContainEqual(["organization_id", "org-1"]);
+  });
+
+  it("un plan que ya no existe (clave foránea) vuelve con un mensaje claro", async () => {
+    sim.errorEscritura = {
+      message: 'insert or update on table "clients" violates foreign key constraint "clients_plan_id_fkey"',
+      code: "23503",
+    };
+    await expect(
+      assignClientPlanAction(ID, "33333333-3333-4333-8333-333333333333")
+    ).resolves.toEqual({
+      success: false,
+      error: "El plan o la llamada que elegiste ya no existe. Recargá la página e intentá de nuevo.",
+    });
+    expect(sim.reportes).toEqual([]);
   });
 
   it("⭐ un plan con id inválido vuelve con el mensaje de validación", async () => {

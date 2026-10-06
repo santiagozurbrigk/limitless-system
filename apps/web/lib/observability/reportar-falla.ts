@@ -18,12 +18,20 @@ export type ContextoDeFalla = {
   organizationId?: string | null;
   /** Proveedor externo involucrado: `ghl`, `calendly`, `fathom`, `zernio`... */
   provider?: string;
+  /**
+   * Server action que falló (`[createClient]`...). Con esto el evento no es de un
+   * proceso de fondo: lleva el tag `server_action` en vez de `proceso_de_fondo`
+   * (SCRUM-497), así las reglas de alerta de los crons no lo mezclan.
+   */
+  accion?: string;
   /** Datos sueltos para el detalle del evento. Nunca secretos ni transcripts. */
   extra?: Record<string, unknown>;
 };
 
 export function etiquetasDeFalla(contexto: ContextoDeFalla): Record<string, string> {
-  const etiquetas: Record<string, string> = { proceso_de_fondo: "true" };
+  const etiquetas: Record<string, string> = contexto.accion
+    ? { server_action: contexto.accion }
+    : { proceso_de_fondo: "true" };
   if (contexto.cron) etiquetas.cron = contexto.cron;
   if (contexto.organizationId) etiquetas.org_id = contexto.organizationId;
   if (contexto.provider) etiquetas.provider = contexto.provider;

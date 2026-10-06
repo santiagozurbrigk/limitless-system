@@ -20,6 +20,8 @@ import {
 } from "@/lib/team/mapper";
 import {
   actionErrorMessage,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
   runMutation,
   type MutationResult,
 } from "@/lib/server/action-result";
@@ -135,28 +137,25 @@ async function requireManagerProfileAndParse<T extends z.ZodTypeAny>(
 
 /**
  * Lo que ve el usuario cuando una lectura de Equipo falla en la base. El
- * detalle técnico queda en la consola del servidor.
+ * detalle técnico se registra en el servidor y va a Sentry.
  */
 const FALLO_AL_LEER_EL_EQUIPO =
   "Hubo un problema al leer los datos del equipo. Recargá la página para intentar de nuevo.";
-
-function falloDeLectura(etiqueta: string, detalle: string): Error {
-  console.error(etiqueta, detalle);
-  return new Error(FALLO_AL_LEER_EL_EQUIPO);
-}
 
 /*
  * SCRUM-497: las lecturas de Equipo devuelven sus errores como valor
  * (`MutationResult`). `/team` es un server component y no hay error boundary:
  * una lectura que lanzaba terminaba en la pantalla de error de Next, con el
- * párrafo técnico en inglés en producción. Ahora la pantalla dibuja su propio
- * estado con el motivo (sesión, cuenta desactivada o la falla de la base).
+ * párrafo técnico en inglés en producción. Corren dentro de
+ * `mutacionConErroresEsperables`: sesión y cuenta desactivada vuelven con su
+ * motivo; una falla de la base (`FallaDeLaBase`) o cualquier otra excepción se
+ * registra, va a Sentry y vuelve con `FALLO_AL_LEER_EL_EQUIPO`.
  */
 
 export async function getTeamMembersAction(): Promise<MutationResult<TeamMember[]>> {
   if (!isSupabaseConfigured()) return { success: true, data: [] };
 
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[getTeamMembers]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -183,17 +182,17 @@ export async function getTeamMembersAction(): Promise<MutationResult<TeamMember[
 
     if (error) {
       if (isMissingTableError(error.message)) return [];
-      throw falloDeLectura("[getTeamMembers]", error.message);
+      throw new FallaDeLaBase(error);
     }
 
     return ((data ?? []) as unknown as ProfileRow[]).map(rowToTeamMember);
-  });
+  }, FALLO_AL_LEER_EL_EQUIPO);
 }
 
 export async function getTeamRolesAction(): Promise<MutationResult<CustomRole[]>> {
   if (!isSupabaseConfigured()) return { success: true, data: [] };
 
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[getTeamRoles]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -206,7 +205,7 @@ export async function getTeamRolesAction(): Promise<MutationResult<CustomRole[]>
 
     if (error) {
       if (isMissingTableError(error.message)) return [];
-      throw falloDeLectura("[getTeamRoles]", error.message);
+      throw new FallaDeLaBase(error);
     }
 
     if (!data?.length) {
@@ -214,7 +213,7 @@ export async function getTeamRolesAction(): Promise<MutationResult<CustomRole[]>
         org_id: organizationId,
       });
       if (rpcError && !isMissingTableError(rpcError.message)) {
-        throw falloDeLectura("[getTeamRoles] create_default_roles", rpcError.message);
+        throw new FallaDeLaBase(rpcError);
       }
 
       const { data: seeded, error: retryError } = await supabase
@@ -224,12 +223,12 @@ export async function getTeamRolesAction(): Promise<MutationResult<CustomRole[]>
         .order("is_default", { ascending: false })
         .order("name", { ascending: true });
 
-      if (retryError) throw falloDeLectura("[getTeamRoles] relectura", retryError.message);
+      if (retryError) throw new FallaDeLaBase(retryError);
       return ((seeded ?? []) as TeamRoleRow[]).map(rowToCustomRole);
     }
 
     return (data as TeamRoleRow[]).map(rowToCustomRole);
-  });
+  }, FALLO_AL_LEER_EL_EQUIPO);
 }
 
 export async function getPendingInvitationsAction(): Promise<
@@ -237,7 +236,7 @@ export async function getPendingInvitationsAction(): Promise<
 > {
   if (!isSupabaseConfigured()) return { success: true, data: [] };
 
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[getPendingInvitations]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -264,13 +263,13 @@ export async function getPendingInvitationsAction(): Promise<
 
     if (error) {
       if (isMissingTableError(error.message)) return [];
-      throw falloDeLectura("[getPendingInvitations]", error.message);
+      throw new FallaDeLaBase(error);
     }
 
     return ((data ?? []) as unknown as TeamInvitationRow[]).map(
       rowToTeamInvitation
     );
-  });
+  }, FALLO_AL_LEER_EL_EQUIPO);
 }
 
 export type TeamPageContext = {

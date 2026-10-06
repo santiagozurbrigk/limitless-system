@@ -43,4 +43,11 @@ describe("etiquetas de una falla", () => {
     });
     expect(etiquetasDeFalla({})).toEqual({ proceso_de_fondo: "true" });
   });
+
+  it("la falla de una server action lleva su etiqueta y no cuenta como proceso de fondo (SCRUM-497)", () => {
+    expect(etiquetasDeFalla({ accion: "[createClient]", organizationId: "org-1" })).toEqual({
+      server_action: "[createClient]",
+      org_id: "org-1",
+    });
+  });
 });

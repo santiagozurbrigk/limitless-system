@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * SCRUM-497: `updateClosingCallAction` devuelve sus errores esperables como
@@ -12,22 +12,31 @@ const ID_OTRA_ORG = "22222222-2222-4222-8222-222222222222";
 type Fila = { id: string; organization_id: string; status: string };
 
 const sim = vi.hoisted(() => ({
+  reportes: [] as Array<{ error: unknown; contexto: unknown }>,
   configurado: true,
   sesion: true,
   filas: [] as Fila[],
   error: null as { message: string; code?: string } | null,
+  lanza: null as unknown,
   updates: [] as Array<{ valores: unknown; filtros: Array<[string, unknown]> }>,
 }));
 
-vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => sim.configurado }));
-vi.mock("@/lib/auth/bootstrap", () => ({
-  requireOrganizationId: async () => {
-    if (!sim.sesion) throw new Error("Sesión no válida");
-    return "org-1";
-  },
-  tryRequireOrganizationId: async () => "org-1",
-  isMissingTableError: (msg: string) => msg.includes("does not exist"),
+vi.mock("@/lib/observability/reportar-falla", () => ({
+  reportarFalla: (error: unknown, contexto: unknown) => sim.reportes.push({ error, contexto }),
 }));
+vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => sim.configurado }));
+// Como el real: la sesión que falta es un rechazo esperable.
+vi.mock("@/lib/auth/bootstrap", async () => {
+  const { ErrorEsperable } = await import("@/lib/server/error-esperable");
+  return {
+    requireOrganizationId: async () => {
+      if (!sim.sesion) throw new ErrorEsperable("Sesión no válida");
+      return "org-1";
+    },
+    tryRequireOrganizationId: async () => "org-1",
+    isMissingTableError: (msg: string) => msg.includes("does not exist"),
+  };
+});
 vi.mock("@/lib/conversations/repair-links", () => ({
   repairClosingConversationLinks: async () => undefined,
 }));
@@ -39,6 +48,7 @@ vi.mock("@/lib/closing/mapper", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     from(tabla: string) {
+      if (sim.lanza) throw sim.lanza;
       expect(tabla).toBe("closing_calls");
       // Aplica los `.eq` pedidos: si la acción deja de filtrar por
       // organización, actualiza la llamada de otra org y el test lo ve.
@@ -76,7 +86,15 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import { updateClosingCallAction } from "../actions";
 
+const TEXTO_FIJO = "Ocurrió un error inesperado. Intentá de nuevo.";
+
+let consola: ReturnType<typeof vi.spyOn>;
+afterEach(() => consola.mockRestore());
+
 beforeEach(() => {
+  sim.lanza = null;
+  consola = vi.spyOn(console, "error").mockImplementation(() => {});
+  sim.reportes = [];
   sim.configurado = true;
   sim.sesion = true;
   sim.filas = [
@@ -129,7 +147,7 @@ describe("updateClosingCallAction", () => {
     expect(sim.updates).toEqual([]);
   });
 
-  it("si falta la tabla devuelve el mensaje de mapDbError", async () => {
+  it("si falta la tabla devuelve el mensaje que lo explica", async () => {
     sim.error = { message: 'relation "closing_calls" does not exist' };
     await expect(updateClosingCallAction(ID, { status: "attended" })).resolves.toEqual({
       success: false,
@@ -152,5 +170,39 @@ describe("updateClosingCallAction", () => {
       success: false,
       error: "Supabase no configurado",
     });
+  });
+
+  it("⭐ una excepción de la red devuelve el texto fijo, nunca el mensaje crudo, y se registra y reporta", async () => {
+    const falla = new TypeError("fetch failed: connect ECONNREFUSED 10.0.0.5:5432");
+    sim.lanza = falla;
+    const r = await updateClosingCallAction(ID, { status: "attended" });
+    expect(r).toEqual({ success: false, error: TEXTO_FIJO });
+    expect(consola).toHaveBeenCalledWith("[updateClosingCall]", falla);
+    expect(sim.reportes).toEqual([{ error: falla, contexto: { accion: "[updateClosingCall]" } }]);
+  });
+
+  it("⭐ una falla de la red que supabase-js devuelve como valor no llega cruda", async () => {
+    sim.error = { message: "TypeError: fetch failed" };
+    await expect(updateClosingCallAction(ID, { status: "attended" })).resolves.toEqual({
+      success: false,
+      error: TEXTO_FIJO,
+    });
+    expect(sim.reportes).toHaveLength(1);
+  });
+
+  it("una conversación vinculada que ya no existe (clave foránea) vuelve con un mensaje claro", async () => {
+    sim.error = { message: "violates foreign key constraint", code: "23503" };
+    await expect(updateClosingCallAction(ID, { status: "attended" })).resolves.toEqual({
+      success: false,
+      error: "La conversación vinculada ya no existe. Recargá la página e intentá de nuevo.",
+    });
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("los rechazos esperables no se reportan", async () => {
+    await updateClosingCallAction(ID_OTRA_ORG, { status: "attended" });
+    await updateClosingCallAction("no-es-un-id", {});
+    expect(sim.reportes).toEqual([]);
+    expect(consola).not.toHaveBeenCalled();
   });
 });

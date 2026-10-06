@@ -14,6 +14,7 @@ type Fila = Record<string, unknown> & { organization_id: string };
 type Error_ = { message: string } | null;
 
 const sim = vi.hoisted(() => ({
+  reportes: [] as Array<{ error: unknown; contexto: unknown }>,
   configurado: true,
   sesion: true,
   rol: "founder" as string,
@@ -24,18 +25,25 @@ const sim = vi.hoisted(() => ({
   filtrosOrg: {} as Record<string, unknown[]>,
 }));
 
+vi.mock("@/lib/observability/reportar-falla", () => ({
+  reportarFalla: (error: unknown, contexto: unknown) => sim.reportes.push({ error, contexto }),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => sim.configurado }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
-vi.mock("@/lib/auth/bootstrap", () => ({
-  requireOrganizationId: async () => {
-    if (!sim.sesion) throw new Error("Sesión no válida");
-    return "org-1";
-  },
-  getCurrentProfile: async () =>
-    sim.sesion ? { id: "yo", organization_id: "org-1", role: sim.rol } : null,
-  isMissingTableError: (msg: string) => msg.includes("does not exist"),
-}));
+// Como el real: la sesión que falta es un rechazo esperable.
+vi.mock("@/lib/auth/bootstrap", async () => {
+  const { ErrorEsperable } = await import("@/lib/server/error-esperable");
+  return {
+    requireOrganizationId: async () => {
+      if (!sim.sesion) throw new ErrorEsperable("Sesión no válida");
+      return "org-1";
+    },
+    getCurrentProfile: async () =>
+      sim.sesion ? { id: "yo", organization_id: "org-1", role: sim.rol } : null,
+    isMissingTableError: (msg: string) => msg.includes("does not exist"),
+  };
+});
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     rpc: async (nombre: string, args: { org_id: string }) => {
@@ -128,6 +136,7 @@ function invitacion(id: string, organizationId: string): Fila {
 
 let consola: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
+  sim.reportes = [];
   sim.configurado = true;
   sim.sesion = true;
   sim.rol = "founder";
@@ -154,10 +163,30 @@ describe("getTeamMembersAction", () => {
     expect(sim.filtrosOrg.profiles).toEqual(["org-1"]);
   });
 
-  it("⭐ una falla de la base vuelve con un texto propio y el detalle queda en la consola", async () => {
+  it("⭐ una falla de la base vuelve con un texto propio; el detalle va a la consola y a Sentry", async () => {
     sim.errores.profiles = { message: "permission denied for table profiles" };
     await expect(getTeamMembersAction()).resolves.toEqual({ success: false, error: FALLO_AL_LEER });
-    expect(consola).toHaveBeenCalledWith("[getTeamMembers]", "permission denied for table profiles");
+    const detalle = expect.objectContaining({
+      name: "FallaDeLaBase",
+      message: "permission denied for table profiles",
+    });
+    expect(consola).toHaveBeenCalledWith("[getTeamMembers]", detalle);
+    expect(sim.reportes).toEqual([{ error: detalle, contexto: { accion: "[getTeamMembers]" } }]);
+  });
+
+  it("⭐ una falla de la red que supabase-js devuelve como valor no llega cruda", async () => {
+    sim.errores.profiles = { message: "TypeError: fetch failed" };
+    const r = await getTeamMembersAction();
+    expect(r).toEqual({ success: false, error: FALLO_AL_LEER });
+    expect(JSON.stringify(r)).not.toContain("fetch failed");
+    expect(sim.reportes).toHaveLength(1);
+  });
+
+  it("sin sesión es un rechazo esperable: no se reporta", async () => {
+    sim.sesion = false;
+    await getTeamMembersAction();
+    expect(sim.reportes).toEqual([]);
+    expect(consola).not.toHaveBeenCalled();
   });
 
   it("sin sesión devuelve el motivo", async () => {
