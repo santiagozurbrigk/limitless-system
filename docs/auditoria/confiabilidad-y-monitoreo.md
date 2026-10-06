@@ -141,7 +141,7 @@ vacío).
 
 | Pieza | Detalle | Evidencia |
 |---|---|---|
-| Sentry servidor y edge | `instrumentation.ts` carga `sentry.server.config.ts` / `sentry.edge.config.ts`; `onRequestError = Sentry.captureRequestError`; habilitado en `NODE_ENV=production`; `sampleRate 1.0`, `tracesSampleRate 0.05`; `beforeSend` descarta "Rate limit exceeded" y borra cookies | `apps/web/instrumentation.ts`, `sentry.server.config.ts` |
+| Sentry servidor y edge | `instrumentation.ts` carga `sentry.server.config.ts` / `sentry.edge.config.ts`; `onRequestError = Sentry.captureRequestError`; habilitado en `NODE_ENV=production`; `sampleRate 1.0`, `tracesSampleRate 0.05`; `beforeSend` descarta "Rate limit exceeded"; desde SCRUM-501 sin el cuerpo del request y con `limpiarEventoDeSentry` (ver `docs/operacion/alertas.md`) | `apps/web/instrumentation.ts`, `sentry.server.config.ts` |
 | Sentry navegador | `sentry.client.config.ts` con `NEXT_PUBLIC_SENTRY_DSN`, sin breadcrumbs de consola | `apps/web/sentry.client.config.ts` |
 | DSN y source maps | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` presentes en Production y Preview | listado de env de Vercel (sólo nombres) |
 | `captureException` explícito | sólo 2 lugares: `app/api/agent/send/route.ts` y `lib/holding/refresh-auth-session.ts` | grep |

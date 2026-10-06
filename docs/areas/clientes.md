@@ -105,7 +105,7 @@ PlatformDataProvider.listClientsAction()  ← select * de clients (incluye custo
 
 | Flujo | Entrada | Dónde |
 |---|---|---|
-| CRUD cliente | `createClientAction`, `updateClientAction`, `deleteClientAction`, `importClientsAction` | `app/clients/actions.ts`. Validan con zod (`lib/validations`); revalidan `/clients`, wins, revisión y dashboard |
+| CRUD cliente | `createClientAction`, `updateClientAction`, `deleteClientAction`, `importClientsAction` (y `assignClientPlanAction`, que delega en `updateClientAction`) | `app/clients/actions.ts`. Validan con zod (`lib/validations`); revalidan `/clients`, wins, revisión y dashboard. Devuelven sus errores esperables como valor (`MutationResult` con `mutacionConErroresEsperables`, SCRUM-497): validación, sin permiso para borrar, sesión, cliente de otra org o inexistente, plan o llamada que ya no existe. Cualquier otro error (la red, la base, un bug) se registra, va a Sentry y el usuario ve el texto fijo. Los errores por fila del import siguen en `errors` del dato. Los componentes las corren con `correrMutacion`; el provider, con `datoDeLaMutacion` (`lib/client/correr-accion.ts`) |
 | Lista | `getClientsBoardAction` | `app/clients/clients-board-actions.ts`. `pickNextTask` (`lib/clients/next-task.ts`) es la misma regla en tabla y ficha |
 | Franja de la ficha | `getClientOverviewAction` | `app/clients/overview-actions.ts` |
 | 1-1 por link | `uploadOneOnOneFromShareLinkAction` → `fetchFathomShare` (página pública de Fathom, sin API key) → `finalizeAssociatedCall` | `app/fathom/manual-upload-actions.ts`, `lib/fathom/share-link.ts`. **No corre el clasificador**: el cliente lo eligió una persona |
