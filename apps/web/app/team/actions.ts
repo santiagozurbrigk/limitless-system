@@ -20,6 +20,7 @@ import {
 } from "@/lib/team/mapper";
 import {
   actionErrorMessage,
+  ErrorEsperable,
   FallaDeLaBase,
   mutacionConErroresEsperables,
   runMutation,
@@ -139,6 +140,10 @@ async function requireManagerProfileAndParse<T extends z.ZodTypeAny>(
  * Lo que ve el usuario cuando una lectura de Equipo falla en la base. El
  * detalle técnico se registra en el servidor y va a Sentry.
  */
+/** Código de Postgres de una restricción de unicidad violada. */
+const VIOLACION_DE_UNICIDAD = "23505";
+const ROL_REPETIDO = "Ya existe un rol con ese nombre.";
+
 const FALLO_AL_LEER_EL_EQUIPO =
   "Hubo un problema al leer los datos del equipo. Recargá la página para intentar de nuevo.";
 
@@ -538,7 +543,10 @@ export async function createCustomRoleAction(data: {
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    // `UNIQUE (organization_id, name)`: un nombre repetido es un rechazo
+    // esperable, no una falla (SCRUM-497).
+    if (error?.code === VIOLACION_DE_UNICIDAD) throw new ErrorEsperable(ROL_REPETIDO);
+    if (error) throw new FallaDeLaBase(error);
 
     revalidateTeam();
     return rowToCustomRole(role as TeamRoleRow);
