@@ -1042,19 +1042,21 @@ export async function loadInfrastructureStats(): Promise<InfrastructureStats> {
 }
 
 type FilaDeCorrida = {
-  estado: "en_curso" | "ok" | "fallo" | "parcial";
+  estado: "en_curso" | "ok" | "encolado" | "fallo" | "parcial";
   inicio: string;
   fin: string | null;
   orgs_procesadas: number | null;
   orgs_fallidas: number | null;
   organizaciones_fallidas: string[] | null;
+  jobs_encolados: number | null;
   error: string | null;
 };
 
 /**
  * La última corrida de cada cron de `vercel.json` (SCRUM-85), con el nombre de
  * las organizaciones que fallaron. Una consulta por cron sobre el índice
- * `(proceso, inicio desc)`: son 19 y cada una lee una fila.
+ * `(proceso, inicio desc)`: son 19 y cada una lee una fila. Con el mismo
+ * `inicio` gana la que tiene `fin` (una cerrada antes que una en curso).
  */
 export async function loadUltimasCorridas(): Promise<CorridasDeProcesos> {
   await requireSuperAdmin();
@@ -1065,9 +1067,12 @@ export async function loadUltimasCorridas(): Promise<CorridasDeProcesos> {
     rutas.map((proceso) =>
       admin
         .from(TABLA_DE_CORRIDAS)
-        .select("estado, inicio, fin, orgs_procesadas, orgs_fallidas, organizaciones_fallidas, error")
+        .select(
+          "estado, inicio, fin, orgs_procesadas, orgs_fallidas, organizaciones_fallidas, jobs_encolados, error"
+        )
         .eq("proceso", proceso)
         .order("inicio", { ascending: false })
+        .order("fin", { ascending: false, nullsFirst: false })
         .limit(1)
         .maybeSingle<FilaDeCorrida>()
     )
@@ -1118,6 +1123,7 @@ export async function loadUltimasCorridas(): Promise<CorridasDeProcesos> {
             id,
             nombre: nombres.get(id) ?? null,
           })),
+          jobsEncolados: fila.jobs_encolados,
           error: fila.error,
         },
       };

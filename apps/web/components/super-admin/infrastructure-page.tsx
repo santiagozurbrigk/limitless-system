@@ -111,7 +111,9 @@ export function InfrastructurePage({
         <h3 className="text-sm font-semibold">Procesos programados</h3>
         <p className="mt-1 text-xs text-muted-foreground">
           Última corrida de cada cron, en hora de Argentina. Si uno figura sin cierre o con orgs
-          fallidas, revisá los logs de Vercel de esa ruta y los issues de Sentry.
+          fallidas, revisá los logs de Vercel de esa ruta y los issues de Sentry. Los crons que
+          reparten el trabajo en una cola figuran como Encolado: cuentan los jobs publicados, no
+          cómo terminó cada uno.
         </p>
         {corridas.disponible ? null : (
           <p className="mt-3 text-sm text-destructive">

@@ -213,12 +213,15 @@ export type UltimaCorridaDeProceso = {
   /** Horario de `vercel.json` (crontab, UTC). */
   horario: string | null;
   corrida: {
-    estado: "en_curso" | "ok" | "fallo" | "parcial";
+    /** `encolado`: fan-out con todos los jobs publicados; no dice cómo terminaron los workers. */
+    estado: "en_curso" | "ok" | "encolado" | "fallo" | "parcial";
     inicio: string;
     fin: string | null;
     orgsProcesadas: number | null;
     orgsFallidas: number | null;
     organizacionesFallidas: { id: string; nombre: string | null }[];
+    /** Jobs de QStash publicados (crons con fan-out); `null` en los demás. */
+    jobsEncolados: number | null;
     error: string | null;
   } | null;
 };

@@ -55,6 +55,7 @@ const CORRIDAS: CorridasDeProcesos = {
         orgsProcesadas: 4,
         orgsFallidas: 1,
         organizacionesFallidas: [{ id: "0a000000-0000-4000-8000-000000000001", nombre: "Academia Norte" }],
+        jobsEncolados: null,
         error: null,
       },
     },
@@ -68,6 +69,21 @@ const CORRIDAS: CorridasDeProcesos = {
         orgsProcesadas: null,
         orgsFallidas: null,
         organizacionesFallidas: [],
+        jobsEncolados: null,
+        error: null,
+      },
+    },
+    {
+      proceso: "/api/cron/intelligence-snapshot",
+      horario: "0 0,12 * * *",
+      corrida: {
+        estado: "encolado",
+        inicio: "2026-10-07T00:00:00Z",
+        fin: "2026-10-07T00:00:02Z",
+        orgsProcesadas: 6,
+        orgsFallidas: 0,
+        organizacionesFallidas: [],
+        jobsEncolados: 6,
         error: null,
       },
     },
@@ -139,6 +155,13 @@ describe("InfrastructurePage", () => {
     expect(pagina).toContain("Sin cierre");
     expect(pagina).toContain("Sin corridas registradas");
     expect(pagina).toContain("Todavía no corrió");
+  });
+
+  it("⭐ un cron con fan-out figura como Encolado con sus jobs, no como OK", () => {
+    const pagina = html();
+    expect(pagina).toContain("Encolado: 6 jobs encolados");
+    expect(pagina).toContain("Encolado no es terminado");
+    expect(pagina).not.toContain("6 orgs procesadas");
   });
 
   it("si no se pudo leer el registro, lo avisa", () => {
