@@ -56,7 +56,7 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 | `/super-admin/users` | `loadAdminUsers` | Todos los perfiles, último login, baja de persona |
 | `/super-admin/holding` | `lib/super-admin/holding-queries.ts`, `holdings-admin.ts` | Portfolio agregado, crear holding y negocios |
 | `/super-admin/costs` | `loadAiCostDashboard` | Costo de IA desde `token_usage` |
-| `/super-admin/infrastructure` | `loadInfrastructureStats` | Conteos de infraestructura |
+| `/super-admin/infrastructure` | `loadInfrastructureStats`, `loadUltimasCorridas`, `leerSalud` | Estado real de la plataforma (el mismo chequeo que `GET /api/health`: base, Storage, variables críticas, Resend y el commit desplegado), la última corrida de cada cron de `vercel.json` desde `corridas_de_procesos` (estado, hora y nombres de las orgs fallidas; `Sin cierre` si quedó en curso más de 15 min), conteos y la clave de Claude de la plataforma. Sin estados escritos a mano desde SCRUM-85 |
 | `/super-admin/client-health` | `lib/super-admin/org-health.ts` | Score 0–100: 25 pts por tener conversaciones, llamadas Fathom, SOPs activos e inputs semanales |
 | `/super-admin/onboarding` | `lib/super-admin/onboarding-progress.ts` (RPC `onboarding_org_progress`) | En qué paso quedó cada org, ordenado por atención |
 | `/super-admin/waitlist`, `/super-admin/trials` | `lib/super-admin/waitlist-queries.ts` | `waitlist_leads` |

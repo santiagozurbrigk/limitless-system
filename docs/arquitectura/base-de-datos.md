@@ -38,7 +38,7 @@ Matices que un dev tiene que saber:
 
 ### Chequeo en CI
 
-El job `migrations` de `.github/workflows/ci.yml` levanta `pgvector/pgvector:pg17`, carga `supabase/ci/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, schemas `auth`/`storage`, `auth.uid()`/`auth.jwt()`, tablas mínimas de storage, publicación de realtime) y corre `supabase/ci/check-migrations.sh`: valida nombres y versiones únicas y aplica las 175 en orden, cada una en su transacción. Si una migración nueva usa otra pieza de la plataforma (otro schema, otra extensión), hay que sumarla a los stubs.
+El job `migrations` de `.github/workflows/ci.yml` levanta `pgvector/pgvector:pg17`, carga `supabase/ci/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, schemas `auth`/`storage`, `auth.uid()`/`auth.jwt()`, tablas mínimas de storage, publicación de realtime) y corre `supabase/ci/check-migrations.sh`: valida nombres y versiones únicas y aplica las 191 en orden, cada una en su transacción; después corre los tests de RLS de `supabase/ci/tests/` (10 archivos). Si una migración nueva usa otra pieza de la plataforma (otro schema, otra extensión), hay que sumarla a los stubs.
 
 ## RLS y acceso
 
@@ -74,7 +74,7 @@ Estas tablas se leen sólo con `createAdminClient()` (service role). El cliente 
 | `zernio_integrations` | `api_key` (cifrada) y `webhook_secret` |
 | `instagram_integrations`, `stripe_integrations`, `mercadopago_integrations`, `vturb_integrations`, `webinarjam_integrations`, `hyros_integrations`, `payment_integrations`, `super_admin_google_tokens` | RLS sin policies |
 | `ghl_integrations` | El miembro puede insertar/actualizar/borrar la de su org, pero no leerla |
-| `ai_brain_documents`, `super_admin_users`, `super_admin_deletions`, `platform_ai_credentials`, `fathom_webhook_events`, `fathom_sync_fallas`, `waitlist_leads`, `rate_limits`, `holding_active_sessions` | Sólo service role / plataforma |
+| `ai_brain_documents`, `super_admin_users`, `super_admin_deletions`, `platform_ai_credentials`, `fathom_webhook_events`, `fathom_sync_fallas`, `corridas_de_procesos`, `waitlist_leads`, `rate_limits`, `holding_active_sessions` | Sólo service role / plataforma |
 
 Excepciones que **sí** son editables por cualquier miembro: `discord_integrations` y `unipile_integrations` (policy `FOR ALL` por org) y `team_member_integrations` (sólo la fila propia).
 
@@ -136,6 +136,7 @@ Una línea por tabla de producción. Filas = conteo aproximado de prod el 2026-0
 | `holdings`, `holding_organizations` | Modelo de holdings del super-admin (panel de holdings) |
 | `super_admin_users`, `super_admin_deletions`, `super_admin_google_tokens` | Staff Limitless, registro de bajas, Drive del super-admin |
 | `platform_ai_credentials` | Una fila (id = 1): la clave de Claude de la plataforma, cifrada, para el trabajo de super-admin (SCRUM-7). RLS sin políticas |
+| `corridas_de_procesos` | Una fila por corrida de cada cron de `vercel.json`: `proceso` (la ruta), `inicio`, `fin`, `estado` (`en_curso`, `ok`, `fallo`, `parcial`), `orgs_procesadas`, `orgs_fallidas`, `organizaciones_fallidas` (uuid[]) y `error` saneado. La escribe `conMonitorDeCron` y la lee Super-admin → Infraestructura con el cliente admin. Índice `(proceso, inicio desc)`; checks de coherencia (fin según estado, fallidas dentro de procesadas); cada cierre borra las de más de 30 días del proceso. Pensada para `correrPorOrganizacion()` (ADR-015). RLS sin políticas (SCRUM-85) |
 | `organization_notes` | Notas internas por org del super-admin |
 | `ai_brain_documents` | "Cerebro de IA" del super-admin |
 

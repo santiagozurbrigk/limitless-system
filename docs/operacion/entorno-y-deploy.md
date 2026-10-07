@@ -80,7 +80,7 @@ Relevadas con grep de `process.env.*` en `apps/` y `packages/` (89 nombres, incl
 | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | **no** | sí | `next.config.ts` (source maps) |
 | `SENTRY_FORCE` | **no** | no | habilita Sentry fuera de producción |
 | `E2E_BASE_URL`, `E2E_HOLDING_EMAIL`, `E2E_HOLDING_PASSWORD`, `PLAYWRIGHT_*`, `CI` | **no** | — | `playwright.config.ts`, `e2e/` |
-| `VERCEL_URL`, `VERCEL_GIT_COMMIT_SHA`, `NODE_ENV`, `NEXT_RUNTIME` | — | automáticas | sistema |
+| `VERCEL_URL`, `VERCEL_GIT_COMMIT_SHA`, `VERCEL_ENV`, `NODE_ENV`, `NEXT_RUNTIME` | — | automáticas | sistema; `/api/health` devuelve el commit corto y el entorno (SCRUM-85) |
 
 ### Sobrantes
 
@@ -110,6 +110,7 @@ Opcional: `SENTRY_DSN` (el mismo de Vercel): con ella cada `logError` va a Sentr
 
 - Proyecto `otc-plaform` (sic) en el team `otcteam`, región **`gru1`** (São Paulo, `apps/web/vercel.json`).
 - **Auto-deploy desde `main`**: cada merge a `main` genera un deploy de producción. Verificado el 2026-09-23: los últimos tres deploys de producción salen de `santiagozurbrigk/limitless-system` (el renombre del repo no cortó la integración).
+- **Que el deploy ocurrió lo comprueba** `.github/workflows/produccion-al-dia.yml` (SCRUM-85): después de cada push a `main` y una vez por día espera hasta 20 min a que `/api/health` devuelva el commit de `main` y, si no, falla y avisa por mail (y en Discord si existe el secreto de GitHub Actions `DISCORD_WEBHOOK_ALERTAS`, opcional). Del 3 al 5 de octubre Vercel perdió el acceso al repo y no desplegó 7 PRs. Detalle en [`alertas.md`](./alertas.md) § Producción desactualizada.
 - Cada push a otra rama genera un preview. Los previews **no sirven para probar OAuth** (las redirect URIs son fijas a producción).
 - Build: `next build` (con `withSentryConfig`); `outputFileTracingRoot` en la raíz del monorepo; `serverExternalPackages` para ffmpeg; `serverActions.bodySizeLimit = 16mb` (adjuntos del inbox).
 - Límites de duración: la mayoría de las rutas declara `maxDuration` 60; agente y RAG 300; `daily-signals` 600; `process-sop-video` 800.
@@ -175,7 +176,7 @@ Prueba real: escribir en un canal monitoreado y ver una fila en `discord_message
 
 ## Nombres externos que todavía dicen OTC
 
-Vercel `otc-plaform`, Supabase `OTC`, Fly `otc-reel-worker`, Railway `otc-discord-bot`, verify token de Meta `otc_instagram_webhook_2024`, fallback `https://otc-plaform.vercel.app` en `lib/email/welcome-email.ts` y en `components/super-admin/infrastructure-page.tsx`. Renombrarlos rompe cosas si no se coordina (`[REBRAND-EXTERNO]`).
+Vercel `otc-plaform`, Supabase `OTC`, Fly `otc-reel-worker`, Railway `otc-discord-bot`, verify token de Meta `otc_instagram_webhook_2024`, fallback `https://otc-plaform.vercel.app` en `lib/email/welcome-email.ts` (la página de Infraestructura del super admin ya no lo muestra desde SCRUM-85). Renombrarlos rompe cosas si no se coordina (`[REBRAND-EXTERNO]`).
 
 ## Archivos clave
 
