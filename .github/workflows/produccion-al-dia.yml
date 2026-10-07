@@ -1,0 +1,58 @@
+# Aviso de producción desactualizada (SCRUM-85 · [MONITOREO-Y-ALERTAS]).
+#
+# Después de cada push a main, y una vez por día, consulta /api/health de
+# producción y espera a que el commit desplegado sea el de main. Si no llega en
+# 20 minutos, el job falla con un mensaje claro: GitHub lo muestra en Actions y
+# le manda un mail a quien tenga activadas las notificaciones de workflows. Si
+# el secreto DISCORD_WEBHOOK_ALERTAS existe, además avisa en ese canal.
+#
+# Sin tokens de Vercel. Cómo se configura y cómo se prueba:
+# docs/operacion/alertas.md § Producción desactualizada.
+name: Producción al día
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Todos los días a las 12:17 UTC (09:17 en Argentina).
+    - cron: "17 12 * * *"
+  # A mano (Actions → Producción al día → Run workflow). Para probar el aviso sin
+  # tocar producción: un commit que no esté desplegado y un plazo corto.
+  workflow_dispatch:
+    inputs:
+      sha_esperado:
+        description: "Commit que tiene que estar desplegado (vacío: el último de la rama)"
+        required: false
+        default: ""
+      plazo_segundos:
+        description: "Cuánto esperar el deploy, en segundos"
+        required: false
+        default: "1200"
+
+# Un merge nuevo reemplaza la espera del anterior: lo que importa es el último.
+concurrency:
+  group: produccion-al-dia
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # La historia sirve para aceptar un deploy posterior al commit esperado.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+
+      - name: Esperar que producción tenga el commit de main
+        run: bash .github/scripts/verificar-produccion.sh
+        env:
+          URL_SALUD: https://www.optimizatucontrol.com/api/health
+          # Los inputs van por variables de entorno, nunca interpolados en el script.
+          SHA_ESPERADO: ${{ inputs.sha_esperado || github.sha }}
+          PLAZO_SEGUNDOS: ${{ inputs.plazo_segundos || '1200' }}
+          INTERVALO_SEGUNDOS: "30"
+          DISCORD_WEBHOOK_ALERTAS: ${{ secrets.DISCORD_WEBHOOK_ALERTAS }}
