@@ -20,31 +20,10 @@
 # Sin tokens de Vercel: sólo mira lo que responde producción.
 set -euo pipefail
 
-URL_SALUD="${URL_SALUD:?Falta URL_SALUD}"
-SHA_ESPERADO="${SHA_ESPERADO:?Falta SHA_ESPERADO}"
+URL_SALUD="${URL_SALUD:-}"
+SHA_ESPERADO="${SHA_ESPERADO:-}"
 PLAZO_SEGUNDOS="${PLAZO_SEGUNDOS:-1200}"
 INTERVALO_SEGUNDOS="${INTERVALO_SEGUNDOS:-30}"
-
-if ! printf '%s' "$SHA_ESPERADO" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
-  echo "::error::SHA_ESPERADO no es un commit (7 a 40 caracteres hexadecimales)."
-  exit 2
-fi
-if ! printf '%s' "$PLAZO_SEGUNDOS$INTERVALO_SEGUNDOS" | grep -Eq '^[0-9]+$'; then
-  echo "::error::PLAZO_SEGUNDOS e INTERVALO_SEGUNDOS tienen que ser números de segundos."
-  exit 2
-fi
-
-esperado="$(printf '%s' "$SHA_ESPERADO" | tr 'A-F' 'a-f' | cut -c1-7)"
-inicio="$(date +%s)"
-ultimo="sin respuesta todavía"
-
-# ¿El commit desplegado es posterior al esperado? Sólo se puede saber con la
-# historia de git disponible (el workflow hace checkout); si no, se asume que no.
-es_posterior() {
-  local desplegado="$1"
-  git rev-parse --verify --quiet "${desplegado}^{commit}" >/dev/null 2>&1 &&
-    git merge-base --is-ancestor "$SHA_ESPERADO" "$desplegado" 2>/dev/null
-}
 
 avisar_en_discord() {
   local mensaje="$1"
@@ -59,6 +38,53 @@ avisar_en_discord() {
   else
     echo "::warning::No se pudo avisar en Discord (revisar el secreto DISCORD_WEBHOOK_ALERTAS)."
   fi
+}
+
+# Toda salida con error deja un `::error` en GitHub y avisa en Discord, también
+# si el script se corta por algo inesperado (`set -e`).
+AVISADO=0
+fallar() {
+  local codigo="$1" titulo="$2" mensaje="$3"
+  AVISADO=1
+  echo "::error title=${titulo}::${mensaje}"
+  avisar_en_discord "$mensaje"
+  exit "$codigo"
+}
+al_salir() {
+  local codigo=$?
+  if [ "$codigo" -ne 0 ] && [ "$AVISADO" = 0 ]; then
+    AVISADO=1
+    local mensaje="La verificación de que producción tenga el commit de main se cortó con un error inesperado (código ${codigo}) y no llegó a comparar. Revisar el log del workflow Producción al día."
+    echo "::error title=Verificación de producción con error::${mensaje}"
+    avisar_en_discord "$mensaje" || true
+  fi
+}
+trap al_salir EXIT
+
+[ -n "$URL_SALUD" ] || fallar 2 "Verificación de producción mal configurada" "Falta URL_SALUD: no se sabe a qué /api/health consultar."
+if ! printf '%s' "$SHA_ESPERADO" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+  fallar 2 "Verificación de producción mal configurada" "SHA_ESPERADO no es un commit (7 a 40 caracteres hexadecimales): no se pudo comparar producción con main."
+fi
+# Hasta 6 dígitos y en base 10: `0080` son 80 s, no un número octal inválido.
+for nombre in PLAZO_SEGUNDOS INTERVALO_SEGUNDOS; do
+  if ! printf '%s' "${!nombre}" | grep -Eq '^[0-9]{1,6}$'; then
+    fallar 2 "Verificación de producción mal configurada" "${nombre} tiene que ser un número de segundos (hasta 6 dígitos): no se pudo comparar producción con main."
+  fi
+done
+PLAZO_SEGUNDOS=$((10#$PLAZO_SEGUNDOS))
+INTERVALO_SEGUNDOS=$((10#$INTERVALO_SEGUNDOS))
+[ "$INTERVALO_SEGUNDOS" -ge 1 ] || fallar 2 "Verificación de producción mal configurada" "INTERVALO_SEGUNDOS tiene que ser 1 o más: no se pudo comparar producción con main."
+
+esperado="$(printf '%s' "$SHA_ESPERADO" | tr 'A-F' 'a-f' | cut -c1-7)"
+inicio="$(date +%s)"
+ultimo="sin respuesta todavía"
+
+# ¿El commit desplegado es posterior al esperado? Sólo se puede saber con la
+# historia de git disponible (el workflow hace checkout); si no, se asume que no.
+es_posterior() {
+  local desplegado="$1"
+  git rev-parse --verify --quiet "${desplegado}^{commit}" >/dev/null 2>&1 &&
+    git merge-base --is-ancestor "$SHA_ESPERADO" "$desplegado" 2>/dev/null
 }
 
 while true; do
@@ -94,6 +120,4 @@ done
 
 if [ "$PLAZO_SEGUNDOS" -ge 60 ]; then espera="$(( PLAZO_SEGUNDOS / 60 )) min"; else espera="${PLAZO_SEGUNDOS} s"; fi
 mensaje="Producción no está al día: main está en ${esperado} y después de ${espera} ${URL_SALUD} responde ${ultimo}. Revisar en Vercel > Deployments que el proyecto siga conectado al repo y que el último deploy de main esté READY (docs/operacion/alertas.md)."
-echo "::error title=Producción desactualizada::${mensaje}"
-avisar_en_discord "$mensaje"
-exit 1
+fallar 1 "Producción desactualizada" "$mensaje"
