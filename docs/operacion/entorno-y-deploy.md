@@ -148,6 +148,35 @@ La configuración de Auth (confirmación de email, signups, duración del JWT) n
     si `mailer_autoconfirm` es `true` (cerrado ante la duda). No se hizo en SCRUM-495: hoy no hay invitaciones
     (nada las crea) y la parte B (SCRUM-499) es la que va a decidir cómo se invita.
 
+### Mails de autenticación: Resend como SMTP de Supabase Auth (SCRUM-16)
+
+Supabase Auth manda los mails de recuperar contraseña, confirmación e invitación. Su servidor por defecto sólo
+entrega a miembros del proyecto, así que en producción usa el SMTP de **Resend** (la misma cuenta que ya usa la
+app para bienvenida y waitlist: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`). Estado verificado el 2026-10-07 con el
+endpoint de arriba: `mailer_autoconfirm: true` y `disable_signup: false`.
+
+1. **Resend → Domains:** el dominio de `RESEND_FROM_EMAIL` tiene que figurar *Verified*.
+2. **Resend → API Keys:** crear una key aparte para Supabase (permiso *Sending access*, limitada a ese dominio).
+3. **Supabase → Authentication → Emails → SMTP Settings → Enable custom SMTP:**
+   - Sender email: el mismo remitente que `RESEND_FROM_EMAIL`.
+   - Sender name: `Limitless`.
+   - Host: `smtp.resend.com` · Port: `465` · Username: `resend` · Password: la key del paso 2.
+4. **Supabase → Authentication → Rate Limits:** "emails sent" en 30 por hora (el default con SMTP propio).
+5. **Supabase → Authentication → URL Configuration:**
+   - Site URL: `https://www.optimizatucontrol.com`.
+   - Redirect URLs: `https://www.optimizatucontrol.com/auth/callback**`.
+6. **Supabase → Authentication → Emails → Templates → Reset Password:**
+   - Asunto: `Recuperá tu contraseña de Limitless`.
+   - Link: `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery`.
+   - El link con `token_hash` lo verifica `/auth/callback` (`verifyOtp`) y funciona aunque el mail se abra en otro
+     dispositivo. El de `{{ .ConfirmationURL }}` usa PKCE y sólo anda en el mismo navegador que lo pidió.
+7. **Probar:**
+   - `/auth/forgot-password` con una cuenta real: el mail llega y el link lleva a `/auth/update-password`.
+   - Guardar la contraseña nueva y entrar con ella.
+8. **Recién con el paso 7 bien:** Authentication → Sign In / Providers → Email → prender **Confirm email**.
+   - El endpoint de arriba tiene que pasar a `mailer_autoconfirm: false`.
+   - Mientras siga en `true`, no agregar emails a `super_admin_users` sin crear antes la cuenta (regla de SCRUM-15).
+
 ## Migraciones en el deploy
 
 Vercel **no aplica migraciones**. El orden es: aplicar la migración en Supabase (reglas en `docs/arquitectura/base-de-datos.md`) y después mergear el código que la usa, o escribir el código tolerante a que la columna todavía no exista (`isMissingColumnError` en `lib/auth/bootstrap.ts`). El job `migrations` del CI garantiza que el set completo arma una base desde cero, no que esté aplicado en producción.

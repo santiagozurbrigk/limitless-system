@@ -65,7 +65,6 @@ Cada ítem es una bandera en `apps/web/lib/release/escondido.ts`; para volver a 
 
 | Qué se escondió | Por qué | Pendiente / fila | Bandera |
 |---|---|---|---|
-| "¿Olvidaste tu contraseña?" en los dos logins | El link no hace nada | `AUTH-RECUPERAR-PASSWORD` · F-PLA-03 | `olvideContrasena` |
 | Pestaña Notificaciones de Ajustes (`?tab=notificaciones` cae en General) | 9 interruptores que no mandan nada | F-PLA-19 | `ajustesNotificaciones` |
 | Pestaña Equipo de Closing (`#equipo` cae en Calendario) | El ranking sale siempre vacío | `CLOSER-AMOUNT-CLOSED` · F-VEN-14 | `closingEquipo` |
 | Recuadro "Vista previa" de Fathom en el turno (queda "Abrir en Fathom") | Placeholder sin función | — | `vistaPreviaFathomEnTurno` |
@@ -93,7 +92,7 @@ Doc técnico: [`docs/areas/plataforma.md`](./areas/plataforma.md) · permisos y 
 |---|---|---|---|---|---|
 | F-PLA-01 | El usuario puede entrar con email y contraseña; tras 5 intentos fallidos ese email queda bloqueado 15 minutos | Con fallas | `LOGIN-RATE-LIMIT`, `TESTS-AUTH` | [`arquitectura/auth-organizaciones-y-permisos.md` § Cómo fluye una request](./arquitectura/auth-organizaciones-y-permisos.md#cómo-fluye-una-request) · `app/login/page.tsx` | |
 | F-PLA-02 | Cualquiera puede crearse una cuenta founder (con su propia organización) desde "Crear cuenta" en el login | Con fallas | `SIGNUP-PUBLICO` | [`arquitectura/auth-organizaciones-y-permisos.md` § Alta de cuentas](./arquitectura/auth-organizaciones-y-permisos.md#alta-de-cuentas) · `components/auth/supabase-login-form.tsx` | |
-| F-PLA-03 | El usuario puede recuperar una contraseña olvidada | A medias | `AUTH-RECUPERAR-PASSWORD` | [`areas/plataforma.md` § Fuera de plataforma](./areas/plataforma.md#fuera-de-plataforma) · `components/auth/supabase-login-form.tsx` (el link "¿Olvidaste tu contraseña?" no hace nada; `app/auth/recover` y `app/auth/update-password` existen pero nada manda el mail) | |
+| F-PLA-03 | El usuario puede recuperar una contraseña olvidada: pide el mail en `/auth/forgot-password` (mensaje neutro) y elige una nueva desde el link | Sin verificar | — | [`areas/plataforma.md` § Fuera de plataforma](./areas/plataforma.md#fuera-de-plataforma) · `app/auth/forgot-password/page.tsx` | |
 | F-PLA-04 | Una cuenta creada por Limitless, por un holding o por el founder al sumar a alguien de su equipo entra con contraseña temporal, que vence a las 24 h, y está obligada a cambiarla en el primer ingreso | Funciona | — | [`arquitectura/auth-organizaciones-y-permisos.md` § Alta de cuentas](./arquitectura/auth-organizaciones-y-permisos.md#alta-de-cuentas) · `app/auth/force-password-change/page.tsx` | |
 | F-PLA-05 | El founder puede sumar a una persona a su equipo con un rol: el sistema crea la cuenta con contraseña temporal y le muestra las credenciales para que se las pase (no se manda mail; el flujo `/invite?token=` no tiene productor y, desde SCRUM-495, aceptar una invitación no crea cuentas: pide iniciar sesión con la cuenta de ese email) | Funciona | `INVITE-ROL-SIN-VALIDAR`, `ROL-MEMBER-SIN-CATALOGO` | [`arquitectura/auth-organizaciones-y-permisos.md` § Alta de cuentas](./arquitectura/auth-organizaciones-y-permisos.md#alta-de-cuentas) · `app/invite/page.tsx` | |
 | F-PLA-06 | El founder puede crear roles que definen, para cada uno de los 13 módulos, "sin acceso", "ver" o "completo", y asignarlos a su equipo | Con fallas | `PERMISOS-SERVER-ACTIONS`, `PERMISOS-VERIFICAR-SESION`, `ROL-MEMBER-SIN-CATALOGO` | [`arquitectura/auth-organizaciones-y-permisos.md` § Permisos por módulo](./arquitectura/auth-organizaciones-y-permisos.md#permisos-por-módulo) · `app/(platform)/team/page.tsx` | |
@@ -136,7 +135,6 @@ Doc técnico: [`docs/areas/plataforma.md`](./areas/plataforma.md) · permisos y 
 
 ### Legacy visible
 
-- Link "¿Olvidaste tu contraseña?" en `/login` y en `/superadmin/login` que no hace nada. **Escondido (SCRUM-490).**
 - Pestaña Notificaciones de Ajustes: nueve interruptores (cinco de mail, cuatro en la app) que se guardan y no disparan nada. **Escondida (SCRUM-490).**
 - `/redesign-preview`: pantalla interna de diseño, sin datos. **Cerrada, responde 404 (SCRUM-490).**
 - `/demo` y `/design-system` (tour estático y catálogo de componentes). **Cerradas, responden 404 (SCRUM-490).**

@@ -1234,3 +1234,15 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 5. Bot de Discord y reel-worker: forzar un error (por ejemplo, un job de reel con un archivo inexistente). Aparece en Sentry con `app=reel-worker` / `app=discord-bot`.
 6. Anotar fecha, quién recibió el mail y cuánto tardó.
 
+## Recuperar la contraseña (SCRUM-16)
+
+**Prerrequisitos:** Resend configurado como SMTP de Supabase Auth (`entorno-y-deploy.md` § Mails de autenticación, pasos 1-6).
+
+1. `/login` → "¿Olvidaste tu contraseña?" → poner el mail de una cuenta real → aparece el mensaje neutro.
+2. Llega el mail desde el remitente de Resend (revisar spam) con asunto "Recuperá tu contraseña de Limitless".
+3. Abrir el link, si se puede desde otro dispositivo: lleva a "Elegí tu contraseña nueva". Guardarla y entrar.
+4. Volver a abrir el mismo link: el login avisa que venció o ya se usó.
+5. Pedirlo con un mail sin cuenta: el mismo mensaje neutro y no llega nada.
+6. Pedirlo 4 veces seguidas con el mismo mail: la cuarta dice que hay demasiados intentos.
+7. Con todo bien, prender "Confirm email" (paso 8) y anotar acá la fecha.
+

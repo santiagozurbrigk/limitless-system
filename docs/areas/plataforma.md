@@ -237,7 +237,20 @@ acciones de Ajustes, `derive-dashboard-data.ts` (`[T-13]`). Sin e2e de onboardin
 ## Escondido para el release de octubre (SCRUM-490)
 
 Banderas en `apps/web/lib/release/escondido.ts` (detalle en `docs/FUNCIONAL.md` § Escondido para el release):
-el link "¿Olvidaste tu contraseña?" de los dos logins, la pestaña Notificaciones de Ajustes (`?tab=notificaciones`
+la pestaña Notificaciones de Ajustes (`?tab=notificaciones`
 cae en General), ManyChat en el catálogo de Integraciones (`listed` sale de la bandera), `/demo`, `/design-system`
 y `/redesign-preview` (un `layout.tsx` en cada una responde `notFound()`), `/lanzamientos` (redirige al Panel) y el
 "Recorrido guiado (demo)" del ⌘K y de la página 404. El ⌘K (`buildPlatformNavigation`) filtra los hijos `hidden`.
+
+## Recuperar la contraseña (SCRUM-16, 2026-10-07)
+
+"¿Olvidaste tu contraseña?" (login y super admin) lleva a `/auth/forgot-password`, pública. Ahí
+`requestPasswordResetAction` (`app/auth/actions.ts`):
+- valida el email y aplica dos límites: 3 por hora por email y 10 por hora por IP (`lib/auth/recuperar-contrasena.ts`);
+- llama a `supabase.auth.resetPasswordForEmail` con vuelta a `/auth/callback?type=recovery`;
+- responde siempre el mismo mensaje neutro, exista o no la cuenta y aunque Supabase falle.
+
+El link del mail pasa por `/auth/callback`, que acepta `token_hash` o `code`, y termina en `/auth/update-password`.
+Si el link venció o ya se usó, el login muestra `?error=link_vencido`. El mail sale por el SMTP de Resend
+configurado en Supabase Auth (`docs/operacion/entorno-y-deploy.md` § Mails de autenticación).
+

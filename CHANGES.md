@@ -34,6 +34,40 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-07 — "¿Olvidaste tu contraseña?" manda el mail de recuperación (SCRUM-16)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma / auth.
+- Archivos nuevos: `app/auth/forgot-password/` y `lib/auth/recuperar-contrasena.ts`.
+- Archivos tocados: `app/auth/actions.ts`, `app/auth/callback/route.ts`, `app/auth/update-password/page.tsx`,
+  `components/auth/supabase-login-form.tsx`, `components/auth/login-screen.tsx`, `routes/paths.ts`,
+  `lib/supabase/public-paths.ts` y `lib/release/escondido.ts`.
+
+**Qué se hizo:**
+- Pantalla pública `/auth/forgot-password`. Pide el mail y llama a `requestPasswordResetAction`, que:
+  - valida el email;
+  - aplica dos límites: 3/h por email y 10/h por IP;
+  - llama a `resetPasswordForEmail` con vuelta a `/auth/callback?type=recovery`;
+  - responde siempre el mismo mensaje neutro.
+- El callback avisa `?error=link_vencido` cuando un link de recuperación venció o ya se usó.
+- El link del login vuelve a mostrarse (bandera `olvideContrasena` en `false`) y lleva a la pantalla nueva.
+- Tests: `app/auth/__tests__/recuperar-contrasena.test.ts` (4) y `lib/auth/__tests__/recuperar-contrasena.test.ts` (3).
+- Doc del paso a paso para conectar Resend como SMTP de Supabase Auth, con la plantilla del mail con `token_hash`
+  para que el link funcione desde otro dispositivo, y el orden para prender "Confirm email" después
+  (`docs/operacion/entorno-y-deploy.md`). Cierra `[AUTH-RECUPERAR-PASSWORD]`.
+
+**Por qué / finalidad:** quien olvidaba la contraseña quedaba afuera hasta que alguien se la reseteara a mano.
+
+**Decisiones de diseño relevantes:** el mensaje neutro no deja averiguar qué emails tienen cuenta, tampoco cuando
+Supabase falla. El PR se mergea después de configurar el SMTP, porque sin eso el mail no sale.
+
+**Riesgos / deuda técnica pendiente:**
+- Hasta probarlo con una cuenta real queda "Sin verificar" (`verificacion-manual.md` § Recuperar la contraseña).
+- "Confirm email" sigue apagado (`mailer_autoconfirm: true`, verificado el 2026-10-07): se prende después de la prueba.
+
+---
+
 ### 2026-10-06 · Auth, Clientes, Equipo y Closing devuelven sus errores esperables como valor (SCRUM-497)
 
 **Rama:** `fix/SCRUM-497-errores-esperables-release`

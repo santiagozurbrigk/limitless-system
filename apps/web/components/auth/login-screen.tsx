@@ -149,9 +149,8 @@ export function LoginScreen({
         {showForgotPassword && !ESCONDIDO.olvideContrasena && (
           <p className="text-center">
             <Link
-              href="#"
+              href={paths.auth.forgotPassword}
               className="text-xs text-muted-foreground hover:text-foreground"
-              onClick={(e) => e.preventDefault()}
             >
               ¿Olvidaste tu contraseña?
             </Link>

@@ -4,6 +4,7 @@ import { isSuperAdminEmail } from "@/lib/auth/require-super-admin";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import { destinoSeguro } from "@/lib/auth/redirect-seguro";
+import { LINK_RECUPERACION_VENCIDO_QUERY } from "@/lib/auth/recuperar-contrasena";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -50,5 +51,7 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.redirect(`${origin}${paths.auth.login}?error=auth_callback`);
+  // Un link de recuperación vencido o ya usado tiene su propio aviso (SCRUM-16).
+  const motivo = type === "recovery" ? LINK_RECUPERACION_VENCIDO_QUERY : "auth_callback";
+  return NextResponse.redirect(`${origin}${paths.auth.login}?error=${motivo}`);
 }
