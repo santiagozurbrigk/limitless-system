@@ -1,4 +1,5 @@
 import { Client } from "@upstash/qstash";
+import { anotarOrganizacion } from "@/lib/observability/corrida-en-curso";
 
 export type RagIngestionJobPayload = {
   documentId: string;
@@ -115,14 +116,18 @@ export async function publishCronFanout(
     )
   );
 
-  for (const result of results) {
+  // Dentro de la corrida de un cron, cada org queda anotada en el registro de
+  // corridas (SCRUM-85): con su job publicado, procesada; si no, fallida.
+  results.forEach((result, i) => {
     if (result.status === "fulfilled") {
       published++;
+      anotarOrganizacion(orgIds[i], "ok");
     } else {
       failed++;
+      anotarOrganizacion(orgIds[i], "fallo");
       console.error("[Queue] publishCronFanout: job no publicado", result.reason);
     }
-  }
+  });
 
   return { published, failed };
 }
