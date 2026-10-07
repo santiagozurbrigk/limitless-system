@@ -76,6 +76,10 @@ begin
     raise exception 'FALLA: el service role no pudo abrir y cerrar una corrida';
   end if;
 
+  -- Un cron con fan-out cierra como encolado, con sus jobs.
+  insert into public.corridas_de_procesos (proceso, fin, estado, orgs_procesadas, orgs_fallidas, jobs_encolados)
+  values ('/api/cron/intelligence-snapshot', now(), 'encolado', 3, 0, 3);
+
   insert into public.corridas_de_procesos (proceso, inicio, fin, estado)
   values ('/api/cron/calendly-sync', now() - interval '31 days', now() - interval '31 days', 'fallo');
   delete from public.corridas_de_procesos
@@ -124,6 +128,12 @@ begin
     insert into public.corridas_de_procesos (proceso, fin, estado, organizaciones_fallidas)
     values ('/api/cron/ghl-sync', now(), 'parcial', array['90000000-0000-0000-0000-000000000a00'::uuid]);
     raise exception 'FALLA: se aceptaron ids de orgs fallidas sin la cuenta';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.corridas_de_procesos (proceso, fin, estado, orgs_procesadas, jobs_encolados)
+    values ('/api/cron/ghl-sync', now(), 'encolado', 2, 3);
+    raise exception 'FALLA: se aceptaron más jobs encolados que orgs procesadas';
   exception when check_violation then null;
   end;
   begin

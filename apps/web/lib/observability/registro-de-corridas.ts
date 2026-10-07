@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { conPlazo } from "@/lib/observability/con-plazo";
 import {
@@ -17,11 +18,18 @@ import { errorParaReportar } from "@/lib/observability/reportar-falla";
  * `conRegistroDeCorrida`: abre la fila en `en_curso`, corre el cron y la cierra
  * con su estado. Una fila que queda en `en_curso` es una corrida que se cortó.
  *
+ * El `id` se genera acá antes de abrir y el cierre es un upsert por ese `id`.
+ * Si la apertura vence en el cliente pero la base la guarda igual, el cierre
+ * cae en la misma fila en vez de dejar otra `en_curso` para siempre.
+ *
  * Estado al cerrar:
  *   - `fallo`: el cron lanzó o respondió 5xx (el mismo criterio que el monitor
  *     de Sentry);
  *   - `parcial`: respondió bien pero alguna organización falló (las anota
- *     `reportarFalla` o `publishCronFanout`, ver `corrida-en-curso.ts`);
+ *     `reportarFalla`, o `publishCronFanout` con un job que no se pudo
+ *     publicar; ver `corrida-en-curso.ts`);
+ *   - `encolado`: un cron con fan-out publicó todos sus jobs. No dice que los
+ *     workers hayan terminado bien: lo que hagan va a Sentry;
  *   - `ok`: el resto.
  *
  * Registrar nunca rompe el cron: cada escritura tiene plazo y cualquier error
@@ -36,12 +44,12 @@ export const PLAZO_DEL_REGISTRO_MS = 2000;
 const LARGO_MAXIMO_DEL_ERROR = 300;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type EstadoDeCorrida = "en_curso" | "ok" | "fallo" | "parcial";
+export type EstadoDeCorrida = "en_curso" | "ok" | "encolado" | "fallo" | "parcial";
 export type EstadoDeCierre = Exclude<EstadoDeCorrida, "en_curso">;
 
 export type CierreDeCorrida = {
-  /** La fila que se abrió al empezar; `null` si no se pudo abrir (se inserta entera). */
-  id: string | null;
+  /** Generado antes de abrir: la apertura y el cierre van a la misma fila. */
+  id: string;
   proceso: string;
   inicio: Date;
   fin: Date;
@@ -50,20 +58,32 @@ export type CierreDeCorrida = {
   orgsProcesadas: number | null;
   orgsFallidas: number | null;
   organizacionesFallidas: string[];
+  /** Jobs de QStash publicados en un cron con fan-out; `null` sin fan-out. */
+  jobsEncolados: number | null;
   error: string | null;
 };
 
 /** Dónde se guardan las corridas. Los tests pasan uno en memoria. */
 export type AlmacenDeCorridas = {
-  abrir(proceso: string, inicio: Date, signal: AbortSignal): Promise<string | null>;
+  abrir(id: string, proceso: string, inicio: Date, signal: AbortSignal): Promise<void>;
+  /** Upsert por `id`: actualiza la fila abierta o la inserta entera si no llegó a abrirse. */
   cerrar(cierre: CierreDeCorrida, signal: AbortSignal): Promise<void>;
   borrarViejas(proceso: string, antesDe: Date, signal: AbortSignal): Promise<void>;
 };
 
-export function estadoDeCierre(fallo: boolean, orgsFallidas: number): EstadoDeCierre {
+export function estadoDeCierre(fallo: boolean, orgsFallidas: number, jobsEncolados: number | null = null): EstadoDeCierre {
   if (fallo) return "fallo";
-  return orgsFallidas > 0 ? "parcial" : "ok";
+  if (orgsFallidas > 0) return "parcial";
+  return jobsEncolados ? "encolado" : "ok";
 }
+
+/**
+ * Una clave que nombra un secreto, también compuesta (`client_secret`,
+ * `x-api-key`, `id_token`, `webhookSecret`), seguida de `=` o `:` (query,
+ * JSON o encabezado). El valor se oculta hasta el próximo separador.
+ */
+const CLAVE_CON_VALOR =
+  /([\w-]*(?:secret|token|password|passwd|contrase(?:n|ñ)a|api[_-]?key|authorization|credentials?|signature)[\w-]*)(["']?\s*[:=]\s*["']?)(?!\[oculto\])[^\s"'&,;}]+/gi;
 
 /**
  * El texto de un error, apto para guardarse en una tabla que lee el staff: sin
@@ -72,13 +92,11 @@ export function estadoDeCierre(fallo: boolean, orgsFallidas: number): EstadoDeCi
  */
 export function mensajeDeErrorSaneado(error: unknown): string {
   const { error: comoError } = errorParaReportar(error);
-  const limpio = nombreSinQuery(comoError.message || "Error sin mensaje")
+  // Se corta antes de buscar: un mensaje enorme no tiene por qué recorrerse entero.
+  const limpio = nombreSinQuery((comoError.message || "Error sin mensaje").slice(0, 2000))
     .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[email]")
     .replace(/\b(bearer|basic)\s+\S+/gi, "$1 [oculto]")
-    .replace(
-      /\b(api[_-]?key|apikey|token|access[_-]?token|refresh[_-]?token|secret|password|contrase(?:n|ñ)a|authorization)(["']?\s*[:=]\s*)\S+/gi,
-      "$1$2[oculto]"
-    )
+    .replace(CLAVE_CON_VALOR, "$1$2[oculto]")
     .replace(/\beyJ[\w-]+\.[\w-]+(?:\.[\w-]+)?/g, "[oculto]")
     .replace(/\b(?:sk|pk|rk|whsec|sb_secret|sb_publishable)[-_][\w-]{8,}/g, "[oculto]")
     .replace(/[A-Za-z0-9_+=]{32,}/g, "[oculto]")
@@ -94,15 +112,20 @@ export function organizacionesDeLaCorrida(anotaciones: AnotacionesDeCorrida): {
   orgsProcesadas: number | null;
   orgsFallidas: number | null;
   organizacionesFallidas: string[];
+  jobsEncolados: number | null;
 } {
   if (anotaciones.procesadas.size === 0) {
-    return { orgsProcesadas: null, orgsFallidas: null, organizacionesFallidas: [] };
+    return { orgsProcesadas: null, orgsFallidas: null, organizacionesFallidas: [], jobsEncolados: null };
   }
   return {
     orgsProcesadas: anotaciones.procesadas.size,
     orgsFallidas: anotaciones.fallidas.size,
     // La columna es uuid[]: un id que no lo es contaría pero no se lista.
     organizacionesFallidas: [...anotaciones.fallidas].filter((id) => UUID.test(id)),
+    // Una org que falló en otro paso no cuenta como encolada.
+    jobsEncolados: anotaciones.fanOut
+      ? [...anotaciones.encoladas].filter((id) => !anotaciones.fallidas.has(id)).length
+      : null,
   };
 }
 
@@ -140,10 +163,12 @@ export async function conRegistroDeCorrida(
   proceso: string,
   ejecutar: () => Promise<Response>,
   almacen: AlmacenDeCorridas = almacenEnLaBase,
-  ahora: () => Date = () => new Date()
+  ahora: () => Date = () => new Date(),
+  nuevoId: () => string = randomUUID
 ): Promise<Response> {
   const inicio = ahora();
-  const id = await sinRomper("abrir la corrida", (signal) => almacen.abrir(proceso, inicio, signal), null);
+  const id = nuevoId();
+  await sinRomper("abrir la corrida", (signal) => almacen.abrir(id, proceso, inicio, signal), undefined);
   const anotaciones = nuevasAnotaciones();
 
   const cerrar = async (fallo: boolean, error: string | null) => {
@@ -153,7 +178,7 @@ export async function conRegistroDeCorrida(
       proceso,
       inicio,
       fin: ahora(),
-      estado: estadoDeCierre(fallo, organizaciones.orgsFallidas ?? 0),
+      estado: estadoDeCierre(fallo, organizaciones.orgsFallidas ?? 0, organizaciones.jobsEncolados),
       ...organizaciones,
       error,
     };
@@ -184,32 +209,38 @@ function lanzarSiHayError(error: { message: string } | null): void {
 
 /** El registro real: `corridas_de_procesos` con el cliente admin. */
 export const almacenEnLaBase: AlmacenDeCorridas = {
-  async abrir(proceso, inicio, signal) {
-    const { data, error } = await createAdminClient()
+  async abrir(id, proceso, inicio, signal) {
+    // Si el cierre llegó antes (esta apertura venció y se escribió tarde), el
+    // id ya existe: no se pisa la fila cerrada.
+    const { error } = await createAdminClient()
       .from(TABLA_DE_CORRIDAS)
-      .insert({ proceso, inicio: inicio.toISOString(), estado: "en_curso" })
-      .select("id")
-      .abortSignal(signal)
-      .single<{ id: string }>();
+      .upsert(
+        { id, proceso, inicio: inicio.toISOString(), estado: "en_curso" },
+        { onConflict: "id", ignoreDuplicates: true }
+      )
+      .abortSignal(signal);
     lanzarSiHayError(error);
-    return data?.id ?? null;
   },
 
   async cerrar(cierre, signal) {
-    const fila = {
-      fin: cierre.fin.toISOString(),
-      estado: cierre.estado,
-      orgs_procesadas: cierre.orgsProcesadas,
-      orgs_fallidas: cierre.orgsFallidas,
-      organizaciones_fallidas: cierre.organizacionesFallidas,
-      error: cierre.error,
-    };
-    const tabla = createAdminClient().from(TABLA_DE_CORRIDAS);
-    const { error } = cierre.id
-      ? await tabla.update(fila).eq("id", cierre.id).abortSignal(signal)
-      : await tabla
-          .insert({ ...fila, proceso: cierre.proceso, inicio: cierre.inicio.toISOString() })
-          .abortSignal(signal);
+    const { error } = await createAdminClient()
+      .from(TABLA_DE_CORRIDAS)
+      .upsert(
+        {
+          id: cierre.id,
+          proceso: cierre.proceso,
+          inicio: cierre.inicio.toISOString(),
+          fin: cierre.fin.toISOString(),
+          estado: cierre.estado,
+          orgs_procesadas: cierre.orgsProcesadas,
+          orgs_fallidas: cierre.orgsFallidas,
+          organizaciones_fallidas: cierre.organizacionesFallidas,
+          jobs_encolados: cierre.jobsEncolados,
+          error: cierre.error,
+        },
+        { onConflict: "id" }
+      )
+      .abortSignal(signal);
     lanzarSiHayError(error);
   },
 

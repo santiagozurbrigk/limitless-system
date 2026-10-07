@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * SCRUM-85 · los 6 crons que publican un job por org quedan con sus orgs en el
- * registro de corridas: la org con su job publicado cuenta como procesada; la
- * que no se pudo publicar, como fallida.
+ * registro de corridas: la org con su job publicado queda encolada (no
+ * terminada: el worker reporta a Sentry); la que no se pudo publicar, fallida.
  */
 
 const sim = vi.hoisted(() => ({ rechazadas: new Set<string>() }));
@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 describe("publishCronFanout dentro de la corrida de un cron", () => {
-  it("⭐ anota cada org: publicada = procesada, no publicada = fallida", async () => {
+  it("⭐ anota cada org: publicada = encolada, no publicada = fallida", async () => {
     sim.rechazadas.add("org-b");
     const anotaciones = nuevasAnotaciones();
     const resultado = await correrEnCorrida(anotaciones, () =>
@@ -42,6 +42,8 @@ describe("publishCronFanout dentro de la corrida de un cron", () => {
     expect(resultado).toEqual({ published: 2, failed: 1 });
     expect([...anotaciones.procesadas].sort()).toEqual(["org-a", "org-b", "org-c"]);
     expect([...anotaciones.fallidas]).toEqual(["org-b"]);
+    expect([...anotaciones.encoladas].sort()).toEqual(["org-a", "org-c"]);
+    expect(anotaciones.fanOut).toBe(true);
   });
 
   it("fuera de un cron publica igual y no anota nada", async () => {

@@ -15,6 +15,7 @@ const sim = vi.hoisted(() => ({
   borrados: [] as { proceso: unknown; antesDe: unknown }[],
   /** Qué hace la base: `ok`, `error` (responde con error) o `colgada` (no responde nunca). */
   base: "ok" as "ok" | "error" | "colgada",
+  aperturaLentaMs: 0,
   checkIns: [] as { status: string }[],
 }));
 
@@ -30,17 +31,31 @@ vi.mock("@sentry/nextjs", () => ({
 }));
 
 /**
- * Lo mínimo del cliente de supabase-js que usa `almacenEnLaBase`: insert,
- * update y delete sobre `corridas_de_procesos`, con `abortSignal`.
+ * Lo mínimo del cliente de supabase-js que usa `almacenEnLaBase`: upsert por
+ * `id` y delete sobre `corridas_de_procesos`, con `abortSignal`. Con
+ * `sim.aperturaLentaMs`, la apertura se escribe en la "base" pasado ese tiempo
+ * aunque el cliente ya la haya abortado (lo que hace PostgREST si el INSERT ya
+ * llegó).
  */
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from(tabla: string) {
       expect(tabla).toBe("corridas_de_procesos");
       const filtros: Record<string, unknown> = {};
-      let operacion: { tipo: "insert" | "update" | "delete"; fila?: Record<string, unknown> } | null =
-        null;
+      let operacion:
+        | { tipo: "upsert"; fila: Record<string, unknown>; ignorarDuplicados: boolean }
+        | { tipo: "delete" }
+        | null = null;
       let senal: AbortSignal | null = null;
+
+      const escribir = (fila: Record<string, unknown>, ignorarDuplicados: boolean) => {
+        const existente = sim.filas.find((f) => f.id === fila.id);
+        if (existente) {
+          if (!ignorarDuplicados) Object.assign(existente, fila);
+        } else {
+          sim.filas.push({ ...(fila as Fila) });
+        }
+      };
 
       const ejecutar = (): Promise<{ data: unknown; error: { message: string } | null }> => {
         if (sim.base === "colgada") {
@@ -54,14 +69,15 @@ vi.mock("@/lib/supabase/admin", () => ({
             error: { message: 'relation "public.corridas_de_procesos" does not exist' },
           });
         }
-        if (operacion?.tipo === "insert") {
-          const fila = { id: `corrida-${sim.filas.length + 1}`, ...operacion.fila };
-          sim.filas.push(fila);
-          return Promise.resolve({ data: { id: fila.id }, error: null });
-        }
-        if (operacion?.tipo === "update") {
-          const fila = sim.filas.find((f) => f.id === filtros.id);
-          if (fila) Object.assign(fila, operacion.fila);
+        if (operacion?.tipo === "upsert") {
+          const { fila, ignorarDuplicados } = operacion;
+          if (sim.aperturaLentaMs > 0 && fila.estado === "en_curso") {
+            setTimeout(() => escribir(fila, ignorarDuplicados), sim.aperturaLentaMs);
+            return new Promise((_, rechazar) =>
+              senal?.addEventListener("abort", () => rechazar(new Error("AbortError")))
+            );
+          }
+          escribir(fila, ignorarDuplicados);
           return Promise.resolve({ data: null, error: null });
         }
         sim.borrados.push({ proceso: filtros.proceso, antesDe: filtros.inicio_lt });
@@ -69,19 +85,15 @@ vi.mock("@/lib/supabase/admin", () => ({
       };
 
       const builder = {
-        insert(fila: Record<string, unknown>) {
-          operacion = { tipo: "insert", fila };
-          return builder;
-        },
-        update(fila: Record<string, unknown>) {
-          operacion = { tipo: "update", fila };
+        upsert(fila: Record<string, unknown>, opciones: { onConflict?: string; ignoreDuplicates?: boolean }) {
+          expect(opciones.onConflict).toBe("id");
+          operacion = { tipo: "upsert", fila, ignorarDuplicados: Boolean(opciones.ignoreDuplicates) };
           return builder;
         },
         delete() {
           operacion = { tipo: "delete" };
           return builder;
         },
-        select: () => builder,
         eq(columna: string, valor: unknown) {
           filtros[columna] = valor;
           return builder;
@@ -94,7 +106,6 @@ vi.mock("@/lib/supabase/admin", () => ({
           senal = signal;
           return builder;
         },
-        single: () => ejecutar(),
         then<T>(
           resolver: (valor: { data: unknown; error: { message: string } | null }) => T,
           rechazar?: (error: unknown) => T
@@ -107,7 +118,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
-import { anotarOrganizacion } from "../corrida-en-curso";
+import { anotarJobDeOrganizacion, anotarOrganizacion } from "../corrida-en-curso";
 import { conMonitorDeCron } from "../cron-monitor";
 import {
   conRegistroDeCorrida,
@@ -125,13 +136,12 @@ const ORG_C = "0c000000-0000-4000-8000-000000000003";
 
 /** Un almacén en memoria para probar la lógica sin el cliente de supabase-js. */
 function almacenEnMemoria() {
-  const abiertas: { proceso: string; inicio: Date }[] = [];
+  const abiertas: { id: string; proceso: string; inicio: Date }[] = [];
   const cierres: CierreDeCorrida[] = [];
   const borrados: { proceso: string; antesDe: Date }[] = [];
   const almacen: AlmacenDeCorridas = {
-    abrir: async (proceso, inicio) => {
-      abiertas.push({ proceso, inicio });
-      return `id-${abiertas.length}`;
+    abrir: async (id, proceso, inicio) => {
+      abiertas.push({ id, proceso, inicio });
     },
     cerrar: async (cierre) => {
       cierres.push(cierre);
@@ -149,6 +159,7 @@ beforeEach(() => {
   sim.filas = [];
   sim.borrados = [];
   sim.base = "ok";
+  sim.aperturaLentaMs = 0;
   sim.checkIns = [];
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -164,6 +175,10 @@ describe("estadoDeCierre", () => {
     expect(estadoDeCierre(true, 3)).toBe("fallo");
     expect(estadoDeCierre(false, 1)).toBe("parcial");
     expect(estadoDeCierre(false, 0)).toBe("ok");
+    // Fan-out: con jobs encolados nunca es ok; con alguno sin publicar, parcial.
+    expect(estadoDeCierre(false, 0, 3)).toBe("encolado");
+    expect(estadoDeCierre(false, 1, 2)).toBe("parcial");
+    expect(estadoDeCierre(false, 0, 0)).toBe("ok");
   });
 });
 
@@ -177,14 +192,17 @@ describe("conRegistroDeCorrida", () => {
         anotarOrganizacion(ORG_B, "ok");
         return Response.json({ ok: true });
       },
-      almacen
+      almacen,
+      undefined,
+      () => "id-1"
     );
 
     expect(respuesta.status).toBe(200);
-    expect(abiertas).toEqual([{ proceso: RUTA, inicio: expect.any(Date) }]);
+    expect(abiertas).toEqual([{ id: "id-1", proceso: RUTA, inicio: expect.any(Date) }]);
     expect(cierres).toHaveLength(1);
     expect(cierres[0]).toMatchObject({
       id: "id-1",
+      jobsEncolados: null,
       proceso: RUTA,
       estado: "ok",
       orgsProcesadas: 2,
@@ -314,6 +332,45 @@ describe("conRegistroDeCorrida", () => {
     expect(porProceso["/api/cron/b"]).toMatchObject({ estado: "ok", orgsProcesadas: 1, orgsFallidas: 0 });
   });
 
+  it("⭐ un cron con fan-out cierra como encolado con sus jobs, no como ok", async () => {
+    const { almacen, cierres } = almacenEnMemoria();
+    await conRegistroDeCorrida(
+      RUTA,
+      async () => {
+        anotarJobDeOrganizacion(ORG_A, true);
+        anotarJobDeOrganizacion(ORG_B, true);
+        return Response.json({ ok: true });
+      },
+      almacen
+    );
+    expect(cierres[0]).toMatchObject({
+      estado: "encolado",
+      orgsProcesadas: 2,
+      orgsFallidas: 0,
+      jobsEncolados: 2,
+    });
+  });
+
+  it("fan-out con un job sin publicar: parcial, con la org y los jobs que sí salieron", async () => {
+    const { almacen, cierres } = almacenEnMemoria();
+    await conRegistroDeCorrida(
+      RUTA,
+      async () => {
+        anotarJobDeOrganizacion(ORG_A, true);
+        anotarJobDeOrganizacion(ORG_B, false);
+        return Response.json({ ok: true });
+      },
+      almacen
+    );
+    expect(cierres[0]).toMatchObject({
+      estado: "parcial",
+      orgsProcesadas: 2,
+      orgsFallidas: 1,
+      organizacionesFallidas: [ORG_B],
+      jobsEncolados: 1,
+    });
+  });
+
   it("anotar fuera de una corrida no hace nada ni lanza", () => {
     expect(() => anotarOrganizacion(ORG_A, "fallo")).not.toThrow();
   });
@@ -340,7 +397,7 @@ describe("conRegistroDeCorrida", () => {
 
     it("si el cron lanza y el registro también, sale el error del cron", async () => {
       const almacen: AlmacenDeCorridas = {
-        abrir: async () => null,
+        abrir: async () => {},
         cerrar: async () => {
           throw new Error("del registro");
         },
@@ -372,7 +429,7 @@ describe("conRegistroDeCorrida", () => {
       expect((await corrida).status).toBe(200);
     });
 
-    it("sin fila abierta (abrir falló) el cierre inserta la corrida entera", async () => {
+    it("si abrir falló, el cierre lleva la corrida entera con el mismo id", async () => {
       const cierres: CierreDeCorrida[] = [];
       const almacen: AlmacenDeCorridas = {
         abrir: async () => {
@@ -383,8 +440,8 @@ describe("conRegistroDeCorrida", () => {
         },
         borrarViejas: async () => {},
       };
-      await conRegistroDeCorrida(RUTA, async () => Response.json({}), almacen);
-      expect(cierres[0]).toMatchObject({ id: null, proceso: RUTA, estado: "ok" });
+      await conRegistroDeCorrida(RUTA, async () => Response.json({}), almacen, undefined, () => "id-x");
+      expect(cierres[0]).toMatchObject({ id: "id-x", proceso: RUTA, estado: "ok", inicio: expect.any(Date) });
     });
   });
 });
@@ -429,6 +486,41 @@ describe("conMonitorDeCron registra en corridas_de_procesos", () => {
     expect(sim.borrados).toEqual([{ proceso: RUTA, antesDe: expect.any(String) }]);
     // El monitor de Sentry sigue igual: el cron respondió bien.
     expect(sim.checkIns.map((c) => c.status)).toEqual(["in_progress", "ok"]);
+  });
+
+  it("⭐ una apertura que vence en el cliente pero la base guarda igual no deja una fila en_curso fantasma", async () => {
+    vi.useFakeTimers();
+    // La base escribe la apertura a los 2,5 s; el cliente la abandona a los 2 s.
+    sim.aperturaLentaMs = PLAZO_DEL_REGISTRO_MS + 500;
+    const cron = conMonitorDeCron(RUTA, async () => Response.json({ ok: true }));
+    const corrida = cron(pedido(`Bearer ${SECRETO}`));
+    await vi.advanceTimersByTimeAsync(PLAZO_DEL_REGISTRO_MS);
+    // El cron terminó y cerró antes de que llegara la apertura tardía.
+    expect((await corrida).status).toBe(200);
+    expect(sim.filas).toHaveLength(1);
+    expect(sim.filas[0].estado).toBe("ok");
+    await vi.advanceTimersByTimeAsync(1000);
+    // La apertura tardía cayó sobre la misma fila y no la pisó.
+    expect(sim.filas).toHaveLength(1);
+    expect(sim.filas[0]).toMatchObject({ proceso: RUTA, estado: "ok" });
+    expect(typeof sim.filas[0].fin).toBe("string");
+  });
+
+  it("una apertura tardía que llega antes del cierre queda cerrada por el upsert del mismo id", async () => {
+    vi.useFakeTimers();
+    sim.aperturaLentaMs = PLAZO_DEL_REGISTRO_MS + 500;
+    const cron = conMonitorDeCron(RUTA, async () => {
+      // El cron dura más que la apertura tardía.
+      await new Promise((r) => setTimeout(r, 2000));
+      return Response.json({ ok: true });
+    });
+    const corrida = cron(pedido(`Bearer ${SECRETO}`));
+    await vi.advanceTimersByTimeAsync(PLAZO_DEL_REGISTRO_MS + 600);
+    expect(sim.filas).toEqual([expect.objectContaining({ estado: "en_curso" })]);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect((await corrida).status).toBe(200);
+    expect(sim.filas).toHaveLength(1);
+    expect(sim.filas[0]).toMatchObject({ estado: "ok" });
   });
 
   it("un pedido sin credencial no es una corrida: no se registra", async () => {
@@ -480,6 +572,31 @@ describe("mensajeDeErrorSaneado", () => {
     ]) {
       expect(texto).not.toContain(sensible);
     }
+  });
+
+  it.each([
+    ["query suelta", "el proveedor rechazó code=1&client_secret=shh123&refresh_token=rt-999", ["shh123", "rt-999"]],
+    ["form", "client_secret=shh123 webhook_secret=wh-777 id_token=idt-555", ["shh123", "wh-777", "idt-555"]],
+    [
+      "JSON",
+      '{"access_token":"at-111","api_key": "ak-222","clientSecret":"cs-333","x_refresh_token":"rt-444"}',
+      ["at-111", "ak-222", "cs-333", "rt-444"],
+    ],
+    ["encabezados", "x-api-key: ak-888, X-Webhook-Secret: ws-999", ["ak-888", "ws-999"]],
+    ["sufijos y mayúsculas", "API_KEY=ak1 Access-Token=at2 PASSWORD : pw3 signature=sg4", ["ak1", "at2", "pw3", "sg4"]],
+  ])("⭐ oculta los valores de claves compuestas en %s", (_caso, texto, secretos) => {
+    const limpio = mensajeDeErrorSaneado(new Error(texto));
+    for (const secreto of secretos) expect(limpio, secreto).not.toContain(secreto);
+    expect(limpio).toContain("[oculto]");
+  });
+
+  it("la query pegada a una URL se va entera", () => {
+    const limpio = mensajeDeErrorSaneado(new Error("fallo en /oauth?code=1&client_secret=shh123"));
+    expect(limpio).toBe("fallo en /oauth");
+  });
+
+  it("no oculta texto que sólo menciona la palabra", () => {
+    expect(mensajeDeErrorSaneado(new Error("token vencido para la org"))).toBe("token vencido para la org");
   });
 
   it("acepta el objeto de error de supabase-js y corta a 300 caracteres", () => {

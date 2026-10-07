@@ -3,9 +3,17 @@
 -- Una fila por corrida de cada cron de `apps/web/vercel.json`. La escribe
 -- `conMonitorDeCron` (`lib/observability/cron-monitor.ts`), el punto por donde
 -- pasan los 19 crons: abre la fila en `en_curso` al empezar y la cierra con
--- `ok`, `fallo` o `parcial` al terminar. Una fila que se queda en `en_curso`
--- es una corrida que se cortó (por ejemplo, el plazo de 60 s de Vercel) o que
--- sigue colgada: la página de Infraestructura del super admin la muestra así.
+-- `ok`, `encolado`, `fallo` o `parcial` al terminar. El `id` lo genera el código
+-- antes de abrir y el cierre es un upsert por ese `id`: una apertura que vence
+-- en el cliente pero llega a escribirse cae en la misma fila que el cierre.
+-- Una fila que se queda en `en_curso` es una corrida que se cortó (por
+-- ejemplo, el plazo de 60 s de Vercel) o que sigue colgada: la página de
+-- Infraestructura del super admin la muestra así.
+--
+-- `encolado`: un cron con fan-out publicó un job de QStash por cada org y
+-- ninguno falló al publicarse. No dice que los workers hayan terminado bien:
+-- sus fallas van a Sentry (`/api/queue/failure`). `jobs_encolados` cuenta esos
+-- jobs; es nulo en los crons sin fan-out.
 --
 -- Columnas de organizaciones: `orgs_procesadas` y `orgs_fallidas` son nulas
 -- cuando el proceso no informa sus organizaciones (hoy lo hacen los que publican
@@ -26,9 +34,10 @@ create table if not exists public.corridas_de_procesos (
   inicio timestamptz not null default now(),
   fin timestamptz,
   estado text not null default 'en_curso'
-    check (estado in ('en_curso', 'ok', 'fallo', 'parcial')),
+    check (estado in ('en_curso', 'ok', 'encolado', 'fallo', 'parcial')),
   orgs_procesadas integer check (orgs_procesadas >= 0),
   orgs_fallidas integer check (orgs_fallidas >= 0),
+  jobs_encolados integer check (jobs_encolados >= 0),
   organizaciones_fallidas uuid[] not null default '{}',
   error text check (char_length(error) <= 500),
   constraint corridas_de_procesos_fin_segun_estado
@@ -38,11 +47,13 @@ create table if not exists public.corridas_de_procesos (
   constraint corridas_de_procesos_fallidas_dentro_de_procesadas
     check (orgs_fallidas is null or orgs_procesadas is null or orgs_fallidas <= orgs_procesadas),
   constraint corridas_de_procesos_ids_dentro_de_fallidas
-    check (cardinality(organizaciones_fallidas) <= coalesce(orgs_fallidas, 0))
+    check (cardinality(organizaciones_fallidas) <= coalesce(orgs_fallidas, 0)),
+  constraint corridas_de_procesos_encolados_dentro_de_procesadas
+    check (jobs_encolados is null or jobs_encolados <= coalesce(orgs_procesadas, 0))
 );
 
 comment on table public.corridas_de_procesos is
-  'Una fila por corrida de cada cron de vercel.json: inicio, fin, estado (en_curso, ok, fallo, parcial) y organizaciones fallidas. Retención de 30 días.';
+  'Una fila por corrida de cada cron de vercel.json: inicio, fin, estado (en_curso, ok, encolado, fallo, parcial), organizaciones fallidas y jobs encolados en los crons con fan-out. Retención de 30 días.';
 
 -- La última corrida de cada proceso y la retención por proceso.
 create index if not exists corridas_de_procesos_proceso_inicio
