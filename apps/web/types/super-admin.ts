@@ -206,6 +206,29 @@ export type InfrastructureStats = {
   aiBrainDocuments: number;
 };
 
+/** Última corrida de un cron de `vercel.json`, de `corridas_de_procesos` (SCRUM-85). */
+export type UltimaCorridaDeProceso = {
+  /** Ruta del cron: `/api/cron/ghl-sync`. */
+  proceso: string;
+  /** Horario de `vercel.json` (crontab, UTC). */
+  horario: string | null;
+  corrida: {
+    estado: "en_curso" | "ok" | "fallo" | "parcial";
+    inicio: string;
+    fin: string | null;
+    orgsProcesadas: number | null;
+    orgsFallidas: number | null;
+    organizacionesFallidas: { id: string; nombre: string | null }[];
+    error: string | null;
+  } | null;
+};
+
+export type CorridasDeProcesos = {
+  /** `false` si no se pudo leer el registro (por ejemplo, falta la migración). */
+  disponible: boolean;
+  procesos: UltimaCorridaDeProceso[];
+};
+
 export type OrgHealthStatus = "healthy" | "warning" | "critical";
 
 export type OrgHealthRow = {
