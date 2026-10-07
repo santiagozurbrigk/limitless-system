@@ -34,6 +34,30 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-07 · Fix-pack de la AR de SCRUM-85: fila fantasma, saneado, fan-out y aviso de producción
+
+**Rama:** `fix/SCRUM-85-salud-y-monitoreo`
+**Commit(s):** `a106e2cf` (registro de corridas y migración), `3e35679e` (página de Infraestructura), `3b1d2dd5` (script del aviso), este (docs)
+**Módulo(s) afectado(s):** Infraestructura y Plataforma (super admin). `lib/observability/{registro-de-corridas,corrida-en-curso}.ts`, `lib/queue/qstash-client.ts`, `lib/super-admin/{queries,estado-de-corridas}.ts`, `components/super-admin/infrastructure-page.tsx`, `types/super-admin.ts`, `supabase/migrations/20261007120000_corridas_de_procesos.sql`, `supabase/ci/tests/90_corridas_de_procesos.sql`, `.github/scripts/verificar-produccion.sh`
+
+**Qué se hizo** (los 5 MENOR de la revisión adversarial de SCRUM-85):
+- **MNR-1, fila fantasma:** si la apertura de una corrida vencía a los 2 s pero la base la guardaba igual, el cierre insertaba otra fila y quedaba una `en_curso` para siempre (la página la marcaba "Sin cierre"). Ahora el `id` se genera con `randomUUID` antes de abrir; la apertura es un upsert con `ignoreDuplicates` (no pisa un cierre que llegó antes) y el cierre, un upsert completo por ese `id`. La lectura de la última corrida desempata con `fin desc nulls last`. Dos tests reproducen la apertura lenta contra el almacén real con un Supabase simulado (apertura que llega después y antes del cierre).
+- **MNR-2:** test con estrella de que `loadUltimasCorridas` rechaza a quien no es super admin antes de consultar la base.
+- **MNR-3:** el saneado del error oculta los valores de claves compuestas (`client_secret`, `webhook_secret`, `id_token`, `x-api-key`, `access_token`, `clientSecret`, `signature`...) en query suelta, JSON y encabezados; corta el mensaje a 2.000 caracteres antes de buscar. Un caso de test por forma.
+- **MNR-4:** el script del aviso valida los plazos (hasta 6 dígitos) y los lee en base 10 (`0080` daba "value too great for base" y salía sin mensaje). Toda salida con error, también los inputs inválidos y un error inesperado (`trap` en `EXIT`), deja un `::error` y avisa en Discord si está el secreto. La prueba con el servidor falso pasó de 10 a 14 casos.
+- **MNR-5:** en los 6 crons con fan-out, "orgs procesadas" contaba jobs publicados y la corrida quedaba `ok` aunque todos los workers fallaran. Ahora `publishCronFanout` anota jobs encolados (`anotarJobDeOrganizacion`), la corrida cierra como `encolado` con `jobs_encolados` (o `parcial` si algún job no se pudo publicar) y la página dice "Encolado: N jobs encolados" con la aclaración de que encolado no es terminado; nunca "OK" ni "orgs procesadas". La migración suma el estado `encolado`, la columna `jobs_encolados` y su check (todavía no estaba aplicada en producción); el SQL de producción se actualizó (01 idéntico entre marcas, 02 con 10 columnas y 11 checks, prueba local).
+- Docs: `alertas.md` (qué significa `encolado`, upsert por id, claves compuestas, catorce casos y aviso ante cualquier error), `jobs-webhooks-y-colas.md`, `base-de-datos.md`, `plataforma.md`, `testing.md` (200 archivos, ~2.013 casos, 2.330 ejecutados), `verificacion-manual.md`, `PENDIENTES.md` (`[AUD-SALUD-3]`: registrar el resultado de cada worker).
+
+**Por qué / finalidad:** la revisión aprobó con 5 MENOR y no queda deuda dentro del alcance.
+
+**Decisiones de diseño relevantes:**
+- Para el fan-out se eligió un estado propio (`encolado`) de punta a punta (base, código y página) en vez de sólo cambiar el texto: así una consulta SQL tampoco confunde "jobs publicados" con "orgs procesadas bien". El resultado real de cada worker queda para `correrPorOrganizacion()` (`[AUD-SALUD-3]`).
+- El `id` del cliente hace innecesario el default de la columna, pero se deja `gen_random_uuid()` para inserciones a mano.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Siguen abiertos en `[MONITOREO-Y-ALERTAS]` los pasos sin código (migración en producción, monitor externo, secreto de Discord opcional).
+
+---
+
 ### 2026-10-07 · Chequeo de salud, registro de corridas de los crons y aviso de producción desactualizada (SCRUM-85)
 
 **Rama:** `fix/SCRUM-85-salud-y-monitoreo`

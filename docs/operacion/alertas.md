@@ -160,30 +160,42 @@ después de 20 min … responde commit Y" y qué revisar. Sin tokens de Vercel.
   [`incidentes.md`](./incidentes.md).
 - **Si Vercel saltea builds a propósito** (Ignored Build Step) el workflow avisaría de más. Hoy no hay ninguno
   configurado en el repo; si se agrega, hay que adaptar el script.
-- **Cómo se probó:** `act` no está disponible; el script se probó contra un servidor falso con diez casos (al día,
+- **Cómo se probó:** `act` no está disponible; el script se probó contra un servidor falso con catorce casos (al día,
   atrasado, deploy que llega dentro del plazo, commit posterior, base caída con el commit correcto, sin versión,
-  aviso a un webhook de Discord falso, producción que no responde, commit y plazo inválidos). La primera corrida real
-  queda en Actions después del merge.
+  aviso a un webhook de Discord falso, producción que no responde, commit y plazo inválidos, plazo con ceros a la
+  izquierda, error inesperado y falta de URL). La primera corrida real queda en Actions después del merge.
+- **Toda salida con error avisa:** desactualizada, inputs inválidos o un error inesperado del script dejan un
+  `::error` en GitHub y, si existe el secreto, un aviso en Discord. Los plazos se leen en base 10 (`0080` son 80 s).
 
 ## Registro de corridas de los crons
 
 Cada corrida autorizada de los 19 crons de `vercel.json` queda en la tabla `corridas_de_procesos`
 (`lib/observability/registro-de-corridas.ts`, desde `conMonitorDeCron`): inicio, fin, estado (`en_curso`, `ok`,
-`fallo`, `parcial`), orgs procesadas y fallidas, los ids de las fallidas y un mensaje de error saneado (sin query,
-emails, tokens ni claves; 300 caracteres como mucho). Se ve en Super-admin → Infraestructura → Procesos programados.
+`encolado`, `fallo`, `parcial`), orgs procesadas y fallidas, los ids de las fallidas, los jobs encolados de los crons
+con fan-out y un mensaje de error saneado (sin query, emails, tokens ni valores de claves, también compuestas como
+`client_secret`, `x-api-key` o `id_token`; 300 caracteres como mucho). Se ve en Super-admin → Infraestructura →
+Procesos programados.
 
 - `fallo`: el cron lanzó o respondió 5xx. `parcial`: respondió bien pero alguna org falló (la que pasó por
   `reportarFalla` con su `organizationId` o cuyo job de QStash no se pudo publicar).
+- **`encolado` no es terminado.** Los 6 crons con fan-out (inteligencia, tono, los tres reportes ejecutivos y métricas
+  de contenido) sólo publican un job de QStash por org. Si todos se publicaron, la corrida queda `encolado` con
+  `jobs_encolados`, y la página dice "Encolado: N jobs encolados", nunca "OK" ni "orgs procesadas". Que un worker
+  falle después (por ejemplo, sin créditos de IA) no cambia esta fila: va a Sentry por el worker y por
+  `/api/queue/failure`. En esos crons, `parcial` quiere decir que algún job no se pudo encolar.
 - Una fila que sigue en `en_curso` más de 15 min es una corrida que se cortó (por ejemplo, el plazo de 60 s de Vercel).
-- Informan sus orgs los 6 crons con fan-out por QStash y las syncs de GHL, Calendly, Fathom y métricas de contenido. El
-  resto queda con las columnas de orgs vacías hasta que pasen a `correrPorOrganizacion()` (`[AUD-SALUD-3]`).
-- Registrar nunca rompe un cron: cada escritura tiene 2 s de plazo y una falla queda en la consola.
+- Informan sus orgs los 6 crons con fan-out por QStash (como jobs encolados) y las syncs de GHL, Calendly, Fathom y
+  métricas de contenido. El resto queda con las columnas de orgs vacías hasta que pasen a `correrPorOrganizacion()`
+  (`[AUD-SALUD-3]`), que también va a registrar el resultado de cada worker.
+- Registrar nunca rompe un cron: cada escritura tiene 2 s de plazo y una falla queda en la consola. El `id` de la
+  corrida se genera antes de abrirla y el cierre es un upsert por ese `id`: si la apertura vence pero la base la guarda
+  igual, cae en la misma fila y no queda una corrida "en curso" fantasma.
 - Retención: cada cierre borra las corridas de ese proceso con más de 30 días.
 
 Consulta útil (Supabase → SQL Editor, sólo lectura):
 
 ```sql
-select proceso, inicio, estado, orgs_procesadas, orgs_fallidas, organizaciones_fallidas, error
+select proceso, inicio, estado, orgs_procesadas, orgs_fallidas, organizaciones_fallidas, jobs_encolados, error
 from public.corridas_de_procesos
 where estado in ('fallo', 'parcial')
    or (estado = 'en_curso' and inicio < now() - interval '15 minutes')

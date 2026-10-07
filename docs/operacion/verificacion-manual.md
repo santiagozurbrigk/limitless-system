@@ -1252,7 +1252,7 @@ aplicada en producción (`limitless-auditoria/sql-produccion/scrum-85/`, con `02
    GitHub y repetir el paso 3: el aviso llega al canal.
 5. 🔒 Super-admin → Infraestructura: "Estado de la plataforma" con el commit desplegado y los chequeos en verde;
    "Procesos programados" con los 19 crons, y después de la primera hora, `OK` o `Parcial` con hora y orgs en los
-   horarios. Ninguno tiene que quedar `Sin cierre` de forma repetida (si pasa, es el corte de 60 s, `[CRONS-CORTE-60S]`).
+   horarios (los 6 crons con fan-out figuran como `Encolado: N jobs encolados`, nunca como `OK`). Ninguno tiene que quedar `Sin cierre` de forma repetida (si pasa, es el corte de 60 s, `[CRONS-CORTE-60S]`).
 6. En Supabase → SQL Editor, la consulta de [`alertas.md`](./alertas.md) § Registro de corridas: las filas coinciden
    con lo que muestra la página; a los 31 días, ninguna fila tiene más de 30 días.
 

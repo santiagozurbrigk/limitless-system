@@ -67,7 +67,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **200 archivos, ~2.001 casos** (recontado el 2026-10-07 con SCRUM-85; el runner ejecuta 2.314 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **200 archivos, ~2.013 casos** (recontado el 2026-10-07 con el fix-pack de SCRUM-85; el runner ejecuta 2.330 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -83,7 +83,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/ghl` | 5 | 45 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook, fecha de alta de un contacto en la zona de la org |
 | `lib/sales` | 3 | 50 | opciones de seguimiento (incluida la fecha propuesta del próximo paso), hilo del lead (el próximo paso vence por día en la zona de la org), rango de métricas de ventas en días de la org (miembro en Madrid) |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
-| `lib/super-admin` | 6 | 50 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role, estado de la org alineado con la base (incluido el desconocido) y la última corrida de cada cron en Infraestructura (en curso, sin cierre, parcial con los nombres de las orgs, falló) |
+| `lib/super-admin` | 6 | 54 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role, estado de la org alineado con la base (incluido el desconocido) y la última corrida de cada cron en Infraestructura (en curso, sin cierre, parcial con los nombres de las orgs, falló, encolado en los crons con fan-out, desempate por `fin`, guard de super admin) |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
 | `lib/sops` | 2 | 25 | marcadores de adjuntos, chunks de audio |
 | `lib/auth` | 7 | 42 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log, un solo chequeo de super admin por pedido, acceso a un módulo por ruta |
@@ -103,7 +103,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/chart` | 1 | 5 | escala del embudo |
 | `lib/supabase` | 2 | 6 | rutas públicas del middleware, `fetchAllRows` |
 | `lib/release` | 1 | 4 | lo escondido para el release: ⌘K, catálogo de integraciones, canales de Lead Magnets |
-| `lib/observability` | 5 | 60 | aviso a Sentry de los crons; registro de corridas en `corridas_de_procesos` (ok, fallo, parcial con las orgs fallidas, una falla o una base colgada del registro no rompe el cron, retención de 30 días, mensaje de error saneado, corridas en paralelo sin mezclarse) y chequeo de salud (estados, plazo de 3 s, versión, variables, una sola medición para muchos pedidos) (SCRUM-85); etiquetas de una falla de proceso de fondo o de server action (SCRUM-497); lo que se saca de un evento o transacción antes de mandarlo (cuerpo, cookies, query también en nombres de transacciones y spans, headers fuera de la lista blanca, breadcrumbs de consola), las configs de Sentry con el SDK simulado y las copias del reel-worker y del bot; un objeto plano reportado con su `message` y su `code` (SCRUM-501) |
+| `lib/observability` | 5 | 67 | aviso a Sentry de los crons; registro de corridas en `corridas_de_procesos` (ok, encolado, fallo, parcial con las orgs fallidas, una falla o una base colgada del registro no rompe el cron, apertura lenta sin fila fantasma, retención de 30 días, mensaje de error saneado también con claves compuestas, corridas en paralelo sin mezclarse) y chequeo de salud (estados, plazo de 3 s, versión, variables, una sola medición para muchos pedidos) (SCRUM-85); etiquetas de una falla de proceso de fondo o de server action (SCRUM-497); lo que se saca de un evento o transacción antes de mandarlo (cuerpo, cookies, query también en nombres de transacciones y spans, headers fuera de la lista blanca, breadcrumbs de consola), las configs de Sentry con el SDK simulado y las copias del reel-worker y del bot; un objeto plano reportado con su `message` y su `code` (SCRUM-501) |
 | `lib/storage` | 1 | 6 | validación de rutas por org |
 | `lib/server` | 1 | 13 | errores de las server actions: sólo un `ErrorEsperable` vuelve con su mensaje en los módulos arreglados y lo demás se registra, va a Sentry y vuelve con el texto fijo; `runMutation` no cambia el mensaje pero reporta las fallas de infraestructura (clasificación por clase, `code` y texto) |
 | `lib/queue` | 2 | 5 | aviso cuando falla un trabajo de QStash; las orgs de un fan-out quedan en el registro de corridas |
@@ -124,7 +124,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/forms` | 1 | 6 | paginación de respuestas de Typeform |
 | `lib/webhooks` | 1 | 22 | status HTTP de la ingesta y webhooks que no pierden el evento crudo |
 | `app/api/health` | 1 | 8 | `GET /api/health`: 200 `ok`, 200 `degradado` (Storage o una variable), 503 con la base caída o colgada, sin caché y sin mensajes, tablas, variables ni valores en la respuesta (SCRUM-85) |
-| `components/super-admin` | 1 | 5 | la página de Infraestructura muestra el chequeo de salud y las corridas reales, sin los estados escritos a mano |
+| `components/super-admin` | 1 | 6 | la página de Infraestructura muestra el chequeo de salud y las corridas reales (un fan-out como Encolado, no OK), sin los estados escritos a mano |
 | `app/api/integrations` | 3 | 14 | callbacks OAuth (sesión y organización), cron de sync de Fathom (plazo y orden), webhook de Fathom por miembro |
 | `app/marketing/content` | 1 | 4 | contenido con mejor rendimiento sobre todas las piezas de la org |
 | `app/auth` | 2 | 11 | el login vuelve a la invitación; el cambio de contraseña obligatorio devuelve sus errores esperables como valor (incluidos los rechazos de Supabase Auth: misma contraseña, débil, sesión, intentos) |

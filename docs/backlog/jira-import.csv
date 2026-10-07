@@ -2788,7 +2788,7 @@ Fuente: PENDIENTES.md [AUD-SALUD-2] · Doc del área: docs/arquitectura/vision-g
 
 *Estado verificado:* 6 crons hacen fan-out por QStash, el resto corre en serie; aislamiento de errores por org desparejo; ningún lock. Consecuencias ya visibles en prod: crons cortados a los 60 s ({{[CRONS-CORTE-60S]}}), errores por org que no llegan a Sentry ni a ningún registro ({{[OBS-SIN-ALERTAS]}}, {{[EMBUDOS-CRON-ERRORES]}}).
 
-*Qué hay que hacer:* helper {{runPerOrg()}} (ADR-015: {{correrPorOrganizacion()}}) con aislamiento de errores, lock (fila en tabla o advisory lock) y resultado uniforme. Desde SCRUM-85 cada corrida ya queda en {{corridas_de_procesos}}, pero las orgs procesadas y fallidas sólo las informan los crons con fan-out y las syncs de GHL, Calendly, Fathom y métricas de contenido: el helper tiene que anotarlas para todos ({{anotarOrganizacion}}, {{lib/observability/corrida-en-curso.ts}}) y sumar la tabla por org con {{corrida_id}}.
+*Qué hay que hacer:* helper {{runPerOrg()}} (ADR-015: {{correrPorOrganizacion()}}) con aislamiento de errores, lock (fila en tabla o advisory lock) y resultado uniforme. Desde SCRUM-85 cada corrida ya queda en {{corridas_de_procesos}}, pero las orgs procesadas y fallidas sólo las informan las syncs de GHL, Calendly, Fathom y métricas de contenido, y los crons con fan-out sólo informan los jobs encolados (estado {{encolado}}: lo que haga cada worker va a Sentry, no al registro): el helper tiene que anotarlas para todos ({{anotarOrganizacion}}, {{lib/observability/corrida-en-curso.ts}}), registrar el resultado de cada worker y sumar la tabla por org con {{corrida_id}}.
 
 *Dónde:* {{apps/web/app/api/cron/*}}, {{apps/web/lib/queue/}}.
 
