@@ -124,6 +124,22 @@ Opcional: `SENTRY_DSN` (el mismo de Vercel): con ella cada `logError` va a Sentr
 4. La rama queda consumida; la próxima tarea arranca de `main` otra vez.
 5. El CI corre en push a `main`, `claude/**`, `feat/**`, `fix/**`, `chore/**`, `Claude-*` y en todo PR (ver `docs/operacion/testing.md`).
 
+## Branch protection de `main`
+
+No se puede configurar desde el repo y no es verificable desde el código: la configura un admin del repo en GitHub (Settings → Branches, o un ruleset para `main`). Lo que conviene exigir:
+
+- **Pedir PR para mergear** y bloquear el push directo y el force push a `main`.
+- **Checks obligatorios** (status checks del workflow `CI`, con "Require branches to be up to date before merging"):
+
+| Check | Qué frena |
+|---|---|
+| `checks` | typecheck, lint y tests de web; typecheck de ui, types, reel-worker y bot; lint de ui, reel-worker y bot |
+| `web-build` | un cambio que rompe `next build` aunque pase `tsc` y lint (por ejemplo un import de servidor en un componente cliente) |
+| `migrations` | una migración que no corre desde cero, una versión repetida o un test de RLS que falla |
+| `backlog` | `PENDIENTES.md` o `docs/backlog/historias.md` inválidos (IDs repetidos, P0/P1 sin criterio, índice desactualizado) |
+
+El check del preview de Vercel queda afuera: depende de la integración de Vercel y no del repo, y `web-build` ya cubre el build. Los e2e de Playwright se suman a la lista cuando corran en CI contra staging (`[T-INFRA-E2E-CI]`). Si se renombra un job en `ci.yml`, hay que actualizar la lista de checks obligatorios: GitHub espera el nombre viejo y el PR queda trabado esperando un check que ya no existe.
+
 El repo se renombró de `ai-coo-platform` a `limitless-system` el 2026-09-22. No crear nunca un repo nuevo con el nombre viejo: rompe la redirección de GitHub. Copias locales viejas: `git remote set-url origin https://github.com/santiagozurbrigk/limitless-system`.
 
 ## Configuración de Supabase Auth
@@ -155,7 +171,7 @@ Vercel **no aplica migraciones**. El orden es: aplicar la migración en Supabase
 ## `apps/reel-worker` en Fly.io
 
 - App `otc-reel-worker`, región `gru`, VM `performance-2x` (2 vCPU, 4 GB), concurrencia 1 (soft) / 2 (hard), `auto_stop_machines` con `min_machines_running = 0` (arranca en frío con el primer job).
-- Deploy manual: `fly deploy --config apps/reel-worker/fly.toml` (o `cd apps/reel-worker && fly deploy`). **No hay deploy automático** ni CI para este worker.
+- Deploy manual: `fly deploy --config apps/reel-worker/fly.toml` (o `cd apps/reel-worker && fly deploy`). **No hay deploy automático.** El CI corre su typecheck y su lint (job `checks`) pero no arma la imagen de Docker.
 - Secrets con `fly secrets set` (lista arriba).
 - Rollback: `fly releases -a otc-reel-worker` y `fly deploy --image <imagen de la release anterior>`.
 - Endpoints: `GET /health`, `POST /` (procesa el job **sincrónicamente**, con la conexión abierta para que Fly no apague la máquina: descarga de Storage, 5 variantes con FFmpeg, captions con Haiku, sube a `trial-reels`, marca el job `preview_ready`; responde 200 aunque falle, para que QStash no reintente). `fly.toml` no define health check.
