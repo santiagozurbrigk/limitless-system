@@ -30,6 +30,7 @@ import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr
 import type { Client, ClientPayment } from "@/types/clients";
 import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
 import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
+import { redondearACentavos } from "@/lib/clients/payment-utils";
 
 function formatMoney(amount: number) {
   return `$${amount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
@@ -117,7 +118,7 @@ export function agregarPago(actual: EstadoDePagos, pago: ClientPayment): EstadoD
  * puede traer 333.333 y el servidor sólo acepta dos decimales (SCRUM-504).
  */
 export function montoParaElFormulario(monto: number): string {
-  return String(Math.round(monto * 100) / 100);
+  return String(redondearACentavos(monto));
 }
 
 /** El rótulo de la cuota que el servidor registró, para el aviso. */

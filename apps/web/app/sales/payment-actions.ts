@@ -10,7 +10,7 @@ import {
   type ClientPaymentRow,
 } from "@/lib/clients/payment-mapper";
 import { CLIENT_PAYMENT_RECEIPTS_BUCKET } from "@/lib/clients/constants";
-import { montoACentavos } from "@/lib/clients/payment-utils";
+import { montoACentavos, redondearACentavos } from "@/lib/clients/payment-utils";
 import {
   isAllowedPaymentReceipt,
   sanitizeFilename,
@@ -78,7 +78,7 @@ const montoDePagoSchema = moneySchema
 
 /** El mismo monto, comparado en centavos. */
 function mismoMonto(a: number, b: number): boolean {
-  return Math.round(a * 100) === Math.round(b * 100);
+  return redondearACentavos(a) === redondearACentavos(b);
 }
 
 const recordPaymentSchema = z.object({

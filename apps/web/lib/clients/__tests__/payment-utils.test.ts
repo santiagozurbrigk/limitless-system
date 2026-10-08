@@ -155,6 +155,14 @@ describe("montos en centavos (SCRUM-504, AR pasada 5)", () => {
     expect(redondearACentavos(333.333)).toBe(333.33);
   });
 
+  it("⭐ redondea la mitad como la columna numeric(12,2): 1.005 → 1.01 (Math.round daría 1.00)", () => {
+    expect(Math.round(1.005 * 100) / 100).toBe(1);
+    expect(redondearACentavos(1.005)).toBe(1.01);
+    expect(redondearACentavos(2.675)).toBe(2.68);
+    expect(redondearACentavos(9_999_999.995)).toBe(10_000_000);
+    expect(redondearACentavos(1.004)).toBe(1);
+  });
+
   it("⭐ lo pagado al cerrar una venta sale en centavos: el pago no se rechaza después de cerrar", () => {
     expect(
       getPaidAmountFromClosePayload(payload({ paymentType: "installments", installmentAmount: 333.333 }))

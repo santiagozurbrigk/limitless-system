@@ -53,9 +53,10 @@ select ci.espera(
   (select count(*) from pg_policies
    where schemaname = 'public' and tablename = 'client_payments' and cmd = 'UPDATE'
      and policyname = 'Org members add receipt to client_payments'
-     and qual ilike '%storage_path IS NULL%'
-     and qual ilike '%organization_id = get_my_organization_id()%'
-     and with_check ilike '%organization_id = get_my_organization_id()%'),
+     -- Igualdad exacta con el texto que devuelve pg_policies (PG17): una
+     -- subcadena dejaría pasar un `or true` que abre la policy a todas las orgs.
+     and qual = '((organization_id = get_my_organization_id()) AND (storage_path IS NULL))'
+     and with_check = '(organization_id = get_my_organization_id())'),
   1, 'la policy de UPDATE exige la org en la USING y en el WITH CHECK, y que no haya comprobante');
 select ci.espera(
   (select count(*) from pg_policies
@@ -200,7 +201,7 @@ select ci.espera(ci.filas($$update public.client_payments set storage_path = '96
   'un miembro no reemplaza un comprobante que ya está');
 select ci.espera(ci.filas($$update public.client_payments set storage_path = '96000000-0000-0000-0000-000000000b00/x.pdf'
   where id = '96000000-0000-0000-0000-0000000000f1'$$), 0,
-  'un miembro de A no le pone comprobante a un pago de la org B');
+  'un miembro de A no le pone comprobante (por id) a un pago de la org B');
 select ci.espera((select count(*) from public.client_payments where client_id = '96000000-0000-0000-0000-0000000000c1' and amount = 999), 0,
   'el monto corregido no queda guardado con la clave vieja');
 
@@ -252,6 +253,24 @@ select ci.espera((select count(*) from public.client_payments where clave_idempo
   'si la cuota no se puede marcar, el pago tampoco queda');
 reset role;
 drop trigger ci_rechaza_update on public.clients;
+
+-- ─── Un UPDATE sin WHERE pasa por la USING de la policy ─────────────────────
+-- Un miembro de la org C, que no tiene pagos propios: un UPDATE sin WHERE no
+-- lee columnas, así que no lo frena la policy de SELECT; sólo la USING de la
+-- de UPDATE (y su org) evita que alcance el pago sin comprobante de la org B.
+-- (El CHECK de SCRUM-81 acepta la ruta: es de la carpeta de B.)
+insert into public.organizations (id, name) values ('96000000-0000-0000-0000-000000000c00', 'Org C');
+insert into auth.users (id, email) values ('96000000-0000-0000-0000-0000000000c9', 'c@test');
+insert into public.profiles (id, email, organization_id, role, full_name, is_active) values
+  ('96000000-0000-0000-0000-0000000000c9', 'c@test', '96000000-0000-0000-0000-000000000c00', 'member', 'C', true);
+select ci.jwt('96000000-0000-0000-0000-0000000000c9');
+set local role authenticated;
+select ci.espera(ci.filas($$update public.client_payments set storage_path = '96000000-0000-0000-0000-000000000b00/hack.pdf'$$), 0,
+  'un miembro de C, con un UPDATE sin WHERE, no le pone comprobante a un pago de la org B');
+reset role;
+select ci.espera((select count(*) from public.client_payments
+  where id = '96000000-0000-0000-0000-0000000000f1' and storage_path is null), 1,
+  'el pago de la org B sigue sin comprobante');
 
 -- ─── Un miembro desactivado no registra pagos ───────────────────────────────
 select ci.jwt('96000000-0000-0000-0000-0000000000a2');
