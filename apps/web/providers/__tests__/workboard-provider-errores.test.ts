@@ -441,6 +441,18 @@ describe("intentarCompletar (lo que corre finalizeComplete)", () => {
     expect(completar).toHaveBeenCalledWith(true);
   });
 
+  it("el evento lleva el número de la confirmación aunque no sea la primera apertura", async () => {
+    let tercera = abierta;
+    for (let n = 0; n < 2; n += 1) {
+      tercera = confirmacionDeCompletado(tercera, { tipo: "cancelar" });
+      tercera = confirmacionDeCompletado(tercera, { tipo: "abrir", tarea: A, patch: null, estadoAnterior: "todo" });
+    }
+    expect(tercera.numero).toBe(3);
+    await expect(
+      intentarCompletar({ confirmacion: tercera, registrarTiempo: async () => true, completar: async () => true })
+    ).resolves.toEqual({ completada: true, evento: { tipo: "completada", numero: 3, taskId: "a" } });
+  });
+
   it("si el registro rechaza, no hay evento ni se completa", async () => {
     const completar = vi.fn(async () => true);
     await expect(

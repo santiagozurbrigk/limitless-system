@@ -38,6 +38,23 @@ const hooks = vi.hoisted(() => {
       };
       return [celdas[k], despachar];
     },
+    // Como React: devuelve el valor guardado mientras las deps no cambien
+    // (Object.is una por una). Así un callback con deps incompletas queda con
+    // su closure viejo, igual que en la app.
+    useMemo(calcular: () => unknown, deps: unknown[]) {
+      const k = i++;
+      const guardado = celdas[k] as { valor: unknown; deps: unknown[] } | undefined;
+      if (
+        guardado &&
+        guardado.deps.length === deps.length &&
+        guardado.deps.every((d, j) => Object.is(d, deps[j]))
+      ) {
+        return guardado.valor;
+      }
+      const valor = calcular();
+      celdas[k] = { valor, deps };
+      return valor;
+    },
   };
 });
 
@@ -45,18 +62,20 @@ vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
   useState: hooks.useState,
   useReducer: hooks.useReducer,
-  useCallback: (f: unknown) => f,
-  useMemo: (f: () => unknown) => f(),
+  useCallback: (f: unknown, deps: unknown[]) => hooks.useMemo(() => f, deps),
+  useMemo: hooks.useMemo,
 }));
 
 const sim = vi.hoisted(() => ({
+  // Estable entre renders, como el `push` real (useCallback en toast-provider).
+  push: (aviso: { title: string; description?: string }) => sim.avisos.push(aviso),
   avisos: [] as Array<{ title: string; description?: string }>,
   acciones: {} as Record<string, (...args: unknown[]) => Promise<unknown>>,
   registros: [] as number[],
 }));
 
 vi.mock("@/providers/toast-provider", () => ({
-  useToast: () => ({ push: (aviso: { title: string }) => sim.avisos.push(aviso) }),
+  useToast: () => ({ push: sim.push }),
 }));
 vi.mock("@/app/workboard/actions", () => {
   const nombres = [
@@ -160,6 +179,27 @@ describe("WorkboardProvider · completar con tiempo", () => {
     expect(render().pendingTimeLoggedMinutes).toBeNull();
     await expect(render().confirmCompleteWithTime(120)).resolves.toBe(true);
     expect(sim.registros).toEqual([30, 120]);
+    // Es la segunda apertura: el evento `completada` tiene que llevar su número.
+    expect(render().pendingCompleteTask).toBeNull();
+  });
+
+  it("⭐ desde el detalle (updateTask con status done): el update rechaza, el reintento no registra dos veces", async () => {
+    let intentos = 0;
+    sim.acciones.updateWorkboardTaskAction = async () => {
+      intentos += 1;
+      return intentos === 1
+        ? { success: false, error: "El lanzamiento que elegiste ya no existe. Recargá la página e intentá de nuevo." }
+        : { success: true, data: { ...TAREA, status: "done" } };
+    };
+    await render().updateTask("t1", { status: "done" });
+    expect(render().pendingCompletePatch).toEqual({ status: "done" });
+
+    await expect(render().confirmCompleteWithTime(30)).resolves.toBe(false);
+    expect(render().pendingTimeLoggedMinutes).toBe(30);
+    await expect(render().confirmCompleteWithTime(30)).resolves.toBe(true);
+    expect(sim.registros).toEqual([30]);
+    expect(intentos).toBe(2);
+    expect(render().pendingCompleteTask).toBeNull();
   });
 
   it("cancelar sin tiempo registrado no avisa", async () => {
