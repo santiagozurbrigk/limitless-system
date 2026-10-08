@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot`, `apps/reel-worker` | sí (`pnpm typecheck`, job `checks`) |
 | Lint | ESLint 9 (`next lint` en web; `eslint src/` con la base de `packages/config` en ui, reel-worker y bot) | `apps/web`, `packages/ui`, `apps/reel-worker`, `apps/discord-bot` | sí (`pnpm lint`, job `checks`) |
-| Unitarios | Vitest 3, entorno `node` | `apps/web` (210 archivos) | sí (`pnpm test`) |
+| Unitarios | Vitest 3, entorno `node` | `apps/web` (212 archivos) | sí (`pnpm test`) |
 | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** (se activa con staging, ver E2E) |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
@@ -71,7 +71,7 @@ Prueban lo que la base deja hacer a cada usuario, que Vitest no puede ver porque
 
 - `00_ayudas.sql` crea el schema `ci` con `ci.jwt(sub, extra)` (deja el JWT de un usuario para la transacción), `ci.rechazado(sql, qué)` (tiene que fallar con 42501), `ci.filas(sql)` (filas tocadas: la RLS en UPDATE y DELETE no da error, afecta 0) y `ci.espera(real, esperado, qué)`.
 - Cada archivo arma sus datos dentro de `begin; ... rollback;`, actúa con `select ci.jwt(...); set local role authenticated;` y vuelve con `reset role`.
-- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9). Hoy son 10 (`00_ayudas.sql` a `90_corridas_de_procesos.sql`, SCRUM-85: el registro de corridas sólo para el service role y sus checks de coherencia).
+- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9). Hoy son 11 (`00_ayudas.sql` a `95_registrar_pago_de_cliente.sql`, SCRUM-504: el pago y su cuota en una transacción, con la RLS y la org de la sesión, y la clave de idempotencia).
 - Validez, igual que en Vitest: sacar la migración que arregla el problema y confirmar que el test falla con `FALLA: ...`.
 - Para correrlos a mano: los mismos comandos de "Migraciones" más arriba.
 
@@ -79,7 +79,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **210 archivos, ~2.183 casos** (recontado el 2026-10-08 con SCRUM-504; el runner ejecuta 2.575 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **212 archivos, ~2.207 casos** (recontado el 2026-10-08 con SCRUM-504; el runner ejecuta 2.602 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -93,7 +93,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/onboarding` | 4 | 61 | derivación, gate de routing, ítems, tours |
 | `lib/discord` | 5 | 60 | actividad, canales, clasificador, perfil, identidades |
 | `lib/ghl` | 5 | 45 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook, fecha de alta de un contacto en la zona de la org |
-| `lib/sales` | 3 | 50 | opciones de seguimiento (incluida la fecha propuesta del próximo paso), hilo del lead (el próximo paso vence por día en la zona de la org), rango de métricas de ventas en días de la org (miembro en Madrid) |
+| `lib/sales` | 4 | 63 | opciones de seguimiento (incluida la fecha propuesta del próximo paso), hilo del lead (el próximo paso vence por día en la zona de la org), rango de métricas de ventas en días de la org (miembro en Madrid); el recorrido del lead: la conversación es obligatoria y cada fuente opcional que falla se registra una vez y se nombra en `faltan` (SCRUM-504) |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
 | `lib/super-admin` | 6 | 54 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role, estado de la org alineado con la base (incluido el desconocido) y la última corrida de cada cron en Infraestructura (en curso, sin cierre, parcial con los nombres de las orgs, falló, encolado en los crons con fan-out, desempate por `fin`, guard de super admin) |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
@@ -124,6 +124,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/youtube` | 1 | 2 | métricas de video que se guardan |
 | `lib/team` | 2 | 14 | rol de la org (filtro por organización), estado de una invitación y comparación de emails |
 | `app/__tests__` | 3 | 12 | los catch de páginas y layouts relanzan los errores de Next (`unstable_rethrow`); el layout de la plataforma y las páginas de Inteligencia dibujan «No tenés acceso» sin lanzar |
+| `app/finance` | 1 | 2 | si sólo falla la lectura de pagos, la configuración de Finanzas llega igual, con los totales por plataforma marcados como sin leer y la falla reportada (SCRUM-504) |
 | `app/fathom` | 2 | 6 | `getSalesCallsAction` contra una base simulada; la lista de 1-1 de la ficha con el día de la org y una sola lectura de la zona |
 | `app/executive-reports`, `app/operations` | 4 | 35 | últimos reportes; el botón de reportes y el reporte de Operaciones no llaman a la IA para una org no activa; las acciones de Operaciones (reporte semanal e inputs) devuelven sus errores esperables como valor, relanzan lo inesperado (sin sesión o redirect) y filtran por organización |
 | `lib/operations` | 2 | 10 | mensaje del botón de Inputs semanales, cómo cuenta el pipeline el paso de Operaciones y el lunes de la semana de la organización |
@@ -142,8 +143,8 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `app/auth` | 2 | 11 | el login vuelve a la invitación; el cambio de contraseña obligatorio devuelve sus errores esperables como valor (incluidos los rechazos de Supabase Auth: misma contraseña, débil, sesión, intentos) |
 | `app/invite`, `app/intelligence` | 2 | 10 | la página de invitación sin crear cuentas; el resumen de Inteligencia rechaza como valor a quien no tiene Operaciones |
 | `app/clients`, `app/closing` | 4 | 40 | las mutaciones de Clientes y la de Closing devuelven sus errores esperables como valor, filtran por organización y no muestran crudo lo inesperado (lo registran y reportan); Closing trae todos los turnos de la org; lo cobrado por cliente para Cobros devuelve su error como valor (SCRUM-504) |
-| `app/sales`, `app/(platform)/sales` | 6 | 107 | todas las acciones de Ventas (Cobros, recorrido del lead, ranking, evolución, objeciones, métricas de rendimiento e importadas, closers, comisión, sync manual y desconexión de Calendly, tabla e hilo de seguimiento, próximo paso, calificación, vínculo lead-cliente y el catálogo de valores) devuelven sus errores esperables como valor, filtran por organización y no muestran crudo lo inesperado (lo registran y reportan); con el token de Calendly vencido, la sync dice que hay que reconectar; `/sales/metrics` y `/sales/closing` pasan el motivo a la pantalla (SCRUM-504) |
-| `components/sales` | 2 | 41 | los componentes de Ventas que usan esas acciones muestran el motivo devuelto y el texto fijo si la acción lanzó: rendimiento del equipo, evolución del closer, objeciones, métricas de rendimiento, avisos de la pantalla de métricas, sync y desconexión de Calendly, métricas del ranking de closers y la tabla de seguimiento (recarga y edición que vuelve atrás la fila) Cobros, ficha de pagos, subida de comprobantes, estado del Calendly propio y recorrido del lead (`leerConMotivo`, `correrMutacion`) (SCRUM-504) |
+| `app/sales`, `app/(platform)/sales` | 6 | 111 | todas las acciones de Ventas (Cobros, recorrido del lead, ranking, evolución, objeciones, métricas de rendimiento e importadas, closers, comisión, sync manual y desconexión de Calendly, tabla e hilo de seguimiento, próximo paso, calificación, vínculo lead-cliente y el catálogo de valores) devuelven sus errores esperables como valor, filtran por organización y no muestran crudo lo inesperado (lo registran y reportan); con el token de Calendly vencido, la sync dice que hay que reconectar; `/sales/metrics` y `/sales/closing` pasan el motivo a la pantalla (SCRUM-504) |
+| `components/sales` | 2 | 46 | los componentes de Ventas que usan esas acciones muestran el motivo devuelto y el texto fijo si la acción lanzó: rendimiento del equipo, evolución del closer, objeciones, métricas de rendimiento, avisos de la pantalla de métricas, sync y desconexión de Calendly, métricas del ranking de closers, la tabla de seguimiento (recarga y edición que vuelve atrás la fila), Cobros, ficha de pagos (relectura que limpia el error, rótulo de la próxima cuota), subida de comprobantes, estado del Calendly propio y recorrido del lead (`leerConMotivo`, `correrMutacion`) (SCRUM-504) |
 | `app/team`, `app/(platform)/team` | 4 | 31 | aceptar una invitación con la sesión; las lecturas de Equipo devuelven sus errores como valor y filtran por organización; `/team` muestra el motivo en vez de la pantalla de error de Next; un rol con nombre repetido vuelve con su mensaje |
 
 **Sin ningún test:** `lib/agent` (compaction, JIT, streaming; sólo las tools de contenido y las fechas de `get_clients_data` tienen test), `lib/ai` (`wrap-untrusted-content`; la clave de la org sí tiene test), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly` (salvo la firma del webhook y la clasificación de rechazos de la sync por closer), `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`, salvo el gráfico de ingresos), los gastos y las métricas de ventas, y los parsers de import de clientes (salvo la fecha por defecto). Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`), las actions de reportes a pedido (`app/executive-reports/__tests__`, `app/operations/__tests__`), las de Clientes, Closing, Equipo, Ventas, Inteligencia y el cambio de contraseña obligatorio (`app/clients`, `app/closing`, `app/team`, `app/sales`, `app/intelligence`, `app/auth`), y las páginas de `app/__tests__`, `/team` e `/invite`.

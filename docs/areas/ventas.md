@@ -22,7 +22,7 @@ layout `app/(platform)/layout.tsx` corta el render si el rol lo tiene en `none`.
 
 | Ruta | Archivo | Qué muestra |
 |---|---|---|
-| `/sales/inbox` | `app/(platform)/sales/inbox/page.tsx` → `components/sales/sales-inbox-layout.tsx` → `zernio-inbox-panel.tsx` | Bandeja unificada de Zernio (IG, WhatsApp, etc.) en vivo, con envío, polling de mensajes cada 30 s y panel lateral de análisis IA (`zernio-side-panel.tsx`) + recorrido del lead (`lead-journey-inline.tsx`) |
+| `/sales/inbox` | `app/(platform)/sales/inbox/page.tsx` → `components/sales/sales-inbox-layout.tsx` → `zernio-inbox-panel.tsx` | Bandeja unificada de Zernio (IG, WhatsApp, etc.) en vivo, con envío, polling de mensajes cada 30 s y panel lateral de análisis IA (`zernio-side-panel.tsx`) + recorrido del lead (`lead-journey-inline.tsx`; si una fuente no se pudo leer, avisa cuál falta) |
 | `/sales/metrics` | `app/(platform)/sales/metrics/page.tsx` → `components/sales/sales-metrics-redesign.tsx` | KPIs de cierre/show/leads por rango de fechas, ranking de equipo (`call_analyses`), objeciones frecuentes, fallback a `metrics_snapshots` importados |
 | `/sales/closing` | `app/(platform)/sales/closing/page.tsx` → `components/closing/closing-overview.tsx` | Tabs por hash: `#calendario`, `#lista`, `#seguimiento` (tabla de leads, `leads-table.tsx`), `#equipo` (`closers-ranking.tsx`). Drawer de turno con botones de resultado, modal de cierre con pago (`payment-modal.tsx`) y de no-cierre/no-show (`call-outcome-modal.tsx`). `?call=<id>` abre un turno |
 | `/sales/cobros` | `app/(platform)/sales/cobros/page.tsx` → `components/sales/cobros-page.tsx` | Tabla por cliente: plan, días restantes, tipo de pago, adeudado, monto. Historial y registro de cuotas con comprobante (`client-payments-section.tsx`). `?cliente=<id>` lo abre desplegado |
@@ -131,6 +131,13 @@ GHL            ── cron /api/cron/ghl-sync (hora) ─────────
   y registra la falla. Las lecturas de closers (`getCloserMetricsAction` y las sin llamador) registran los errores
   de la base que antes ignoraban: el ranking de closers (escondido) ya no se ve como "sin closers"
   cuando falla ([CLOSER-AMOUNT-CLOSED]).
+- **Recorrido del lead** (`lib/sales/lead-journey.ts`, SCRUM-504): devuelve `{ pasos, faltan }`. La
+  conversación es la lectura principal: si falla, `FallaDeLaBase` y la acción devuelve el texto fijo.
+  La llamada, la venta, el contenido, los comentarios de Zernio, los CTA de ManyChat y la atribución por
+  UTM son fuentes opcionales (`fuenteOpcional`): si una falla, se registra una vez en Sentry
+  (`[getLeadJourney] <fuente>`), se nombra en `faltan` y el resto llega igual; el panel muestra los pasos
+  y "Faltan datos del recorrido: no se pudieron leer …". Zernio sin conectar no es falla. Marketing
+  (`closed-buyer-journeys.ts`) usa sólo los pasos.
 - **Sync manual del Calendly de un closer** (botón "Sincronizar ahora" en Configuración y el del ranking
   de closers): `syncCloserCalendlyAction` devuelve `MutationResult` (SCRUM-504). Vuelven con un motivo
   claro: sin integración (sin fila o sin token), conexión vencida o revocada (el refresh responde 400
@@ -338,8 +345,13 @@ perfiles vuelven como motivo.
 Lee clientes del provider y `getClientsTableEnrichmentAction` + `listPlansAction`. El adeudado se
 calcula con `computeOutstandingBalance` / `computeRemainingProgramDays` (`lib/clients/plan-utils.ts`).
 Registrar una cuota: `prepareClientPaymentReceiptUploadAction` (URL firmada al bucket, path
-`<org>/<client>/<uuid>-<nombre>`) → subida directa → `recordClientPaymentAction` (inserta y marca la
-cuota pagada en `clients.installments`) o `addInstallmentPaymentAction`.
+`<org>/<client>/<uuid>-<nombre>`) → subida directa → `recordClientPaymentAction` o
+`addInstallmentPaymentAction`, que llaman a la función `registrar_pago_de_cliente`
+(`20261008150000`, SCRUM-504): inserta el pago y marca la cuota en `clients.installments` en una sola
+transacción, con el cliente bloqueado, la RLS y la org de la sesión; si la cuota no se puede marcar no
+queda el pago. Cada formulario de la ficha genera una clave de idempotencia al abrirse: si la respuesta
+se pierde y se vuelve a guardar, la función devuelve el pago ya registrado (índice único por org). El
+cierre de venta desde Closing todavía no pasa una clave (`[CLOSING-CIERRE-ATOMICO]`).
 
 Las 6 acciones de `app/sales/payment-actions.ts` devuelven `MutationResult` (SCRUM-504): validación,
 sesión, cliente de otra org, sin plan de cuotas, sin cuotas pendientes, archivo no permitido, comprobante
@@ -347,8 +359,11 @@ inexistente y una ruta de comprobante que no es de la org vuelven con su motivo;
 Storage se registra, va a Sentry y vuelve con el texto fijo (antes llegaba el mensaje crudo). Las lecturas
 de pagos (`lib/sales/pagos.ts`, que usan también Finanzas, Clientes y la cuota) ya no devuelven `[]` ante
 una falla: Cobros (`getClientsTableEnrichmentAction`), la ficha de pagos, Finanzas y el Panel avisan que
-lo cobrado no está al día en vez de mostrar todo adeudado. Si el pago se guarda pero la cuota no se puede
-marcar, el pago queda y la falla se registra.
+lo cobrado no está al día en vez de mostrar todo adeudado. En Finanzas, si sólo falla la lectura de
+pagos, la configuración (gastos, suscripciones, equipo y plataformas) llega igual y las secciones de
+plataformas avisan que lo recibido no está al día. Si la primera lectura de la ficha falló y después se
+lee bien, el error se va; con los pagos sin leer, el botón dice "Registrar la próxima cuota" (sin un
+número calculado sobre una lista vacía).
 
 ## Integraciones externas
 
