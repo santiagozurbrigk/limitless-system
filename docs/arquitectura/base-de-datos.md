@@ -99,6 +99,7 @@ Excepciones que **sí** son editables por cualquier miembro: `discord_integratio
 | `create_default_roles(uuid)` | Siembra roles al crear una org | `authenticated`, service role |
 | `client_last_activity(uuid)` | Última novedad por cliente (onboarding de clientes) | sólo service role |
 | `aceptar_invitacion_de_equipo(text, uuid)` | Acepta una invitación de equipo con la cuenta de la sesión, en una transacción con la invitación bloqueada; devuelve un motivo en texto (SECURITY DEFINER, `20261005150000`, SCRUM-495; ver `docs/arquitectura/auth-organizaciones-y-permisos.md`) | sólo service role (`aceptarInvitacionAction`) |
+| `crear_sprint(uuid, text, text, text, date, date, uuid)` | Completa el sprint activo de la organización y crea el nuevo en una transacción, con un lock por organización para dos altas a la vez (SECURITY INVOKER: la RLS de `sprints` decide; `20261008120000`, SCRUM-503) | `authenticated` (`createSprintAction`), service role |
 | `onboarding_connected_source_count`, `onboarding_org_progress` | Checklist de onboarding | ver `docs/areas/plataforma.md` |
 | `get_current_week_start()` | Semana de weekly inputs | |
 | `set_updated_at()` | Trigger genérico de `updated_at` | trigger |
@@ -190,7 +191,7 @@ Propósito de cada una en el doc del área. Las notas del cliente son columnas d
 `agent_conversations`, `agent_messages`, `agent_graph_proposals`, `business_stages`, `business_context_documents`, `knowledge_base_categories`, `rag_documents`, `rag_chunks` (pgvector), `founder_communication_tone`.
 
 ### Operaciones (`docs/areas/operaciones.md`)
-`workboard_tasks`, `workboard_task_attachments`, `workboard_task_documents`, `sprints`, `sops`, `sop_versions`, `sop_attachments`, `sop_generation_jobs`, `weekly_inputs`, `weekly_reports`, `intelligence_snapshots`, `executive_reports`, `launches`, `launch_metrics`.
+`workboard_tasks`, `workboard_task_attachments`, `workboard_task_documents`, `sprints` (a lo sumo uno `active` por organización: índice único parcial `sprints_un_activo_por_org`, `20261008120000`), `sops`, `sop_versions`, `sop_attachments`, `sop_generation_jobs`, `weekly_inputs`, `weekly_reports`, `intelligence_snapshots`, `executive_reports`, `launches`, `launch_metrics`.
 
 ### Discord (`docs/areas/discord.md`)
 `discord_integrations`, `discord_client_links`, `discord_messages`, `discord_pending_links` (vacía), `discord_channel_clients`, `discord_team_members`.

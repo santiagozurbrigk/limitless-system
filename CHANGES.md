@@ -34,6 +34,31 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-08 · Fix-pack de la AR de SCRUM-503: crear sprint atómico, sin doble registro de tiempo y lint de todo web
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `b55515e0` (pantallas, provider y lint), `91c3e1ad` (migración `crear_sprint` y acción), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero; base de datos. `supabase/migrations/20261008120000_crear_sprint_atomico.sql`, `supabase/ci/tests/95_crear_sprint.sql`, `app/workboard/actions.ts`, `providers/workboard-provider.tsx`, `components/workboard/{workboard-task-detail-dialog,log-time-modal,workboard-shell}.tsx`, `next.config.ts`
+
+**Qué se hizo** (los 5 MENOR de la revisión adversarial de SCRUM-503, pasada 1):
+- **M1:** las tres protecciones de pantalla pasan a funciones puras con tests y control negativo: `cambiarConReversion` (el selector de sprint o lanzamiento del detalle vuelve a lo que había si la acción rechaza), `confirmarTiempo` (el modal de tiempo no muestra "listo" si no se guardó) y `altaDeTarea` (si la acción rechaza, el formulario queda abierto y no se aplican recursos).
+- **M2:** el test del provider pasa los hijos como tercer argumento de `createElement` (`react/no-children-prop`). `next lint` revisa además `providers`, `hooks`, `layouts`, `constants`, `mocks`, `routes`, `types`, `scripts`, `workspaces` y `e2e` (`eslint.dirs`); se arreglaron los dos avisos del provider del Tablero. Quedan 13 avisos de `react-hooks/exhaustive-deps` en `providers/finance-data-provider.tsx`, que ya estaban y no son del Tablero.
+- **M3:** completar una tarea con tiempo (`completarConTiempo`) recuerda que el tiempo ya se registró si el completado rechazó: el reintento sólo completa y el aviso dice "Se registró el tiempo, pero no se pudo completar la tarea". `performMove` y `moveTask` devuelven si salió, así el modal no se cierra cuando falla el movimiento del Kanban.
+- **M4:** migración `20261008120000_crear_sprint_atomico`: normaliza las organizaciones con más de un sprint activo (deja activo el que la app mostraba, el de `start_date` más reciente), índice único parcial `sprints_un_activo_por_org` y la función `crear_sprint` (SECURITY INVOKER: la RLS de `sprints` sigue decidiendo; lock por organización para dos altas a la vez), que completa el activo e inserta el nuevo en una transacción. `createSprintAction` la llama por RPC; si no existe (`PGRST202`) es una falla de despliegue que va a Sentry. `updateSprintAction` devuelve "Ya hay un sprint activo. Completalo antes de activar otro." si choca con el índice. Test de CI `95_crear_sprint.sql`. SQL de producción en `limitless-auditoria/sql-produccion/scrum-503/` (precheck, migración en transacción idéntica al repo, verificación con `todo_ok` y prueba local con dos altas a la vez).
+- **M5:** el comentario del mock de la relectura apunta al test que existe, y hay un caso para la relectura de una tarea sin la columna `sop_id`.
+- Docs: `docs/arquitectura/base-de-datos.md`, `docs/areas/operaciones.md`, `docs/operacion/testing.md` (206 archivos, ~2.146 casos, 2.539 ejecutados; 11 archivos de tests de RLS; carpetas del lint), `PENDIENTES.md`.
+
+**Por qué / finalidad:** la revisión aprobó con 5 MENOR y no queda deuda dentro del alcance. M3 y M4 venían de antes: un reintento sumaba el tiempo dos veces, y un alta de sprint que fallaba a la mitad dejaba la organización sin sprint activo (o dos activos con dos pestañas).
+
+**Decisiones de diseño relevantes:**
+- `crear_sprint` es SECURITY INVOKER y recibe la organización: la acción ya la resuelve con `requireOrganizationId` (incluido el negocio activo de un holding) y la RLS impide escribir en otra. Un DEFINER habría tenido que repetir esa lógica.
+- La migración normaliza los duplicados en vez de fallar: deja activo el mismo sprint que la app ya mostraba, sin borrar nada. El precheck dice cuántos hay y trae la consulta para revisarlos antes.
+- Para M3 se eligió recordar el registro en vez de completar primero: completar antes de registrar dejaba una tarea cerrada sin su tiempo si el registro fallaba, y el modal quedaba con la tarea ya hecha.
+
+**Riesgos / deuda técnica pendiente:** la migración **va antes del merge y del deploy**: con el código nuevo sin la función, "Nuevo sprint" muestra el texto fijo y la falla va a Sentry; el código viejo funciona igual con la migración aplicada. Los 13 avisos de `finance-data-provider.tsx` quedan visibles en `next lint` (decisión de la coordinación si entran en Finanzas).
+
+---
+
 ### 2026-10-08 · Los errores esperables del Tablero vuelven como valor (SCRUM-503)
 
 **Rama:** `fix/SCRUM-503-tablero-errores`
