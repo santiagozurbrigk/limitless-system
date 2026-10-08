@@ -14,6 +14,8 @@ import {
   Textarea,
 } from "@ai-coo/ui";
 import { createSprintAction } from "@/app/workboard/actions";
+import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
+import { useToast } from "@/providers/toast-provider";
 import { SPRINT_AREA_FOCUS_OPTIONS } from "@/lib/workboard/constants";
 import { CampoFecha } from "@/components/shared/campo-fecha";
 import { fechaDeHoyEnZona, sumarDias } from "@/lib/fechas/calendario";
@@ -23,6 +25,33 @@ import type { SprintAreaFocus, WorkboardSprint } from "@/types/workboard";
 /** Un sprint dura dos semanas por defecto: termina 14 días después de hoy (en la org). */
 function defaultEndDate(zona: string | null): string {
   return sumarDias(fechaDeHoyEnZona(zona), 14);
+}
+
+/**
+ * Crea el sprint. Un rechazo esperable vuelve como valor y se avisa con su
+ * motivo; si la acción lanza, el texto fijo (SCRUM-503). Con éxito llama a
+ * `alCrear`.
+ */
+export function crearSprint(
+  datos: {
+    name: string;
+    goal?: string;
+    areaFocus: SprintAreaFocus;
+    startDate: string;
+    endDate: string;
+  },
+  opciones: {
+    avisar: (aviso: Aviso) => void;
+    alCrear: (sprint: WorkboardSprint) => void;
+  }
+): Promise<void> {
+  return correrMutacion({
+    accion: () => createSprintAction(datos),
+    alExito: opciones.alCrear,
+    avisar: opciones.avisar,
+    tituloError: "No se pudo crear el sprint",
+    etiqueta: "[CreateSprintModal] crear sprint",
+  });
 }
 
 export function CreateSprintModal({
@@ -41,6 +70,7 @@ export function CreateSprintModal({
   const [startDate, setStartDate] = useState(() => fechaDeHoyEnZona(zonaDeLaOrganizacion));
   const [endDate, setEndDate] = useState(() => defaultEndDate(zonaDeLaOrganizacion));
   const [pending, startTransition] = useTransition();
+  const { push } = useToast();
 
   function resetForm() {
     setName("");
@@ -53,16 +83,23 @@ export function CreateSprintModal({
   function handleCreate() {
     if (!name.trim()) return;
     startTransition(async () => {
-      const sprint = await createSprintAction({
-        name: name.trim(),
-        goal: goal.trim() || undefined,
-        areaFocus,
-        startDate,
-        endDate,
-      });
-      resetForm();
-      onCreated(sprint);
-      onOpenChange(false);
+      await crearSprint(
+        {
+          name: name.trim(),
+          goal: goal.trim() || undefined,
+          areaFocus,
+          startDate,
+          endDate,
+        },
+        {
+          avisar: push,
+          alCrear: (sprint) => {
+            resetForm();
+            onCreated(sprint);
+            onOpenChange(false);
+          },
+        }
+      );
     });
   }
 

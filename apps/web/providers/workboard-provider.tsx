@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  assignTaskToLaunchAction,
   assignTaskToSprintAction,
   createWorkboardTaskAction,
   deleteWorkboardTaskAction,
@@ -17,6 +18,9 @@ import {
   moveWorkboardTaskAction,
   updateWorkboardTaskAction,
 } from "@/app/workboard/actions";
+import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
+import type { MutationResult } from "@/lib/server/action-result";
+import { useToast } from "@/providers/toast-provider";
 import type { LaunchPickerOption } from "@/types/launches";
 import type {
   TaskArea,
@@ -77,19 +81,48 @@ type WorkboardContextValue = {
     launchId?: string | null;
     sopId?: string | null;
     documentIds?: string[];
-  }) => Promise<WorkboardTask>;
+  }) => Promise<WorkboardTask | null>;
   moveTask: (taskId: string, status: TaskStatus) => Promise<void>;
-  updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
-  deleteTask: (taskId: string) => Promise<void>;
-  confirmCompleteWithTime: (minutes: number, note?: string) => Promise<void>;
-  skipTimeAndComplete: () => Promise<void>;
+  /** `false` si la acción rechazó (ya se avisó con un toast). */
+  updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<boolean>;
+  deleteTask: (taskId: string) => Promise<boolean>;
+  confirmCompleteWithTime: (minutes: number, note?: string) => Promise<boolean>;
+  skipTimeAndComplete: () => Promise<boolean>;
   cancelComplete: () => void;
   upsertTaskInState: (task: WorkboardTask) => void;
-  assignTaskToSprint: (taskId: string, sprintId: string | null) => Promise<void>;
+  assignTaskToSprint: (taskId: string, sprintId: string | null) => Promise<boolean>;
+  assignTaskToLaunch: (taskId: string, launchId: string | null) => Promise<boolean>;
   kanbanDoneVisibleUntil: Record<string, number>;
 };
 
 const WorkboardContext = createContext<WorkboardContextValue | null>(null);
+
+/**
+ * ⭐ Corre una acción del tablero desde la pantalla (SCRUM-503).
+ *
+ * Las acciones devuelven sus errores esperables como valor: el motivo se avisa
+ * con un toast. Si la acción lanza, es inesperado: se registra en la consola y
+ * se avisa con el texto fijo (`correrMutacion`). Devuelve el dato si salió
+ * bien y `null` si no, para que quien llama deshaga lo que adelantó o deje el
+ * formulario abierto. Nunca rechaza: un `void` sobre esto no deja una promesa
+ * sin atender.
+ */
+export async function correrEnElTablero<T>(opciones: {
+  accion: () => Promise<MutationResult<T>>;
+  avisar: (aviso: Aviso) => void;
+  tituloError: string;
+  etiqueta: string;
+}): Promise<{ data: T } | null> {
+  const salida: { hecho: boolean; data?: T } = { hecho: false };
+  await correrMutacion({
+    ...opciones,
+    alExito: (data) => {
+      salida.hecho = true;
+      salida.data = data;
+    },
+  });
+  return salida.hecho ? { data: salida.data as T } : null;
+}
 
 function applyTaskPatch(
   prev: WorkboardTask,
@@ -140,6 +173,7 @@ export function WorkboardProvider({
   initialLaunchFilterId?: string;
   children: ReactNode;
 }) {
+  const { push } = useToast();
   const [tasks, setTasks] = useState(initialTasks);
   const [sprints, setSprints] = useState(initialSprints);
   const [sprintFilterId, setSprintFilterId] = useState(initialSprintFilterId);
@@ -182,9 +216,14 @@ export function WorkboardProvider({
   }, []);
 
   const refreshSprints = useCallback(async () => {
-    const list = await getSprintsAction();
-    setSprints(list);
-  }, []);
+    const leidos = await correrEnElTablero({
+      accion: () => getSprintsAction(),
+      avisar: push,
+      tituloError: "No se pudieron actualizar los sprints",
+      etiqueta: "[Workboard] actualizar sprints",
+    });
+    if (leidos) setSprints(leidos.data);
+  }, [push]);
 
   const upsertTaskInState = useCallback((task: WorkboardTask) => {
     setTasks((prev) => {
@@ -212,37 +251,55 @@ export function WorkboardProvider({
         current.map((t) => (t.id === taskId ? { ...t, status } : t))
       );
 
-      try {
-        await moveWorkboardTaskAction({ taskId, status });
-      } catch {
-        if (prev) upsertTaskInState(prev);
-      }
+      const movida = await correrEnElTablero({
+        accion: () => moveWorkboardTaskAction({ taskId, status }),
+        avisar: push,
+        tituloError: "No se pudo mover la tarea",
+        etiqueta: "[Workboard] mover tarea",
+      });
+      if (!movida) upsertTaskInState(prev);
     },
-    [tasks, upsertTaskInState, markKanbanDoneVisible, clearKanbanDoneVisible]
+    [tasks, upsertTaskInState, markKanbanDoneVisible, clearKanbanDoneVisible, push]
   );
 
   const finalizeComplete = useCallback(
-    async (minutes?: number, note?: string) => {
-      if (!pendingCompleteTask) return;
+    async (minutes?: number, note?: string): Promise<boolean> => {
+      if (!pendingCompleteTask) return false;
 
       setIsSaving(true);
       try {
+        // Si algo rechaza, el modal de tiempo queda abierto para reintentar o
+        // cancelar, como cuando la acción lanzaba.
         if (minutes != null && minutes > 0) {
-          await logTaskTimeAction({
-            taskId: pendingCompleteTask.id,
-            actualMinutes: minutes,
-            estimatedMinutes: pendingCompleteTask.estimatedMinutes,
-            note,
+          const registrado = await correrEnElTablero({
+            accion: () =>
+              logTaskTimeAction({
+                taskId: pendingCompleteTask.id,
+                actualMinutes: minutes,
+                estimatedMinutes: pendingCompleteTask.estimatedMinutes,
+                note,
+              }),
+            avisar: push,
+            tituloError: "No se pudo registrar el tiempo",
+            etiqueta: "[Workboard] registrar tiempo",
           });
+          if (!registrado) return false;
         }
 
         if (pendingCompletePatch) {
-          const updated = await updateWorkboardTaskAction({
-            taskId: pendingCompleteTask.id,
-            ...pendingCompletePatch,
-            status: "done",
+          const actualizada = await correrEnElTablero({
+            accion: () =>
+              updateWorkboardTaskAction({
+                taskId: pendingCompleteTask.id,
+                ...pendingCompletePatch,
+                status: "done",
+              }),
+            avisar: push,
+            tituloError: "No se pudo completar la tarea",
+            etiqueta: "[Workboard] completar tarea",
           });
-          upsertTaskInState(updated);
+          if (!actualizada) return false;
+          upsertTaskInState(actualizada.data);
           markKanbanDoneVisible(pendingCompleteTask.id);
         } else {
           await performMove(pendingCompleteTask.id, "done");
@@ -253,25 +310,32 @@ export function WorkboardProvider({
         setPendingCompletePreviousStatus(null);
         setSelectedTask(null);
         await refreshSprints();
+        return true;
       } finally {
         setIsSaving(false);
       }
     },
-    [pendingCompleteTask, pendingCompletePatch, performMove, upsertTaskInState, refreshSprints, markKanbanDoneVisible]
+    [pendingCompleteTask, pendingCompletePatch, performMove, upsertTaskInState, refreshSprints, markKanbanDoneVisible, push]
   );
 
   const createTask = useCallback(
     async (input: Parameters<WorkboardContextValue["createTask"]>[0]) => {
       setIsSaving(true);
       try {
-        const created = await createWorkboardTaskAction(input);
-        upsertTaskInState(created);
-        return created;
+        const creada = await correrEnElTablero({
+          accion: () => createWorkboardTaskAction(input),
+          avisar: push,
+          tituloError: "No se pudo crear la tarea",
+          etiqueta: "[Workboard] crear tarea",
+        });
+        if (!creada) return null;
+        upsertTaskInState(creada.data);
+        return creada.data;
       } finally {
         setIsSaving(false);
       }
     },
-    [upsertTaskInState]
+    [upsertTaskInState, push]
   );
 
   const moveTask = useCallback(
@@ -292,49 +356,62 @@ export function WorkboardProvider({
   );
 
   const updateTask = useCallback(
-    async (taskId: string, patch: TaskUpdatePatch) => {
+    async (taskId: string, patch: TaskUpdatePatch): Promise<boolean> => {
       const prev = tasks.find((t) => t.id === taskId);
-      if (!prev) return;
+      if (!prev) return true;
 
       if (patch.status === "done" && prev.status !== "done") {
         setPendingCompleteTask(applyTaskPatch(prev, patch, members));
         setPendingCompletePatch(patch);
         setPendingCompletePreviousStatus(prev.status);
-        return;
+        return true;
       }
 
       setIsSaving(true);
       try {
-        const updated = await updateWorkboardTaskAction({ taskId, ...patch });
-        upsertTaskInState(updated);
+        const actualizada = await correrEnElTablero({
+          accion: () => updateWorkboardTaskAction({ taskId, ...patch }),
+          avisar: push,
+          tituloError: "No se pudo guardar la tarea",
+          etiqueta: "[Workboard] guardar tarea",
+        });
+        if (!actualizada) return false;
+        upsertTaskInState(actualizada.data);
+        return true;
       } finally {
         setIsSaving(false);
       }
     },
-    [tasks, upsertTaskInState]
+    [tasks, upsertTaskInState, push]
   );
 
-  const deleteTask = useCallback(async (taskId: string) => {
+  const deleteTask = useCallback(async (taskId: string): Promise<boolean> => {
     setIsSaving(true);
     try {
-      await deleteWorkboardTaskAction(taskId);
+      const borrada = await correrEnElTablero({
+        accion: () => deleteWorkboardTaskAction(taskId),
+        avisar: push,
+        tituloError: "No se pudo eliminar la tarea",
+        etiqueta: "[Workboard] eliminar tarea",
+      });
+      if (!borrada) return false;
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
       setSelectedTask((prev) => (prev?.id === taskId ? null : prev));
+      return true;
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [push]);
 
   const confirmCompleteWithTime = useCallback(
-    async (minutes: number, note?: string) => {
-      await finalizeComplete(minutes, note);
-    },
+    (minutes: number, note?: string) => finalizeComplete(minutes, note),
     [finalizeComplete]
   );
 
-  const skipTimeAndComplete = useCallback(async () => {
-    await finalizeComplete();
-  }, [finalizeComplete]);
+  const skipTimeAndComplete = useCallback(
+    () => finalizeComplete(),
+    [finalizeComplete]
+  );
 
   const cancelComplete = useCallback(() => {
     setPendingCompleteTask((pendingTask) => {
@@ -363,17 +440,44 @@ export function WorkboardProvider({
   }, [clearKanbanDoneVisible]);
 
   const assignTaskToSprint = useCallback(
-    async (taskId: string, sprintId: string | null) => {
+    async (taskId: string, sprintId: string | null): Promise<boolean> => {
       setIsSaving(true);
       try {
-        const updated = await assignTaskToSprintAction(taskId, sprintId);
-        upsertTaskInState(updated);
+        const actualizada = await correrEnElTablero({
+          accion: () => assignTaskToSprintAction(taskId, sprintId),
+          avisar: push,
+          tituloError: "No se pudo cambiar el sprint",
+          etiqueta: "[Workboard] asignar sprint",
+        });
+        if (!actualizada) return false;
+        upsertTaskInState(actualizada.data);
         await refreshSprints();
+        return true;
       } finally {
         setIsSaving(false);
       }
     },
-    [refreshSprints, upsertTaskInState]
+    [refreshSprints, upsertTaskInState, push]
+  );
+
+  /**
+   * Cambia el lanzamiento de la tarea desde el detalle. Antes el detalle
+   * llamaba a la acción directo; vive acá para avisar el rechazo igual que el
+   * resto del tablero. No marca `isSaving`, como antes.
+   */
+  const assignTaskToLaunch = useCallback(
+    async (taskId: string, launchId: string | null): Promise<boolean> => {
+      const actualizada = await correrEnElTablero({
+        accion: () => assignTaskToLaunchAction(taskId, launchId),
+        avisar: push,
+        tituloError: "No se pudo cambiar el lanzamiento",
+        etiqueta: "[Workboard] asignar lanzamiento",
+      });
+      if (!actualizada) return false;
+      upsertTaskInState(actualizada.data);
+      return true;
+    },
+    [upsertTaskInState, push]
   );
 
   const value = useMemo(
@@ -407,6 +511,7 @@ export function WorkboardProvider({
       cancelComplete,
       upsertTaskInState,
       assignTaskToSprint,
+      assignTaskToLaunch,
       kanbanDoneVisibleUntil,
     }),
     [
@@ -433,6 +538,7 @@ export function WorkboardProvider({
       cancelComplete,
       upsertTaskInState,
       assignTaskToSprint,
+      assignTaskToLaunch,
       kanbanDoneVisibleUntil,
     ]
   );

@@ -19,7 +19,8 @@ export interface LogTimeModalProps {
   taskId: string;
   taskTitle: string;
   estimatedMinutes?: number;
-  onConfirm: (minutes: number, note?: string) => void | Promise<void>;
+  /** Si devuelve `false`, no se guardó (quien llama ya avisó el motivo). */
+  onConfirm: (minutes: number, note?: string) => boolean | void | Promise<boolean | void>;
   onSkip: () => void | Promise<void>;
   onCancel: () => void | Promise<void>;
   open: boolean;
@@ -83,7 +84,8 @@ export function LogTimeModal({
     if (totalMinutes <= 0) return;
     setSubmitting(true);
     try {
-      await onConfirm(totalMinutes, note.trim() || undefined);
+      const guardado = await onConfirm(totalMinutes, note.trim() || undefined);
+      if (guardado === false) return;
       setSuccess(true);
       setTimeout(() => setSuccess(false), 1200);
     } finally {

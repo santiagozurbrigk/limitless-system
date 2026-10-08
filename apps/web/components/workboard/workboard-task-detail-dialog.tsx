@@ -17,10 +17,6 @@ import {
   Textarea,
 } from "@ai-coo/ui";
 import {
-  assignTaskToLaunchAction,
-  assignTaskToSprintAction,
-} from "@/app/workboard/actions";
-import {
   STATUS_COLORS,
   STATUS_LABELS,
   TASK_AREA_LABELS,
@@ -47,6 +43,7 @@ export function WorkboardTaskDetailDialog() {
     updateTask,
     deleteTask,
     assignTaskToSprint,
+    assignTaskToLaunch,
     upsertTaskInState,
     isSaving,
   } = useWorkboard();
@@ -88,7 +85,9 @@ export function WorkboardTaskDetailDialog() {
   async function handleSave() {
     const completing =
       status === "done" && selectedTask!.status !== "done";
-    await updateTask(selectedTask!.id, {
+    // Si la acción rechaza, el provider ya avisó con el motivo y el detalle
+    // queda abierto con lo que escribiste.
+    const guardada = await updateTask(selectedTask!.id, {
       title,
       description,
       status,
@@ -101,7 +100,7 @@ export function WorkboardTaskDetailDialog() {
         .map((t) => t.trim())
         .filter(Boolean),
     });
-    if (!completing) {
+    if (guardada && !completing) {
       setSelectedTask(null);
     }
   }
@@ -251,11 +250,15 @@ export function WorkboardTaskDetailDialog() {
               disabled={isSaving}
               onChange={(e) => {
                 const next = e.target.value;
+                const anterior = sprintId;
                 setSprintId(next);
+                // Si rechaza, el provider avisa y el selector vuelve a lo que había.
                 void assignTaskToSprint(
                   selectedTask.id,
                   next ? next : null
-                );
+                ).then((hecho) => {
+                  if (!hecho) setSprintId(anterior);
+                });
               }}
             >
               <option value="">Sin sprint</option>
@@ -277,12 +280,14 @@ export function WorkboardTaskDetailDialog() {
                 disabled={isSaving}
                 onChange={(e) => {
                   const next = e.target.value;
+                  const anterior = launchId;
                   setLaunchId(next);
-                  void assignTaskToLaunchAction(
+                  // Si rechaza, el provider avisa y el selector vuelve a lo que había.
+                  void assignTaskToLaunch(
                     selectedTask.id,
                     next ? next : null
-                  ).then((updated) => {
-                    upsertTaskInState(updated);
+                  ).then((hecho) => {
+                    if (!hecho) setLaunchId(anterior);
                   });
                 }}
               >

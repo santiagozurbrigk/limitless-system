@@ -101,6 +101,8 @@ export function WorkboardShell() {
 
   async function handleAddTask() {
     if (!newTask.title.trim()) return;
+    // Si la acción rechaza, el provider ya avisó con el motivo y el formulario
+    // queda abierto con lo que escribiste.
     const created = await createTask({
       title: newTask.title,
       description: newTask.description,
@@ -115,6 +117,7 @@ export function WorkboardShell() {
         .filter(Boolean),
       launchId: newTask.launchId || null,
     });
+    if (!created) return;
 
     const resourceError = await applyDraftTaskResources(created.id, resourcesDraft);
     const refreshed = await getWorkboardTaskByIdAction(created.id);
@@ -240,9 +243,7 @@ export function WorkboardShell() {
         taskId={pendingCompleteTask?.id ?? ""}
         taskTitle={pendingCompleteTask?.title ?? ""}
         estimatedMinutes={pendingCompleteTask?.estimatedMinutes}
-        onConfirm={async (minutes, note) => {
-          await confirmCompleteWithTime(minutes, note);
-        }}
+        onConfirm={(minutes, note) => confirmCompleteWithTime(minutes, note)}
         onSkip={async () => {
           await skipTimeAndComplete();
         }}
