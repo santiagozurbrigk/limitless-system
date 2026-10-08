@@ -72,6 +72,38 @@ function PaymentProgressBar({ paid, total }: { paid: number; total: number }) {
   );
 }
 
+/**
+ * Rótulos del botón y del diálogo de la próxima cuota. Si los pagos no se
+ * pudieron leer, la próxima pendiente se calcula sobre una lista vacía y puede
+ * ser otra: se dice "la próxima cuota" sin número (el servidor elige la
+ * correcta).
+ */
+export function rotulosDeLaProximaCuota(
+  etiqueta: string | null,
+  loadError: string | null
+): { boton: string; dialogo: string } {
+  if (loadError || !etiqueta) return { boton: "Registrar la próxima cuota", dialogo: "la próxima cuota" };
+  return { boton: `Registrar cuota ${etiqueta}`, dialogo: etiqueta };
+}
+
+/**
+ * Qué queda después de releer los pagos: con éxito, la lista y sin error (ya
+ * se leyó bien, el error de la primera lectura no aplica más); si falla,
+ * `null`: queda lo que se veía.
+ */
+export function estadoTrasReleerPagos(
+  lectura: Lectura<ClientPayment[]>
+): { payments: ClientPayment[]; loadError: null } | null {
+  return lectura.ok ? { payments: lectura.data, loadError: null } : null;
+}
+
+/** El rótulo de la cuota que el servidor registró, para el aviso. */
+export function rotuloDeCuotaRegistrada(cliente: Client, pago: ClientPayment): string {
+  const numero = pago.installmentNumber;
+  const etiqueta = numero != null ? cliente.installments?.[numero - 1]?.label : undefined;
+  return etiqueta ?? "La cuota";
+}
+
 /** Los pagos de un cliente, o el motivo si no se pudieron leer (SCRUM-504). */
 export function cargarPagosDelCliente(clientId: string): Promise<Lectura<ClientPayment[]>> {
   return leerConMotivo(
@@ -145,9 +177,14 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
   /** Relee la lista después de registrar; si falla, queda lo que se ve. */
   function releerPagos() {
     void cargarPagosDelCliente(client.id).then((lectura) => {
-      if (lectura.ok) setPayments(lectura.data);
+      const estado = estadoTrasReleerPagos(lectura);
+      if (!estado) return;
+      setPayments(estado.payments);
+      setLoadError(estado.loadError);
     });
   }
+
+  const rotulos = rotulosDeLaProximaCuota(nextPending?.label ?? null, loadError);
 
   async function openReceipt(paymentId: string) {
     setOpeningId(paymentId);
@@ -179,7 +216,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
               onClick={() => setAddOpen(true)}
             >
               <Plus className="h-3.5 w-3.5" />
-              Registrar cuota {nextPending.label}
+              {rotulos.boton}
             </Button>
           ) : null}
           {showGenericButton ? (
@@ -279,7 +316,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
           onOpenChange={setAddOpen}
           clientId={client.id}
           defaultAmount={nextPending.amount}
-          installmentLabel={nextPending.label}
+          installmentLabel={rotulos.dialogo}
           onSuccess={(updatedClient, newPayment) => {
             // `updateClient` lanza con el motivo (SCRUM-497): sin este catch
             // quedaba como una promesa rechazada que nadie veía.
@@ -296,7 +333,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
             void refreshClientPayments();
             push({
               title: "Cuota registrada",
-              description: `${nextPending.label} guardada con comprobante`,
+              description: `${rotuloDeCuotaRegistrada(updatedClient, newPayment)} guardada con comprobante`,
               variant: "success",
             });
           }}
@@ -310,6 +347,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
           clientId={client.id}
           onSuccess={(newPayment) => {
             setPayments((prev) => [newPayment, ...prev]);
+            releerPagos();
             void refreshClientPayments();
             push({
               title: "Pago registrado",

@@ -363,3 +363,49 @@ describe("comprobantes", () => {
     });
   });
 });
+
+describe("filtro por organización (AR pasada 2, MENOR-4)", () => {
+  const PAGO_AJENO = "55555555-5555-4555-8555-555555555555";
+
+  it("⭐ no firma la subida a la carpeta de un cliente de otra organización", async () => {
+    await expect(
+      prepareClientPaymentReceiptUploadAction({
+        clientId: CLIENTE_AJENO,
+        fileName: "c.pdf",
+        fileSize: 10,
+        mimeType: "application/pdf",
+      })
+    ).resolves.toEqual({ success: false, error: "Cliente no encontrado" });
+    const lectura = sim.operaciones.find((o) => o.tabla === "clients");
+    expect(lectura?.filtros).toEqual([
+      ["id", CLIENTE_AJENO],
+      ["organization_id", ORG],
+    ]);
+  });
+
+  it("⭐ no abre el comprobante de un pago de otra organización", async () => {
+    await expect(getClientPaymentReceiptUrlAction(PAGO_AJENO)).resolves.toEqual({
+      success: false,
+      error: "Comprobante no encontrado",
+    });
+    const lectura = sim.operaciones.find((o) => o.tabla === "client_payments");
+    expect(lectura?.filtros).toEqual([
+      ["organization_id", ORG],
+      ["id", PAGO_AJENO],
+    ]);
+  });
+
+  it("⭐ una fila propia con la ruta de otra organización no se firma: texto fijo y se reporta", async () => {
+    (sim.tablas.client_payments[0] as Fila).storage_path = "otra-org/cliente/comprobante.pdf";
+    await expect(getClientPaymentReceiptUrlAction(PAGO)).resolves.toEqual({
+      success: false,
+      error: ERROR_INESPERADO,
+    });
+    expect(sim.reportes).toEqual([
+      {
+        error: expect.objectContaining({ message: "Ruta de almacenamiento inválida" }),
+        contexto: { accion: "[getClientPaymentReceiptUrl]" },
+      },
+    ]);
+  });
+});

@@ -90,7 +90,12 @@ import {
 } from "@/components/closing/leads-table";
 import { FrequentObjectionsSection } from "../frequent-objections-section";
 import { AvisoDeCobradoSinLeer, cargarCobradoPorCliente } from "../cobros-page";
-import { cargarPagosDelCliente } from "../client-payments-section";
+import {
+  cargarPagosDelCliente,
+  estadoTrasReleerPagos,
+  rotuloDeCuotaRegistrada,
+  rotulosDeLaProximaCuota,
+} from "../client-payments-section";
 import { uploadPaymentReceiptFile } from "../payment-receipt-dropzone";
 import { AvisoDeRecorridoIncompleto, cargarRecorridoDelLead } from "../lead-journey-inline";
 
@@ -506,5 +511,29 @@ describe("Recorrido del lead", () => {
     expect(html).toContain("Faltan datos del recorrido:");
     expect(html).toContain("no se pudieron leer la llamada y los comentarios.");
     expect(renderToStaticMarkup(createElement(AvisoDeRecorridoIncompleto, { faltan: [] }))).toBe("");
+  });
+});
+
+describe("Ficha de pagos (AR pasada 2, MENOR-1)", () => {
+  it("⭐ releer con éxito limpia el error de la primera lectura", () => {
+    expect(estadoTrasReleerPagos({ ok: true, data: [] })).toEqual({ payments: [], loadError: null });
+  });
+
+  it("releer con error deja lo que se veía", () => {
+    expect(estadoTrasReleerPagos({ ok: false, motivo: ERROR_INESPERADO })).toBeNull();
+  });
+
+  it("⭐ con los pagos sin leer, la cuota no se rotula con un número calculado sobre una lista vacía", () => {
+    expect(rotulosDeLaProximaCuota("1/3", ERROR_INESPERADO)).toEqual({
+      boton: "Registrar la próxima cuota",
+      dialogo: "la próxima cuota",
+    });
+    expect(rotulosDeLaProximaCuota("2/3", null)).toEqual({ boton: "Registrar cuota 2/3", dialogo: "2/3" });
+  });
+
+  it("⭐ el aviso usa la cuota que registró el servidor", () => {
+    const cliente = { installments: [{ label: "1/3" }, { label: "2/3" }, { label: "3/3" }] } as never;
+    expect(rotuloDeCuotaRegistrada(cliente, { installmentNumber: 2 } as never)).toBe("2/3");
+    expect(rotuloDeCuotaRegistrada(cliente, { installmentNumber: null } as never)).toBe("La cuota");
   });
 });

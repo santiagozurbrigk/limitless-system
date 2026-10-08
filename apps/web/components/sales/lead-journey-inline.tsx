@@ -12,7 +12,7 @@ import {
   Image as ImageIcon,
   Zap,
 } from "lucide-react";
-import { Skeleton, SteppedAlert, cn } from "@ai-coo/ui";
+import { Skeleton, cn } from "@ai-coo/ui";
 import { getLeadJourneyAction, getZernioLeadJourneyAction } from "@/app/sales/actions";
 import { paths } from "@/routes";
 import type { LeadJourneyStep, RecorridoDelLead } from "@/lib/sales/lead-journey";
