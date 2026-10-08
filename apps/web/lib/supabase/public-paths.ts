@@ -20,6 +20,12 @@ export function isPublicPath(pathname: string): boolean {
   if (pathname === paths.superAdmin.login) return true;
   if (pathname.startsWith(`${paths.superAdmin.login}/`)) return true;
   if (pathname === "/api/waitlist") return true;
+  /*
+   * Chequeo de salud (SCRUM-85): lo consultan el monitor externo y el workflow
+   * que compara la versión de producción con `main`, sin cuenta. Responde sólo
+   * booleanos, el commit y la hora.
+   */
+  if (pathname === "/api/health") return true;
   if (pathname.startsWith("/api/utm/")) return true;
   if (pathname.startsWith("/api/cron/")) return true;
   if (pathname.startsWith("/api/queue/")) return true;

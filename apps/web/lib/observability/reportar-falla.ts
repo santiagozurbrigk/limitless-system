@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { anotarOrganizacion } from "@/lib/observability/corrida-en-curso";
 
 /**
  * Manda a Sentry una falla de un proceso de fondo, con las etiquetas que dicen
@@ -11,6 +12,10 @@ import * as Sentry from "@sentry/nextjs";
  * Zernio (849). Con las etiquetas, Sentry agrupa por org y alerta por mail.
  *
  * No tira nunca: reportar no puede romper el trabajo que falló.
+ *
+ * Dentro de la corrida de un cron, una falla con `organizationId` además deja a
+ * esa org como fallida en el registro de corridas (SCRUM-85,
+ * `corrida-en-curso.ts`): la corrida termina como `parcial`.
  */
 export type ContextoDeFalla = {
   /** Ruta del cron (`/api/cron/ghl-sync`) o nombre del worker. */
@@ -64,6 +69,7 @@ export function errorParaReportar(error: unknown): { error: Error; codigo: strin
 }
 
 export function reportarFalla(error: unknown, contexto: ContextoDeFalla): void {
+  if (!contexto.accion) anotarOrganizacion(contexto.organizationId, "fallo");
   try {
     const { error: aReportar, codigo } = errorParaReportar(error);
     Sentry.withScope((scope) => {

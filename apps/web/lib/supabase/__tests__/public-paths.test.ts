@@ -18,6 +18,8 @@ describe("isPublicPath", () => {
     "/login",
     "/onboarding-cliente/abc123",
     "/privacidad",
+    // SCRUM-85: el monitor externo y el workflow de versión lo consultan sin cuenta.
+    "/api/health",
   ])("deja pasar %s sin sesión", (pathname) => {
     expect(isPublicPath(pathname)).toBe(true);
   });
@@ -35,6 +37,9 @@ describe("isPublicPath", () => {
     "/onboarding",
     "/onboarding/holding",
     "/onboarding-cliente",
+    // Sólo la ruta exacta del chequeo de salud es pública.
+    "/api/healthz",
+    "/api/health/detalle",
   ])("exige sesión en %s", (pathname) => {
     expect(isPublicPath(pathname)).toBe(false);
   });

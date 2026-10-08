@@ -12,6 +12,8 @@ import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
 import { estadoDeOrg, planPorMrr } from "@/lib/super-admin/estado-de-org";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { horarioDeCron, rutasDeCrons } from "@/lib/observability/cron-monitor";
+import { TABLA_DE_CORRIDAS } from "@/lib/observability/registro-de-corridas";
 import {
   countByOrg,
   CLIENT_BILLING_SELECT,
@@ -28,6 +30,8 @@ import {
   type SuperAdminPeriod,
 } from "@/lib/super-admin/period";
 import type {
+  CorridasDeProcesos,
+  UltimaCorridaDeProceso,
   AdminAiCostDashboard,
   AdminOrganizationDetail,
   AdminOrganizationListRow,
@@ -1034,6 +1038,96 @@ export async function loadInfrastructureStats(): Promise<InfrastructureStats> {
     closingCalls: closing.count ?? 0,
     clients: clients.count ?? 0,
     aiBrainDocuments: brainDocs.count ?? 0,
+  };
+}
+
+type FilaDeCorrida = {
+  estado: "en_curso" | "ok" | "encolado" | "fallo" | "parcial";
+  inicio: string;
+  fin: string | null;
+  orgs_procesadas: number | null;
+  orgs_fallidas: number | null;
+  organizaciones_fallidas: string[] | null;
+  jobs_encolados: number | null;
+  error: string | null;
+};
+
+/**
+ * La última corrida de cada cron de `vercel.json` (SCRUM-85), con el nombre de
+ * las organizaciones que fallaron. Una consulta por cron sobre el índice
+ * `(proceso, inicio desc)`: son 19 y cada una lee una fila. Con el mismo
+ * `inicio` gana la que tiene `fin` (una cerrada antes que una en curso).
+ */
+export async function loadUltimasCorridas(): Promise<CorridasDeProcesos> {
+  await requireSuperAdmin();
+
+  const admin = createAdminClient();
+  const rutas = rutasDeCrons();
+  const lecturas = await Promise.all(
+    rutas.map((proceso) =>
+      admin
+        .from(TABLA_DE_CORRIDAS)
+        .select(
+          "estado, inicio, fin, orgs_procesadas, orgs_fallidas, organizaciones_fallidas, jobs_encolados, error"
+        )
+        .eq("proceso", proceso)
+        .order("inicio", { ascending: false })
+        .order("fin", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle<FilaDeCorrida>()
+    )
+  );
+
+  const sinCorrida = (proceso: string): UltimaCorridaDeProceso => ({
+    proceso,
+    horario: horarioDeCron(proceso) ?? null,
+    corrida: null,
+  });
+
+  const fallida = lecturas.find((lectura) => lectura.error);
+  if (fallida?.error) {
+    console.error("[super-admin] corridas de procesos:", fallida.error.message);
+    return { disponible: false, procesos: rutas.map(sinCorrida) };
+  }
+
+  const idsFallidos = [
+    ...new Set(lecturas.flatMap((lectura) => lectura.data?.organizaciones_fallidas ?? [])),
+  ];
+  const nombres = new Map<string, string>();
+  if (idsFallidos.length > 0) {
+    const { data, error } = await admin
+      .from("organizations")
+      .select("id, name")
+      .in("id", idsFallidos);
+    if (error) console.error("[super-admin] nombres de orgs fallidas:", error.message);
+    for (const org of (data ?? []) as { id: string; name: string | null }[]) {
+      if (org.name) nombres.set(org.id, org.name);
+    }
+  }
+
+  return {
+    disponible: true,
+    procesos: rutas.map((proceso, i) => {
+      const fila = lecturas[i].data;
+      if (!fila) return sinCorrida(proceso);
+      return {
+        proceso,
+        horario: horarioDeCron(proceso) ?? null,
+        corrida: {
+          estado: fila.estado,
+          inicio: fila.inicio,
+          fin: fila.fin,
+          orgsProcesadas: fila.orgs_procesadas,
+          orgsFallidas: fila.orgs_fallidas,
+          organizacionesFallidas: (fila.organizaciones_fallidas ?? []).map((id) => ({
+            id,
+            nombre: nombres.get(id) ?? null,
+          })),
+          jobsEncolados: fila.jobs_encolados,
+          error: fila.error,
+        },
+      };
+    }),
   };
 }
 

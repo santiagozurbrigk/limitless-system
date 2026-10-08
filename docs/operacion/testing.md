@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot`, `apps/reel-worker` | sí (`pnpm typecheck`, job `checks`) |
 | Lint | ESLint 9 (`next lint` en web; `eslint src/` con la base de `packages/config` en ui, reel-worker y bot) | `apps/web`, `packages/ui`, `apps/reel-worker`, `apps/discord-bot` | sí (`pnpm lint`, job `checks`) |
-| Unitarios | Vitest 3, entorno `node` | `apps/web` (194 archivos) | sí (`pnpm test`) |
+| Unitarios | Vitest 3, entorno `node` | `apps/web` (200 archivos) | sí (`pnpm test`) |
 | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** (se activa con staging, ver E2E) |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
@@ -71,7 +71,7 @@ Prueban lo que la base deja hacer a cada usuario, que Vitest no puede ver porque
 
 - `00_ayudas.sql` crea el schema `ci` con `ci.jwt(sub, extra)` (deja el JWT de un usuario para la transacción), `ci.rechazado(sql, qué)` (tiene que fallar con 42501), `ci.filas(sql)` (filas tocadas: la RLS en UPDATE y DELETE no da error, afecta 0) y `ci.espera(real, esperado, qué)`.
 - Cada archivo arma sus datos dentro de `begin; ... rollback;`, actúa con `select ci.jwt(...); set local role authenticated;` y vuelve con `reset role`.
-- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9).
+- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9). Hoy son 10 (`00_ayudas.sql` a `90_corridas_de_procesos.sql`, SCRUM-85: el registro de corridas sólo para el service role y sus checks de coherencia).
 - Validez, igual que en Vitest: sacar la migración que arregla el problema y confirmar que el test falla con `FALLA: ...`.
 - Para correrlos a mano: los mismos comandos de "Migraciones" más arriba.
 
@@ -79,7 +79,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **194 archivos, ~1.945 casos** (recontado el 2026-10-06 con SCRUM-497 rebasada sobre SCRUM-501; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **200 archivos, ~2.013 casos** (recontado el 2026-10-07 con el fix-pack de SCRUM-85; el runner ejecuta 2.330 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -95,7 +95,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/ghl` | 5 | 45 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook, fecha de alta de un contacto en la zona de la org |
 | `lib/sales` | 3 | 50 | opciones de seguimiento (incluida la fecha propuesta del próximo paso), hilo del lead (el próximo paso vence por día en la zona de la org), rango de métricas de ventas en días de la org (miembro en Madrid) |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
-| `lib/super-admin` | 5 | 43 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role y estado de la org alineado con la base (incluido el desconocido) |
+| `lib/super-admin` | 6 | 54 | plan de bajas, progreso de onboarding, chequeo de super admin en las lecturas con service role, estado de la org alineado con la base (incluido el desconocido) y la última corrida de cada cron en Infraestructura (en curso, sin cierre, parcial con los nombres de las orgs, falló, encolado en los crons con fan-out, desempate por `fin`, guard de super admin) |
 | `lib/client-onboarding` | 3 | 25 | formulario por link |
 | `lib/sops` | 2 | 25 | marcadores de adjuntos, chunks de audio |
 | `lib/auth` | 7 | 42 | redirect seguro, límite de login, cuenta desactivada, rol de la org, permisos sin log, un solo chequeo de super admin por pedido, acceso a un módulo por ruta |
@@ -115,10 +115,10 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/chart` | 1 | 5 | escala del embudo |
 | `lib/supabase` | 2 | 6 | rutas públicas del middleware, `fetchAllRows` |
 | `lib/release` | 1 | 4 | lo escondido para el release: ⌘K, catálogo de integraciones, canales de Lead Magnets |
-| `lib/observability` | 3 | 26 | aviso a Sentry de los crons; etiquetas de una falla de proceso de fondo o de server action (SCRUM-497); lo que se saca de un evento o transacción antes de mandarlo (cuerpo, cookies, query también en nombres de transacciones y spans, headers fuera de la lista blanca, breadcrumbs de consola), las configs de Sentry con el SDK simulado y las copias del reel-worker y del bot; un objeto plano reportado con su `message` y su `code` (SCRUM-501) |
+| `lib/observability` | 5 | 67 | aviso a Sentry de los crons; registro de corridas en `corridas_de_procesos` (ok, encolado, fallo, parcial con las orgs fallidas, una falla o una base colgada del registro no rompe el cron, apertura lenta sin fila fantasma, retención de 30 días, mensaje de error saneado también con claves compuestas, corridas en paralelo sin mezclarse) y chequeo de salud (estados, plazo de 3 s, versión, variables, una sola medición para muchos pedidos) (SCRUM-85); etiquetas de una falla de proceso de fondo o de server action (SCRUM-497); lo que se saca de un evento o transacción antes de mandarlo (cuerpo, cookies, query también en nombres de transacciones y spans, headers fuera de la lista blanca, breadcrumbs de consola), las configs de Sentry con el SDK simulado y las copias del reel-worker y del bot; un objeto plano reportado con su `message` y su `code` (SCRUM-501) |
 | `lib/storage` | 1 | 6 | validación de rutas por org |
 | `lib/server` | 1 | 13 | errores de las server actions: sólo un `ErrorEsperable` vuelve con su mensaje en los módulos arreglados y lo demás se registra, va a Sentry y vuelve con el texto fijo; `runMutation` no cambia el mensaje pero reporta las fallas de infraestructura (clasificación por clase, `code` y texto) |
-| `lib/queue` | 1 | 3 | aviso cuando falla un trabajo de QStash |
+| `lib/queue` | 2 | 5 | aviso cuando falla un trabajo de QStash; las orgs de un fan-out quedan en el registro de corridas |
 | `lib/unipile` | 2 | 5 | secreto del webhook |
 | `lib/intelligence` | 2 | 15 | organizaciones sobre las que corren los crons de IA y el chequeo de la org al procesarla (generadores, workers, modo en serie) |
 | `lib/youtube` | 1 | 2 | métricas de video que se guardan |
@@ -135,6 +135,8 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/calendly` | 1 | 11 | firma del webhook |
 | `lib/forms` | 1 | 6 | paginación de respuestas de Typeform |
 | `lib/webhooks` | 1 | 22 | status HTTP de la ingesta y webhooks que no pierden el evento crudo |
+| `app/api/health` | 1 | 8 | `GET /api/health`: 200 `ok`, 200 `degradado` (Storage o una variable), 503 con la base caída o colgada, sin caché y sin mensajes, tablas, variables ni valores en la respuesta (SCRUM-85) |
+| `components/super-admin` | 1 | 6 | la página de Infraestructura muestra el chequeo de salud y las corridas reales (un fan-out como Encolado, no OK), sin los estados escritos a mano |
 | `app/api/integrations` | 3 | 14 | callbacks OAuth (sesión y organización), cron de sync de Fathom (plazo y orden), webhook de Fathom por miembro |
 | `app/marketing/content` | 1 | 4 | contenido con mejor rendimiento sobre todas las piezas de la org |
 | `app/auth` | 2 | 11 | el login vuelve a la invitación; el cambio de contraseña obligatorio devuelve sus errores esperables como valor (incluidos los rechazos de Supabase Auth: misma contraseña, débil, sesión, intentos) |
@@ -174,6 +176,8 @@ Tiempos medidos el 2026-10-07 (SCRUM-261), con los cuatro jobs en paralelo:
 | Con caché de `.next` (lo habitual) | 1 min 55 s | 2 min 56 s | 28 s | 8 s | 2 min 56 s |
 
 Qué jobs conviene exigir para mergear a `main`: `docs/operacion/entorno-y-deploy.md` § Branch protection.
+
+Aparte del CI, `.github/workflows/produccion-al-dia.yml` (SCRUM-85) no prueba código: después de cada push a `main` y una vez por día comprueba que producción tenga desplegado el commit de `main` ([`alertas.md`](./alertas.md) § Producción desactualizada).
 
 ## Backlog
 

@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import vercelConfig from "@/vercel.json";
 import { assertCronAuthorized } from "@/lib/integrations/cron-auth";
 import { reportarFalla } from "@/lib/observability/reportar-falla";
+import { conRegistroDeCorrida } from "@/lib/observability/registro-de-corridas";
 
 /**
  * Sentry Cron Monitors para los crons de `vercel.json` (SCRUM-84).
@@ -15,6 +16,10 @@ import { reportarFalla } from "@/lib/observability/reportar-falla";
  *
  * Sólo se registran las corridas autorizadas (las de Vercel Cron o las manuales
  * con `CRON_SECRET`): un pedido sin credencial no es una corrida.
+ *
+ * Cada corrida queda además en la tabla `corridas_de_procesos` con su estado y
+ * sus organizaciones fallidas (SCRUM-85, `registro-de-corridas.ts`): la lee la
+ * página de Infraestructura del super admin. Registrar nunca rompe el cron.
  */
 
 type CronConfig = { path: string; schedule: string };
@@ -83,7 +88,7 @@ export function conMonitorDeCron(
     };
 
     try {
-      const response = await handler(request);
+      const response = await conRegistroDeCorrida(path, () => handler(request));
       await cerrar(response.status >= 500 ? "error" : "ok");
       return response;
     } catch (error) {

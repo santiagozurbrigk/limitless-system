@@ -6,6 +6,7 @@ import {
 import { resolvePostAnalytics } from "@/lib/zernio/resolve-analytics";
 import type { ContentMetrics } from "@/types/content";
 import { reportarFalla } from "@/lib/observability/reportar-falla";
+import { anotarOrganizacion } from "@/lib/observability/corrida-en-curso";
 import {
   armarLote,
   esErrorDeAcceso,
@@ -343,7 +344,11 @@ export async function syncContentMetricsAllOrgs(): Promise<{
     try {
       const result = await syncContentMetricsForOrg(organizationId);
       results.push({ organizationId, ...result });
+      // Registro de corridas (SCRUM-85). Una clave rechazada ya quedó como
+      // fallida por `reportarFalla` y no se pisa.
+      anotarOrganizacion(organizationId, "ok");
     } catch (err) {
+      anotarOrganizacion(organizationId, "fallo");
       console.error("[syncContentMetrics] org falló completa", {
         organizationId,
         error: err instanceof Error ? err.message : String(err),

@@ -7,6 +7,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { CalendlyEventSyncPayload } from "@/types/calendly";
 import { reportarFalla } from "@/lib/observability/reportar-falla";
+import { anotarOrganizacion } from "@/lib/observability/corrida-en-curso";
 
 export type CalendlyOrgSyncResult = {
   organizationId: string;
@@ -103,6 +104,7 @@ export async function syncCalendlyOrganizationSafe(
       .eq("organization_id", organizationId);
 
     const synced = result.inserted + result.updated;
+    anotarOrganizacion(organizationId, "ok");
     return {
       organizationId,
       synced,
@@ -116,6 +118,13 @@ export async function syncCalendlyOrganizationSafe(
       `[calendly/sync] Error inesperado (org=${organizationId}):`,
       e
     );
+    // Sin esto la org fallaba sin Sentry y sin quedar en el registro de corridas.
+    reportarFalla(e, {
+      cron: "/api/cron/calendly-sync",
+      organizationId,
+      provider: "calendly",
+      extra: { etapa: "unexpected_error" },
+    });
     return EMPTY_ORG_RESULT(organizationId, "unexpected_error");
   }
 }

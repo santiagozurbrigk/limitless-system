@@ -1234,3 +1234,25 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 5. Bot de Discord y reel-worker: forzar un error (por ejemplo, un job de reel con un archivo inexistente). Aparece en Sentry con `app=reel-worker` / `app=discord-bot`.
 6. Anotar fecha, quién recibió el mail y cuánto tardó.
 
+## Salud y producción al día (SCRUM-85)
+
+**Prerrequisitos:** el PR de SCRUM-85 mergeado y desplegado; la migración `20261007120000_corridas_de_procesos`
+aplicada en producción (`limitless-auditoria/sql-produccion/scrum-85/`, con `02_verificacion.sql` en `todo_ok`).
+
+1. ⭐ `curl -i https://www.optimizatucontrol.com/api/health` sin sesión: 200, `"status":"ok"`, los tres chequeos en
+   `true`, `version.commit` igual a los 7 primeros caracteres del último commit de `main`, `version.entorno` =
+   `production` y `Cache-Control: no-store`. Nada de mensajes, tablas ni variables.
+2. ⭐ Monitor externo: crear la cuenta y el monitor con los pasos de [`alertas.md`](./alertas.md) § Monitor externo
+   (UptimeRobot o Better Stack, aviso por mail o Discord). Forzar una alerta como dice el paso 5 y anotar quién la
+   recibió y cuánto tardó. Anotar en este bloque qué servicio y qué cuenta quedaron.
+3. ⭐ Workflow "Producción al día": la corrida del push del merge termina en verde (Actions). Para ver la falla sin
+   tocar producción: Run workflow con `sha_esperado` = un commit que no esté desplegado y `plazo_segundos` = `60`;
+   tiene que fallar con "Producción no está al día" y tiene que llegar el mail de GitHub.
+4. Discord (opcional): crear el webhook del canal del equipo, guardarlo como secreto `DISCORD_WEBHOOK_ALERTAS` en
+   GitHub y repetir el paso 3: el aviso llega al canal.
+5. 🔒 Super-admin → Infraestructura: "Estado de la plataforma" con el commit desplegado y los chequeos en verde;
+   "Procesos programados" con los 19 crons, y después de la primera hora, `OK` o `Parcial` con hora y orgs en los
+   horarios (los 6 crons con fan-out figuran como `Encolado: N jobs encolados`, nunca como `OK`). Ninguno tiene que quedar `Sin cierre` de forma repetida (si pasa, es el corte de 60 s, `[CRONS-CORTE-60S]`).
+6. En Supabase → SQL Editor, la consulta de [`alertas.md`](./alertas.md) § Registro de corridas: las filas coinciden
+   con lo que muestra la página; a los 31 días, ninguna fila tiene más de 30 días.
+

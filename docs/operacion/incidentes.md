@@ -13,29 +13,38 @@ corras scripts de "arreglo" y no apliques migraciones** hasta haber hecho un dum
 | Qué | Dónde | Sirve para |
 |---|---|---|
 | App web, crons, webhooks | Vercel → proyecto `otc-plaform` (team `otcteam`) → **Logs** (filtrar por ruta: `/api/cron/`, `/api/webhooks/`) y **Crons** (última ejecución de cada uno) | Casi todo |
-| Errores con stack | Sentry (proyecto de `SENTRY_PROJECT`); sólo `apps/web` en producción | Excepciones de páginas, actions y rutas |
+| Errores con stack | Sentry (proyecto de `SENTRY_PROJECT`). `apps/web` siempre; el bot y el reel-worker tienen el código (SCRUM-84) y reportan cuando tienen `SENTRY_DSN` cargada (pendiente en Railway y Fly, `[OBS-SIN-ALERTAS]`) | Excepciones de páginas, actions, rutas y procesos de fondo |
+| Salud y versión desplegada | `GET https://www.optimizatucontrol.com/api/health` (sin sesión) y Super-admin → Infraestructura | Si la base y Storage responden y qué commit está en producción ([`alertas.md`](./alertas.md) § Chequeo de salud) |
+| Corridas de los crons | Super-admin → Infraestructura → Procesos programados, o la tabla `corridas_de_procesos` ([`alertas.md`](./alertas.md) § Registro de corridas) | Qué cron falló o se cortó y qué orgs fallaron |
 | Base, Auth, Storage | Supabase → proyecto `OTC` (`nrzlylzbmsuowzhpdnjl`) → Logs (Postgres, Auth, API) y Reports; estado general en `status.supabase.com` | Caídas, sólo lectura, cupos |
 | Colas | Upstash → QStash → Logs / DLQ | Jobs que no llegan o fallan |
 | Worker de reels | `fly logs -a otc-reel-worker`, `fly status -a otc-reel-worker` | Trial reels |
 | Bot de Discord | Railway → servicio `otc-discord-bot` → Logs | Mensajes de Discord que no llegan |
 | Estado de proveedores | status pages de Anthropic, OpenAI, Vercel, Supabase, Upstash, Zernio | Descartar que sea de ellos |
 
-**No uses** la página "Infraestructura" del super admin para diagnosticar: sus estados están escritos a mano y
-siempre dicen "ok" (`[MONITOREO-Y-ALERTAS]`).
+La página "Infraestructura" del super admin muestra el chequeo de salud real (base, Storage, variables críticas,
+commit desplegado) y la última corrida de cada cron con sus orgs fallidas (SCRUM-85). Hasta el 2026-10-07 tenía
+estados escritos a mano.
 
 ## 2. Cómo se detecta hoy
 
-No hay alertas automáticas verificadas ni endpoint de salud. Un incidente se entera por:
+Desde SCRUM-85 hay endpoint de salud y aviso de producción desactualizada; el monitor externo y las reglas de Sentry
+dependen de cuentas que todavía hay que configurar ([`alertas.md`](./alertas.md)). Un incidente se entera por:
+- el monitor externo de `/api/health` (mail o Discord), **cuando se configure** (`[MONITOREO-Y-ALERTAS]`);
+- el workflow "Producción al día" de GitHub Actions, que falla (y manda mail) si producción no tiene el commit de
+  `main` 20 minutos después del merge o en el chequeo diario;
+- Sentry (si alguien configuró alertas por mail; **verificar**, `[OBS-SIN-ALERTAS]`);
+- Super-admin → Infraestructura → Procesos programados (un cron fallido, parcial o sin cierre), o Vercel → Crons;
 - un cliente o alguien del equipo que avisa;
-- Sentry (si alguien configuró alertas por mail; **verificar**);
-- revisar Vercel → Crons (un cron sin ejecución reciente o con 500);
 - mails de Supabase (aviso de pausa, cupo excedido).
 
 Chequeo rápido de 2 minutos:
-1. ¿Abre `/login`? ¿Se puede entrar con una cuenta de prueba?
-2. Vercel → Deployments: ¿el último deploy de producción está `READY`? ¿Cuándo fue?
-3. Vercel → Logs últimos 30 min: ¿hay una ola de 500?
-4. Supabase → proyecto: ¿`ACTIVE_HEALTHY`? ¿Algún banner de cupo o sólo lectura?
+1. ¿Qué responde `https://www.optimizatucontrol.com/api/health`? `caido` (503) es la base; `degradado`, Storage o una
+   variable; y `version.commit` tiene que ser el último de `main`.
+2. ¿Abre `/login`? ¿Se puede entrar con una cuenta de prueba?
+3. Vercel → Deployments: ¿el último deploy de producción está `READY`? ¿Cuándo fue?
+4. Vercel → Logs últimos 30 min: ¿hay una ola de 500?
+5. Supabase → proyecto: ¿`ACTIVE_HEALTHY`? ¿Algún banner de cupo o sólo lectura?
 
 ## 3. Primeros pasos por tipo de incidente
 
@@ -72,7 +81,9 @@ supabase db dump --db-url "$DB_URL" -f data.sql --use-copy --data-only
 4. **Nunca cargues un cobro con monto cero o inventado** porque no se pudo leer el payload: queda sin mapear y se anota.
 
 ### C · Un cron no corre o falla
-1. Vercel → Crons: ¿figura? ¿Última ejecución? Vercel → Logs filtrando la ruta.
+1. Super-admin → Infraestructura → Procesos programados: estado de la última corrida (`Falló`, `Parcial` con las orgs
+   que fallaron, `Sin cierre` si se cortó) y cuándo empezó. Después, Vercel → Crons: ¿figura? ¿Última ejecución?
+   Vercel → Logs filtrando la ruta.
 2. Si responde **500 "CRON_SECRET is not configured"** o **401**: la variable falta o cambió. Revisar en Vercel y redeployar.
 3. Si es un cron con fan-out (reportes, inteligencia, tono, métricas de contenido): mirar QStash → Logs; los workers pueden responder 200 aunque el trabajo haya fallado (`[INTELIGENCIA-SIN-REINTENTO]`).
 4. Re-ejecutar a mano para una org:
@@ -126,6 +137,17 @@ Es el incidente más grave (fuga entre clientes).
 ### I · El bot de Discord o el worker de reels no responden
 - Bot: Railway → Logs. Al arrancar dice si falta una variable y si la clave de Supabase es la service role. Los mensajes enviados mientras estuvo caído **no se recuperan** (`[DISCORD-BACKFILL]`).
 - Worker: `fly status` / `fly logs`. Arranca en frío con el primer job. Un job fallido no se reintenta solo: el usuario tiene que volver a generar.
+
+### J · Producción no tiene el último merge
+Lo avisa el workflow "Producción al día" (GitHub Actions, mail y Discord si está configurado). Pasó del 3 al 5 de
+octubre de 2026: Vercel perdió el acceso al repo y no desplegó 7 PRs en 36 horas.
+1. Compara `version.commit` de `/api/health` con el último commit de `main`.
+2. Vercel → Deployments: si no hay deploy del último commit de `main`, el proyecto perdió la conexión con el repo.
+   Reconéctalo en Settings → Git y redespliega (o empuja un commit vacío a `main` por PR, como se hizo el 5-oct).
+3. Si el deploy existe y falló, mira su log; si está `READY` pero no es el de producción, promuévelo.
+4. Si el merge traía una migración, confirma que esté aplicada (`docs/arquitectura/base-de-datos.md`): el código y
+   la base pueden haber quedado desfasados en cualquiera de los dos sentidos.
+5. Cuando quede al día, vuelve a correr el workflow a mano (Actions → Producción al día → Run workflow).
 
 ## 4. A quién avisar
 

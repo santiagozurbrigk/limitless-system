@@ -11,6 +11,7 @@ import { listGHLAppointments } from "./client";
 import { decryptGHLApiKey, getGHLIntegrationForOrg } from "./integration";
 import { syncGHLAppointmentsForOrganization, type GHLSyncResult } from "./sync-appointments";
 import { reportarFalla } from "@/lib/observability/reportar-falla";
+import { anotarOrganizacion } from "@/lib/observability/corrida-en-curso";
 
 // Rango: últimos 90 días + próximos 90 días
 // GHL /calendars/events requiere Unix timestamps en milisegundos (no ISO 8601)
@@ -88,6 +89,7 @@ export async function syncGHLOrganizationSafe(
       `[ghl-sync] org=${organizationId} calendars=${calendarIds.length} fetched=${result.fetched} inserted=${result.inserted} updated=${result.updated}`
     );
 
+    anotarOrganizacion(organizationId, "ok");
     return { organizationId, ...result };
   } catch (e) {
     console.error(`[ghl-sync] Error org=${organizationId}:`, e);
