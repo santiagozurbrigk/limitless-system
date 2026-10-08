@@ -10,10 +10,7 @@ import {
 } from "@/app/sales/actions";
 import { ClientCallAnalysisSection } from "@/components/clients/client-call-analysis";
 import { CloserEvolutionChart } from "@/components/clients/closer-evolution-chart";
-import {
-  TeamCallRanking,
-  TeamPerformanceSummary,
-} from "@/components/sales/team-call-ranking";
+import { TeamCallRanking } from "@/components/sales/team-call-ranking";
 import type { ClientLinkedCall } from "@/types/clients";
 import { FichaSection } from "@/components/clients/ficha-section";
 import type { TeamRankingEntry } from "@/types/call-analysis";

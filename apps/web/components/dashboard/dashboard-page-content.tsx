@@ -28,7 +28,6 @@ export function DashboardPageContent({
     totalComments: 0,
     hasData: false,
   },
-  customMetrics = [],
 }: {
   frequentObjections?: FrequentObjectionsResult | null;
   zernioAnalytics?: ZernioAnalyticsSummary;
