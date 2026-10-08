@@ -384,6 +384,7 @@ function AddInstallmentPaymentDialog({
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [claveIdempotencia, setClaveIdempotencia] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     if (open) {
@@ -391,6 +392,9 @@ function AddInstallmentPaymentDialog({
       setPaymentDate(fechaDeHoyEnZona(zonaDeLaOrganizacion));
       setFile(null);
       setError(null);
+      // Una clave por formulario abierto: si la respuesta se pierde y se
+      // vuelve a guardar, el servidor no duplica el cobro (SCRUM-504).
+      setClaveIdempotencia(crypto.randomUUID());
     }
   }, [open, defaultAmount, zonaDeLaOrganizacion]);
 
@@ -430,6 +434,7 @@ function AddInstallmentPaymentDialog({
             paymentDate,
             storagePath,
             mimeType,
+            claveIdempotencia,
           }),
         "[ClientPaymentsSection] registrar cuota"
       );
@@ -512,6 +517,7 @@ function AddGenericPaymentDialog({
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [claveIdempotencia, setClaveIdempotencia] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     if (open) {
@@ -519,6 +525,9 @@ function AddGenericPaymentDialog({
       setPaymentDate(fechaDeHoyEnZona(zonaDeLaOrganizacion));
       setFile(null);
       setError(null);
+      // Una clave por formulario abierto: si la respuesta se pierde y se
+      // vuelve a guardar, el servidor no duplica el cobro (SCRUM-504).
+      setClaveIdempotencia(crypto.randomUUID());
     }
   }, [open, zonaDeLaOrganizacion]);
 
@@ -558,6 +567,7 @@ function AddGenericPaymentDialog({
             paymentDate,
             storagePath,
             mimeType,
+            claveIdempotencia,
           }),
         "[ClientPaymentsSection] registrar pago"
       );

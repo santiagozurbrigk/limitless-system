@@ -27,6 +27,7 @@ const sim = vi.hoisted(() => ({
   lanza: null as unknown,
   operaciones: [] as Operacion[],
   errorStorage: null as { message: string } | null,
+  rpcs: [] as Array<{ nombre: string; args: Fila }>,
 }));
 
 vi.mock("@/lib/observability/reportar-falla", () => ({
@@ -44,8 +45,46 @@ vi.mock("@/lib/auth/bootstrap", async () => {
   };
 });
 
+/**
+ * `registrar_pago_de_cliente` como la función SQL (su transacción y su RLS se
+ * prueban en supabase/ci/tests/95_registrar_pago_de_cliente.sql): cliente de
+ * la org de la sesión o P0002, clave de idempotencia, alta y cuota marcada.
+ */
+function rpcFalsa(nombre: string, args: Fila) {
+  expect(nombre).toBe("registrar_pago_de_cliente");
+  sim.rpcs.push({ nombre, args });
+  const error = sim.errores.clients ?? sim.errores.client_payments ?? sim.erroresPorOp.rpc ?? null;
+  if (error) return { data: null, error };
+  const cliente = (sim.tablas.clients ?? []).find((c) => c.id === args.p_client_id && c.organization_id === ORG);
+  if (!cliente) return { data: null, error: { code: "P0002", message: "registrar_pago_de_cliente: cliente no encontrado" } };
+  const pagos = sim.tablas.client_payments ?? [];
+  if (args.p_clave_idempotencia) {
+    const previo = pagos.find((p) => p.clave_idempotencia === args.p_clave_idempotencia && p.organization_id === ORG);
+    if (previo) return { data: previo, error: null };
+  }
+  const nuevo: Fila = {
+    id: `pago-${pagos.length + 1}`,
+    client_id: args.p_client_id,
+    organization_id: ORG,
+    amount: args.p_amount,
+    payment_date: args.p_payment_date,
+    storage_path: args.p_storage_path,
+    mime_type: args.p_mime_type,
+    installment_number: args.p_installment_number,
+    clave_idempotencia: args.p_clave_idempotencia,
+    created_at: "2026-10-08T00:00:00Z",
+  };
+  pagos.push(nuevo);
+  sim.tablas.client_payments = pagos;
+  return { data: nuevo, error: null };
+}
+
 function clienteFalso() {
   return {
+    rpc: async (nombre: string, args: Fila) => {
+      if (sim.lanza) throw sim.lanza;
+      return rpcFalsa(nombre, args);
+    },
     auth: { getUser: async () => ({ data: { user: { id: "yo" } } }) },
     storage: {
       from: () => ({
@@ -145,6 +184,7 @@ beforeEach(() => {
   sim.erroresPorOp = {};
   sim.operaciones = [];
   sim.errorStorage = null;
+  sim.rpcs = [];
   sim.tablas = {
     clients: [
       {
@@ -234,46 +274,56 @@ describe("lecturas de pagos", () => {
 });
 
 describe("registrar un pago", () => {
-  it("lo guarda en la organización de la sesión", async () => {
-    const r = await recordClientPaymentAction(registrar);
+  it("lo registra con la función atómica, con los datos y la clave", async () => {
+    const r = await recordClientPaymentAction({ ...registrar, installmentNumber: 1, claveIdempotencia: "clave-0001" });
     expect(r.success).toBe(true);
-    const alta = sim.operaciones.find((o) => o.op === "insert");
-    expect((alta?.valores as Fila).organization_id).toBe(ORG);
+    expect(sim.rpcs).toEqual([
+      {
+        nombre: "registrar_pago_de_cliente",
+        args: {
+          p_client_id: CLIENTE,
+          p_amount: 100,
+          p_payment_date: "2026-10-08",
+          p_storage_path: null,
+          p_mime_type: null,
+          p_installment_number: 1,
+          p_payment_received_from: null,
+          p_payment_destination_platform_id: null,
+          p_clave_idempotencia: "clave-0001",
+        },
+      },
+    ]);
   });
 
-  it("⭐ un cliente de otra organización devuelve el motivo", async () => {
+  it("⭐ un reintento con la misma clave devuelve el mismo pago, sin duplicarlo", async () => {
+    const primero = await recordClientPaymentAction({ ...registrar, claveIdempotencia: "clave-0002" });
+    const segundo = await recordClientPaymentAction({ ...registrar, claveIdempotencia: "clave-0002" });
+    expect(primero.success && segundo.success && primero.data.id === segundo.data.id).toBe(true);
+    expect(sim.tablas.client_payments.filter((p) => p.clave_idempotencia === "clave-0002")).toHaveLength(1);
+  });
+
+  it("⭐ un cliente de otra organización (P0002 de la función) devuelve el motivo", async () => {
     await expect(recordClientPaymentAction({ ...registrar, clientId: CLIENTE_AJENO })).resolves.toEqual({
       success: false,
       error: "Cliente no encontrado",
     });
+    expect(sim.reportes).toEqual([]);
   });
 
-  it("⭐ un comprobante con una ruta de otra organización devuelve el motivo", async () => {
+  it("⭐ un comprobante con una ruta de otra organización devuelve el motivo, sin llamar a la función", async () => {
     await expect(
       recordClientPaymentAction({ ...registrar, storagePath: "otra-org/x.pdf", mimeType: "application/pdf" })
     ).resolves.toEqual({ success: false, error: "La ruta del comprobante no es válida." });
-    expect(sim.operaciones.some((o) => o.op === "insert")).toBe(false);
+    expect(sim.rpcs).toEqual([]);
   });
 
-  it("⭐ un error al insertar vuelve con el texto fijo, no con el mensaje de la base", async () => {
-    sim.erroresPorOp["client_payments:insert"] = { message: "duplicate key value violates unique constraint" };
-    await expect(recordClientPaymentAction(registrar)).resolves.toEqual({
+  it("⭐ si la función falla (por ejemplo, al marcar la cuota) vuelve el texto fijo y se reporta", async () => {
+    sim.erroresPorOp.rpc = { message: "registrar_pago_de_cliente: no se pudo marcar la cuota", code: "42501" };
+    await expect(recordClientPaymentAction({ ...registrar, installmentNumber: 1 })).resolves.toEqual({
       success: false,
       error: ERROR_INESPERADO,
     });
     expect(sim.reportes).toHaveLength(1);
-  });
-
-  it("si la cuota no se puede marcar, el pago queda y la falla se reporta", async () => {
-    sim.erroresPorOp["clients:update"] = { message: "TypeError: fetch failed" };
-    const r = await recordClientPaymentAction({ ...registrar, installmentNumber: 1 });
-    expect(r.success).toBe(true);
-    expect(sim.reportes).toEqual([
-      {
-        error: expect.objectContaining({ name: "FallaDeLaBase" }),
-        contexto: { accion: "[recordClientPayment] cuota" },
-      },
-    ]);
   });
 
   it("⭐ datos inválidos devuelven el motivo de la validación", async () => {
@@ -290,6 +340,17 @@ describe("registrar una cuota", () => {
     if (!r.success) return;
     expect(r.data.payment.installmentNumber).toBe(1);
     expect(r.data.client.id).toBe(CLIENTE);
+  });
+
+  it("⭐ el reintento de una cuota con la misma clave devuelve ese pago, no otra cuota", async () => {
+    sim.tablas.client_payments = [];
+    const primero = await addInstallmentPaymentAction({ ...registrar, claveIdempotencia: "clave-cuota" });
+    const segundo = await addInstallmentPaymentAction({ ...registrar, claveIdempotencia: "clave-cuota" });
+    expect(primero.success && segundo.success).toBe(true);
+    if (!primero.success || !segundo.success) return;
+    expect(segundo.data.payment.id).toBe(primero.data.payment.id);
+    expect(segundo.data.payment.installmentNumber).toBe(1);
+    expect(sim.rpcs).toHaveLength(1);
   });
 
   it("⭐ un cliente sin plan de cuotas devuelve el motivo", async () => {

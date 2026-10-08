@@ -4,11 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { leerPagosDelCliente, leerPagosDeLaOrganizacion } from "@/lib/sales/pagos";
-import {
-  patchToUpdateRow,
-  rowToClient,
-  type ClientRow,
-} from "@/lib/clients/mapper";
+import { rowToClient, type ClientRow } from "@/lib/clients/mapper";
 import {
   rowToClientPayment,
   type ClientPaymentRow,
@@ -24,7 +20,6 @@ import {
   ErrorEsperable,
   FallaDeLaBase,
   mutacionConErroresEsperables,
-  registrarFallaDeAccion,
   type MutationResult,
 } from "@/lib/server/action-result";
 import { moneySchema, uuidSchema } from "@/lib/validations";
@@ -37,7 +32,8 @@ import { assertOrgStoragePath, isOrgStoragePath } from "@/lib/storage/org-path";
  * SCRUM-504: las acciones de Cobros devuelven sus errores como valor
  * (`MutationResult`) con `mutacionConErroresEsperables`. Validación, sesión,
  * cliente que no es de la org, sin plan de cuotas, sin cuotas pendientes y la
- * ruta del comprobante que no es de la org vuelven con su motivo. Un error de
+ * ruta del comprobante que no es de la org vuelven con su motivo. El pago y su
+ * cuota se registran juntos (`registrar_pago_de_cliente`). Un error de
  * la base (`FallaDeLaBase`), del Storage o un bug se registra, va a Sentry y
  * vuelve con el texto fijo: antes llegaba el mensaje crudo de la base, y las
  * lecturas devolvían `[]` (en Cobros y Finanzas, "sin pagos").
@@ -69,6 +65,8 @@ const recordPaymentSchema = z.object({
   installmentNumber: z.number().int().min(1).max(120).nullable().optional(),
   paymentReceivedFrom: z.string().trim().max(500).optional(),
   paymentDestinationPlatformId: uuidSchema.optional(),
+  /** La genera la pantalla al abrir el formulario: un reintento no duplica el cobro. */
+  claveIdempotencia: z.string().trim().min(8).max(100).optional(),
 });
 
 const addInstallmentPaymentSchema = z.object({
@@ -77,18 +75,11 @@ const addInstallmentPaymentSchema = z.object({
   paymentDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
   storagePath: z.string().trim().min(1).nullish(),
   mimeType: z.string().trim().min(1).max(200).nullish(),
+  claveIdempotencia: z.string().trim().min(8).max(100).optional(),
 });
 
 /** Datos validados de un pago, sin el usuario que lo carga. */
 type DatosDelPago = z.infer<typeof recordPaymentSchema>;
-
-async function currentUserId(): Promise<string | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user?.id ?? null;
-}
 
 /**
  * Un pago cambia tres pantallas, no una.
@@ -105,20 +96,6 @@ function revalidatePaymentScreens() {
   revalidatePath(paths.platform.sales.cobros);
   revalidatePath(paths.platform.finance.root);
   revalidatePath(paths.platform.dashboard);
-}
-
-function markInstallmentPaid(
-  installments: ClientInstallment[],
-  installmentNumber: number,
-  paidAt: string
-): ClientInstallment[] {
-  const index = installmentNumber - 1;
-  if (index < 0 || index >= installments.length) return installments;
-  return installments.map((inst, i) =>
-    i === index
-      ? { ...inst, status: "paid" as const, paidAt }
-      : inst
-  );
 }
 
 function nextPendingInstallmentNumber(
@@ -208,81 +185,39 @@ async function registrarPago(
   organizationId: string,
   datos: DatosDelPago
 ): Promise<ClientPayment> {
-  const uploadedBy = await currentUserId();
   const supabase = await createClient();
-  const {
-    clientId,
-    amount,
-    paymentDate,
-    storagePath,
-    mimeType,
-    installmentNumber,
-    paymentReceivedFrom,
-    paymentDestinationPlatformId,
-  } = datos;
 
   // La guarda sigue valiendo, pero sólo cuando hay archivo: sin comprobante
   // no hay ruta que validar.
-  if (storagePath && !isOrgStoragePath(storagePath, organizationId)) {
+  if (datos.storagePath && !isOrgStoragePath(datos.storagePath, organizationId)) {
     throw new ErrorEsperable(RUTA_INVALIDA);
   }
 
-  const { data: clientRow, error: clientError } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("id", clientId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+  // Pago y cuota en una sola transacción, con la RLS y la org de la sesión, y
+  // la clave de idempotencia (20261008150000_registrar_pago_de_cliente): si la
+  // cuota no se puede marcar no queda el pago, y un reintento con la misma
+  // clave devuelve el pago ya registrado.
+  const { data, error } = await supabase.rpc("registrar_pago_de_cliente", {
+    p_client_id: datos.clientId,
+    p_amount: datos.amount,
+    p_payment_date: datos.paymentDate,
+    p_storage_path: datos.storagePath ?? null,
+    p_mime_type: datos.mimeType ?? null,
+    p_installment_number: datos.installmentNumber ?? null,
+    p_payment_received_from: datos.paymentReceivedFrom ?? null,
+    p_payment_destination_platform_id: datos.paymentDestinationPlatformId ?? null,
+    p_clave_idempotencia: datos.claveIdempotencia ?? null,
+  });
 
-  if (clientError) throw new FallaDeLaBase(clientError);
-  if (!clientRow) throw new ErrorEsperable(CLIENTE_NO_ENCONTRADO);
-
-  const { data: paymentRow, error: insertError } = await supabase
-    .from("client_payments")
-    .insert({
-      client_id: clientId,
-      organization_id: organizationId,
-      amount,
-      payment_date: paymentDate,
-      storage_path: storagePath ?? null,
-      mime_type: mimeType ?? null,
-      installment_number: installmentNumber ?? null,
-      payment_received_from: paymentReceivedFrom ?? null,
-      payment_destination_platform_id: paymentDestinationPlatformId ?? null,
-      uploaded_by: uploadedBy,
-    })
-    .select()
-    .single();
-
-  // Incluida la tabla que falta: es una falla del despliegue, no del usuario.
-  if (insertError) throw new FallaDeLaBase(insertError);
-  if (!paymentRow) throw new Error("El alta del pago no devolvió la fila");
-
-  if (
-    installmentNumber != null &&
-    clientRow.payment_type === "installments" &&
-    Array.isArray(clientRow.installments)
-  ) {
-    const installments = markInstallmentPaid(
-      clientRow.installments as ClientInstallment[],
-      installmentNumber,
-      paymentDate
-    );
-    const updateRow = patchToUpdateRow({ installments });
-    const { error: cuotaError } = await supabase
-      .from("clients")
-      .update(updateRow)
-      .eq("id", clientId)
-      .eq("organization_id", organizationId);
-    // El pago ya quedó guardado: no se lo presenta como fallido, pero la cuota
-    // sin marcar no se pierde en silencio.
-    if (cuotaError) {
-      registrarFallaDeAccion("[recordClientPayment] cuota", new FallaDeLaBase(cuotaError));
-    }
+  if (error) {
+    // P0002: el cliente no es de la org de la sesión (o no existe).
+    if (error.code === "P0002") throw new ErrorEsperable(CLIENTE_NO_ENCONTRADO);
+    throw new FallaDeLaBase(error);
   }
+  if (!data) throw new Error("registrar_pago_de_cliente no devolvió el pago");
 
   revalidatePaymentScreens();
-  return rowToClientPayment(paymentRow as ClientPaymentRow);
+  return rowToClientPayment(data as ClientPaymentRow);
 }
 
 export async function recordClientPaymentAction(
@@ -375,7 +310,7 @@ export async function addInstallmentPaymentAction(
   return mutacionConErroresEsperables("[addInstallmentPayment]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
-    const { clientId, amount, paymentDate, storagePath, mimeType } =
+    const { clientId, amount, paymentDate, storagePath, mimeType, claveIdempotencia } =
       parsed.data;
 
     const { data: clientRow, error: clientError } = await supabase
@@ -389,6 +324,24 @@ export async function addInstallmentPaymentAction(
     if (!clientRow) throw new ErrorEsperable(CLIENTE_NO_ENCONTRADO);
     if (clientRow.payment_type !== "installments") {
       throw new ErrorEsperable("Este cliente no tiene plan de cuotas");
+    }
+
+    // Un reintento de una cuota ya registrada (misma clave): se devuelve ese
+    // pago, sin calcular otra "próxima cuota".
+    if (claveIdempotencia) {
+      const { data: previo, error: previoError } = await supabase
+        .from("client_payments")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .eq("clave_idempotencia", claveIdempotencia)
+        .maybeSingle();
+      if (previoError) throw new FallaDeLaBase(previoError);
+      if (previo) {
+        return {
+          payment: rowToClientPayment(previo as ClientPaymentRow),
+          client: rowToClient(clientRow as ClientRow),
+        };
+      }
     }
 
     const existing = await leerPagosDelCliente(supabase, organizationId, clientId);
@@ -410,6 +363,7 @@ export async function addInstallmentPaymentAction(
       installmentNumber,
       paymentReceivedFrom: referencePayment?.paymentReceivedFrom,
       paymentDestinationPlatformId: referencePayment?.paymentDestinationPlatformId,
+      claveIdempotencia,
     });
 
     const { data: updatedClient, error: reloadError } = await supabase
