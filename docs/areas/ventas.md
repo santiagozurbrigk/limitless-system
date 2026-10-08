@@ -117,6 +117,17 @@ GHL            ── cron /api/cron/ghl-sync (hora) ─────────
   `updateClosingCallAction` → `patchToClosingUpdateRow` (`lib/closing/mapper.ts`), que marca
   `status_source = 'manual'` (las ediciones de seguimiento de `lead-actions.ts` no tocan `status`); los syncs consultan
   `syncMayOverwriteStatus`.
+- **Errores como valor (SCRUM-504):** todas las acciones de `app/sales` devuelven `MutationResult`.
+  En el seguimiento (`lead-actions.ts`, `follow-up-options-actions.ts`) la sesión y la validación
+  (valor que no está en el catálogo, archivado, sin fecha, nombre vacío o repetido) vuelven con su
+  motivo; un error de la base se registra, va a Sentry y vuelve con el texto fijo (antes llegaba el
+  mensaje crudo de la base). Si `listLeadsTableAction` falla, `/sales/closing` se dibuja igual y la
+  pestaña de seguimiento muestra el motivo (antes mostraba la tabla vacía); una edición rechazada
+  vuelve atrás la fila y avisa. El catálogo se lee con `leerCatalogoDeSeguimiento`
+  (`lib/sales/catalogo-de-seguimiento.ts`), que sigue cayendo en los valores de fábrica si su lectura
+  falla. Las lecturas de closers (`getCloserMetricsAction` y las sin llamador) registran los errores
+  de la base que antes ignoraban: el ranking de closers (escondido) ya no se ve como "sin closers"
+  cuando falla ([CLOSER-AMOUNT-CLOSED]).
 - **Sync manual del Calendly de un closer** (botón "Sincronizar ahora" en Configuración y el del ranking
   de closers): `syncCloserCalendlyAction` devuelve `MutationResult` (SCRUM-504). Vuelven con un motivo
   claro: sin integración (sin fila o sin token), conexión vencida o revocada (el refresh responde 400
@@ -304,12 +315,12 @@ asistidas) y leads/agendas/nurturing desde `conversations` (vacía → siempre 0
 El ranking de equipo sale de `call_analyses` (`getTeamRankingAction`) y las objeciones de
 `lib/metrics/frequent-objections.ts`.
 
-Las lecturas de métricas (`getSalesPerformanceMetricsAction`, `getSalesMetricsSnapshotsAction`) y de
-análisis de llamadas (`getTeamRankingAction`, `getCloserEvolutionAction`, `getTeamAverageEvolutionAction`)
+Las lecturas de métricas (`getSalesPerformanceMetricsAction`, `getSalesMetricsSnapshotsAction`,
+`getFrequentObjectionsAction`, que la página usa en vez de leer la base directo) y de análisis de llamadas (`getTeamRankingAction`, `getCloserEvolutionAction`, `getTeamAverageEvolutionAction`)
 devuelven `MutationResult` (SCRUM-504): la sesión que falta vuelve con su motivo; un error de la base
 (salvo la tabla que falta en las de `call_analyses`, que se lee como "sin datos") se registra, va a Sentry
 y vuelve con el texto fijo. `/sales/metrics` (server component) se dibuja igual y avisa el motivo de las
-métricas importadas; la pantalla avisa también el de las de rendimiento, y el rendimiento del equipo y la
+métricas importadas y de las objeciones; la pantalla avisa también el de las de rendimiento, y el rendimiento del equipo y la
 evolución del closer (ficha del cliente) muestran el motivo en su estado de error (`leerConMotivo`,
 `lib/sales/lectura-con-motivo.ts`). `updateCloserCommissionAction` (sin llamadores) también devuelve
 `MutationResult`: porcentaje fuera de 0-100, closer de otra org o sin permiso y el `42501` del trigger de
