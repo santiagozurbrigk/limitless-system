@@ -170,7 +170,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         setTeamCompensation(config.teamCompensation);
       });
     }
-  }, [refreshFinanceConfig]);
+    // Las dos funciones son estables (`useCallback` sin dependencias): sumar
+    // `refreshClientPayments` no cambia cuándo corre el efecto.
+  }, [refreshFinanceConfig, refreshClientPayments]);
 
   useEffect(() => {
     if (useSupabase && !clientsLoading) {
@@ -227,7 +229,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       ]);
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation, zonaDeLaOrganizacion]
+    [runFinanceMutation, zonaDeLaOrganizacion]
   );
 
   const updatePaymentPlatform = useCallback(
@@ -240,7 +242,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       );
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const removePaymentPlatform = useCallback(
@@ -251,7 +253,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setPaymentPlatforms((prev) => prev.filter((p) => p.id !== id));
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const addFixedExpense = useCallback(
@@ -265,7 +267,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       ]);
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const updateFixedExpense = useCallback(
@@ -278,7 +280,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       );
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const removeFixedExpense = useCallback(
@@ -289,7 +291,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setFixedExpenses((prev) => prev.filter((e) => e.id !== id));
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const addSubscription = useCallback(
@@ -300,7 +302,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setSubscriptions((prev) => [...prev, { ...sub, id: `sub-${Date.now()}` }]);
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const updateSubscription = useCallback(
@@ -313,7 +315,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       );
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const removeSubscription = useCallback(
@@ -324,7 +326,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setSubscriptions((prev) => prev.filter((s) => s.id !== id));
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const updateTeamCompensation = useCallback(
@@ -337,7 +339,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       );
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const addTeamCompensation = useCallback(
@@ -356,7 +358,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       ]);
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const removeTeamCompensation = useCallback(
@@ -367,7 +369,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setTeamCompensation((prev) => prev.filter((t) => t.id !== id));
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const enrichedTeamCompensation = useMemo(
