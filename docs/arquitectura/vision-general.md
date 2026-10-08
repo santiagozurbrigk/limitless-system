@@ -68,7 +68,7 @@ limitless-system/
 
 - Los cuatro paquetes reservados no tienen lógica. El equivalente real vive en `apps/web/lib/` (`lib/ai`, `lib/supabase`, `lib/<proveedor>`, `lib/queue`). No agregues código ahí sin decidir antes mover lo existente.
 - `apps/discord-bot` y `apps/reel-worker` son **standalone**: no importan ningún paquete del workspace y tienen su propio Dockerfile.
-- Tasks de Turbo (`turbo.json`): `build`, `dev`, `lint`, `typecheck`, `test`. Sólo `apps/web` declara `test`; `lint` lo declaran `apps/web` y `packages/ui`; `apps/reel-worker` no declara `typecheck` ni `lint`, así que **el CI no lo compila**.
+- Tasks de Turbo (`turbo.json`): `build`, `dev`, `lint`, `typecheck`, `test`. Sólo `apps/web` declara `test`; `lint` lo declaran `apps/web`, `packages/ui`, `apps/reel-worker` y `apps/discord-bot`; `typecheck`, `apps/web`, `packages/ui`, `packages/types`, `apps/reel-worker` y `apps/discord-bot`. El job `checks` del CI corre los dos en todas las apps, y el job `web-build` corre el `next build` de `apps/web` (SCRUM-261).
 - El nombre interno del workspace sigue siendo `ai-coo-platform` y los paquetes `@ai-coo/*`, aunque el repo se llama `limitless-system`.
 
 ## Estructura de `apps/web`

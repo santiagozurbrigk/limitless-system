@@ -34,6 +34,36 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-07 · El CI compila la app y revisa el reel-worker, el bot y el backlog (SCRUM-261)
+
+**Rama:** `fix/SCRUM-261-ci-build-y-worker`
+**Commit(s):** `91026fc9` (typecheck y lint del reel-worker y del bot), `b31e417f` (setup de Playwright), `4430a2a9` (workflow), `267b5b1f` (spec del holding) y este (docs).
+**Módulo(s) afectado(s):** CI e infraestructura. `.github/workflows/ci.yml`, `apps/reel-worker/{package.json,eslint.config.mjs,src/processor.ts}`, `apps/discord-bot/{package.json,eslint.config.mjs}`, `pnpm-lock.yaml`, `apps/web/e2e/{auth.setup.ts,holding.spec.ts}`, `docs/operacion/{testing.md,entorno-y-deploy.md}`, ADR-006.
+
+**Qué se hizo** (cierra `[AUD-SALUD-5 / CI-COBERTURA]`):
+- Job `web-build`: `next build` de `apps/web` en paralelo con los demás, con caché de pnpm y de `apps/web/.next/cache` (clave por lockfile y por el código de web y de `packages/*/src`), y sólo variables públicas ficticias (`NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL` con dominio `.invalid`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`). No usa ni pide secretos; sin `SENTRY_AUTH_TOKEN` no sube source maps.
+- `apps/reel-worker` suma `typecheck` y `lint`; `apps/discord-bot` ya tenía `typecheck` (y ya corría en CI) y suma `lint`. Los dos usan la base de ESLint de `packages/config` con `--max-warnings=0`. Turbo los orquesta, así que el job `checks` los corre sin pasos nuevos. Se sacó el único aviso que había (`Writable` sin uso en `processor.ts`).
+- Job `backlog`: Python 3.12 y `pendientes_a_jira.py --check` e `historias_a_jira.py --check`.
+- El workflow pasa a permisos de sólo lectura (`contents: read`) y cada job tiene `timeout-minutes`.
+- `e2e/auth.setup.ts` entra por `/login` (`paths.auth.login`) y verifica el pathname exacto. Iba a `/auth/login`, que no existe: llegaba al login sólo porque el middleware redirige a `/login` a quien no tiene sesión. El `beforeEach` de `holding.spec.ts` tenía la misma ruta y también pasa a `paths.auth.login`; se sacó un locator sin uso que buscaba un `data-testid` inexistente.
+- Docs: `testing.md` (qué corre cada job, cómo correr lo mismo en local, tiempos y por qué los e2e esperan a staging) y `entorno-y-deploy.md` (checks que conviene exigir en la branch protection de `main`); ADR-006 ya no dice que el CI no revisa el worker.
+
+**Por qué / finalidad:** un cambio que rompía `next build` (por ejemplo un import de servidor en un componente cliente) pasaba `tsc` y lint y recién fallaba en Vercel, y un cambio del reel-worker que no compilaba no lo veía nadie hasta el deploy manual en Fly.
+
+**Verificación:** suite completa (194 archivos, 2251 tests), typecheck de todo el monorepo (web, ui, types, reel-worker y bot), lint, checks del backlog y `next build` local con las mismas variables que el CI. En GitHub, con ramas temporales (`tmp/ci-prueba-scrum-261-*`, ya borradas junto con sus cachés): la rama de la tarea pasa los cuatro jobs; un import de `next/headers` en un componente cliente pasa `checks` y falla `web-build` ("You're importing a component that needs next/headers"); un error de tipos en `apps/reel-worker/src/processor.ts` falla `checks` en `@ai-coo/reel-worker#typecheck` y deja pasar `web-build`. Un error en `org-path.ts` del worker falla los dos, porque web lo importa en un test y `next build` revisa esos tipos. Con el setup de Playwright contra `next start` y un Supabase falso, el login se encuentra por `/login`, se completa el formulario y corta recién al esperar la redirección (no hay cuenta real).
+
+**Tiempos de CI:** antes, 1 min 48 s en total (`checks` 1 min 47 s). Ahora, con los cuatro jobs en paralelo, el total es el de `web-build`: 4 min 8 s con la caché de `.next` vacía y 2 min 56 s con caché; `checks` tarda 1 min 55 s a 2 min 1 s, `migrations` alrededor de 30 s y `backlog` menos de 10 s.
+
+**Decisiones de diseño relevantes:**
+- La config de ESLint del worker y del bot importa la base por ruta relativa y no como dependencia `workspace:*`: las dos imágenes de Docker se arman con `npm` fuera del monorepo y `npm` no entiende ese protocolo. `eslint` sí va como dependencia de desarrollo de cada app (el `npm install` del Dockerfile del bot lo instala en la etapa de build, no en la imagen final).
+- `next build` corre el mismo comando que Vercel (con su lint y su chequeo de tipos) para que lo que pasa en CI pase en Vercel, aunque repita trabajo de `checks`. En paralelo no suma al total.
+- Los e2e no corren en CI todavía: necesitan staging con cuentas sembradas (propuesta de arquitectura, ADR-016). Siguen en `[T-INFRA-E2E-CI]`.
+- La branch protection no se puede configurar desde el repo: queda escrita en `entorno-y-deploy.md` para que la configure un admin.
+
+**Riesgos / deuda técnica pendiente:** si un admin no configura los checks obligatorios, un PR en rojo se puede mergear igual. Los e2e siguen sin correr (`[T-INFRA-E2E-CI]`).
+
+---
+
 ### 2026-10-06 · Auth, Clientes, Equipo y Closing devuelven sus errores esperables como valor (SCRUM-497)
 
 **Rama:** `fix/SCRUM-497-errores-esperables-release`
