@@ -34,6 +34,34 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-08 · Los errores esperables del Tablero vuelven como valor (SCRUM-503)
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `261d1120` (acciones, llamadores y tests), `d2c65573` (`/workboard` dinámica), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero. `app/workboard/actions.ts`, `app/(platform)/workboard/page.tsx`, `providers/workboard-provider.tsx`, `components/workboard/{create-sprint-modal,log-time-modal,workboard-shell,workboard-task-detail-dialog,workboard-time-report}.tsx`
+
+**Qué se hizo** (parte de `[ACTIONS-ERRORES-EN-PRODUCCION]`, historia SCRUM-496):
+- Las 16 funciones de `app/workboard/actions.ts` que lanzaban (33 throws) y `loadWorkboardPageDataAction`, que las junta, devuelven `MutationResult` y corren dentro de `mutacionConErroresEsperables`. Vuelven con su motivo: validación (zod), "Sesión no válida", "Sin permisos para configurar sueldos", tarea inexistente o de otra organización (`PGRST116` de `.single()` y la lectura de `logTaskTimeAction`: "No se encontró la tarea. Puede que la hayan eliminado."), responsable, sprint, lanzamiento o SOP que ya no existe (`23503`) y la tabla que falta. Lo demás es una `FallaDeLaBase` o una excepción: consola, Sentry con el tag `server_action` y el texto fijo.
+- Las lecturas internas (miembros, tareas, sprints, sprint activo) pasan a funciones privadas que lanzan `FallaDeLaBase`; las acciones exportadas las envuelven. Así una acción no depende del `MutationResult` de otra.
+- `updateSprintCompletionAction` ya no devuelve éxito si la base falla (modo `estricto` del recálculo). El mismo recálculo como efecto de mover, editar o asignar sigue ignorando la falla, como antes.
+- `/workboard` muestra "No se pudo cargar el tablero" con el motivo si la carga falla y se declara `force-dynamic`.
+- `WorkboardProvider` corre todas las acciones con `correrEnElTablero` (sobre `correrMutacion`): el motivo sale en un toast, si la acción lanza el texto fijo y la consola, y la función le dice a la pantalla si salió. El alta deja el formulario abierto, el detalle no se cierra, el modal de tiempo no muestra "listo" (`onConfirm` puede devolver `false`), el Kanban deshace el movimiento y los selectores de sprint y lanzamiento vuelven a lo que había. El cambio de lanzamiento del detalle pasa al provider (`assignTaskToLaunch`). Crear sprint (`crearSprint`) avisa con un toast y el reporte de tiempo (`leerReporteDeTiempo`) muestra el motivo en su estado de error.
+- Tests: 54 casos declarados (99 ejecutados) de las acciones con un Supabase simulado que aplica los filtros (rechazo esperable con el mensaje exacto, éxito, filtro por organización, falla de la red lanzada y devuelta por supabase-js para cada una de las 17), 15 del provider, 6 de los componentes y 4 de la página.
+- Docs: `docs/areas/operaciones.md`, `docs/operacion/testing.md` (204 archivos, ~2.092 casos, 2.454 ejecutados), `PENDIENTES.md` (avance y reconteo: quedan 78 funciones, 139 throws, 25 archivos).
+
+**Por qué / finalidad:** en producción Next no le manda al cliente el mensaje de un error lanzado por una server action. Quien movía una tarea que ya no existía o creaba un sprint sin nombre veía un párrafo técnico en inglés (y en el Kanban, nada: la promesa rechazada no se atendía), y una lectura que fallaba dejaba `/workboard` en la pantalla de error de Next.
+
+**Decisiones de diseño relevantes:**
+- El provider es el único lugar que avisa: los componentes sólo reaccionan al resultado (dejar abierto, deshacer). Así no hay toasts dobles y ningún `void` deja una promesa sin atender.
+- Las lecturas devuelven valor y la página muestra el motivo, en vez de lanzar hacia un boundary: la plataforma no tiene `error.tsx` (lo suma SCRUM-108).
+- "Tarea no encontrada" de `logTaskTimeAction` pasa al mismo texto que el resto de las acciones del tablero; en producción nunca había llegado a la pantalla.
+- Un `update` sin `.single()` sobre una tarea de otra organización sigue tocando 0 filas y devolviendo éxito, como antes: el filtro por organización no cambia y sumar una lectura para distinguirlo es otra lógica.
+- `force-dynamic` en `/workboard`: con la lectura que ahora atrapa sus errores, el prerender de `next build` registraba como falla el error con que Next marca la ruta como dinámica. La ruta ya era dinámica.
+
+**Riesgos / deuda técnica pendiente:** `mutacionConErroresEsperables` (módulo común de SCRUM-497) no relanza `DYNAMIC_SERVER_USAGE`: `[getTeamMembers]` se registra como falla en cada `next build` desde `/sales/closing`, y cualquier página de otro módulo que lea con ella va a hacer lo mismo; el arreglo de fondo es empezar su `catch` con `unstable_rethrow` (anotado en `[ACTIONS-ERRORES-EN-PRODUCCION]`). Fuera del alcance de esta tarea y sin tocar: `createSprintAction` ignora una falla al cerrar el sprint activo anterior, y el alta de una tarea sigue llamando a `getWorkboardTaskByIdAction` y a los adjuntos (`app/workboard/task-link-actions.ts`) sin atrapar una excepción.
+
+---
+
 ### 2026-10-07 · Fix-pack de la AR de SCRUM-85: fila fantasma, saneado, fan-out y aviso de producción
 
 **Rama:** `fix/SCRUM-85-salud-y-monitoreo`

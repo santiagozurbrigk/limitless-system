@@ -90,6 +90,20 @@ miembros de la org; `20260616100000`). Migraciones: `20260522300000_workboard_ta
   path con `assertOrgStoragePath`. Lectura con URL firmada de 1 h.
 - **Sprints:** `createSprintAction` **completa el sprint activo anterior** y crea el nuevo como `active`.
 - **Tarifas:** `setMemberHourlyRateAction` (founder/admin) escribe `profiles.hourly_rate`.
+- **Errores (SCRUM-503):** las 17 acciones de `app/workboard/actions.ts` devuelven `MutationResult` y no lanzan,
+  porque en producción Next no le manda al cliente el mensaje de un error lanzado por una server action. Corren
+  dentro de `mutacionConErroresEsperables` (`lib/server/action-result.ts`): validación, sesión, "Sin permisos para
+  configurar sueldos", tarea inexistente o de otra organización (`PGRST116` de `.single()`, "No se encontró la
+  tarea..."), un responsable, sprint, lanzamiento o SOP que ya no existe (`23503`) y la tabla que falta vuelven con
+  su motivo; lo demás se registra, va a Sentry con el tag `server_action` y vuelve con "Ocurrió un error
+  inesperado. Intentá de nuevo.". `updateSprintCompletionAction` ya no devuelve éxito si la base falla; el mismo
+  recálculo como efecto de mover, editar o asignar sigue ignorando la falla, porque la escritura principal ya se
+  hizo. `/workboard` muestra "No se pudo cargar el tablero" con el motivo si la carga falla (no hay error
+  boundary) y se declara `force-dynamic` para que `next build` no registre como falla el error de ruta dinámica.
+  El provider corre todas las acciones con `correrEnElTablero` (sobre `correrMutacion`): el motivo sale en un
+  toast y quien llama sabe si salió, así el formulario de alta, el detalle y el modal de tiempo quedan abiertos,
+  y el selector de sprint o de lanzamiento vuelve a lo que había. Crear sprint avisa con un toast y el reporte de
+  tiempo muestra el motivo en su estado de error.
 
 ### SOPs
 
