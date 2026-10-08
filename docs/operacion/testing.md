@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot`, `apps/reel-worker` | sí (`pnpm typecheck`, job `checks`) |
 | Lint | ESLint 9 (`next lint` en web; `eslint src/` con la base de `packages/config` en ui, reel-worker y bot) | `apps/web`, `packages/ui`, `apps/reel-worker`, `apps/discord-bot` | sí (`pnpm lint`, job `checks`) |
-| Unitarios | Vitest 3, entorno `node` | `apps/web` (207 archivos) | sí (`pnpm test`) |
+| Unitarios | Vitest 3, entorno `node` | `apps/web` (209 archivos) | sí (`pnpm test`) |
 | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** (se activa con staging, ver E2E) |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
@@ -81,7 +81,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **207 archivos, ~2.155 casos** (recontado el 2026-10-08 con la segunda revisión de SCRUM-503; el runner ejecuta 2.548 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **209 archivos, ~2.171 casos** (recontado el 2026-10-08 con la tercera revisión de SCRUM-503; el runner ejecuta 2.566 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -130,8 +130,8 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `app/executive-reports`, `app/operations` | 4 | 35 | últimos reportes; el botón de reportes y el reporte de Operaciones no llaman a la IA para una org no activa; las acciones de Operaciones (reporte semanal e inputs) devuelven sus errores esperables como valor, relanzan lo inesperado (sin sesión o redirect) y filtran por organización |
 | `lib/operations` | 2 | 10 | mensaje del botón de Inputs semanales, cómo cuenta el pipeline el paso de Operaciones y el lunes de la semana de la organización |
 | `lib/client` | 1 | 12 | cómo los componentes corren las server actions (`correr-accion.ts`): mensaje devuelto, texto fijo y consola ante un error inesperado, un redirect no avisa, espera un `alExito` asíncrono, y la capa que devuelve el dato o lanza (`datoDeLaMutacion`) |
-| `providers` | 2 | 30 | zona de la organización en el cliente (`ZonaDeLaOrganizacionProvider`): un miembro en Madrid ve el día de la org; el hoy es null en el render del servidor; el provider del Tablero avisa el motivo de cada rechazo, el texto fijo si la acción lanza, y le dice a la pantalla si salió; completar con tiempo no lo registra dos veces al reintentar, el tiempo registrado vale sólo para la confirmación abierta (cancelar o abrir otra lo olvidan) y un movimiento fallido del Kanban no cierra el modal (SCRUM-503) |
-| `components/workboard` | 3 | 22 | crear sprint avisa el motivo del rechazo y el reporte de tiempo lo muestra; los recursos de una tarea nueva (SOP, documentos, adjuntos) devuelven el motivo y no rechazan si algo lanza; el texto fijo si la acción lanza (SCRUM-503); el selector del detalle vuelve a lo que había, el modal de tiempo no muestra «listo» y el formulario de alta queda abierto si la acción rechaza; con el tiempo ya registrado, el modal lo avisa y no deja cambiar los minutos |
+| `providers` | 3 | 41 | zona de la organización en el cliente (`ZonaDeLaOrganizacionProvider`): un miembro en Madrid ve el día de la org; el hoy es null en el render del servidor; el provider del Tablero avisa el motivo de cada rechazo, el texto fijo si la acción lanza, y le dice a la pantalla si salió; completar con tiempo no lo registra dos veces al reintentar, el tiempo registrado vale sólo para la confirmación abierta (cancelar o abrir otra lo olvidan, y la respuesta tardía de otra confirmación se ignora), cancelar con el tiempo ya registrado avisa, y un movimiento fallido del Kanban no cierra el modal; uno de los archivos prueba el provider con estado de verdad, con hooks mínimos sin DOM (SCRUM-503) |
+| `components/workboard` | 4 | 27 | crear sprint avisa el motivo del rechazo y el reporte de tiempo lo muestra; los recursos de una tarea nueva (SOP, documentos, adjuntos) devuelven el motivo y no rechazan si algo lanza; el texto fijo si la acción lanza (SCRUM-503); el selector del detalle vuelve a lo que había, el modal de tiempo no muestra «listo» y el formulario de alta queda abierto si la acción rechaza; con el tiempo ya registrado, el modal lo avisa y no deja cambiar los minutos (con una frase que no depende de la unidad y el botón «Completar tarea»), el modal no se cierra mientras guarda y el shell le pasa los minutos ya registrados |
 | `components/shared` | 1 | 10 | `CampoFecha`: muestra lo guardado sin correrlo de día (en la zona de la org si se le pasa) y emite la fecha elegida |
 | `lib/agent` | 3 | 8 | tools de contenido del agente con piezas sin métricas, fechas que lee el agente en la zona de la org |
 | `lib/ai` | 3 | 15 | aviso de la clave de IA, clave rechazada o sin créditos, resolución de la credencial de la org |

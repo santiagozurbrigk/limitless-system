@@ -34,6 +34,30 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-08 · Tercera revisión de SCRUM-503: confirmaciones que no se cruzan y textos del modal de tiempo
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `483b7e3d` (provider, modal de tiempo y tests), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero. `providers/workboard-provider.tsx`, `components/workboard/log-time-modal.tsx`, `lib/workboard/duracion.ts` (nuevo)
+
+**Qué se hizo** (3 MENOR y 2 observaciones de la revisión adversarial de SCRUM-503, pasada 3):
+- **MENOR-1:** cada apertura de la confirmación de "completar con tiempo" lleva un número, y los eventos `tiempoRegistrado` y `completada` traen el número y la tarea de la suya; el reducer ignora los que no son de la abierta. Antes la respuesta tardía de la tarea A (cerrando el modal a mitad de pedido y abriendo B) marcaba el tiempo de A en la confirmación de B, que se completaba sin registrar el suyo; y si A se completaba, cerraba la confirmación de B. Además el modal no se puede cerrar (Escape, overlay, X, Cancelar) mientras guarda (`sePuedeCerrar`).
+- **MENOR-2:** el aviso del modal dice "Tiempo ya registrado: 1 hora. Confirmá para completar la tarea; no se vuelve a cargar.", que no depende de la unidad (antes "Ya quedaron registrados 1 hora"), y con el tiempo ya registrado el botón dice "Completar tarea" / "Completando…".
+- **MENOR-3:** `finalizeComplete` usa `intentarCompletar`, una función pura exportada que corre el intento con lo que sabe la confirmación y devuelve el evento a despachar. Un test nuevo prueba el provider con estado de verdad (hooks mínimos que guardan el estado, sin DOM): el reintento no registra dos veces, cancelar avisa y olvida el tiempo, y el completado siguiente registra sus minutos. Otro prueba que el shell le pasa los minutos al modal. Los cuatro mutantes del informe que antes pasaban la suite ahora hacen fallar al menos un test cada uno (`control-negativo-ar-pasada-3.txt`).
+- **Observaciones:** el JSDoc de `completarConTiempo` vuelve a su lugar; cancelar con el tiempo ya registrado avisa con un toast "La tarea no se completó, pero el tiempo quedó registrado" para que no se vuelva a cargar (`avisoAlCancelar`). La duración se formatea en `lib/workboard/duracion.ts`, que comparten el modal y el aviso.
+- Docs: `docs/operacion/testing.md` (209 archivos, ~2.171 casos, 2.566 ejecutados).
+
+**Por qué / finalidad:** la revisión aprobó con 3 MENOR y no queda deuda dentro del alcance.
+
+**Decisiones de diseño relevantes:**
+- Un número por apertura y no sólo el id de la tarea: también distingue una apertura anterior de la misma tarea (cancelar y volver a abrir).
+- Se hicieron las dos protecciones del MENOR-1: el modal que no se cierra a mitad de pedido evita además que la tarjeta vuelva a su columna cuando la base ya la tiene hecha.
+- Los textos de la interfaz siguen en voseo.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Sigue pendiente aplicar la migración `20261008120000` en producción antes del merge.
+
+---
+
 ### 2026-10-08 · Segunda revisión de SCRUM-503: el tiempo registrado no sobrevive a la confirmación
 
 **Rama:** `fix/SCRUM-503-tablero-errores`
