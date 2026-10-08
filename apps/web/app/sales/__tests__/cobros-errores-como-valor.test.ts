@@ -138,6 +138,7 @@ function clienteFalso() {
       const builder = {
         select: () => builder,
         order: () => builder,
+        limit: () => builder,
         insert(valores: unknown) {
           operacion.op = "insert";
           operacion.valores = valores;
@@ -527,8 +528,9 @@ describe("filtro por organización (AR pasada 2, MENOR-4)", () => {
 });
 
 describe("montos y comprobantes en un reintento (AR pasada 4)", () => {
-  const OTRO_ARCHIVO = `${ORG}/${CLIENTE}/dos.pdf`;
-  const ARCHIVO = `${ORG}/${CLIENTE}/uno.pdf`;
+  // Rutas con la forma de una subida de comprobante (<org>/<cliente>/<uuid>-<nombre>).
+  const OTRO_ARCHIVO = `${ORG}/${CLIENTE}/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa-dos.pdf`;
+  const ARCHIVO = `${ORG}/${CLIENTE}/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb-uno.pdf`;
 
   it("⭐ un monto con más de dos decimales se rechaza con motivo, sin llamar a la función", async () => {
     await expect(recordClientPaymentAction({ ...registrar, amount: 333.333 })).resolves.toEqual({
@@ -581,7 +583,11 @@ describe("montos y comprobantes en un reintento (AR pasada 4)", () => {
     });
     expect(r.success).toBe(true);
     expect(sim.reportes).toEqual([
-      { error: expect.objectContaining({ message: "Storage caído" }), contexto: { accion: "[registrarPago] comprobante sobrante" } },
+      // Un texto fijo: ni el mensaje del Storage ni la ruta.
+      {
+        error: expect.objectContaining({ message: "No se pudo borrar el comprobante sobrante" }),
+        contexto: { accion: "[registrarPago] comprobante sobrante" },
+      },
     ]);
   });
 
@@ -623,5 +629,52 @@ describe("montos y comprobantes en un reintento (AR pasada 4)", () => {
       expect(segundo.data.payment.storagePath).toBe(ARCHIVO);
       expect(sim.rpcs.map((r) => r.args.p_installment_number)).toEqual([1, 1]);
     });
+  });
+});
+
+describe("borrar el comprobante sobrante (AR pasada 5, MAYOR-1)", () => {
+  const MIO = `${ORG}/${CLIENTE}/cccccccc-cccc-4ccc-8ccc-cccccccccccc-mio.pdf`;
+  const DE_OTRO_PAGO = `${ORG}/${CLIENTE_2}/dddddddd-dddd-4ddd-8ddd-dddddddddddd-comprobante-de-otro-pago.pdf`;
+
+  it("⭐ no borra el comprobante de otro pago de la org aunque lo manden en un reintento", async () => {
+    sim.tablas.client_payments.push(
+      pago("77777777-7777-4777-8777-777777777777", ORG, CLIENTE_2, { storage_path: DE_OTRO_PAGO })
+    );
+    await recordClientPaymentAction({ ...registrar, storagePath: MIO, mimeType: "application/pdf", claveIdempotencia: "clave-propia" });
+    const r = await recordClientPaymentAction({
+      ...registrar,
+      storagePath: DE_OTRO_PAGO,
+      mimeType: "application/pdf",
+      claveIdempotencia: "clave-propia",
+    });
+    expect(r.success && r.data.storagePath).toBe(MIO);
+    expect(sim.borrados).toEqual([]);
+    expect(sim.reportes).toEqual([
+      {
+        error: expect.objectContaining({ message: "El archivo sobrante es el comprobante de otro pago: no se borra" }),
+        contexto: { accion: "[registrarPago] comprobante sobrante" },
+      },
+    ]);
+    // Al registro no va la ruta.
+    expect(JSON.stringify(sim.reportes)).not.toContain(DE_OTRO_PAGO);
+  });
+
+  it("⭐ una ruta que no es una subida de comprobante no se borra", async () => {
+    const RARA = `${ORG}/${CLIENTE}/no-es-una-subida.pdf`;
+    await recordClientPaymentAction({ ...registrar, storagePath: MIO, mimeType: "application/pdf", claveIdempotencia: "clave-rara" });
+    await recordClientPaymentAction({ ...registrar, storagePath: RARA, mimeType: "application/pdf", claveIdempotencia: "clave-rara" });
+    expect(sim.borrados).toEqual([]);
+    expect(sim.reportes).toHaveLength(1);
+  });
+
+  it("si no se puede saber si la ruta está en uso, no borra y lo registra", async () => {
+    await recordClientPaymentAction({ ...registrar, storagePath: MIO, mimeType: "application/pdf", claveIdempotencia: "clave-duda" });
+    // Falla la consulta de si la ruta está en uso (la función simulada no la usa).
+    sim.erroresPorOp["client_payments:select"] = { message: "TypeError: fetch failed" };
+    const OTRO = `${ORG}/${CLIENTE}/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee-otro.pdf`;
+    const r = await recordClientPaymentAction({ ...registrar, storagePath: OTRO, mimeType: "application/pdf", claveIdempotencia: "clave-duda" });
+    expect(r.success).toBe(true);
+    expect(sim.borrados).toEqual([]);
+    expect(sim.reportes).toHaveLength(1);
   });
 });

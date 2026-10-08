@@ -44,6 +44,33 @@ select ci.espera(
      'public.registrar_pago_de_cliente(uuid, numeric, date, text, text, integer, text, uuid, text)', 'execute')) x),
   1, 'authenticated con EXECUTE sobre registrar_pago_de_cliente');
 
+-- ─── La policy de UPDATE y los grants de client_payments ────────────────────
+-- Se mira la definición, no sólo el efecto: con la org fuera de la USING, un
+-- UPDATE sin WHERE (que no pasa por la policy de SELECT) alcanzaría pagos de
+-- otra org; un WITH CHECK sin la org o un grant de más no se ven con una
+-- llamada (los frenan el grant por columna y el CHECK de la ruta).
+select ci.espera(
+  (select count(*) from pg_policies
+   where schemaname = 'public' and tablename = 'client_payments' and cmd = 'UPDATE'
+     and policyname = 'Org members add receipt to client_payments'
+     and qual ilike '%storage_path IS NULL%'
+     and qual ilike '%organization_id = get_my_organization_id()%'
+     and with_check ilike '%organization_id = get_my_organization_id()%'),
+  1, 'la policy de UPDATE exige la org en la USING y en el WITH CHECK, y que no haya comprobante');
+select ci.espera(
+  (select count(*) from pg_policies
+   where schemaname = 'public' and tablename = 'client_payments' and cmd in ('UPDATE', 'ALL')),
+  1, 'una sola policy de UPDATE sobre client_payments');
+select ci.espera(
+  (select count(*) from information_schema.columns c
+   where c.table_schema = 'public' and c.table_name = 'client_payments'
+     and has_column_privilege('authenticated', 'public.client_payments', c.column_name, 'UPDATE')),
+  2, 'authenticated edita exactamente dos columnas de client_payments (storage_path y mime_type)');
+
+-- Un pago de la org B sin comprobante (para ver que un miembro de A no lo toca).
+insert into public.client_payments (id, client_id, organization_id, amount) values
+  ('96000000-0000-0000-0000-0000000000f1', '96000000-0000-0000-0000-0000000000cb', '96000000-0000-0000-0000-000000000b00', 10);
+
 -- ─── anon no la llama ni edita pagos ─────────────────────────────────────────
 set local role anon;
 select ci.rechazado(
@@ -171,6 +198,9 @@ select ci.rechazado(
 select ci.espera(ci.filas($$update public.client_payments set storage_path = '96000000-0000-0000-0000-000000000a00/x/tres.pdf'
   where clave_idempotencia = 'clave-comprobante'$$), 0,
   'un miembro no reemplaza un comprobante que ya está');
+select ci.espera(ci.filas($$update public.client_payments set storage_path = '96000000-0000-0000-0000-000000000b00/x.pdf'
+  where id = '96000000-0000-0000-0000-0000000000f1'$$), 0,
+  'un miembro de A no le pone comprobante a un pago de la org B');
 select ci.espera((select count(*) from public.client_payments where client_id = '96000000-0000-0000-0000-0000000000c1' and amount = 999), 0,
   'el monto corregido no queda guardado con la clave vieja');
 

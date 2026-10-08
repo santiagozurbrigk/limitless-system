@@ -10,6 +10,7 @@ import {
   type ClientPaymentRow,
 } from "@/lib/clients/payment-mapper";
 import { CLIENT_PAYMENT_RECEIPTS_BUCKET } from "@/lib/clients/constants";
+import { montoACentavos } from "@/lib/clients/payment-utils";
 import {
   isAllowedPaymentReceipt,
   sanitizeFilename,
@@ -70,10 +71,10 @@ const prepareReceiptUploadSchema = z.object({
  * se guardaba redondeado y el reintento con la misma clave no coincidía.
  */
 const montoDePagoSchema = moneySchema
-  .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, {
+  .refine((v) => montoACentavos(v) !== null, {
     message: "El monto puede tener hasta dos decimales.",
   })
-  .transform((v) => Math.round(v * 100) / 100);
+  .transform((v) => montoACentavos(v) ?? v);
 
 /** El mismo monto, comparado en centavos. */
 function mismoMonto(a: number, b: number): boolean {
@@ -205,14 +206,48 @@ export async function prepareClientPaymentReceiptUploadAction(
  * `recordClientPaymentAction` y `addInstallmentPaymentAction` sin pasar por
  * otra server action.
  */
-async function borrarComprobanteSobrante(ruta: string): Promise<void> {
+/**
+ * Las rutas que arma `prepareClientPaymentReceiptUploadAction`:
+ * `<org>/<cliente>/<uuid>-<nombre>` o `<org>/<uuid>-<nombre>`.
+ */
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const SUBIDA_DE_COMPROBANTE = new RegExp(`^${UUID}/(?:${UUID}/)?${UUID}-[A-Za-z0-9._-]+$`);
+
+function esSubidaDeComprobante(ruta: string, organizationId: string): boolean {
+  return ruta.startsWith(`${organizationId}/`) && SUBIDA_DE_COMPROBANTE.test(ruta);
+}
+
+/**
+ * Borra el archivo que sobró de un reintento (el pago ya tenía comprobante).
+ *
+ * ⭐ La ruta la manda el navegador y el borrado es con service role (AR de
+ * SCRUM-504, pasada 5): sólo se borra si tiene la forma de una subida de
+ * comprobante de la org y **ninguna fila de `client_payments`** (de ninguna
+ * org) la usa. Si no, no se toca y queda registrado. Al registro va un texto
+ * fijo, nunca la ruta.
+ */
+async function borrarComprobanteSobrante(ruta: string, organizationId: string): Promise<void> {
+  const etiqueta = "[registrarPago] comprobante sobrante";
   try {
-    const { error } = await createAdminClient()
-      .storage.from(CLIENT_PAYMENT_RECEIPTS_BUCKET)
-      .remove([ruta]);
-    if (error) throw new Error(error.message);
+    if (!esSubidaDeComprobante(ruta, organizationId)) {
+      registrarFallaDeAccion(etiqueta, new Error("El archivo sobrante no es una subida de comprobante: no se borra"));
+      return;
+    }
+    const admin = createAdminClient();
+    const { data: enUso, error: usoError } = await admin
+      .from("client_payments")
+      .select("id")
+      .eq("storage_path", ruta)
+      .limit(1);
+    if (usoError) throw new FallaDeLaBase(usoError);
+    if (enUso?.length) {
+      registrarFallaDeAccion(etiqueta, new Error("El archivo sobrante es el comprobante de otro pago: no se borra"));
+      return;
+    }
+    const { error } = await admin.storage.from(CLIENT_PAYMENT_RECEIPTS_BUCKET).remove([ruta]);
+    if (error) throw new Error("No se pudo borrar el comprobante sobrante");
   } catch (e) {
-    registrarFallaDeAccion("[registrarPago] comprobante sobrante", e);
+    registrarFallaDeAccion(etiqueta, e);
   }
 }
 
@@ -258,7 +293,7 @@ async function registrarPago(
   // devuelve el que tenía y el archivo recién subido sobra. Se borra para no
   // dejarlo huérfano; si no se puede, queda registrado (el pago está bien).
   if (datos.storagePath && pago.storage_path !== datos.storagePath) {
-    await borrarComprobanteSobrante(datos.storagePath);
+    await borrarComprobanteSobrante(datos.storagePath, organizationId);
   }
 
   revalidatePaymentScreens();
