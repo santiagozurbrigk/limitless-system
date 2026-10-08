@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot`, `apps/reel-worker` | sí (`pnpm typecheck`, job `checks`) |
 | Lint | ESLint 9 (`next lint` en web; `eslint src/` con la base de `packages/config` en ui, reel-worker y bot) | `apps/web`, `packages/ui`, `apps/reel-worker`, `apps/discord-bot` | sí (`pnpm lint`, job `checks`) |
-| Unitarios | Vitest 3, entorno `node` | `apps/web` (213 archivos) | sí (`pnpm test`) |
+| Unitarios | Vitest 3, entorno `node` | `apps/web` (214 archivos) | sí (`pnpm test`) |
 | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** (se activa con staging, ver E2E) |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
@@ -71,7 +71,7 @@ Prueban lo que la base deja hacer a cada usuario, que Vitest no puede ver porque
 
 - `00_ayudas.sql` crea el schema `ci` con `ci.jwt(sub, extra)` (deja el JWT de un usuario para la transacción), `ci.rechazado(sql, qué)` (tiene que fallar con 42501), `ci.filas(sql)` (filas tocadas: la RLS en UPDATE y DELETE no da error, afecta 0) y `ci.espera(real, esperado, qué)`.
 - Cada archivo arma sus datos dentro de `begin; ... rollback;`, actúa con `select ci.jwt(...); set local role authenticated;` y vuelve con `reset role`.
-- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9). Hoy son 11 (`00_ayudas.sql` a `96_registrar_pago_de_cliente.sql`, SCRUM-504: el pago y su cuota en una transacción, con la RLS y la org de la sesión, la clave de idempotencia (la misma clave con otro cliente, monto, fecha o cuota se rechaza; el monto se compara redondeado; el comprobante que faltaba se suma), sólo el comprobante editable por un miembro y sin EXECUTE para anon ni public; `96_` porque SCRUM-503 trae `95_crear_sprint.sql`).
+- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9). Hoy son 11 (`00_ayudas.sql` a `96_registrar_pago_de_cliente.sql`, SCRUM-504: el pago y su cuota en una transacción, con la RLS y la org de la sesión, la clave de idempotencia (la misma clave con otro cliente, monto, fecha o cuota se rechaza; el monto se compara redondeado; el comprobante que faltaba se suma), sólo el comprobante editable por un miembro (la definición de la policy de UPDATE y las dos columnas con grant se verifican) y sin EXECUTE para anon ni public; `96_` porque SCRUM-503 trae `95_crear_sprint.sql`).
 - Validez, igual que en Vitest: sacar la migración que arregla el problema y confirmar que el test falla con `FALLA: ...`.
 - Para correrlos a mano: los mismos comandos de "Migraciones" más arriba.
 
@@ -79,7 +79,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **213 archivos, ~2.227 casos** (recontado el 2026-10-08 con SCRUM-504; el runner ejecuta 2.622 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **214 archivos, ~2.236 casos** (recontado el 2026-10-08 con SCRUM-504; el runner ejecuta 2.631 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -88,7 +88,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/checkpoints` | 7 | 105 | recorrido del cliente, etapas, propuestas, trabados (vence y atraso en días de la zona de la org), fecha de un hito en la zona de la org y validación "no futura" por día (incluidas UTC+12 y UTC-6) |
 | `lib/custom-fields` | 7 | 85 | campos configurables: validación, merge, formato, alertas por fecha |
 | `lib/payments` | 5 | 85 | normalización Whop/Commas, firmas, agregados, retención |
-| `lib/clients` | 10 | 102 | próxima tarea (vencida con el hoy de la org, también para un miembro en otra zona), facturación, satisfacción, señales, sub-clientes, revisión semanal, fecha de alta por defecto del import de Excel, día de la 1-1 en el prompt de tareas, días que le quedan al programa |
+| `lib/clients` | 10 | 105 | próxima tarea (vencida con el hoy de la org, también para un miembro en otra zona), facturación, satisfacción, señales, sub-clientes, revisión semanal, fecha de alta por defecto del import de Excel, día de la 1-1 en el prompt de tareas, días que le quedan al programa; montos en centavos (lo pagado al cerrar una venta se redondea, SCRUM-504) |
 | `lib/fechas` | 2 | 39 | fechas calendario: hoy en una zona, suma de días (fin de mes, año y horario de verano), días entre dos fechas, vencida (sólo `YYYY-MM-DD`), valor guardado leído en la zona de la org (ida y vuelta), formato de fecha guardada, mediodía e inicio de una fecha en una zona, día de un instante real, zona de la organización con fallback |
 | `lib/onboarding` | 4 | 61 | derivación, gate de routing, ítems, tours |
 | `lib/discord` | 5 | 60 | actividad, canales, clasificador, perfil, identidades |
@@ -130,6 +130,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/operations` | 2 | 10 | mensaje del botón de Inputs semanales, cómo cuenta el pipeline el paso de Operaciones y el lunes de la semana de la organización |
 | `lib/client` | 1 | 18 | cómo los componentes corren las server actions (`correr-accion.ts`): mensaje devuelto, texto fijo y consola ante un error inesperado, un redirect no avisa, espera un `alExito` asíncrono, y la capa que devuelve el dato o lanza (`datoDeLaMutacion`); `leerConMotivo` y `falloInesperado` (el motivo o el texto fijo, sin lanzar; SCRUM-504) |
 | `providers` | 1 | 5 | zona de la organización en el cliente (`ZonaDeLaOrganizacionProvider`): un miembro en Madrid ve el día de la org; el hoy es null en el render del servidor |
+| `components/clients` | 1 | 3 | el editor de planes no deja guardar un monto por cuota con más de dos decimales (SCRUM-504) |
 | `components/shared` | 1 | 10 | `CampoFecha`: muestra lo guardado sin correrlo de día (en la zona de la org si se le pasa) y emite la fecha elegida |
 | `lib/agent` | 3 | 8 | tools de contenido del agente con piezas sin métricas, fechas que lee el agente en la zona de la org |
 | `lib/ai` | 3 | 15 | aviso de la clave de IA, clave rechazada o sin créditos, resolución de la credencial de la org |
@@ -143,7 +144,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `app/auth` | 2 | 11 | el login vuelve a la invitación; el cambio de contraseña obligatorio devuelve sus errores esperables como valor (incluidos los rechazos de Supabase Auth: misma contraseña, débil, sesión, intentos) |
 | `app/invite`, `app/intelligence` | 2 | 10 | la página de invitación sin crear cuentas; el resumen de Inteligencia rechaza como valor a quien no tiene Operaciones |
 | `app/clients`, `app/closing` | 4 | 40 | las mutaciones de Clientes y la de Closing devuelven sus errores esperables como valor, filtran por organización y no muestran crudo lo inesperado (lo registran y reportan); Closing trae todos los turnos de la org; lo cobrado por cliente para Cobros devuelve su error como valor (SCRUM-504) |
-| `app/sales`, `app/(platform)/sales` | 6 | 121 | todas las acciones de Ventas (Cobros, recorrido del lead, ranking, evolución, objeciones, métricas de rendimiento e importadas, closers, comisión, sync manual y desconexión de Calendly, tabla e hilo de seguimiento, próximo paso, calificación, vínculo lead-cliente y el catálogo de valores) devuelven sus errores esperables como valor, filtran por organización y no muestran crudo lo inesperado (lo registran y reportan); con el token de Calendly vencido, la sync dice que hay que reconectar; `/sales/metrics` y `/sales/closing` pasan el motivo a la pantalla (SCRUM-504) |
+| `app/sales`, `app/(platform)/sales` | 6 | 124 | todas las acciones de Ventas (Cobros, recorrido del lead, ranking, evolución, objeciones, métricas de rendimiento e importadas, closers, comisión, sync manual y desconexión de Calendly, tabla e hilo de seguimiento, próximo paso, calificación, vínculo lead-cliente y el catálogo de valores) devuelven sus errores esperables como valor, filtran por organización y no muestran crudo lo inesperado (lo registran y reportan); con el token de Calendly vencido, la sync dice que hay que reconectar; `/sales/metrics` y `/sales/closing` pasan el motivo a la pantalla (SCRUM-504) |
 | `components/sales` | 2 | 50 | los componentes de Ventas que usan esas acciones muestran el motivo devuelto y el texto fijo si la acción lanzó: rendimiento del equipo, evolución del closer, objeciones, métricas de rendimiento, avisos de la pantalla de métricas, sync y desconexión de Calendly, métricas del ranking de closers, la tabla de seguimiento (recarga y edición que vuelve atrás la fila), Cobros, ficha de pagos (relectura que limpia el error, rótulo de la próxima cuota), subida de comprobantes, estado del Calendly propio y recorrido del lead (`leerConMotivo`, `correrMutacion`) (SCRUM-504) |
 | `app/team`, `app/(platform)/team` | 4 | 31 | aceptar una invitación con la sesión; las lecturas de Equipo devuelven sus errores como valor y filtran por organización; `/team` muestra el motivo en vez de la pantalla de error de Next; un rol con nombre repetido vuelve con su mensaje |
 

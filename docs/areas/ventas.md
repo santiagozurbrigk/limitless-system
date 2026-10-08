@@ -352,8 +352,12 @@ transacción, con el cliente bloqueado, la RLS y la org de la sesión; si la cuo
 queda el pago. Cada formulario de la ficha genera una clave de idempotencia al abrirse: si la respuesta
 se pierde y se vuelve a guardar, la función devuelve el pago ya registrado (índice único por org; si
 el reintento trae el comprobante que faltaba se le suma, y si el pago ya tenía otro la acción borra el
-archivo nuevo); con otros datos (cliente, monto en centavos, fecha o cuota) se rechaza con un motivo.
-Los montos admiten hasta dos decimales. El
+archivo nuevo, sólo si tiene la forma de una subida de comprobante de la org y ningún pago lo usa: si
+no, no se toca y se registra); con otros datos (cliente, monto en centavos, fecha o cuota) se rechaza
+con un motivo.
+Los montos admiten hasta dos decimales; al cerrar una venta desde Closing, lo pagado se redondea a
+centavos (para que el pago no se rechace después de cerrar la llamada y crear el cliente), y el editor
+de planes no deja guardar un monto por cuota con más de dos decimales. El
 cierre de venta desde Closing todavía no pasa una clave (`[CLOSING-CIERRE-ATOMICO]`).
 
 Las 6 acciones de `app/sales/payment-actions.ts` devuelven `MutationResult` (SCRUM-504): validación,
