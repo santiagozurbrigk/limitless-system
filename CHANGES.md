@@ -34,6 +34,29 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-08 · Segunda revisión de SCRUM-503: el tiempo registrado no sobrevive a la confirmación
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `ea2a2c5a` (provider, modal de tiempo y tests), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero. `providers/workboard-provider.tsx`, `components/workboard/{log-time-modal,workboard-shell}.tsx`
+
+**Qué se hizo** (MAYOR-1 de la revisión adversarial de SCRUM-503, pasada 2):
+- El recuerdo del tiempo ya registrado (fix-pack de M3) vivía en un `useRef` por tarea toda la sesión: después de cancelar, un completado posterior de la misma tarea se salteaba el registro y el modal decía "listo" sin guardar los minutos nuevos; y si se cambiaban los minutos y se reintentaba, se ignoraban sin aviso. Ahora la confirmación de "completar con tiempo" es un reducer (`confirmacionDeCompletado`) con la tarea, el patch, el estado anterior y los minutos registrados: abrir una confirmación nueva (aunque sea de la misma tarea), cancelar o completar olvidan el tiempo.
+- Mientras el tiempo ya quedó registrado en la confirmación abierta, el modal dice "Ya quedaron registrados N. Confirmá para completar la tarea; el tiempo no se vuelve a cargar." y deshabilita los minutos y la nota; confirmar sólo completa (`minutosAConfirmar`).
+- Tests: el reducer (cancelar olvida, una confirmación nueva empieza sin tiempo, el escenario de cancelar y volver a completar con otros minutos que ahora sí se registran) y el modal dibujado con y sin tiempo registrado. Control negativo por mutante en `control-negativo-ar-pasada-2.txt`.
+- `verificacion-manual.md` suma § Tablero: errores como valor y crear sprint atómico, con la prueba de humo de crear un sprint en producción (la primera vez que `.rpc("crear_sprint").single()` corre contra PostgREST real).
+- Docs: `docs/operacion/testing.md` (207 archivos, ~2.155 casos, 2.548 ejecutados).
+
+**Por qué / finalidad:** el arreglo de M3 cambiaba el riesgo de duplicar tiempo por el de perderlo sin aviso.
+
+**Decisiones de diseño relevantes:**
+- El tiempo registrado queda atado a la confirmación y no a la tarea: es lo único que garantiza que un intento nuevo registre sus minutos. Para que ningún camino se olvide de limpiarlo, abrir y cerrar la confirmación son eventos del mismo reducer que guarda el tiempo.
+- El texto del modal va en voseo, como el resto de la interfaz.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Sigue pendiente aplicar la migración `20261008120000` en producción antes del merge.
+
+---
+
 ### 2026-10-08 · Fix-pack de la AR de SCRUM-503: crear sprint atómico, sin doble registro de tiempo y lint de todo web
 
 **Rama:** `fix/SCRUM-503-tablero-errores`
