@@ -55,8 +55,14 @@ vi.mock("@/lib/metrics/frequent-objections", () => ({
   mockFrequentObjectionSummaries: () => [],
 }));
 vi.mock("@/lib/sales/lead-journey", () => ({
-  getLeadJourney: vi.fn(),
-  getZernioLeadJourney: vi.fn(),
+  getLeadJourney: async (organizationId: string) => {
+    if (sim.lanza) throw sim.lanza;
+    return [{ type: "dm", org: organizationId }];
+  },
+  getZernioLeadJourney: async (organizationId: string) => {
+    if (sim.lanza) throw sim.lanza;
+    return [{ type: "comment", org: organizationId }];
+  },
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -327,5 +333,29 @@ describe("getFrequentObjectionsAction", () => {
 describe("getCallAnalysesAction", () => {
   it("ya no existe: no tenía llamadores y era un endpoint expuesto", () => {
     expect("getCallAnalysesAction" in acciones).toBe(false);
+  });
+});
+
+describe("recorrido del lead (antes devolvía [] ante cualquier falla)", () => {
+  const llamadas: Array<[string, string, () => Promise<{ success: boolean }>]> = [
+    ["getLeadJourneyAction", "[getLeadJourney]", () => acciones.getLeadJourneyAction("conv-1")],
+    ["getZernioLeadJourneyAction", "[getZernioLeadJourney]", () => acciones.getZernioLeadJourneyAction("acc", "p1", "Ana")],
+  ];
+
+  it.each(llamadas)("%s lee el recorrido de la organización de la sesión", async (_n, _e, llamar) => {
+    const r = await llamar();
+    expect(r).toMatchObject({ success: true, data: [{ org: "org-1" }] });
+  });
+
+  it.each(llamadas)("⭐ %s sin sesión devuelve el motivo", async (_n, _e, llamar) => {
+    sim.sesion = false;
+    await expect(llamar()).resolves.toEqual({ success: false, error: "Sesión no válida" });
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it.each(llamadas)("⭐ %s con una excepción devuelve el texto fijo y la reporta", async (_n, etiqueta, llamar) => {
+    sim.lanza = new TypeError("fetch failed");
+    await expect(llamar()).resolves.toEqual({ success: false, error: ERROR_INESPERADO });
+    expect(sim.reportes).toEqual([{ error: sim.lanza, contexto: { accion: etiqueta } }]);
   });
 });

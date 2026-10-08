@@ -215,15 +215,15 @@ export async function getMockCallAnalysisKeysAction() {
 export async function getLeadJourneyAction(
   conversationId: string,
   context?: LeadJourneyContext
-): Promise<LeadJourneyStep[]> {
-  if (!isSupabaseConfigured()) return [];
+): Promise<MutationResult<LeadJourneyStep[]>> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
 
-  try {
+  // Antes atrapaba todo y devolvía `[]`: sin sesión o con una falla, el panel
+  // decía "Sin recorrido registrado" (AR de SCRUM-504).
+  return mutacionConErroresEsperables("[getLeadJourney]", async () => {
     const organizationId = await requireOrganizationId();
-    return await getLeadJourney(organizationId, conversationId, context);
-  } catch {
-    return [];
-  }
+    return getLeadJourney(organizationId, conversationId, context);
+  });
 }
 
 /**
@@ -234,19 +234,17 @@ export async function getZernioLeadJourneyAction(
   accountId: string,
   participantId: string,
   participantName: string
-): Promise<LeadJourneyStep[]> {
-  if (!isSupabaseConfigured()) return [];
+): Promise<MutationResult<LeadJourneyStep[]>> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
 
-  try {
+  return mutacionConErroresEsperables("[getZernioLeadJourney]", async () => {
     const organizationId = await requireOrganizationId();
-    return await getZernioLeadJourney(organizationId, {
+    return getZernioLeadJourney(organizationId, {
       zernioAccountId: accountId,
       zernioParticipantId: participantId,
       zernioParticipantName: participantName,
     });
-  } catch {
-    return [];
-  }
+  });
 }
 
 export async function getFrequentObjectionsAction(): Promise<

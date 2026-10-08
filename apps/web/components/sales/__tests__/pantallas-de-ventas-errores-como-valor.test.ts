@@ -26,6 +26,7 @@ const sim = vi.hoisted(() => ({
   cobrado: null as unknown,
   prepararSubida: null as unknown,
   estadoCalendly: null as unknown,
+  recorrido: null as unknown,
 }));
 
 /** Devuelve el resultado simulado, o lo lanza si es una excepción. */
@@ -38,6 +39,8 @@ function responder(valor: unknown) {
 // acciones de servidor (`app/clients/actions.ts`).
 vi.mock("server-only", () => ({}));
 vi.mock("@/app/sales/actions", () => ({
+  getLeadJourneyAction: () => responder(sim.recorrido),
+  getZernioLeadJourneyAction: () => responder(sim.recorrido),
   getFrequentObjectionsAction: () => responder(sim.objeciones),
   getTeamRankingAction: () => responder(sim.ranking),
   getCloserEvolutionAction: () => responder(sim.evolucion),
@@ -89,6 +92,7 @@ import { FrequentObjectionsSection } from "../frequent-objections-section";
 import { AvisoDeCobradoSinLeer, cargarCobradoPorCliente } from "../cobros-page";
 import { cargarPagosDelCliente } from "../client-payments-section";
 import { uploadPaymentReceiptFile } from "../payment-receipt-dropzone";
+import { cargarRecorridoDelLead } from "../lead-journey-inline";
 
 const caida = () => new Error("An error occurred in the Server Components render.");
 
@@ -472,5 +476,26 @@ describe("Estado del Calendly propio (AR, MENOR-4)", () => {
   it("con el estado, el dato", async () => {
     sim.estadoCalendly = { success: true, data: { connected: true } };
     await expect(cargarEstadoDeMiCalendly()).resolves.toEqual({ ok: true, data: { connected: true } });
+  });
+});
+
+describe("Recorrido del lead", () => {
+  it("⭐ con un motivo lo devuelve (antes \"Sin recorrido registrado\")", async () => {
+    sim.recorrido = { success: false, error: "Sesión no válida" };
+    await expect(cargarRecorridoDelLead({ conversationId: "c1" })).resolves.toEqual({
+      ok: false,
+      motivo: "Sesión no válida",
+    });
+  });
+
+  it("⭐ si la acción de Zernio lanza, el texto fijo", async () => {
+    sim.recorrido = caida();
+    await expect(
+      cargarRecorridoDelLead({ zernioAccountId: "a", zernioParticipantName: "Ana" })
+    ).resolves.toEqual({ ok: false, motivo: ERROR_INESPERADO });
+  });
+
+  it("sin datos para buscar, recorrido vacío", async () => {
+    await expect(cargarRecorridoDelLead({})).resolves.toEqual({ ok: true, data: [] });
   });
 });

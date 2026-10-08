@@ -16,6 +16,7 @@ import { Skeleton, SteppedAlert, cn } from "@ai-coo/ui";
 import { getLeadJourneyAction, getZernioLeadJourneyAction } from "@/app/sales/actions";
 import { paths } from "@/routes";
 import type { LeadJourneyStep } from "@/lib/sales/lead-journey";
+import { leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 
 // ─── Configuración visual por tipo de paso ────────────────────────────────────
 
@@ -244,6 +245,34 @@ function StepContent({ step }: { step: LeadJourneyStep }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
+/** El recorrido del lead por conversación o por Zernio, o el motivo si no se pudo leer. */
+export function cargarRecorridoDelLead(params: {
+  conversationId?: string;
+  zernioAccountId?: string;
+  zernioParticipantId?: string;
+  zernioParticipantName?: string;
+}): Promise<Lectura<LeadJourneyStep[]>> {
+  const { conversationId, zernioAccountId, zernioParticipantId, zernioParticipantName } = params;
+  if (conversationId) {
+    return leerConMotivo(
+      () =>
+        getLeadJourneyAction(conversationId, {
+          zernioAccountId,
+          zernioParticipantId,
+          zernioParticipantName,
+        }),
+      "[LeadJourneyInline] recorrido"
+    );
+  }
+  if (zernioAccountId && zernioParticipantName) {
+    return leerConMotivo(
+      () => getZernioLeadJourneyAction(zernioAccountId, zernioParticipantId ?? "", zernioParticipantName),
+      "[LeadJourneyInline] recorrido de Zernio"
+    );
+  }
+  return Promise.resolve({ ok: true, data: [] });
+}
+
 export function LeadJourneyInline({
   conversationId,
   leadName,
@@ -261,33 +290,26 @@ export function LeadJourneyInline({
 }) {
   const [steps, setSteps] = useState<LeadJourneyStep[]>([]);
   const [loading, setLoading] = useState(true);
+  // Por qué no se pudo leer el recorrido (SCRUM-504): antes se veía como
+  // "Sin recorrido registrado".
+  const [motivo, setMotivo] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setMotivo(null);
 
-    const fetchFn =
-      conversationId
-        ? getLeadJourneyAction(conversationId, {
-            zernioAccountId,
-            zernioParticipantId,
-            zernioParticipantName,
-          })
-        : zernioAccountId && zernioParticipantName
-          ? getZernioLeadJourneyAction(
-              zernioAccountId,
-              zernioParticipantId ?? "",
-              zernioParticipantName
-            )
-          : Promise.resolve([] as LeadJourneyStep[]);
-
-    fetchFn
-      .then((result) => {
-        if (!cancelled) setSteps(result);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void cargarRecorridoDelLead({
+      conversationId,
+      zernioAccountId,
+      zernioParticipantId,
+      zernioParticipantName,
+    }).then((lectura) => {
+      if (cancelled) return;
+      if (lectura.ok) setSteps(lectura.data);
+      else setMotivo(lectura.motivo);
+      setLoading(false);
+    });
 
     return () => {
       cancelled = true;
@@ -314,6 +336,10 @@ export function LeadJourneyInline({
 
       {loading ? (
         <JourneySkeleton />
+      ) : motivo ? (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-4 text-[11px] text-destructive" role="alert">
+          No se pudo cargar el recorrido. {motivo}
+        </p>
       ) : steps.length === 0 ? (
         <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-4 text-center">
           <p className="text-[11px] font-medium text-muted-foreground">Sin recorrido registrado</p>
