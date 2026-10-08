@@ -92,7 +92,8 @@ import { FrequentObjectionsSection } from "../frequent-objections-section";
 import { AvisoDeCobradoSinLeer, cargarCobradoPorCliente } from "../cobros-page";
 import {
   cargarPagosDelCliente,
-  estadoTrasReleerPagos,
+  agregarPago,
+  aplicarLecturaDePagos,
   rotuloDeCuotaRegistrada,
   rotulosDeLaProximaCuota,
 } from "../client-payments-section";
@@ -515,12 +516,38 @@ describe("Recorrido del lead", () => {
 });
 
 describe("Ficha de pagos (AR pasada 2, MENOR-1)", () => {
+  const pago = (id: string) => ({ id }) as never;
+  const conError = { payments: [], loadError: ERROR_INESPERADO };
+
   it("⭐ releer con éxito limpia el error de la primera lectura", () => {
-    expect(estadoTrasReleerPagos({ ok: true, data: [] })).toEqual({ payments: [], loadError: null });
+    expect(aplicarLecturaDePagos(conError, { ok: true, data: [pago("p1")] }, "relectura")).toEqual({
+      payments: [pago("p1")],
+      loadError: null,
+    });
   });
 
-  it("releer con error deja lo que se veía", () => {
-    expect(estadoTrasReleerPagos({ ok: false, motivo: ERROR_INESPERADO })).toBeNull();
+  it("⭐ cargar con éxito también limpia el error", () => {
+    expect(aplicarLecturaDePagos(conError, { ok: true, data: [] }, "carga")).toEqual({ payments: [], loadError: null });
+  });
+
+  it("⭐ si falla la carga queda el motivo, con lo que se veía", () => {
+    const actual = { payments: [pago("p1")], loadError: null };
+    expect(aplicarLecturaDePagos(actual, { ok: false, motivo: "Sesión no válida" }, "carga")).toEqual({
+      payments: [pago("p1")],
+      loadError: "Sesión no válida",
+    });
+  });
+
+  it("si falla una relectura queda todo como estaba", () => {
+    const actual = { payments: [pago("p1")], loadError: null };
+    expect(aplicarLecturaDePagos(actual, { ok: false, motivo: ERROR_INESPERADO }, "relectura")).toBe(actual);
+  });
+
+  it("un pago nuevo va arriba y no toca el error", () => {
+    expect(agregarPago({ payments: [pago("p1")], loadError: null }, pago("p2"))).toEqual({
+      payments: [pago("p2"), pago("p1")],
+      loadError: null,
+    });
   });
 
   it("⭐ con los pagos sin leer, la cuota no se rotula con un número calculado sobre una lista vacía", () => {

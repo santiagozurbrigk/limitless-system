@@ -60,7 +60,15 @@ function rpcFalsa(nombre: string, args: Fila) {
   const pagos = sim.tablas.client_payments ?? [];
   if (args.p_clave_idempotencia) {
     const previo = pagos.find((p) => p.clave_idempotencia === args.p_clave_idempotencia && p.organization_id === ORG);
-    if (previo) return { data: previo, error: null };
+    if (previo) {
+      const otros =
+        previo.client_id !== args.p_client_id ||
+        previo.amount !== args.p_amount ||
+        previo.payment_date !== args.p_payment_date ||
+        (args.p_installment_number != null && previo.installment_number !== args.p_installment_number);
+      if (otros) return { data: null, error: { code: "IDM01", message: "registrar_pago_de_cliente: la clave ya se usó con otros datos" } };
+      return { data: previo, error: null };
+    }
   }
   const nuevo: Fila = {
     id: `pago-${pagos.length + 1}`,
@@ -302,6 +310,17 @@ describe("registrar un pago", () => {
     expect(sim.tablas.client_payments.filter((p) => p.clave_idempotencia === "clave-0002")).toHaveLength(1);
   });
 
+  it("⭐ la misma clave con otros datos (IDM01 de la función) devuelve el motivo, no el pago viejo", async () => {
+    await recordClientPaymentAction({ ...registrar, claveIdempotencia: "clave-0003" });
+    await expect(
+      recordClientPaymentAction({ ...registrar, amount: 999, claveIdempotencia: "clave-0003" })
+    ).resolves.toEqual({
+      success: false,
+      error: "Ese pago ya se registró con otros datos. Cerrá el formulario y volvé a abrirlo para cargar otro.",
+    });
+    expect(sim.reportes).toEqual([]);
+  });
+
   it("⭐ un cliente de otra organización (P0002 de la función) devuelve el motivo", async () => {
     await expect(recordClientPaymentAction({ ...registrar, clientId: CLIENTE_AJENO })).resolves.toEqual({
       success: false,
@@ -350,6 +369,18 @@ describe("registrar una cuota", () => {
     if (!primero.success || !segundo.success) return;
     expect(segundo.data.payment.id).toBe(primero.data.payment.id);
     expect(segundo.data.payment.installmentNumber).toBe(1);
+    expect(sim.rpcs).toHaveLength(1);
+  });
+
+  it("⭐ la misma clave de una cuota con otro monto devuelve el motivo, no el pago viejo", async () => {
+    sim.tablas.client_payments = [];
+    await addInstallmentPaymentAction({ ...registrar, claveIdempotencia: "clave-cuota-2" });
+    await expect(
+      addInstallmentPaymentAction({ ...registrar, amount: 150, claveIdempotencia: "clave-cuota-2" })
+    ).resolves.toEqual({
+      success: false,
+      error: "Ese pago ya se registró con otros datos. Cerrá el formulario y volvé a abrirlo para cargar otro.",
+    });
     expect(sim.rpcs).toHaveLength(1);
   });
 

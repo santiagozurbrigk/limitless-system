@@ -86,15 +86,30 @@ export function rotulosDeLaProximaCuota(
   return { boton: `Registrar cuota ${etiqueta}`, dialogo: etiqueta };
 }
 
+/** Los pagos que muestra la ficha y, si la lectura falló, por qué. */
+export type EstadoDePagos = { payments: ClientPayment[]; loadError: string | null };
+
 /**
- * Qué queda después de releer los pagos: con éxito, la lista y sin error (ya
- * se leyó bien, el error de la primera lectura no aplica más); si falla,
- * `null`: queda lo que se veía.
+ * Cómo queda la ficha después de leer los pagos (SCRUM-504). Toda la lógica de
+ * `loadError` vive acá; el componente sólo guarda lo que devuelve.
+ * - Con éxito: la lista, y sin error (si la primera lectura había fallado y
+ *   ahora se leyó bien, el error no aplica más).
+ * - Si falla la carga: el motivo, con lo que se veía.
+ * - Si falla una relectura (después de registrar): queda todo como estaba.
  */
-export function estadoTrasReleerPagos(
-  lectura: Lectura<ClientPayment[]>
-): { payments: ClientPayment[]; loadError: null } | null {
-  return lectura.ok ? { payments: lectura.data, loadError: null } : null;
+export function aplicarLecturaDePagos(
+  actual: EstadoDePagos,
+  lectura: Lectura<ClientPayment[]>,
+  momento: "carga" | "relectura"
+): EstadoDePagos {
+  if (lectura.ok) return { payments: lectura.data, loadError: null };
+  if (momento === "relectura") return actual;
+  return { payments: actual.payments, loadError: lectura.motivo };
+}
+
+/** Un pago recién registrado, arriba de la lista. */
+export function agregarPago(actual: EstadoDePagos, pago: ClientPayment): EstadoDePagos {
+  return { ...actual, payments: [pago, ...actual.payments] };
 }
 
 /** El rótulo de la cuota que el servidor registró, para el aviso. */
@@ -123,7 +138,13 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
    */
   const { refreshClientPayments } = useFinanceData();
   const { push } = useToast();
-  const [payments, setPayments] = useState<ClientPayment[]>([]);
+  const [estadoDePagos, setEstadoDePagos] = useState<EstadoDePagos>({
+    payments: [],
+    loadError: null,
+  });
+  // Por qué no se pudieron leer los pagos (SCRUM-504): antes la falla se veía
+  // como "Aún no hay pagos registrados".
+  const { payments, loadError } = estadoDePagos;
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [addGenericOpen, setAddGenericOpen] = useState(false);
@@ -152,21 +173,12 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
 
   const showGenericButton = client.paymentType !== "installments";
 
-  // Por qué no se pudieron leer los pagos (SCRUM-504): antes la falla se veía
-  // como "Aún no hay pagos registrados".
-  const [loadError, setLoadError] = useState<string | null>(null);
-
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     void cargarPagosDelCliente(client.id).then((lectura) => {
       if (cancelled) return;
-      if (lectura.ok) {
-        setPayments(lectura.data);
-        setLoadError(null);
-      } else {
-        setLoadError(lectura.motivo);
-      }
+      setEstadoDePagos((actual) => aplicarLecturaDePagos(actual, lectura, "carga"));
       setLoading(false);
     });
     return () => {
@@ -177,10 +189,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
   /** Relee la lista después de registrar; si falla, queda lo que se ve. */
   function releerPagos() {
     void cargarPagosDelCliente(client.id).then((lectura) => {
-      const estado = estadoTrasReleerPagos(lectura);
-      if (!estado) return;
-      setPayments(estado.payments);
-      setLoadError(estado.loadError);
+      setEstadoDePagos((actual) => aplicarLecturaDePagos(actual, lectura, "relectura"));
     });
   }
 
@@ -328,7 +337,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
                 description: e instanceof Error ? e.message : undefined,
               });
             });
-            setPayments((prev) => [newPayment, ...prev]);
+            setEstadoDePagos((actual) => agregarPago(actual, newPayment));
             releerPagos();
             void refreshClientPayments();
             push({
@@ -346,7 +355,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
           onOpenChange={setAddGenericOpen}
           clientId={client.id}
           onSuccess={(newPayment) => {
-            setPayments((prev) => [newPayment, ...prev]);
+            setEstadoDePagos((actual) => agregarPago(actual, newPayment));
             releerPagos();
             void refreshClientPayments();
             push({

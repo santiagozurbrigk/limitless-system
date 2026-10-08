@@ -19,7 +19,8 @@
 --     pago ya registrado en vez de duplicarlo (índice único por organización);
 --   - si la cuota no se puede marcar, no queda nada (la transacción se
 --     deshace).
--- Errores: 'P0002' si el cliente no es de la org (o no existe); 42501 sin
+-- Errores: 'P0002' si el cliente no es de la org (o no existe); 'IDM01' si la
+-- clave ya se usó con otro cliente, monto, fecha o cuota; 42501 sin
 -- organización o si la RLS no deja marcar la cuota.
 
 alter table public.client_payments
@@ -73,6 +74,17 @@ begin
     from public.client_payments
     where organization_id = v_org and clave_idempotencia = p_clave_idempotencia;
     if found then
+      -- Una clave ya usada con otros datos no es un reintento: el usuario
+      -- corrigió el formulario después de perder la respuesta. No se devuelve
+      -- el pago viejo como si fuera el nuevo.
+      if v_pago.client_id <> p_client_id
+         or v_pago.amount <> p_amount
+         or v_pago.payment_date <> p_payment_date
+         or (p_installment_number is not null
+             and v_pago.installment_number is distinct from p_installment_number)
+      then
+        raise exception 'registrar_pago_de_cliente: la clave ya se usó con otros datos' using errcode = 'IDM01';
+      end if;
       return v_pago;
     end if;
   end if;

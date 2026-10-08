@@ -16,6 +16,7 @@ const sim = vi.hoisted(() => ({
   tablas: {} as Record<string, Fila[]>,
   errores: {} as Record<string, { message: string } | null>,
   filtrosOrg: {} as Record<string, unknown[]>,
+  updates: [] as string[],
 }));
 
 vi.mock("@/lib/observability/reportar-falla", () => ({
@@ -36,12 +37,25 @@ vi.mock("@/lib/supabase/server", () => ({
       const leer = () => {
         const error = sim.errores[tabla] ?? null;
         if (error) return { data: null, error };
-        return {
-          data: (sim.tablas[tabla] ?? []).filter((f) => filtros.every(([c, v]) => f[c] === v)),
-          error: null,
-        };
+        const filas = (sim.tablas[tabla] ?? []).filter((f) => filtros.every(([c, v]) => f[c] === v));
+        if (op === "update") {
+          filas.forEach((f) => Object.assign(f, valores));
+          sim.updates.push(tabla);
+        }
+        return { data: filas, error: null };
       };
+      let op = "select";
+      let valores: Fila = {};
       const builder = {
+        update(v: Fila) {
+          op = "update";
+          valores = v;
+          return builder;
+        },
+        single: async () => {
+          const { data, error } = leer();
+          return { data: data?.[0] ?? null, error };
+        },
         select: () => builder,
         order: () => builder,
         eq(columna: string, valor: unknown) {
@@ -62,13 +76,14 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { loadFinanceConfigAction } from "../actions";
+import { loadFinanceConfigAction, updatePaymentPlatformAction } from "../actions";
 
 let consola: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   sim.reportes = [];
   sim.errores = {};
   sim.filtrosOrg = {};
+  sim.updates = [];
   sim.tablas = {
     fixed_expenses: [{ id: "g1", organization_id: "org-1", name: "Oficina", category: "x", amount: 10, currency: "USD", frequency: "monthly", status: "active" }],
     subscriptions: [{ id: "s1", organization_id: "org-1", name: "Herramienta", status: "active", amount: 5, currency: "USD" }],
@@ -107,5 +122,29 @@ describe("loadFinanceConfigAction", () => {
         contexto: { accion: "[loadFinanceConfig] pagos" },
       },
     ]);
+  });
+});
+
+describe("updatePaymentPlatformAction (AR pasada 3, MENOR-2)", () => {
+  it("⭐ con client_payments caído, el cambio se guarda una vez y la acción devuelve éxito", async () => {
+    sim.errores.client_payments = { message: "TypeError: fetch failed" };
+    const r = await updatePaymentPlatformAction("p1", { name: "Stripe US" });
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    expect(r.data.name).toBe("Stripe US");
+    expect(r.data.totalReceived).toBe(0);
+    expect(sim.updates).toEqual(["payment_platforms"]);
+    expect(sim.tablas.payment_platforms[0].name).toBe("Stripe US");
+    expect(sim.reportes).toEqual([
+      {
+        error: expect.objectContaining({ name: "FallaDeLaBase", message: "TypeError: fetch failed" }),
+        contexto: { accion: "[updatePaymentPlatform] pagos" },
+      },
+    ]);
+  });
+
+  it("con los pagos bien, devuelve el total recibido", async () => {
+    const r = await updatePaymentPlatformAction("p1", { name: "Stripe US" });
+    expect(r.success && r.data.totalReceived).toBe(100);
   });
 });

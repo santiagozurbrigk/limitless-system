@@ -41,6 +41,12 @@ import { assertOrgStoragePath, isOrgStoragePath } from "@/lib/storage/org-path";
 
 const CLIENTE_NO_ENCONTRADO = "Cliente no encontrado";
 const RUTA_INVALIDA = "La ruta del comprobante no es válida.";
+/**
+ * La clave de idempotencia ya se usó con otros datos: el usuario corrigió el
+ * formulario después de perder la respuesta del primer guardado.
+ */
+const CLAVE_CON_OTROS_DATOS =
+  "Ese pago ya se registró con otros datos. Cerrá el formulario y volvé a abrirlo para cargar otro.";
 
 const prepareReceiptUploadSchema = z.object({
   clientId: uuidSchema.optional(),
@@ -212,6 +218,8 @@ async function registrarPago(
   if (error) {
     // P0002: el cliente no es de la org de la sesión (o no existe).
     if (error.code === "P0002") throw new ErrorEsperable(CLIENTE_NO_ENCONTRADO);
+    // IDM01: la misma clave con otro cliente, monto, fecha o cuota.
+    if (error.code === "IDM01") throw new ErrorEsperable(CLAVE_CON_OTROS_DATOS);
     throw new FallaDeLaBase(error);
   }
   if (!data) throw new Error("registrar_pago_de_cliente no devolvió el pago");
@@ -337,6 +345,15 @@ export async function addInstallmentPaymentAction(
         .maybeSingle();
       if (previoError) throw new FallaDeLaBase(previoError);
       if (previo) {
+        // Con otros datos no es un reintento: no se devuelve el pago viejo
+        // como si fuera el nuevo (la misma regla que la función SQL).
+        if (
+          previo.client_id !== clientId ||
+          Number(previo.amount) !== amount ||
+          previo.payment_date !== paymentDate
+        ) {
+          throw new ErrorEsperable(CLAVE_CON_OTROS_DATOS);
+        }
         return {
           payment: rowToClientPayment(previo as ClientPaymentRow),
           client: rowToClient(clientRow as ClientRow),

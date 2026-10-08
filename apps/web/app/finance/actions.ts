@@ -470,8 +470,14 @@ export async function updatePaymentPlatformAction(
       .single();
 
     if (error || !data) throw new Error(mapFinanceError(error?.message ?? "Error"));
+    // El cambio ya se guardó: si los pagos no se pueden leer, no se lo
+    // presenta como fallido. Los totales quedan en cero y la falla se registra
+    // (la pantalla relee la configuración y avisa con `pagosSinLeer`).
     const [payments, hoy] = await Promise.all([
-      leerPagosDeLaOrganizacion(supabase, organizationId),
+      leerPagosDeLaOrganizacion(supabase, organizationId).catch((e: unknown) => {
+        registrarFallaDeAccion("[updatePaymentPlatform] pagos", e);
+        return [] as ClientPayment[];
+      }),
       fechaDeHoyDeLaOrganizacion(supabase, organizationId),
     ]);
     return paymentPlatformTotals([data as PaymentPlatformRow], payments, hoy)[0];
