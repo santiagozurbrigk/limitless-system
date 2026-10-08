@@ -168,7 +168,7 @@ vacío).
 | Operación | Estado | Veredicto | ID |
 |---|---|---|---|
 | Cerrar venta | 5 escrituras desde el navegador, sin transacción | **Falla** | `[CLOSING-CIERRE-ATOMICO]` |
-| Registrar pago | el botón se deshabilita mientras corre (`client-payments-section.tsx:405`), pero el servidor no tiene clave de idempotencia ni índice único: un reintento tras un corte de red duplica el cobro. La marca de cuota paga es leer-modificar-escribir sobre `clients.installments` y **no mira el error** (`app/sales/payment-actions.ts:259-263`) | Revisar | nuevo `[PAGO-SIN-IDEMPOTENCIA]` |
+| Registrar pago | **Resuelto el 2026-10-08 (SCRUM-504):** el pago y la cuota se registran juntos con `registrar_pago_de_cliente` y la clave de idempotencia de los formularios de la ficha (el cierre de venta sin clave sigue en `[CLOSING-CIERRE-ATOMICO]`). Estado al auditar: el botón se deshabilita mientras corre (`client-payments-section.tsx:405`), pero el servidor no tiene clave de idempotencia ni índice único: un reintento tras un corte de red duplica el cobro. La marca de cuota paga es leer-modificar-escribir sobre `clients.installments` y **no mira el error** (`app/sales/payment-actions.ts:259-263`) | Revisar | nuevo `[PAGO-SIN-IDEMPOTENCIA]` |
 | Dos webhooks iguales | pagos y GHL: dedupe por id (con el hueco de `pending`/`error`); Calendly: índice único; Fathom org: la reentrega pisa el estado | Revisar | `[AUD-CONF-5]`, `[WEBHOOK-FECHAS-INVENTADAS]` |
 | Crons superpuestos | sin lock; Fathom se protege con toma atómica | Revisar | `[AUD-SALUD-3]`, `[AUD-CONF-3]` |
 | Refresh de token de Calendly | si el refresh sale bien y falla el `update`, el refresh token nuevo se pierde (Calendly rota el refresh token: **a confirmar** en su doc, no está bajada) | Revisar | se menciona en `[INTEGRACIONES-ERROR-SIN-MARCA]` |
@@ -254,6 +254,10 @@ vacío).
   y permitir reintentar un job trabado más de X minutos.
 
 ### H8 · Registrar un pago no es idempotente — Media · nuevo `[PAGO-SIN-IDEMPOTENCIA]`
+**Resuelto el 2026-10-08 (SCRUM-504):** migración `20261008150000_registrar_pago_de_cliente` (pago y cuota en una
+transacción, cliente bloqueado, clave de idempotencia con índice único por org; la misma clave con otros datos se
+rechaza). El cierre de venta desde Closing todavía no pasa clave (`[CLOSING-CIERRE-ATOMICO]`). Lo que sigue es el
+estado al auditar (las líneas citadas ya no existen).
 - **Hecho:** `recordClientPaymentAction` hace `insert` en `client_payments` sin clave de idempotencia ni índice único
   (`app/sales/payment-actions.ts:221-237`; migración `20260715100000_client_payments.sql` sólo índices no únicos). La
   cuota se marca con leer-modificar-escribir de `clients.installments` sin mirar el `error` del `update` (`:259-263`).
