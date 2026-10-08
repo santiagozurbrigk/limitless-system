@@ -23,6 +23,18 @@ type InviteeResource = {
   }>;
 };
 
+/**
+ * Status HTTP con el que respondió la API de Calendly, si `error` salió de un
+ * rechazo de la API (y no de la red o de un bug). Lo usa la sync por closer
+ * para distinguir una conexión vencida (401) o un límite de consultas (429) de
+ * una falla.
+ */
+export function statusDeLaApiDeCalendly(error: unknown): number | null {
+  if (!(error instanceof Error) || !("status" in error)) return null;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : null;
+}
+
 async function fetchCalendlyJson<T>(url: string, accessToken: string): Promise<T> {
   const resp = await fetch(url, {
     headers: {
@@ -36,7 +48,9 @@ async function fetchCalendlyJson<T>(url: string, accessToken: string): Promise<T
       (json as { message?: string })?.message ??
       (json as { title?: string })?.title ??
       `Calendly API error (${resp.status})`;
-    throw new Error(message);
+    // Un `Error` común con el status: con una subclase, `runMutation` (la sync
+    // de la org) pasaría a reportar estos rechazos como falla.
+    throw Object.assign(new Error(message), { status: resp.status });
   }
   return json as T;
 }
