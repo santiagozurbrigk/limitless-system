@@ -34,6 +34,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-08 · Cuarta revisión de SCRUM-503: tests que ven el cierre del modal, las deps del provider y el número de la confirmación
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `ad7fbce7` (tests, `duracion.ts` y `mapper.ts`), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero. Tests de `providers/` y `components/workboard/`; `lib/workboard/duracion.ts`, `lib/workboard/mapper.ts`
+
+**Qué se hizo** (4 MENOR de la revisión adversarial de SCRUM-503, pasada 4):
+- **MENOR-1:** test sin DOM del modal de tiempo (`modal-de-tiempo-cierre.test.ts`): hooks que guardan el estado y un Dialog y botones mockeados que guardan sus handlers. Mientras guarda ("Registrando…" o "Completando…"), `onOpenChange(false)` (Escape, overlay, X) no llama a `onCancel` y Cancelar está deshabilitado; después, sí cancela.
+- **MENOR-2:** en el test del provider con estado, `useCallback` y `useMemo` memorizan por deps (`Object.is`) y el `push` del toast es estable, como en la app: un callback con deps incompletas queda con su closure viejo y el test lo ve. Caso nuevo desde el detalle: `updateTask` con `status: "done"`, el update rechaza, el reintento completa y el tiempo queda registrado una sola vez.
+- **MENOR-3:** el test de cancelar y volver a completar verifica que el completado de la segunda apertura cierra la confirmación, y `intentarCompletar` se prueba con una tercera apertura.
+- **MENOR-4:** `formatearDuracion` dice "1 minuto" (antes "1 minutos"); test de 0, 1, 45, 60, 90 y 120.
+- Se sacaron dos imports de tipos sin usar de `lib/workboard/mapper.ts`, los únicos avisos de lint que quedaban en el Tablero.
+- Control negativo con los mutantes del informe (`control-negativo-ar-pasada-4.txt`): cada uno hace fallar al menos un test. Docs: `docs/operacion/testing.md` (211 archivos, ~2.175 casos, 2.576 ejecutados).
+
+**Por qué / finalidad:** la revisión aprobó con 4 MENOR, todos de tests salvo una línea; no queda deuda dentro del alcance.
+
+**Decisiones de diseño relevantes:** los tests sin DOM reemplazan los hooks por unos que se comportan como los de React en lo que importa (estado entre renders, memorizar por deps); no se agregó jsdom ni testing-library al proyecto.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Sigue pendiente aplicar la migración `20261008120000` en producción antes del merge.
+
+---
+
 ### 2026-10-08 · Tercera revisión de SCRUM-503: confirmaciones que no se cruzan y textos del modal de tiempo
 
 **Rama:** `fix/SCRUM-503-tablero-errores`
