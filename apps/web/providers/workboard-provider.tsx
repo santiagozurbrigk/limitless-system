@@ -22,6 +22,7 @@ import {
 import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
 import type { MutationResult } from "@/lib/server/action-result";
 import { useToast } from "@/providers/toast-provider";
+import { formatearDuracion } from "@/lib/workboard/duracion";
 import type { LaunchPickerOption } from "@/types/launches";
 import type {
   TaskArea,
@@ -106,22 +107,17 @@ type WorkboardContextValue = {
 const WorkboardContext = createContext<WorkboardContextValue | null>(null);
 
 /**
- * ⭐ Completar una tarea registrando su tiempo (SCRUM-503).
- *
- * Son dos acciones: registrar el tiempo y completar. Si el registro sale y el
- * completado rechaza, el modal queda abierto para reintentar; el reintento no
- * vuelve a registrar el tiempo (`tiempoYaRegistrado`), porque
- * `logTaskTimeAction` acumula y lo sumaría dos veces. `completar` recibe si el
- * tiempo ya quedó guardado, para decirlo en el aviso.
- */
-/**
  * ⭐ La confirmación de "completar con tiempo" que está abierta (SCRUM-503,
- * AR pasada 2). El tiempo registrado vale sólo para esta confirmación: abrir
- * una nueva (aunque sea de la misma tarea), cancelar o completar lo olvidan.
- * Así un intento posterior registra sus propios minutos en vez de saltearse
- * el registro.
+ * revisiones 2 y 3). El tiempo registrado vale sólo para esta confirmación:
+ * abrir una nueva (aunque sea de la misma tarea), cancelar o completar lo
+ * olvidan, así un intento posterior registra sus propios minutos en vez de
+ * saltearse el registro. Cada apertura lleva un número: la respuesta tardía de
+ * un intento (registró el tiempo, se completó) trae el número y la tarea de su
+ * confirmación, y si ya no es la abierta se ignora.
  */
 export type ConfirmacionDeCompletado = {
+  /** Sube en cada apertura; identifica la confirmación. */
+  numero: number;
   tarea: WorkboardTask | null;
   patch: TaskUpdatePatch | null;
   estadoAnterior: TaskStatus | null;
@@ -129,18 +125,26 @@ export type ConfirmacionDeCompletado = {
   minutosRegistrados: number | null;
 };
 
+/** De qué confirmación es una respuesta. */
+type DeLaConfirmacion = { numero: number; taskId: string };
+
 export type EventoDeConfirmacion =
   | { tipo: "abrir"; tarea: WorkboardTask; patch: TaskUpdatePatch | null; estadoAnterior: TaskStatus }
-  | { tipo: "tiempoRegistrado"; minutos: number }
+  | ({ tipo: "tiempoRegistrado"; minutos: number } & DeLaConfirmacion)
   | { tipo: "cancelar" }
-  | { tipo: "completada" };
+  | ({ tipo: "completada" } & DeLaConfirmacion);
 
 export const SIN_CONFIRMACION: ConfirmacionDeCompletado = {
+  numero: 0,
   tarea: null,
   patch: null,
   estadoAnterior: null,
   minutosRegistrados: null,
 };
+
+function esLaAbierta(actual: ConfirmacionDeCompletado, evento: DeLaConfirmacion): boolean {
+  return actual.tarea?.id === evento.taskId && actual.numero === evento.numero;
+}
 
 export function confirmacionDeCompletado(
   actual: ConfirmacionDeCompletado,
@@ -149,21 +153,33 @@ export function confirmacionDeCompletado(
   switch (evento.tipo) {
     case "abrir":
       return {
+        numero: actual.numero + 1,
         tarea: evento.tarea,
         patch: evento.patch,
         estadoAnterior: evento.estadoAnterior,
         minutosRegistrados: null,
       };
     case "tiempoRegistrado":
-      // Sólo dentro de una confirmación abierta, y el primer registro manda.
-      if (!actual.tarea) return actual;
+      // Sólo en la confirmación de la que viene, y el primer registro manda.
+      if (!esLaAbierta(actual, evento)) return actual;
       return { ...actual, minutosRegistrados: actual.minutosRegistrados ?? evento.minutos };
-    case "cancelar":
     case "completada":
-      return SIN_CONFIRMACION;
+      if (!esLaAbierta(actual, evento)) return actual;
+      return { ...SIN_CONFIRMACION, numero: actual.numero };
+    case "cancelar":
+      return { ...SIN_CONFIRMACION, numero: actual.numero };
   }
 }
 
+/**
+ * ⭐ Completar una tarea registrando su tiempo (SCRUM-503).
+ *
+ * Son dos acciones: registrar el tiempo y completar. Si el registro sale y el
+ * completado rechaza, el modal queda abierto para reintentar; el reintento no
+ * vuelve a registrar el tiempo (`tiempoYaRegistrado`), porque
+ * `logTaskTimeAction` acumula y lo sumaría dos veces. `completar` recibe si el
+ * tiempo ya quedó guardado, para decirlo en el aviso.
+ */
 export async function completarConTiempo(op: {
   minutos?: number;
   tiempoYaRegistrado: boolean;
@@ -179,6 +195,55 @@ export async function completarConTiempo(op: {
   }
   const completada = await op.completar(tiempoRegistrado);
   return { completada, tiempoRegistrado };
+}
+
+/**
+ * Un intento de completar la tarea de la confirmación abierta: corre
+ * `completarConTiempo` con lo que la confirmación sabe (si el tiempo ya se
+ * registró) y devuelve el evento que hay que despachar con su resultado. Es
+ * lo que usa `finalizeComplete`; vive acá para poder probarlo sin dibujar el
+ * provider.
+ */
+export async function intentarCompletar(op: {
+  confirmacion: ConfirmacionDeCompletado;
+  minutos?: number;
+  registrarTiempo: (minutos: number) => Promise<boolean>;
+  completar: (tiempoRegistrado: boolean) => Promise<boolean>;
+}): Promise<{ completada: boolean; evento: EventoDeConfirmacion | null }> {
+  const tarea = op.confirmacion.tarea;
+  if (!tarea) return { completada: false, evento: null };
+  const yaRegistrado = op.confirmacion.minutosRegistrados != null;
+  const resultado = await completarConTiempo({
+    minutos: op.minutos,
+    tiempoYaRegistrado: yaRegistrado,
+    registrarTiempo: op.registrarTiempo,
+    completar: op.completar,
+  });
+  const deLaConfirmacion = { numero: op.confirmacion.numero, taskId: tarea.id };
+  if (resultado.completada) {
+    return { completada: true, evento: { tipo: "completada", ...deLaConfirmacion } };
+  }
+  if (resultado.tiempoRegistrado && !yaRegistrado && op.minutos != null) {
+    return {
+      completada: false,
+      evento: { tipo: "tiempoRegistrado", minutos: op.minutos, ...deLaConfirmacion },
+    };
+  }
+  return { completada: false, evento: null };
+}
+
+/**
+ * El aviso al cancelar una confirmación cuyo tiempo ya quedó registrado: la
+ * tarea no se completó, pero los minutos están guardados y no hay que volver
+ * a cargarlos. Sin tiempo registrado no hay nada que avisar.
+ */
+export function avisoAlCancelar(confirmacion: ConfirmacionDeCompletado): Aviso | null {
+  if (confirmacion.minutosRegistrados == null) return null;
+  return {
+    title: "La tarea no se completó, pero el tiempo quedó registrado",
+    description: `Tiempo registrado: ${formatearDuracion(confirmacion.minutosRegistrados)}. Si volvés a completarla, no lo cargues otra vez.`,
+    variant: "default",
+  };
 }
 
 /**
@@ -361,9 +426,9 @@ export function WorkboardProvider({
       try {
         // Si algo rechaza, el modal de tiempo queda abierto para reintentar o
         // cancelar.
-        const resultado = await completarConTiempo({
+        const { completada, evento } = await intentarCompletar({
+          confirmacion,
           minutos: minutes,
-          tiempoYaRegistrado: confirmacion.minutosRegistrados != null,
           registrarTiempo: async (minutos) =>
             Boolean(
               await correrEnElTablero({
@@ -401,14 +466,9 @@ export function WorkboardProvider({
             return true;
           },
         });
-        if (!resultado.completada) {
-          if (resultado.tiempoRegistrado && minutes != null) {
-            despacharConfirmacion({ tipo: "tiempoRegistrado", minutos: minutes });
-          }
-          return false;
-        }
+        if (evento) despacharConfirmacion(evento);
+        if (!completada) return false;
 
-        despacharConfirmacion({ tipo: "completada" });
         setSelectedTask(null);
         await refreshSprints();
         return true;
@@ -416,7 +476,7 @@ export function WorkboardProvider({
         setIsSaving(false);
       }
     },
-    [pendingCompleteTask, pendingCompletePatch, confirmacion.minutosRegistrados, performMove, upsertTaskInState, refreshSprints, markKanbanDoneVisible, push]
+    [pendingCompleteTask, pendingCompletePatch, confirmacion, performMove, upsertTaskInState, refreshSprints, markKanbanDoneVisible, push]
   );
 
   const createTask = useCallback(
@@ -529,9 +589,11 @@ export function WorkboardProvider({
       );
     }
     clearKanbanDoneVisible(taskId);
+    const aviso = avisoAlCancelar(confirmacion);
+    if (aviso) push(aviso);
     // Olvida también el tiempo registrado: un intento posterior registra el suyo.
     despacharConfirmacion({ tipo: "cancelar" });
-  }, [confirmacion, clearKanbanDoneVisible]);
+  }, [confirmacion, clearKanbanDoneVisible, push]);
 
   const assignTaskToSprint = useCallback(
     async (taskId: string, sprintId: string | null): Promise<boolean> => {

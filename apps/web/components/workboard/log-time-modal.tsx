@@ -14,6 +14,7 @@ import {
   Textarea,
   cn,
 } from "@ai-coo/ui";
+import { formatearDuracion } from "@/lib/workboard/duracion";
 
 export interface LogTimeModalProps {
   taskId: string;
@@ -32,12 +33,14 @@ export interface LogTimeModalProps {
   minutosYaRegistrados?: number | null;
 }
 
-function formatDuration(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${m} minutos`;
-  if (m === 0) return `${h} ${h === 1 ? "hora" : "horas"}`;
-  return `${h}h ${m}m`;
+/**
+ * Si el modal se puede cerrar (Escape, el overlay, la X o Cancelar). Mientras
+ * se está guardando, no: cancelar a mitad de pedido devolvía la tarjeta a su
+ * columna aunque la base ya la tuviera hecha, y la respuesta tardía caía en la
+ * confirmación siguiente (SCRUM-503).
+ */
+export function sePuedeCerrar(enviando: boolean): boolean {
+  return !enviando;
 }
 
 /**
@@ -151,7 +154,7 @@ export function LogTimeModal({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) void handleCancel();
+        if (!nextOpen && sePuedeCerrar(submitting)) void handleCancel();
       }}
     >
       <DialogContent className="max-w-md">
@@ -181,8 +184,8 @@ export function LogTimeModal({
             <div className="space-y-4 py-2">
               {yaRegistrado ? (
                 <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
-                  Ya quedaron registrados {formatDuration(minutosYaRegistrados)}. Confirmá para
-                  completar la tarea; el tiempo no se vuelve a cargar.
+                  Tiempo ya registrado: {formatearDuracion(minutosYaRegistrados)}. Confirmá para
+                  completar la tarea; no se vuelve a cargar.
                 </p>
               ) : null}
               <div className="flex flex-wrap items-end gap-3">
@@ -216,7 +219,7 @@ export function LogTimeModal({
               </div>
 
               <p className="text-sm text-muted-foreground">
-                = <span className="font-medium text-foreground">{formatDuration(aConfirmar ?? totalMinutes)}</span> total
+                = <span className="font-medium text-foreground">{formatearDuracion(aConfirmar ?? totalMinutes)}</span> total
               </p>
 
               {estimatedMinutes && estimatedMinutes > 0 && estimateDelta ? (
@@ -230,7 +233,7 @@ export function LogTimeModal({
                         : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300"
                   )}
                 >
-                  Estimaste {formatDuration(estimatedMinutes)} — {estimateDelta.label}
+                  Estimaste {formatearDuracion(estimatedMinutes)} — {estimateDelta.label}
                 </p>
               ) : null}
 
@@ -270,7 +273,13 @@ export function LogTimeModal({
                   disabled={submitting || aConfirmar == null}
                   onClick={() => void handleConfirm()}
                 >
-                  {submitting ? "Registrando…" : "Registrar tiempo"}
+                  {yaRegistrado
+                    ? submitting
+                      ? "Completando…"
+                      : "Completar tarea"
+                    : submitting
+                      ? "Registrando…"
+                      : "Registrar tiempo"}
                 </Button>
               </div>
             </DialogFooter>
