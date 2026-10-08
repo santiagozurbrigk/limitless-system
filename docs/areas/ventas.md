@@ -117,6 +117,15 @@ GHL            ── cron /api/cron/ghl-sync (hora) ─────────
   `updateClosingCallAction` → `patchToClosingUpdateRow` (`lib/closing/mapper.ts`), que marca
   `status_source = 'manual'` (las ediciones de seguimiento de `lead-actions.ts` no tocan `status`); los syncs consultan
   `syncMayOverwriteStatus`.
+- **Sync manual del Calendly de un closer** (botón "Sincronizar ahora" en Configuración y el del ranking
+  de closers): `syncCloserCalendlyAction` devuelve `MutationResult` (SCRUM-504). Vuelven con un motivo
+  claro: sin integración (sin fila o sin token), conexión vencida o revocada (el refresh responde 400
+  `invalid_grant` o la API de eventos 401/403: hay que desconectar y volver a conectar), conexión sin el
+  usuario de Calendly y límite de consultas (429). Lo distingue `sincronizarEventosDelCloser`
+  (`lib/calendly/closer-sync.ts`), que lanza `RechazoDeCalendly`; cualquier otra falla (la red, la base,
+  un 5xx de Calendly) se registra, va a Sentry y vuelve con el texto fijo. El cron usa
+  `syncCloserCalendlyEvents`, que no lanza y anota el mismo `reason` que antes. `disconnectMyCalendlyAction`
+  también devuelve `MutationResult` y ya no avisa "desconectado" si el borrado falla.
 
 ### Resultado de un turno (cliente)
 
@@ -295,6 +304,17 @@ asistidas) y leads/agendas/nurturing desde `conversations` (vacía → siempre 0
 El ranking de equipo sale de `call_analyses` (`getTeamRankingAction`) y las objeciones de
 `lib/metrics/frequent-objections.ts`.
 
+Las lecturas de métricas (`getSalesPerformanceMetricsAction`, `getSalesMetricsSnapshotsAction`) y de
+análisis de llamadas (`getTeamRankingAction`, `getCloserEvolutionAction`, `getTeamAverageEvolutionAction`)
+devuelven `MutationResult` (SCRUM-504): la sesión que falta vuelve con su motivo; un error de la base
+(salvo la tabla que falta en las de `call_analyses`, que se lee como "sin datos") se registra, va a Sentry
+y vuelve con el texto fijo. `/sales/metrics` (server component) se dibuja igual y avisa el motivo de las
+métricas importadas; la pantalla avisa también el de las de rendimiento, y el rendimiento del equipo y la
+evolución del closer (ficha del cliente) muestran el motivo en su estado de error (`leerConMotivo`,
+`lib/sales/lectura-con-motivo.ts`). `updateCloserCommissionAction` (sin llamadores) también devuelve
+`MutationResult`: porcentaje fuera de 0-100, closer de otra org o sin permiso y el `42501` del trigger de
+perfiles vuelven como motivo.
+
 ### Cobros
 
 Lee clientes del provider y `getClientsTableEnrichmentAction` + `listPlansAction`. El adeudado se
@@ -335,7 +355,7 @@ El inbox pasó a Zernio y `SalesInboxLayout` sólo renderiza `ZernioInboxPanel`.
 | Instagram DMs (`lib/instagram/poll-conversations.ts`, `process-message.ts`, webhook, cron `*/5`) | `listed: false`; `app/instagram/actions.ts` sin uso; crons en `vercel.json` | `vercel.json` |
 | `lib/sales/upsert-inbound-conversation.ts`, `unipile-inbox-filter.ts`, `lead-name.ts`, `getLeadJourney` (rama no-Zernio de `lib/sales/lead-journey.ts`) | Sólo alimentan `conversations` | Los tres canales legacy |
 | `app/api/integrations/calendly/sync` | Responde 410 | Nada |
-| Server actions sin uso: `getCallAnalysesAction`, `getMockCallAnalysisKeysAction` (`app/sales/actions.ts`), `getCloserCallsAction`, `updateCloserCommissionAction`, `getClosersWithCalendlyStatusAction` (`closer-actions.ts`), `getLeadThreadAction` (`lead-actions.ts`), `getConversationIdByExternalRef` | Endpoints expuestos sin llamador; `updateCloserCommissionAction` deja a cualquier miembro fijar su comisión | Nada |
+| Server actions sin uso: `getMockCallAnalysisKeysAction` (`app/sales/actions.ts`), `getCloserCallsAction`, `updateCloserCommissionAction`, `getClosersWithCalendlyStatusAction` (`closer-actions.ts`), `getLeadThreadAction` (`lead-actions.ts`), `getConversationIdByExternalRef` (`getCallAnalysesAction` se borró en SCRUM-504) | Endpoints expuestos sin llamador; `updateCloserCommissionAction` no deja a un miembro fijar su comisión (la policy de UPDATE de `profiles` y el trigger `protect_profile_columns` sólo dejan a founder/admin) | Nada |
 
 Orden sugerido: (1) sacar `conversations` del provider y de métricas/embudo, (2) deslistar ManyChat,
 (3) quitar crons de Instagram, (4) borrar código, (5) migración que suelte la FK

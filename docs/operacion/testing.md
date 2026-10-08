@@ -8,14 +8,12 @@
 |---|---|---|---|
 | Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot`, `apps/reel-worker` | sí (`pnpm typecheck`, job `checks`) |
 | Lint | ESLint 9 (`next lint` en web; `eslint src/` con la base de `packages/config` en ui, reel-worker y bot) | `apps/web`, `packages/ui`, `apps/reel-worker`, `apps/discord-bot` | sí (`pnpm lint`, job `checks`) |
-| Unitarios | Vitest 3, entorno `node` | `apps/web` (211 archivos) | sí (`pnpm test`) |
+| Unitarios | Vitest 3, entorno `node` | `apps/web` (206 archivos) | sí (`pnpm test`) |
 | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** (se activa con staging, ver E2E) |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
 | Build | `next build` de `apps/web` | `apps/web` | sí (job `web-build`) |
 | Backlog | `pendientes_a_jira.py --check`, `historias_a_jira.py --check` | `PENDIENTES.md`, `docs/backlog/historias.md` | sí (job `backlog`) |
-
-En web, `next lint` revisa las carpetas de `eslint.dirs` de `next.config.ts`: además de las de siempre (`app`, `components`, `lib`), `providers`, `hooks`, `layouts`, `constants`, `mocks`, `routes`, `types`, `scripts`, `workspaces` y `e2e` (SCRUM-503: un error en un test de `providers/` no lo veía nadie). Hoy deja 13 avisos de `react-hooks/exhaustive-deps` en `providers/finance-data-provider.tsx`, que ya estaban.
 
 En el reel-worker y el bot el lint corre con `--max-warnings=0`: hoy no tienen avisos y así se mantienen. `packages/*`, el reel-worker y el bot no tienen tests propios; las copias del worker y del bot que tienen que coincidir con web (`org-path.ts`, `limpiar-evento-sentry.ts`) se prueban desde los tests de web.
 
@@ -73,7 +71,7 @@ Prueban lo que la base deja hacer a cada usuario, que Vitest no puede ver porque
 
 - `00_ayudas.sql` crea el schema `ci` con `ci.jwt(sub, extra)` (deja el JWT de un usuario para la transacción), `ci.rechazado(sql, qué)` (tiene que fallar con 42501), `ci.filas(sql)` (filas tocadas: la RLS en UPDATE y DELETE no da error, afecta 0) y `ci.espera(real, esperado, qué)`.
 - Cada archivo arma sus datos dentro de `begin; ... rollback;`, actúa con `select ci.jwt(...); set local role authenticated;` y vuelve con `reset role`.
-- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9). Hoy son 11 (`00_ayudas.sql` a `95_crear_sprint.sql`; el último es SCRUM-503: `crear_sprint` crea en la organización propia y no en otra, deja un solo sprint activo y anon no la puede llamar).
+- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9). Hoy son 10 (`00_ayudas.sql` a `90_corridas_de_procesos.sql`, SCRUM-85: el registro de corridas sólo para el service role y sus checks de coherencia).
 - Validez, igual que en Vitest: sacar la migración que arregla el problema y confirmar que el test falla con `FALLA: ...`.
 - Para correrlos a mano: los mismos comandos de "Migraciones" más arriba.
 
@@ -81,7 +79,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **211 archivos, ~2.175 casos** (recontado el 2026-10-08 con la cuarta revisión de SCRUM-503; el runner ejecuta 2.576 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **206 archivos, ~2.089 casos** (recontado el 2026-10-08 con SCRUM-504; el runner ejecuta 2.420 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -113,29 +111,28 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/hyros` | 1 | 11 | resolución de atribución |
 | `lib/zernio` | 5 | 27 | triggers de comentarios, integración por org, métricas que se guardan, filas de la sync, status de los errores HTTP y timeout |
 | `lib/security` | 3 | 28 | cifrado, comparación en tiempo constante |
-| `lib/workboard` | 3 | 9 | filtro por responsable, día de una tarea sin vencimiento en la zona de la org, duración del modal de tiempo ("1 minuto", "1 hora", "1h 30m") |
+| `lib/workboard` | 2 | 8 | filtro por responsable, día de una tarea sin vencimiento en la zona de la org |
 | `lib/chart` | 1 | 5 | escala del embudo |
 | `lib/supabase` | 2 | 6 | rutas públicas del middleware, `fetchAllRows` |
 | `lib/release` | 1 | 4 | lo escondido para el release: ⌘K, catálogo de integraciones, canales de Lead Magnets |
 | `lib/observability` | 5 | 67 | aviso a Sentry de los crons; registro de corridas en `corridas_de_procesos` (ok, encolado, fallo, parcial con las orgs fallidas, una falla o una base colgada del registro no rompe el cron, apertura lenta sin fila fantasma, retención de 30 días, mensaje de error saneado también con claves compuestas, corridas en paralelo sin mezclarse) y chequeo de salud (estados, plazo de 3 s, versión, variables, una sola medición para muchos pedidos) (SCRUM-85); etiquetas de una falla de proceso de fondo o de server action (SCRUM-497); lo que se saca de un evento o transacción antes de mandarlo (cuerpo, cookies, query también en nombres de transacciones y spans, headers fuera de la lista blanca, breadcrumbs de consola), las configs de Sentry con el SDK simulado y las copias del reel-worker y del bot; un objeto plano reportado con su `message` y su `code` (SCRUM-501) |
 | `lib/storage` | 1 | 6 | validación de rutas por org |
-| `lib/server` | 1 | 16 | errores de las server actions: sólo un `ErrorEsperable` vuelve con su mensaje en los módulos arreglados y lo demás se registra, va a Sentry y vuelve con el texto fijo; `runMutation` no cambia el mensaje pero reporta las fallas de infraestructura (clasificación por clase, `code` y texto); los errores internos de Next (redirect, notFound y el de ruta dinámica del prerender) se relanzan sin registrarse ni ir a Sentry (SCRUM-503) |
+| `lib/server` | 1 | 13 | errores de las server actions: sólo un `ErrorEsperable` vuelve con su mensaje en los módulos arreglados y lo demás se registra, va a Sentry y vuelve con el texto fijo; `runMutation` no cambia el mensaje pero reporta las fallas de infraestructura (clasificación por clase, `code` y texto) |
 | `lib/queue` | 2 | 5 | aviso cuando falla un trabajo de QStash; las orgs de un fan-out quedan en el registro de corridas |
 | `lib/unipile` | 2 | 5 | secreto del webhook |
 | `lib/intelligence` | 2 | 15 | organizaciones sobre las que corren los crons de IA y el chequeo de la org al procesarla (generadores, workers, modo en serie) |
 | `lib/youtube` | 1 | 2 | métricas de video que se guardan |
 | `lib/team` | 2 | 14 | rol de la org (filtro por organización), estado de una invitación y comparación de emails |
-| `app/__tests__` | 3 | 13 | los catch de páginas y layouts relanzan los errores de Next (`unstable_rethrow`); el layout de la plataforma y las páginas de Inteligencia dibujan «No tenés acceso» sin lanzar; los catch del módulo común de las server actions también (SCRUM-503) |
+| `app/__tests__` | 3 | 12 | los catch de páginas y layouts relanzan los errores de Next (`unstable_rethrow`); el layout de la plataforma y las páginas de Inteligencia dibujan «No tenés acceso» sin lanzar |
 | `app/fathom` | 2 | 6 | `getSalesCallsAction` contra una base simulada; la lista de 1-1 de la ficha con el día de la org y una sola lectura de la zona |
 | `app/executive-reports`, `app/operations` | 4 | 35 | últimos reportes; el botón de reportes y el reporte de Operaciones no llaman a la IA para una org no activa; las acciones de Operaciones (reporte semanal e inputs) devuelven sus errores esperables como valor, relanzan lo inesperado (sin sesión o redirect) y filtran por organización |
 | `lib/operations` | 2 | 10 | mensaje del botón de Inputs semanales, cómo cuenta el pipeline el paso de Operaciones y el lunes de la semana de la organización |
 | `lib/client` | 1 | 12 | cómo los componentes corren las server actions (`correr-accion.ts`): mensaje devuelto, texto fijo y consola ante un error inesperado, un redirect no avisa, espera un `alExito` asíncrono, y la capa que devuelve el dato o lanza (`datoDeLaMutacion`) |
-| `providers` | 3 | 43 | zona de la organización en el cliente (`ZonaDeLaOrganizacionProvider`): un miembro en Madrid ve el día de la org; el hoy es null en el render del servidor; el provider del Tablero avisa el motivo de cada rechazo, el texto fijo si la acción lanza, y le dice a la pantalla si salió; completar con tiempo no lo registra dos veces al reintentar, el tiempo registrado vale sólo para la confirmación abierta (cancelar o abrir otra lo olvidan, y la respuesta tardía de otra confirmación se ignora), cancelar con el tiempo ya registrado avisa, y un movimiento fallido del Kanban no cierra el modal; uno de los archivos prueba el provider con estado de verdad, con hooks mínimos sin DOM que memorizan por deps como React (también el completado desde el detalle) (SCRUM-503) |
-| `components/workboard` | 5 | 28 | crear sprint avisa el motivo del rechazo y el reporte de tiempo lo muestra; los recursos de una tarea nueva (SOP, documentos, adjuntos) devuelven el motivo y no rechazan si algo lanza; el texto fijo si la acción lanza (SCRUM-503); el selector del detalle vuelve a lo que había, el modal de tiempo no muestra «listo» y el formulario de alta queda abierto si la acción rechaza; con el tiempo ya registrado, el modal lo avisa y no deja cambiar los minutos (con una frase que no depende de la unidad y el botón «Completar tarea»), el modal no se cierra mientras guarda (Escape, overlay, X y Cancelar, probado con el Dialog mockeado) y el shell le pasa los minutos ya registrados |
+| `providers` | 1 | 5 | zona de la organización en el cliente (`ZonaDeLaOrganizacionProvider`): un miembro en Madrid ve el día de la org; el hoy es null en el render del servidor |
 | `components/shared` | 1 | 10 | `CampoFecha`: muestra lo guardado sin correrlo de día (en la zona de la org si se le pasa) y emite la fecha elegida |
 | `lib/agent` | 3 | 8 | tools de contenido del agente con piezas sin métricas, fechas que lee el agente en la zona de la org |
 | `lib/ai` | 3 | 15 | aviso de la clave de IA, clave rechazada o sin créditos, resolución de la credencial de la org |
-| `lib/calendly` | 1 | 11 | firma del webhook |
+| `lib/calendly` | 2 | 19 | firma del webhook; cómo la sync por closer clasifica los rechazos de Calendly (refresh `invalid_grant`, 401/403, 429) y que la del cron no cambia (SCRUM-504) |
 | `lib/forms` | 1 | 6 | paginación de respuestas de Typeform |
 | `lib/webhooks` | 1 | 22 | status HTTP de la ingesta y webhooks que no pierden el evento crudo |
 | `app/api/health` | 1 | 8 | `GET /api/health`: 200 `ok`, 200 `degradado` (Storage o una variable), 503 con la base caída o colgada, sin caché y sin mensajes, tablas, variables ni valores en la respuesta (SCRUM-85) |
@@ -145,10 +142,11 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `app/auth` | 2 | 11 | el login vuelve a la invitación; el cambio de contraseña obligatorio devuelve sus errores esperables como valor (incluidos los rechazos de Supabase Auth: misma contraseña, débil, sesión, intentos) |
 | `app/invite`, `app/intelligence` | 2 | 10 | la página de invitación sin crear cuentas; el resumen de Inteligencia rechaza como valor a quien no tiene Operaciones |
 | `app/clients`, `app/closing` | 3 | 37 | las mutaciones de Clientes y la de Closing devuelven sus errores esperables como valor, filtran por organización y no muestran crudo lo inesperado (lo registran y reportan); Closing trae todos los turnos de la org |
+| `app/sales`, `app/(platform)/sales` | 3 | 43 | las lecturas de Ventas (ranking, evolución, métricas de rendimiento e importadas) y las acciones de closers (comisión, sync manual y desconexión de Calendly) devuelven sus errores esperables como valor, filtran por organización y no muestran crudo lo inesperado (lo registran y reportan); con el token de Calendly vencido, la sync dice que hay que reconectar; `/sales/metrics` pasa el motivo a la pantalla (SCRUM-504) |
+| `components/sales` | 2 | 25 | los componentes de Ventas que usan esas acciones muestran el motivo devuelto y el texto fijo si la acción lanzó: rendimiento del equipo, evolución del closer, métricas de rendimiento, avisos de la pantalla de métricas y sync y desconexión de Calendly (`leerConMotivo`, `correrMutacion`) (SCRUM-504) |
 | `app/team`, `app/(platform)/team` | 4 | 31 | aceptar una invitación con la sesión; las lecturas de Equipo devuelven sus errores como valor y filtran por organización; `/team` muestra el motivo en vez de la pantalla de error de Next; un rol con nombre repetido vuelve con su mensaje |
-| `app/workboard`, `app/(platform)/workboard` | 3 | 91 | las 17 acciones del Tablero y las 9 de vínculos de tareas (adjuntos, SOP, documentos) devuelven sus errores esperables como valor con el mensaje exacto, filtran por organización y no muestran crudo lo inesperado (excepción de la red lanzada o devuelta por supabase-js: texto fijo, consola y Sentry); crear un sprint usa la función atómica `crear_sprint` y un sprint activo repetido vuelve con su motivo; la relectura de una tarea sin la columna `sop_id`; `/workboard` muestra el motivo en vez de la pantalla de error de Next (SCRUM-503) |
 
-**Sin ningún test:** `lib/agent` (compaction, JIT, streaming; sólo las tools de contenido y las fechas de `get_clients_data` tienen test), `lib/ai` (`wrap-untrusted-content`; la clave de la org sí tiene test), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly` (salvo la firma del webhook), `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`, salvo el gráfico de ingresos), los gastos y las métricas de ventas, y los parsers de import de clientes (salvo la fecha por defecto). Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`), las actions de reportes a pedido (`app/executive-reports/__tests__`, `app/operations/__tests__`), las de Clientes, Closing, Equipo, Inteligencia y el cambio de contraseña obligatorio (`app/clients`, `app/closing`, `app/team`, `app/intelligence`, `app/auth`), y las páginas de `app/__tests__`, `/team` e `/invite`.
+**Sin ningún test:** `lib/agent` (compaction, JIT, streaming; sólo las tools de contenido y las fechas de `get_clients_data` tienen test), `lib/ai` (`wrap-untrusted-content`; la clave de la org sí tiene test), `lib/rag`, `lib/auth` (bootstrap), `lib/holding`, `lib/calendly` (salvo la firma del webhook y la clasificación de rechazos de la sync por closer), `lib/typeform`, `lib/mercadopago`, `lib/stripe`, `lib/utm`, `lib/product`, `lib/business-context`, `lib/intelligence` (generación del informe), `lib/finance`, `lib/rate-limit.ts`, `lib/sanitize.ts`, `lib/format.ts`, `lib/validations.ts`, las funciones de `lib/metrics` que alimentan el Panel (`derive-dashboard-data.ts`, salvo el gráfico de ingresos), los gastos y las métricas de ventas, y los parsers de import de clientes (salvo la fecha por defecto). Route handlers y Server Actions tienen pocos tests: los workers de IA (`lib/intelligence/__tests__/org-pausada-al-procesar.test.ts`), `getSalesCallsAction` (`app/fathom/__tests__`), las actions de reportes a pedido (`app/executive-reports/__tests__`, `app/operations/__tests__`), las de Clientes, Closing, Equipo, Ventas, Inteligencia y el cambio de contraseña obligatorio (`app/clients`, `app/closing`, `app/team`, `app/sales`, `app/intelligence`, `app/auth`), y las páginas de `app/__tests__`, `/team` e `/invite`.
 
 ### E2E
 
