@@ -17,8 +17,7 @@ import {
   type WorkboardLinkPickerOption,
 } from "@/app/workboard/task-link-actions";
 import { WORKBOARD_ATTACHMENTS_ACCEPT } from "@/lib/workboard/constants";
-import { isNextRouterError } from "next/dist/client/components/is-next-router-error";
-import { correrMutacion, ERROR_INESPERADO } from "@/lib/client/correr-accion";
+import { correrMutacion, falloInesperado } from "@/lib/client/correr-accion";
 import { paths } from "@/routes";
 import { useToast } from "@/providers/toast-provider";
 import type { WorkboardTask } from "@/types/workboard";
@@ -35,17 +34,13 @@ const EMPTY_DRAFT: WorkboardTaskResourcesDraft = {
   documentIds: [],
 };
 
-/**
- * Lo que devuelven `uploadTaskAttachmentFile` y `applyDraftTaskResources`
- * cuando algo lanza (la red, la subida a Storage, una acción): se registra en
- * la consola y el motivo es el texto fijo. Nunca rechazan (SCRUM-503). Un
- * redirect de Next se relanza para que navegue.
+/*
+ * `uploadTaskAttachmentFile` y `applyDraftTaskResources` nunca rechazan
+ * (SCRUM-503): si algo lanza (la red, la subida a Storage, una acción), el
+ * motivo sale de `falloInesperado` (`lib/client/correr-accion.ts`, común desde
+ * SCRUM-504): se registra en la consola y es el texto fijo; un redirect de Next
+ * se relanza para que navegue.
  */
-function falloInesperado(etiqueta: string, error: unknown): string {
-  if (isNextRouterError(error)) throw error;
-  console.error(etiqueta, error);
-  return ERROR_INESPERADO;
-}
 
 export async function uploadTaskAttachmentFile(
   taskId: string,
