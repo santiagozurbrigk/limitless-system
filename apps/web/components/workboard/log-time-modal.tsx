@@ -24,6 +24,12 @@ export interface LogTimeModalProps {
   onSkip: () => void | Promise<void>;
   onCancel: () => void | Promise<void>;
   open: boolean;
+  /**
+   * Minutos que ya quedaron registrados en este intento (el completado rechazó
+   * después). Se muestran y no se pueden cambiar: confirmar sólo completa la
+   * tarea, sin registrar otra vez (SCRUM-503).
+   */
+  minutosYaRegistrados?: number | null;
 }
 
 function formatDuration(minutes: number): string {
@@ -47,6 +53,19 @@ export async function confirmarTiempo(
   return guardado !== false;
 }
 
+/**
+ * Los minutos que se confirman: los ya registrados si los hay (no se cargan
+ * otros), o los del formulario si son más que cero; null si no hay nada que
+ * confirmar.
+ */
+export function minutosAConfirmar(
+  totalMinutes: number,
+  minutosYaRegistrados?: number | null
+): number | null {
+  if (minutosYaRegistrados != null) return minutosYaRegistrados;
+  return totalMinutes > 0 ? totalMinutes : null;
+}
+
 export function LogTimeModal({
   taskTitle,
   estimatedMinutes,
@@ -54,6 +73,7 @@ export function LogTimeModal({
   onSkip,
   onCancel,
   open,
+  minutosYaRegistrados = null,
 }: LogTimeModalProps) {
   const [hours, setHours] = useState("0");
   const [minutes, setMinutes] = useState("30");
@@ -93,11 +113,14 @@ export function LogTimeModal({
     };
   }, [estimatedMinutes, totalMinutes]);
 
+  const yaRegistrado = minutosYaRegistrados != null;
+  const aConfirmar = minutosAConfirmar(totalMinutes, minutosYaRegistrados);
+
   async function handleConfirm() {
-    if (totalMinutes <= 0) return;
+    if (aConfirmar == null) return;
     setSubmitting(true);
     try {
-      const mostrarExito = await confirmarTiempo(onConfirm, totalMinutes, note.trim() || undefined);
+      const mostrarExito = await confirmarTiempo(onConfirm, aConfirmar, note.trim() || undefined);
       if (!mostrarExito) return;
       setSuccess(true);
       setTimeout(() => setSuccess(false), 1200);
@@ -156,6 +179,12 @@ export function LogTimeModal({
             </DialogHeader>
 
             <div className="space-y-4 py-2">
+              {yaRegistrado ? (
+                <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+                  Ya quedaron registrados {formatDuration(minutosYaRegistrados)}. Confirmá para
+                  completar la tarea; el tiempo no se vuelve a cargar.
+                </p>
+              ) : null}
               <div className="flex flex-wrap items-end gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="log-hours">Horas</Label>
@@ -164,6 +193,7 @@ export function LogTimeModal({
                     type="number"
                     min={0}
                     className="w-20 tabular-nums"
+                    disabled={yaRegistrado}
                     value={hours}
                     onChange={(e) => setHours(e.target.value)}
                   />
@@ -177,6 +207,7 @@ export function LogTimeModal({
                     min={0}
                     max={59}
                     className="w-20 tabular-nums"
+                    disabled={yaRegistrado}
                     value={minutes}
                     onChange={(e) => setMinutes(e.target.value)}
                   />
@@ -185,7 +216,7 @@ export function LogTimeModal({
               </div>
 
               <p className="text-sm text-muted-foreground">
-                = <span className="font-medium text-foreground">{formatDuration(totalMinutes)}</span> total
+                = <span className="font-medium text-foreground">{formatDuration(aConfirmar ?? totalMinutes)}</span> total
               </p>
 
               {estimatedMinutes && estimatedMinutes > 0 && estimateDelta ? (
@@ -209,6 +240,7 @@ export function LogTimeModal({
                   id="log-note"
                   placeholder="Qué hiciste, bloqueos, etc."
                   value={note}
+                  disabled={yaRegistrado}
                   onChange={(e) => setNote(e.target.value)}
                   rows={3}
                 />
@@ -235,7 +267,7 @@ export function LogTimeModal({
                 </Button>
                 <Button
                   type="button"
-                  disabled={submitting || totalMinutes <= 0}
+                  disabled={submitting || aConfirmar == null}
                   onClick={() => void handleConfirm()}
                 >
                   {submitting ? "Registrando…" : "Registrar tiempo"}

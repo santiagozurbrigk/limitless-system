@@ -41,6 +41,8 @@ vi.mock("@/app/workboard/actions", () => {
 
 import {
   completarConTiempo,
+  confirmacionDeCompletado,
+  SIN_CONFIRMACION,
   correrEnElTablero,
   useWorkboard,
   WorkboardProvider,
@@ -322,5 +324,73 @@ describe("completarConTiempo", () => {
       completarConTiempo({ tiempoYaRegistrado: false, registrarTiempo, completar: async () => false })
     ).resolves.toEqual({ completada: false, tiempoRegistrado: false });
     expect(registrarTiempo).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * MAYOR-1 de la AR pasada 2 de SCRUM-503: el tiempo ya registrado vale sólo
+ * para la confirmación abierta. Antes quedaba marcado por tarea toda la sesión:
+ * después de cancelar, un completado posterior se salteaba el registro y el
+ * modal decía "listo" sin guardar los minutos nuevos.
+ */
+describe("confirmacionDeCompletado", () => {
+  const T1 = { ...TAREA, id: "t1" } as WorkboardTask;
+  const abrir = { tipo: "abrir", tarea: T1, patch: null, estadoAnterior: "todo" } as const;
+
+  it("al registrar el tiempo dentro de la confirmación abierta lo recuerda (el primero manda)", () => {
+    let c = confirmacionDeCompletado(SIN_CONFIRMACION, abrir);
+    c = confirmacionDeCompletado(c, { tipo: "tiempoRegistrado", minutos: 30 });
+    c = confirmacionDeCompletado(c, { tipo: "tiempoRegistrado", minutos: 45 });
+    expect(c.minutosRegistrados).toBe(30);
+  });
+
+  it("⭐ cancelar olvida el tiempo registrado", () => {
+    let c = confirmacionDeCompletado(SIN_CONFIRMACION, abrir);
+    c = confirmacionDeCompletado(c, { tipo: "tiempoRegistrado", minutos: 30 });
+    c = confirmacionDeCompletado(c, { tipo: "cancelar" });
+    expect(c).toEqual(SIN_CONFIRMACION);
+  });
+
+  it("⭐ abrir una confirmación nueva, aunque sea de la misma tarea, empieza sin tiempo registrado", () => {
+    let c = confirmacionDeCompletado(SIN_CONFIRMACION, abrir);
+    c = confirmacionDeCompletado(c, { tipo: "tiempoRegistrado", minutos: 30 });
+    c = confirmacionDeCompletado(c, abrir);
+    expect(c.minutosRegistrados).toBeNull();
+    expect(c.tarea).toBe(T1);
+  });
+
+  it("completar olvida todo, y sin confirmación abierta no se registra nada", () => {
+    let c = confirmacionDeCompletado(SIN_CONFIRMACION, abrir);
+    c = confirmacionDeCompletado(c, { tipo: "completada" });
+    expect(c).toEqual(SIN_CONFIRMACION);
+    expect(confirmacionDeCompletado(SIN_CONFIRMACION, { tipo: "tiempoRegistrado", minutos: 5 })).toEqual(
+      SIN_CONFIRMACION
+    );
+  });
+
+  it("⭐ cancelar y volver a completar registra los minutos nuevos (no se pierden)", async () => {
+    // Primer intento: se registran 30 y el completado rechaza.
+    let c = confirmacionDeCompletado(SIN_CONFIRMACION, abrir);
+    const primero = await completarConTiempo({
+      minutos: 30,
+      tiempoYaRegistrado: c.minutosRegistrados != null,
+      registrarTiempo: async () => true,
+      completar: async () => false,
+    });
+    if (primero.tiempoRegistrado && !primero.completada) {
+      c = confirmacionDeCompletado(c, { tipo: "tiempoRegistrado", minutos: 30 });
+    }
+    // Cancela y, más tarde, vuelve a completar la misma tarea con 120.
+    c = confirmacionDeCompletado(c, { tipo: "cancelar" });
+    c = confirmacionDeCompletado(c, abrir);
+    const registrarTiempo = vi.fn(async () => true);
+    const segundo = await completarConTiempo({
+      minutos: 120,
+      tiempoYaRegistrado: c.minutosRegistrados != null,
+      registrarTiempo,
+      completar: async () => true,
+    });
+    expect(registrarTiempo).toHaveBeenCalledWith(120);
+    expect(segundo).toEqual({ completada: true, tiempoRegistrado: true });
   });
 });

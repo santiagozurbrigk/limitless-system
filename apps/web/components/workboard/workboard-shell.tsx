@@ -98,6 +98,7 @@ export function WorkboardShell() {
     isSaving,
     upsertTaskInState,
     pendingCompleteTask,
+    pendingTimeLoggedMinutes,
     confirmCompleteWithTime,
     skipTimeAndComplete,
     cancelComplete,
@@ -280,6 +281,7 @@ export function WorkboardShell() {
         taskId={pendingCompleteTask?.id ?? ""}
         taskTitle={pendingCompleteTask?.title ?? ""}
         estimatedMinutes={pendingCompleteTask?.estimatedMinutes}
+        minutosYaRegistrados={pendingTimeLoggedMinutes}
         onConfirm={(minutes, note) => confirmCompleteWithTime(minutes, note)}
         onSkip={async () => {
           await skipTimeAndComplete();

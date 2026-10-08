@@ -5,7 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
-  useRef,
+  useReducer,
   useState,
   type ReactNode,
 } from "react";
@@ -67,6 +67,12 @@ type WorkboardContextValue = {
   setSelectedTask: (task: WorkboardTask | null) => void;
   pendingCompleteTask: WorkboardTask | null;
   pendingCompletePatch: TaskUpdatePatch | null;
+  /**
+   * Minutos que ya quedaron registrados en este intento de completar la tarea
+   * (el completado rechazó después). El modal de tiempo los muestra y no deja
+   * cargar otros: confirmar sólo completa.
+   */
+  pendingTimeLoggedMinutes: number | null;
   isSaving: boolean;
   createTask: (input: {
     title: string;
@@ -108,6 +114,56 @@ const WorkboardContext = createContext<WorkboardContextValue | null>(null);
  * `logTaskTimeAction` acumula y lo sumaría dos veces. `completar` recibe si el
  * tiempo ya quedó guardado, para decirlo en el aviso.
  */
+/**
+ * ⭐ La confirmación de "completar con tiempo" que está abierta (SCRUM-503,
+ * AR pasada 2). El tiempo registrado vale sólo para esta confirmación: abrir
+ * una nueva (aunque sea de la misma tarea), cancelar o completar lo olvidan.
+ * Así un intento posterior registra sus propios minutos en vez de saltearse
+ * el registro.
+ */
+export type ConfirmacionDeCompletado = {
+  tarea: WorkboardTask | null;
+  patch: TaskUpdatePatch | null;
+  estadoAnterior: TaskStatus | null;
+  /** Minutos ya registrados en esta confirmación, o null. */
+  minutosRegistrados: number | null;
+};
+
+export type EventoDeConfirmacion =
+  | { tipo: "abrir"; tarea: WorkboardTask; patch: TaskUpdatePatch | null; estadoAnterior: TaskStatus }
+  | { tipo: "tiempoRegistrado"; minutos: number }
+  | { tipo: "cancelar" }
+  | { tipo: "completada" };
+
+export const SIN_CONFIRMACION: ConfirmacionDeCompletado = {
+  tarea: null,
+  patch: null,
+  estadoAnterior: null,
+  minutosRegistrados: null,
+};
+
+export function confirmacionDeCompletado(
+  actual: ConfirmacionDeCompletado,
+  evento: EventoDeConfirmacion
+): ConfirmacionDeCompletado {
+  switch (evento.tipo) {
+    case "abrir":
+      return {
+        tarea: evento.tarea,
+        patch: evento.patch,
+        estadoAnterior: evento.estadoAnterior,
+        minutosRegistrados: null,
+      };
+    case "tiempoRegistrado":
+      // Sólo dentro de una confirmación abierta, y el primer registro manda.
+      if (!actual.tarea) return actual;
+      return { ...actual, minutosRegistrados: actual.minutosRegistrados ?? evento.minutos };
+    case "cancelar":
+    case "completada":
+      return SIN_CONFIRMACION;
+  }
+}
+
 export async function completarConTiempo(op: {
   minutos?: number;
   tiempoYaRegistrado: boolean;
@@ -210,16 +266,13 @@ export function WorkboardProvider({
   const [areaFilter, setAreaFilter] = useState("all");
   const [view, setView] = useState<"board" | "calendar" | "time">("board");
   const [selectedTask, setSelectedTask] = useState<WorkboardTask | null>(null);
-  const [pendingCompleteTask, setPendingCompleteTask] =
-    useState<WorkboardTask | null>(null);
-  const [pendingCompletePatch, setPendingCompletePatch] =
-    useState<TaskUpdatePatch | null>(null);
-  const [, setPendingCompletePreviousStatus] =
-    useState<TaskStatus | null>(null);
+  const [confirmacion, despacharConfirmacion] = useReducer(
+    confirmacionDeCompletado,
+    SIN_CONFIRMACION
+  );
+  const pendingCompleteTask = confirmacion.tarea;
+  const pendingCompletePatch = confirmacion.patch;
   const [isSaving, setIsSaving] = useState(false);
-  // La tarea cuyo tiempo ya se registró en un intento de completarla que
-  // después rechazó: el reintento sólo la completa (`completarConTiempo`).
-  const tiempoRegistradoDe = useRef<string | null>(null);
   const [kanbanDoneVisibleUntil, setKanbanDoneVisibleUntil] = useState<
     Record<string, number>
   >({});
@@ -310,7 +363,7 @@ export function WorkboardProvider({
         // cancelar.
         const resultado = await completarConTiempo({
           minutos: minutes,
-          tiempoYaRegistrado: tiempoRegistradoDe.current === tarea.id,
+          tiempoYaRegistrado: confirmacion.minutosRegistrados != null,
           registrarTiempo: async (minutos) =>
             Boolean(
               await correrEnElTablero({
@@ -348,13 +401,14 @@ export function WorkboardProvider({
             return true;
           },
         });
-        if (resultado.tiempoRegistrado) tiempoRegistradoDe.current = tarea.id;
-        if (!resultado.completada) return false;
-        tiempoRegistradoDe.current = null;
+        if (!resultado.completada) {
+          if (resultado.tiempoRegistrado && minutes != null) {
+            despacharConfirmacion({ tipo: "tiempoRegistrado", minutos: minutes });
+          }
+          return false;
+        }
 
-        setPendingCompleteTask(null);
-        setPendingCompletePatch(null);
-        setPendingCompletePreviousStatus(null);
+        despacharConfirmacion({ tipo: "completada" });
         setSelectedTask(null);
         await refreshSprints();
         return true;
@@ -362,7 +416,7 @@ export function WorkboardProvider({
         setIsSaving(false);
       }
     },
-    [pendingCompleteTask, pendingCompletePatch, performMove, upsertTaskInState, refreshSprints, markKanbanDoneVisible, push]
+    [pendingCompleteTask, pendingCompletePatch, confirmacion.minutosRegistrados, performMove, upsertTaskInState, refreshSprints, markKanbanDoneVisible, push]
   );
 
   const createTask = useCallback(
@@ -392,9 +446,7 @@ export function WorkboardProvider({
       if (prev.status === status) return true;
 
       if (status === "done") {
-        setPendingCompleteTask(prev);
-        setPendingCompletePatch(null);
-        setPendingCompletePreviousStatus(prev.status);
+        despacharConfirmacion({ tipo: "abrir", tarea: prev, patch: null, estadoAnterior: prev.status });
         return true;
       }
 
@@ -409,9 +461,12 @@ export function WorkboardProvider({
       if (!prev) return true;
 
       if (patch.status === "done" && prev.status !== "done") {
-        setPendingCompleteTask(applyTaskPatch(prev, patch, members));
-        setPendingCompletePatch(patch);
-        setPendingCompletePreviousStatus(prev.status);
+        despacharConfirmacion({
+          tipo: "abrir",
+          tarea: applyTaskPatch(prev, patch, members),
+          patch,
+          estadoAnterior: prev.status,
+        });
         return true;
       }
 
@@ -462,30 +517,21 @@ export function WorkboardProvider({
   );
 
   const cancelComplete = useCallback(() => {
-    setPendingCompleteTask((pendingTask) => {
-      if (!pendingTask) return null;
-
-      const taskId = pendingTask.id;
-
-      setPendingCompletePreviousStatus((previousStatus) => {
-        if (previousStatus != null) {
-          setTasks((current) =>
-            current.map((t) =>
-              t.id === taskId ? { ...t, status: previousStatus } : t
-            )
-          );
-          setSelectedTask((sel) =>
-            sel?.id === taskId ? { ...sel, status: previousStatus } : sel
-          );
-        }
-        return null;
-      });
-
-      clearKanbanDoneVisible(taskId);
-      setPendingCompletePatch(null);
-      return null;
-    });
-  }, [clearKanbanDoneVisible]);
+    const { tarea, estadoAnterior } = confirmacion;
+    if (!tarea) return;
+    const taskId = tarea.id;
+    if (estadoAnterior != null) {
+      setTasks((current) =>
+        current.map((t) => (t.id === taskId ? { ...t, status: estadoAnterior } : t))
+      );
+      setSelectedTask((sel) =>
+        sel?.id === taskId ? { ...sel, status: estadoAnterior } : sel
+      );
+    }
+    clearKanbanDoneVisible(taskId);
+    // Olvida también el tiempo registrado: un intento posterior registra el suyo.
+    despacharConfirmacion({ tipo: "cancelar" });
+  }, [confirmacion, clearKanbanDoneVisible]);
 
   const assignTaskToSprint = useCallback(
     async (taskId: string, sprintId: string | null): Promise<boolean> => {
@@ -549,6 +595,7 @@ export function WorkboardProvider({
       setSelectedTask,
       pendingCompleteTask,
       pendingCompletePatch,
+      pendingTimeLoggedMinutes: confirmacion.minutosRegistrados,
       isSaving,
       createTask,
       moveTask,
@@ -576,6 +623,7 @@ export function WorkboardProvider({
       selectedTask,
       pendingCompleteTask,
       pendingCompletePatch,
+      confirmacion.minutosRegistrados,
       isSaving,
       createTask,
       moveTask,
