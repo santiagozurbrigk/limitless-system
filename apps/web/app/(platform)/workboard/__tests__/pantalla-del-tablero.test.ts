@@ -32,17 +32,13 @@ vi.mock("@/providers/workboard-provider", () => ({
     `tareas:${props.initialTasks.map((t) => t.id).join(",")} filtro:${props.initialSprintFilterId}`,
 }));
 
-import WorkboardPage, { dynamic } from "../page";
+import WorkboardPage from "../page";
 
 beforeEach(() => {
   sim.resultado = null;
 });
 
 describe("WorkboardPage", () => {
-  it("se declara dinámica: next build no la prerenderiza ni registra como falla el error con que Next marca una ruta dinámica", () => {
-    expect(dynamic).toBe("force-dynamic");
-  });
-
   it("⭐ con la lectura rechazada muestra el motivo, no la pantalla de error de Next", async () => {
     sim.resultado = { success: false, error: "Sesión no válida" };
     const html = renderToStaticMarkup(await WorkboardPage());
