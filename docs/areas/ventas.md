@@ -350,7 +350,10 @@ Registrar una cuota: `prepareClientPaymentReceiptUploadAction` (URL firmada al b
 (`20261008150000`, SCRUM-504): inserta el pago y marca la cuota en `clients.installments` en una sola
 transacción, con el cliente bloqueado, la RLS y la org de la sesión; si la cuota no se puede marcar no
 queda el pago. Cada formulario de la ficha genera una clave de idempotencia al abrirse: si la respuesta
-se pierde y se vuelve a guardar, la función devuelve el pago ya registrado (índice único por org). El
+se pierde y se vuelve a guardar, la función devuelve el pago ya registrado (índice único por org; si
+el reintento trae el comprobante que faltaba se le suma, y si el pago ya tenía otro la acción borra el
+archivo nuevo); con otros datos (cliente, monto en centavos, fecha o cuota) se rechaza con un motivo.
+Los montos admiten hasta dos decimales. El
 cierre de venta desde Closing todavía no pasa una clave (`[CLOSING-CIERRE-ATOMICO]`).
 
 Las 6 acciones de `app/sales/payment-actions.ts` devuelven `MutationResult` (SCRUM-504): validación,
