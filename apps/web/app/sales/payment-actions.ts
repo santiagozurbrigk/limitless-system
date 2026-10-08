@@ -20,6 +20,7 @@ import {
   ErrorEsperable,
   FallaDeLaBase,
   mutacionConErroresEsperables,
+  registrarFallaDeAccion,
   type MutationResult,
 } from "@/lib/server/action-result";
 import { moneySchema, uuidSchema } from "@/lib/validations";
@@ -62,9 +63,26 @@ const prepareReceiptUploadSchema = z.object({
  * dos. Guardar una ruta sin tipo dejaría un archivo que después no se sabe
  * cómo abrir.
  */
+/**
+ * Un monto de un pago: hasta dos decimales (la columna es numeric(12,2)). Se
+ * redondea a centavos lo que es ruido del punto flotante (0.1 + 0.2), y se
+ * rechaza con motivo lo que de verdad tiene más decimales (333.333): si no,
+ * se guardaba redondeado y el reintento con la misma clave no coincidía.
+ */
+const montoDePagoSchema = moneySchema
+  .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, {
+    message: "El monto puede tener hasta dos decimales.",
+  })
+  .transform((v) => Math.round(v * 100) / 100);
+
+/** El mismo monto, comparado en centavos. */
+function mismoMonto(a: number, b: number): boolean {
+  return Math.round(a * 100) === Math.round(b * 100);
+}
+
 const recordPaymentSchema = z.object({
   clientId: uuidSchema,
-  amount: moneySchema,
+  amount: montoDePagoSchema,
   paymentDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
   storagePath: z.string().trim().min(1).nullish(),
   mimeType: z.string().trim().min(1).max(200).nullish(),
@@ -77,7 +95,7 @@ const recordPaymentSchema = z.object({
 
 const addInstallmentPaymentSchema = z.object({
   clientId: uuidSchema,
-  amount: moneySchema,
+  amount: montoDePagoSchema,
   paymentDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
   storagePath: z.string().trim().min(1).nullish(),
   mimeType: z.string().trim().min(1).max(200).nullish(),
@@ -187,6 +205,17 @@ export async function prepareClientPaymentReceiptUploadAction(
  * `recordClientPaymentAction` y `addInstallmentPaymentAction` sin pasar por
  * otra server action.
  */
+async function borrarComprobanteSobrante(ruta: string): Promise<void> {
+  try {
+    const { error } = await createAdminClient()
+      .storage.from(CLIENT_PAYMENT_RECEIPTS_BUCKET)
+      .remove([ruta]);
+    if (error) throw new Error(error.message);
+  } catch (e) {
+    registrarFallaDeAccion("[registrarPago] comprobante sobrante", e);
+  }
+}
+
 async function registrarPago(
   organizationId: string,
   datos: DatosDelPago
@@ -224,8 +253,16 @@ async function registrarPago(
   }
   if (!data) throw new Error("registrar_pago_de_cliente no devolvió el pago");
 
+  const pago = data as ClientPaymentRow;
+  // Un reintento con comprobante sobre un pago que ya tenía otro: la función
+  // devuelve el que tenía y el archivo recién subido sobra. Se borra para no
+  // dejarlo huérfano; si no se puede, queda registrado (el pago está bien).
+  if (datos.storagePath && pago.storage_path !== datos.storagePath) {
+    await borrarComprobanteSobrante(datos.storagePath);
+  }
+
   revalidatePaymentScreens();
-  return rowToClientPayment(data as ClientPaymentRow);
+  return rowToClientPayment(pago);
 }
 
 export async function recordClientPaymentAction(
@@ -349,15 +386,24 @@ export async function addInstallmentPaymentAction(
         // como si fuera el nuevo (la misma regla que la función SQL).
         if (
           previo.client_id !== clientId ||
-          Number(previo.amount) !== amount ||
+          !mismoMonto(Number(previo.amount), amount) ||
           previo.payment_date !== paymentDate
         ) {
           throw new ErrorEsperable(CLAVE_CON_OTROS_DATOS);
         }
-        return {
-          payment: rowToClientPayment(previo as ClientPaymentRow),
-          client: rowToClient(clientRow as ClientRow),
-        };
+        // Es un reintento: se repite con la cuota del pago registrado, así la
+        // función devuelve ese pago (y le suma el comprobante si ahora lo trae)
+        // en vez de calcular otra "próxima cuota".
+        const payment = await registrarPago(organizationId, {
+          clientId,
+          amount,
+          paymentDate,
+          storagePath,
+          mimeType,
+          installmentNumber: previo.installment_number as number | null,
+          claveIdempotencia,
+        });
+        return await conClienteRecargado(payment);
       }
     }
 
@@ -383,19 +429,23 @@ export async function addInstallmentPaymentAction(
       claveIdempotencia,
     });
 
-    const { data: updatedClient, error: reloadError } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("id", clientId)
-      .eq("organization_id", organizationId)
-      .single();
+    return await conClienteRecargado(payment);
 
-    if (reloadError) throw new FallaDeLaBase(reloadError);
+    async function conClienteRecargado(payment: ClientPayment) {
+      const { data: updatedClient, error: reloadError } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", clientId)
+        .eq("organization_id", organizationId)
+        .single();
 
-    revalidatePaymentScreens();
-    return {
-      payment,
-      client: rowToClient(updatedClient as ClientRow),
-    };
+      if (reloadError) throw new FallaDeLaBase(reloadError);
+
+      revalidatePaymentScreens();
+      return {
+        payment,
+        client: rowToClient(updatedClient as ClientRow),
+      };
+    }
   });
 }

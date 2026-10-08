@@ -112,6 +112,14 @@ export function agregarPago(actual: EstadoDePagos, pago: ClientPayment): EstadoD
   return { ...actual, payments: [pago, ...actual.payments] };
 }
 
+/**
+ * El monto de la cuota para el formulario, en centavos: el plan de cuotas
+ * puede traer 333.333 y el servidor sólo acepta dos decimales (SCRUM-504).
+ */
+export function montoParaElFormulario(monto: number): string {
+  return String(Math.round(monto * 100) / 100);
+}
+
 /** El rótulo de la cuota que el servidor registró, para el aviso. */
 export function rotuloDeCuotaRegistrada(cliente: Client, pago: ClientPayment): string {
   const numero = pago.installmentNumber;
@@ -385,7 +393,7 @@ function AddInstallmentPaymentDialog({
   installmentLabel: string;
   onSuccess: (client: Client, payment: ClientPayment) => void;
 }) {
-  const [amount, setAmount] = useState(String(defaultAmount));
+  const [amount, setAmount] = useState(montoParaElFormulario(defaultAmount));
   const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const [paymentDate, setPaymentDate] = useState(() =>
     fechaDeHoyEnZona(zonaDeLaOrganizacion)
@@ -397,7 +405,7 @@ function AddInstallmentPaymentDialog({
 
   useEffect(() => {
     if (open) {
-      setAmount(String(defaultAmount));
+      setAmount(montoParaElFormulario(defaultAmount));
       setPaymentDate(fechaDeHoyEnZona(zonaDeLaOrganizacion));
       setFile(null);
       setError(null);

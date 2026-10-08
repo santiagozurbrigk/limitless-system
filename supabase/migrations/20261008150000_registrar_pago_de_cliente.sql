@@ -17,6 +17,7 @@
 --     se registran uno después del otro;
 --   - con `p_clave_idempotencia`, un reintento con la misma clave devuelve el
 --     pago ya registrado en vez de duplicarlo (índice único por organización);
+--     si el pago no tenía comprobante y el reintento lo trae, se le suma;
 --   - si la cuota no se puede marcar, no queda nada (la transacción se
 --     deshace).
 -- Errores: 'P0002' si el cliente no es de la org (o no existe); 'IDM01' si la
@@ -32,6 +33,19 @@ comment on column public.client_payments.clave_idempotencia is
 create unique index if not exists client_payments_clave_idempotencia_key
   on public.client_payments (organization_id, clave_idempotencia)
   where clave_idempotencia is not null;
+
+-- Sumar el comprobante a un pago que no lo tiene: la única escritura de
+-- UPDATE sobre client_payments. Sólo las columnas del comprobante (grant por
+-- columna) y sólo filas de la org sin comprobante (policy). Antes no había
+-- policy de UPDATE: nadie podía editar un pago.
+drop policy if exists "Org members add receipt to client_payments" on public.client_payments;
+create policy "Org members add receipt to client_payments"
+  on public.client_payments for update
+  using (organization_id = public.get_my_organization_id() and storage_path is null)
+  with check (organization_id = public.get_my_organization_id());
+
+revoke update on public.client_payments from anon, authenticated;
+grant update (storage_path, mime_type) on public.client_payments to authenticated;
 
 create or replace function public.registrar_pago_de_cliente(
   p_client_id uuid,
@@ -77,13 +91,28 @@ begin
       -- Una clave ya usada con otros datos no es un reintento: el usuario
       -- corrigió el formulario después de perder la respuesta. No se devuelve
       -- el pago viejo como si fuera el nuevo.
+      -- El monto se compara con el redondeo de la columna (numeric(12,2)):
+      -- 333.333 se guardó como 333.33 y su reintento no es "otros datos".
       if v_pago.client_id <> p_client_id
-         or v_pago.amount <> p_amount
+         or v_pago.amount <> round(p_amount, 2)
          or v_pago.payment_date <> p_payment_date
          or (p_installment_number is not null
              and v_pago.installment_number is distinct from p_installment_number)
       then
         raise exception 'registrar_pago_de_cliente: la clave ya se usó con otros datos' using errcode = 'IDM01';
+      end if;
+      -- El reintento trae el comprobante que el primer guardado no tenía: se
+      -- le suma al pago (cada subida tiene otra ruta, así que no se compara la
+      -- ruta). Si el pago ya tenía comprobante, se devuelve como está y la app
+      -- borra el archivo nuevo para no dejarlo huérfano.
+      if v_pago.storage_path is null and p_storage_path is not null then
+        update public.client_payments
+        set storage_path = p_storage_path, mime_type = p_mime_type
+        where id = v_pago.id and organization_id = v_org and storage_path is null
+        returning * into v_pago;
+        if not found then
+          raise exception 'registrar_pago_de_cliente: no se pudo sumar el comprobante' using errcode = '42501';
+        end if;
       end if;
       return v_pago;
     end if;

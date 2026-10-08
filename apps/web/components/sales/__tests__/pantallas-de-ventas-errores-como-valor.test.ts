@@ -94,6 +94,7 @@ import {
   cargarPagosDelCliente,
   agregarPago,
   aplicarLecturaDePagos,
+  montoParaElFormulario,
   rotuloDeCuotaRegistrada,
   rotulosDeLaProximaCuota,
 } from "../client-payments-section";
@@ -562,5 +563,13 @@ describe("Ficha de pagos (AR pasada 2, MENOR-1)", () => {
     const cliente = { installments: [{ label: "1/3" }, { label: "2/3" }, { label: "3/3" }] } as never;
     expect(rotuloDeCuotaRegistrada(cliente, { installmentNumber: 2 } as never)).toBe("2/3");
     expect(rotuloDeCuotaRegistrada(cliente, { installmentNumber: null } as never)).toBe("La cuota");
+  });
+});
+
+describe("Monto de la cuota en el formulario (AR pasada 4)", () => {
+  it("⭐ se redondea a centavos: el servidor sólo acepta dos decimales", () => {
+    expect(montoParaElFormulario(333.333)).toBe("333.33");
+    expect(montoParaElFormulario(0.1 + 0.2)).toBe("0.3");
+    expect(montoParaElFormulario(100)).toBe("100");
   });
 });

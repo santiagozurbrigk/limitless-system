@@ -12,6 +12,7 @@ const ERROR_INESPERADO = "Ocurrió un error inesperado. Intentá de nuevo.";
 const ORG = "11111111-1111-4111-8111-111111111111";
 const CLIENTE = "22222222-2222-4222-8222-222222222222";
 const CLIENTE_AJENO = "33333333-3333-4333-8333-333333333333";
+const CLIENTE_2 = "66666666-6666-4666-8666-666666666666";
 const PAGO = "44444444-4444-4444-8444-444444444444";
 
 type Fila = Record<string, unknown>;
@@ -28,6 +29,8 @@ const sim = vi.hoisted(() => ({
   operaciones: [] as Operacion[],
   errorStorage: null as { message: string } | null,
   rpcs: [] as Array<{ nombre: string; args: Fila }>,
+  borrados: [] as string[],
+  errorAlBorrar: null as { message: string } | null,
 }));
 
 vi.mock("@/lib/observability/reportar-falla", () => ({
@@ -63,10 +66,15 @@ function rpcFalsa(nombre: string, args: Fila) {
     if (previo) {
       const otros =
         previo.client_id !== args.p_client_id ||
-        previo.amount !== args.p_amount ||
+        Math.round(Number(previo.amount) * 100) !== Math.round(Number(args.p_amount) * 100) ||
         previo.payment_date !== args.p_payment_date ||
         (args.p_installment_number != null && previo.installment_number !== args.p_installment_number);
       if (otros) return { data: null, error: { code: "IDM01", message: "registrar_pago_de_cliente: la clave ya se usó con otros datos" } };
+      // Como la función: el comprobante que el primer guardado no tenía se suma.
+      if (!previo.storage_path && args.p_storage_path) {
+        previo.storage_path = args.p_storage_path;
+        previo.mime_type = args.p_mime_type;
+      }
       return { data: previo, error: null };
     }
   }
@@ -100,6 +108,10 @@ function clienteFalso() {
           sim.errorStorage
             ? { data: null, error: sim.errorStorage }
             : { data: { signedUrl: `https://storage/${ruta}` }, error: null },
+        remove: async (rutas: string[]) => {
+          sim.borrados.push(...rutas);
+          return { data: null, error: sim.errorAlBorrar };
+        },
         createSignedUrl: async (ruta: string) =>
           sim.errorStorage
             ? { data: null, error: sim.errorStorage }
@@ -193,6 +205,8 @@ beforeEach(() => {
   sim.operaciones = [];
   sim.errorStorage = null;
   sim.rpcs = [];
+  sim.borrados = [];
+  sim.errorAlBorrar = null;
   sim.tablas = {
     clients: [
       {
@@ -206,6 +220,13 @@ beforeEach(() => {
         ],
       },
       { id: CLIENTE_AJENO, organization_id: "otra-org", name: "Ajeno", payment_type: "single" },
+      {
+        id: CLIENTE_2,
+        organization_id: ORG,
+        name: "Beto",
+        payment_type: "installments",
+        installments: [{ label: "1/1", amount: 100, status: "pending" }],
+      },
     ],
     client_payments: [
       pago(PAGO, ORG, CLIENTE),
@@ -369,7 +390,10 @@ describe("registrar una cuota", () => {
     if (!primero.success || !segundo.success) return;
     expect(segundo.data.payment.id).toBe(primero.data.payment.id);
     expect(segundo.data.payment.installmentNumber).toBe(1);
-    expect(sim.rpcs).toHaveLength(1);
+    // El reintento vuelve a la función con la cuota del pago registrado (para
+    // sumar el comprobante si ahora lo trae), y no queda otro pago.
+    expect(sim.rpcs.map((r) => r.args.p_installment_number)).toEqual([1, 1]);
+    expect(sim.tablas.client_payments.filter((p) => p.clave_idempotencia === "clave-cuota")).toHaveLength(1);
   });
 
   it("⭐ la misma clave de una cuota con otro monto devuelve el motivo, no el pago viejo", async () => {
@@ -499,5 +523,105 @@ describe("filtro por organización (AR pasada 2, MENOR-4)", () => {
         contexto: { accion: "[getClientPaymentReceiptUrl]" },
       },
     ]);
+  });
+});
+
+describe("montos y comprobantes en un reintento (AR pasada 4)", () => {
+  const OTRO_ARCHIVO = `${ORG}/${CLIENTE}/dos.pdf`;
+  const ARCHIVO = `${ORG}/${CLIENTE}/uno.pdf`;
+
+  it("⭐ un monto con más de dos decimales se rechaza con motivo, sin llamar a la función", async () => {
+    await expect(recordClientPaymentAction({ ...registrar, amount: 333.333 })).resolves.toEqual({
+      success: false,
+      error: "El monto puede tener hasta dos decimales.",
+    });
+    expect(sim.rpcs).toEqual([]);
+  });
+
+  it("⭐ el ruido del punto flotante (0.1 + 0.2) se redondea a centavos y el reintento coincide", async () => {
+    const primero = await recordClientPaymentAction({ ...registrar, amount: 0.1 + 0.2, claveIdempotencia: "clave-flotante" });
+    const segundo = await recordClientPaymentAction({ ...registrar, amount: 0.1 + 0.2, claveIdempotencia: "clave-flotante" });
+    expect(sim.rpcs.map((r) => r.args.p_amount)).toEqual([0.3, 0.3]);
+    expect(primero.success && segundo.success && primero.data.id === segundo.data.id).toBe(true);
+  });
+
+  it("⭐ el reintento con el comprobante que faltaba lo suma al pago y no borra nada", async () => {
+    await recordClientPaymentAction({ ...registrar, claveIdempotencia: "clave-archivo" });
+    const r = await recordClientPaymentAction({
+      ...registrar,
+      storagePath: ARCHIVO,
+      mimeType: "application/pdf",
+      claveIdempotencia: "clave-archivo",
+    });
+    expect(r.success && r.data.storagePath).toBe(ARCHIVO);
+    expect(sim.borrados).toEqual([]);
+  });
+
+  it("⭐ si el pago ya tenía comprobante, el archivo nuevo se borra para no dejarlo huérfano", async () => {
+    await recordClientPaymentAction({ ...registrar, storagePath: ARCHIVO, mimeType: "application/pdf", claveIdempotencia: "clave-dos" });
+    const r = await recordClientPaymentAction({
+      ...registrar,
+      storagePath: OTRO_ARCHIVO,
+      mimeType: "application/pdf",
+      claveIdempotencia: "clave-dos",
+    });
+    expect(r.success && r.data.storagePath).toBe(ARCHIVO);
+    expect(sim.borrados).toEqual([OTRO_ARCHIVO]);
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("⭐ si no se puede borrar el sobrante, el pago sale bien y la falla se registra", async () => {
+    sim.errorAlBorrar = { message: "Storage caído" };
+    await recordClientPaymentAction({ ...registrar, storagePath: ARCHIVO, mimeType: "application/pdf", claveIdempotencia: "clave-tres" });
+    const r = await recordClientPaymentAction({
+      ...registrar,
+      storagePath: OTRO_ARCHIVO,
+      mimeType: "application/pdf",
+      claveIdempotencia: "clave-tres",
+    });
+    expect(r.success).toBe(true);
+    expect(sim.reportes).toEqual([
+      { error: expect.objectContaining({ message: "Storage caído" }), contexto: { accion: "[registrarPago] comprobante sobrante" } },
+    ]);
+  });
+
+  describe("cuotas", () => {
+    beforeEach(() => {
+      sim.tablas.client_payments = [];
+    });
+    const otrosDatos = "Ese pago ya se registró con otros datos. Cerrá el formulario y volvé a abrirlo para cargar otro.";
+
+    it("⭐ la misma clave de una cuota con otra fecha devuelve el motivo", async () => {
+      await addInstallmentPaymentAction({ ...registrar, claveIdempotencia: "clave-c-fecha" });
+      await expect(
+        addInstallmentPaymentAction({ ...registrar, paymentDate: "2026-10-09", claveIdempotencia: "clave-c-fecha" })
+      ).resolves.toEqual({ success: false, error: otrosDatos });
+      // Lo decide la acción, antes de volver a la función.
+      expect(sim.rpcs).toHaveLength(1);
+    });
+
+    it("⭐ la misma clave de una cuota con otro cliente devuelve el motivo", async () => {
+      await addInstallmentPaymentAction({ ...registrar, claveIdempotencia: "clave-c-cliente" });
+      await expect(
+        addInstallmentPaymentAction({ ...registrar, clientId: CLIENTE_2, claveIdempotencia: "clave-c-cliente" })
+      ).resolves.toEqual({ success: false, error: otrosDatos });
+      expect(sim.tablas.client_payments.filter((p) => p.client_id === CLIENTE_2)).toEqual([]);
+      expect(sim.rpcs).toHaveLength(1);
+    });
+
+    it("⭐ el reintento de una cuota con el comprobante que faltaba lo suma al mismo pago", async () => {
+      const primero = await addInstallmentPaymentAction({ ...registrar, claveIdempotencia: "clave-c-archivo" });
+      const segundo = await addInstallmentPaymentAction({
+        ...registrar,
+        storagePath: ARCHIVO,
+        mimeType: "application/pdf",
+        claveIdempotencia: "clave-c-archivo",
+      });
+      expect(primero.success && segundo.success).toBe(true);
+      if (!primero.success || !segundo.success) return;
+      expect(segundo.data.payment.id).toBe(primero.data.payment.id);
+      expect(segundo.data.payment.storagePath).toBe(ARCHIVO);
+      expect(sim.rpcs.map((r) => r.args.p_installment_number)).toEqual([1, 1]);
+    });
   });
 });
