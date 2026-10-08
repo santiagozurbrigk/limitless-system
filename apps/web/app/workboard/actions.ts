@@ -57,6 +57,12 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
 const SIN_FILAS = "PGRST116";
 /** Código de Postgres de una clave foránea que apunta a algo que no existe. */
 const REFERENCIA_INEXISTENTE = "23503";
+/** Código de Postgres de una restricción de unicidad violada. */
+const VIOLACION_DE_UNICIDAD = "23505";
+/** Código de PostgREST cuando la función pedida por RPC no existe. */
+const FUNCION_INEXISTENTE = "PGRST202";
+const SPRINT_ACTIVO_REPETIDO =
+  "Ya hay un sprint activo. Completalo antes de activar otro.";
 
 const SESION_NO_VALIDA = "Sesión no válida";
 const REFERENCIA_DE_LA_TAREA_INEXISTENTE =
@@ -80,8 +86,11 @@ const SPRINT_INEXISTENTE =
 function errorDeEscritura(
   error: { message: string; code?: string | null },
   tabla: string,
-  conocidos: { sinFilas?: string; referenciaInexistente?: string } = {}
+  conocidos: { sinFilas?: string; referenciaInexistente?: string; duplicado?: string } = {}
 ): Error {
+  if (conocidos.duplicado && error.code === VIOLACION_DE_UNICIDAD) {
+    return new ErrorEsperable(conocidos.duplicado);
+  }
   if (conocidos.sinFilas && error.code === SIN_FILAS) {
     return new ErrorEsperable(conocidos.sinFilas);
   }
@@ -708,32 +717,27 @@ export async function createSprintAction(
     const profile = await getCurrentProfile();
     const supabase = await createClient();
 
-    // Sólo puede haber un sprint activo: si no se pudo cerrar el anterior, no
-    // se crea el nuevo (quedarían dos activos). Antes la falla se ignoraba.
-    const { error: cierreError } = await supabase
-      .from("sprints")
-      .update({ status: "completed", updated_at: new Date().toISOString() })
-      .eq("organization_id", organizationId)
-      .eq("status", "active");
-
-    if (cierreError) throw errorDeEscritura(cierreError, "sprints");
-
+    // Completar el activo y crear el nuevo es una sola transacción en la base
+    // (`crear_sprint`, migración 20261008120000): si algo falla no queda nada a
+    // medias, y el índice `sprints_un_activo_por_org` impide dos activos.
     const { data: sprint, error } = await supabase
-      .from("sprints")
-      .insert({
-        organization_id: organizationId,
-        name: data.name.trim(),
-        goal: data.goal?.trim() || null,
-        area_focus: data.areaFocus || null,
-        start_date: data.startDate,
-        end_date: data.endDate,
-        status: "active",
-        created_by: profile?.id ?? null,
+      .rpc("crear_sprint", {
+        p_organization_id: organizationId,
+        p_name: data.name.trim(),
+        p_goal: data.goal?.trim() || null,
+        p_area_focus: data.areaFocus || null,
+        p_start_date: data.startDate,
+        p_end_date: data.endDate,
+        p_created_by: profile?.id ?? null,
       })
-      .select("*")
       .single();
 
-    if (error) throw errorDeEscritura(error, "sprints");
+    if (error) {
+      // La función no existe: la migración no está aplicada. Es una falla de
+      // despliegue, no un motivo para el usuario; va a Sentry.
+      if (error.code === FUNCION_INEXISTENTE) throw new FallaDeLaBase(error);
+      throw errorDeEscritura(error, "sprints");
+    }
 
     revalidateWorkboard();
     return rowToSprint(sprint as SprintRow, []);
@@ -766,7 +770,9 @@ export async function updateSprintAction(
       .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw errorDeEscritura(error, "sprints");
+    if (error) {
+      throw errorDeEscritura(error, "sprints", { duplicado: SPRINT_ACTIVO_REPETIDO });
+    }
 
     revalidateWorkboard();
   });

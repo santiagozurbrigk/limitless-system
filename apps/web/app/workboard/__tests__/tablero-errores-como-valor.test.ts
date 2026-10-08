@@ -23,7 +23,7 @@ const NO_EXISTE = "88888888-8888-4888-8888-888888888888";
 type Fila = Record<string, unknown>;
 type Consulta = {
   tabla: string;
-  op: "select" | "insert" | "update" | "delete" | "upsert";
+  op: "select" | "insert" | "update" | "delete" | "upsert" | "rpc";
   valores?: unknown;
   filtros: Array<[string, unknown]>;
 };
@@ -40,7 +40,7 @@ const sim = vi.hoisted(() => ({
   lanza: null as unknown,
   consultas: [] as Array<{
     tabla: string;
-    op: "select" | "insert" | "update" | "delete" | "upsert";
+    op: "select" | "insert" | "update" | "delete" | "upsert" | "rpc";
     valores?: unknown;
     filtros: Array<[string, unknown]>;
   }>,
@@ -74,8 +74,9 @@ vi.mock("@/lib/workboard/tarea-con-vinculos", async () => {
       sops: new Map(),
     }),
     deleteTaskAttachmentsForTask: async () => undefined,
-    // La relectura de la tarea creada: se prueba aparte, en
-    // `tarea-con-vinculos.test.ts`.
+    // La relectura de la tarea creada. La real (`leerTareaConVinculos`) se
+    // prueba a través de `getWorkboardTaskByIdAction` en
+    // `vinculos-de-tareas-errores-como-valor.test.ts`.
     leerTareaConVinculos: async (id: string, organizationId: string) => {
       if (!sim.tareaReleida) throw new FallaDeLaBase({ message: "boom al releer" });
       const fila = (sim.tablas.workboard_tasks ?? []).find(
@@ -87,6 +88,36 @@ vi.mock("@/lib/workboard/tarea-con-vinculos", async () => {
 });
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
+    // `crear_sprint` (migración 20261008120000), como la base: completa el
+    // activo de la organización e inserta el nuevo, todo o nada.
+    rpc(nombre: string, args: Record<string, unknown>) {
+      if (sim.lanza) throw sim.lanza;
+      sim.consultas.push({ tabla: `rpc:${nombre}`, op: "rpc", valores: args, filtros: [] });
+      const resultado = () => {
+        const error = sim.errores[`rpc:${nombre}`];
+        if (error) return { data: null, error };
+        for (const f of sim.tablas.sprints ?? []) {
+          if (f.organization_id === args.p_organization_id && f.status === "active") f.status = "completed";
+        }
+        const fila = {
+          id: NUEVA,
+          organization_id: args.p_organization_id,
+          name: args.p_name,
+          goal: args.p_goal,
+          area_focus: args.p_area_focus,
+          start_date: args.p_start_date,
+          end_date: args.p_end_date,
+          status: "active",
+          completion_rate: 0,
+          created_by: args.p_created_by,
+          created_at: "2026-10-08T00:00:00Z",
+          updated_at: "2026-10-08T00:00:00Z",
+        };
+        sim.tablas.sprints = [...(sim.tablas.sprints ?? []), fila];
+        return { data: fila, error: null };
+      };
+      return { single: async () => resultado() };
+    },
     from(tabla: string) {
       if (sim.lanza) throw sim.lanza;
       const consulta: Consulta = { tabla, op: "select", filtros: [] };
@@ -581,29 +612,55 @@ describe("setMemberHourlyRateAction", () => {
 describe("createSprintAction", () => {
   const NUEVO_SPRINT = { name: "Sprint 4", startDate: "2026-10-08", endDate: "2026-10-22" };
 
-  it("cierra el activo y crea el nuevo en la organización", async () => {
+  it("⭐ crea el sprint con la función atómica de la base, en la organización de la sesión", async () => {
     const r = await createSprintAction(NUEVO_SPRINT);
     expect(r.success && r.data).toMatchObject({ id: NUEVA, name: "Sprint 4", status: "active" });
+    // Una sola llamada: completar el activo y crear el nuevo no son dos escrituras.
+    expect(escrituras()).toEqual([
+      {
+        tabla: "rpc:crear_sprint",
+        op: "rpc",
+        valores: {
+          p_organization_id: ORG,
+          p_name: "Sprint 4",
+          p_goal: null,
+          p_area_focus: null,
+          p_start_date: "2026-10-08",
+          p_end_date: "2026-10-22",
+          p_created_by: M1,
+        },
+        filtros: [],
+      },
+    ]);
     expect(filaDe("sprints", S1)?.status).toBe("completed");
     expect(filaDe("sprints", S_OTRA_ORG)?.status).toBe("active");
-    const alta = escrituras().find((c) => c.op === "insert");
-    expect(alta?.valores).toMatchObject({ organization_id: ORG });
   });
 
-  it("⭐ si no se puede cerrar el sprint activo, no crea el nuevo: texto fijo y se reporta", async () => {
-    sim.errores["sprints:update"] = { message: "TypeError: fetch failed" };
+  it("⭐ si la función falla no queda nada a medias: texto fijo y se reporta", async () => {
+    sim.errores["rpc:crear_sprint"] = { message: "TypeError: fetch failed" };
     await expect(createSprintAction(NUEVO_SPRINT)).resolves.toEqual({
       success: false,
       error: TEXTO_FIJO,
     });
-    expect(escrituras().map((c) => c.op)).toEqual(["update"]);
-    expect(sim.tablas.sprints.filter((f) => f.status === "active")).toHaveLength(2);
+    expect(filaDe("sprints", S1)?.status).toBe("active");
     expect(sim.reportes).toEqual([
       {
         error: expect.objectContaining({ name: "FallaDeLaBase" }),
         contexto: { accion: "[createSprint]" },
       },
     ]);
+  });
+
+  it("si la función no existe (migración sin aplicar) es una falla de despliegue: texto fijo y Sentry", async () => {
+    sim.errores["rpc:crear_sprint"] = {
+      code: "PGRST202",
+      message: "Could not find the function public.crear_sprint(...) in the schema cache",
+    };
+    await expect(createSprintAction(NUEVO_SPRINT)).resolves.toEqual({
+      success: false,
+      error: TEXTO_FIJO,
+    });
+    expect(sim.reportes).toHaveLength(1);
   });
 
   it("⭐ sin nombre vuelve con el mensaje de validación, sin escribir", async () => {
@@ -648,6 +705,18 @@ describe("updateSprintAction", () => {
       success: false,
       error: "ID inválido",
     });
+  });
+
+  it("⭐ activar un sprint con otro activo (índice único) vuelve con el motivo", async () => {
+    sim.errores["sprints:update"] = {
+      code: "23505",
+      message: 'duplicate key value violates unique constraint "sprints_un_activo_por_org"',
+    };
+    await expect(updateSprintAction(S1, { status: "active" })).resolves.toEqual({
+      success: false,
+      error: "Ya hay un sprint activo. Completalo antes de activar otro.",
+    });
+    expect(sim.reportes).toEqual([]);
   });
 
   it("el sprint de otra organización no se toca", async () => {
@@ -761,7 +830,7 @@ const ACCIONES: ReadonlyArray<
   ["setMemberHourlyRateAction", () => setMemberHourlyRateAction({ memberId: M1, hourlyRate: 1, currency: "USD" }), "[setMemberHourlyRate]", "profiles:update"],
   ["getActiveSprintAction", () => getActiveSprintAction(), "[getActiveSprint]", "sprints"],
   ["getSprintsAction", () => getSprintsAction(), "[getSprints]", "sprints"],
-  ["createSprintAction", () => createSprintAction({ name: "a", startDate: "2026-10-01", endDate: "2026-10-02" }), "[createSprint]", "sprints:insert"],
+  ["createSprintAction", () => createSprintAction({ name: "a", startDate: "2026-10-01", endDate: "2026-10-02" }), "[createSprint]", "rpc:crear_sprint"],
   ["updateSprintAction", () => updateSprintAction(S1, { name: "a" }), "[updateSprint]", "sprints:update"],
   ["assignTaskToSprintAction", () => assignTaskToSprintAction(T1, S1), "[assignTaskToSprint]", "workboard_tasks:update"],
   ["updateSprintCompletionAction", () => updateSprintCompletionAction(S1), "[updateSprintCompletion]", "sprints:update"],
