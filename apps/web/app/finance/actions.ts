@@ -39,6 +39,11 @@ export type FinanceConfigPayload = {
   subscriptions: Subscription[];
   teamCompensation: TeamCompensation[];
   paymentPlatforms: PaymentPlatformConfig[];
+  /**
+   * Los pagos no se pudieron leer: los totales recibidos por plataforma no
+   * están al día (SCRUM-504). El resto de la configuración llega igual.
+   */
+  pagosSinLeer: boolean;
 };
 
 export type { MutationResult };
@@ -93,6 +98,7 @@ const EMPTY_FINANCE_CONFIG: FinanceConfigPayload = {
   subscriptions: [],
   teamCompensation: [],
   paymentPlatforms: [],
+  pagosSinLeer: false,
 };
 
 export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
@@ -105,6 +111,7 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
       subscriptions: mockSubscriptions.map((s) => ({ ...s })),
       teamCompensation: mockTeamCompensation.map((t) => ({ ...t })),
       paymentPlatforms: mockPaymentPlatforms.map((p) => ({ ...p })),
+      pagosSinLeer: false,
     };
   }
 
@@ -116,7 +123,17 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
 
     // Si los pagos no se pueden leer, lanza `FallaDeLaBase` (SCRUM-504): antes
     // los totales por plataforma quedaban en cero sin aviso.
-    const payments = await leerPagosDeLaOrganizacion(supabase, organizationId);
+    // Los pagos se leen aparte (AR de SCRUM-504, pasada 2): si fallan, se
+    // registra la falla y los totales por plataforma quedan en cero con el
+    // aviso, pero gastos, suscripciones, equipo y plataformas llegan igual.
+    let payments: ClientPayment[] = [];
+    let pagosSinLeer = false;
+    try {
+      payments = await leerPagosDeLaOrganizacion(supabase, organizationId);
+    } catch (e) {
+      registrarFallaDeAccion("[loadFinanceConfig] pagos", e);
+      pagosSinLeer = true;
+    }
 
   const [fixedRes, subsRes, teamRes, platRes, hoy] = await Promise.all([
     supabase
@@ -165,6 +182,7 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
         payments,
         hoy
       ),
+      pagosSinLeer,
     };
   } catch (e) {
     // Se registra y va a Sentry (SCRUM-504: incluye la falla al leer los pagos).

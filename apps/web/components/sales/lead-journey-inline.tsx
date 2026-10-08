@@ -15,7 +15,8 @@ import {
 import { Skeleton, SteppedAlert, cn } from "@ai-coo/ui";
 import { getLeadJourneyAction, getZernioLeadJourneyAction } from "@/app/sales/actions";
 import { paths } from "@/routes";
-import type { LeadJourneyStep } from "@/lib/sales/lead-journey";
+import type { LeadJourneyStep, RecorridoDelLead } from "@/lib/sales/lead-journey";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 
 // ─── Configuración visual por tipo de paso ────────────────────────────────────
@@ -251,7 +252,7 @@ export function cargarRecorridoDelLead(params: {
   zernioAccountId?: string;
   zernioParticipantId?: string;
   zernioParticipantName?: string;
-}): Promise<Lectura<LeadJourneyStep[]>> {
+}): Promise<Lectura<RecorridoDelLead>> {
   const { conversationId, zernioAccountId, zernioParticipantId, zernioParticipantName } = params;
   if (conversationId) {
     return leerConMotivo(
@@ -270,7 +271,27 @@ export function cargarRecorridoDelLead(params: {
       "[LeadJourneyInline] recorrido de Zernio"
     );
   }
-  return Promise.resolve({ ok: true, data: [] });
+  return Promise.resolve({ ok: true, data: { pasos: [], faltan: [] } });
+}
+
+/** "la llamada", "la venta" → "la llamada y la venta". */
+function enumerar(partes: string[]): string {
+  if (partes.length <= 1) return partes[0] ?? "";
+  return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
+}
+
+/**
+ * Aviso de las fuentes del recorrido que no se pudieron leer (SCRUM-504): los
+ * pasos que sí se leyeron se muestran igual.
+ */
+export function AvisoDeRecorridoIncompleto({ faltan }: { faltan: string[] }) {
+  if (faltan.length === 0) return null;
+  return (
+    <AvisoDeLecturaFallida
+      titulo="Faltan datos del recorrido:"
+      motivo={`no se pudieron leer ${enumerar(faltan)}.`}
+    />
+  );
 }
 
 export function LeadJourneyInline({
@@ -293,11 +314,13 @@ export function LeadJourneyInline({
   // Por qué no se pudo leer el recorrido (SCRUM-504): antes se veía como
   // "Sin recorrido registrado".
   const [motivo, setMotivo] = useState<string | null>(null);
+  const [faltan, setFaltan] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setMotivo(null);
+    setFaltan([]);
 
     void cargarRecorridoDelLead({
       conversationId,
@@ -306,8 +329,12 @@ export function LeadJourneyInline({
       zernioParticipantName,
     }).then((lectura) => {
       if (cancelled) return;
-      if (lectura.ok) setSteps(lectura.data);
-      else setMotivo(lectura.motivo);
+      if (lectura.ok) {
+        setSteps(lectura.data.pasos);
+        setFaltan(lectura.data.faltan);
+      } else {
+        setMotivo(lectura.motivo);
+      }
       setLoading(false);
     });
 
@@ -333,6 +360,12 @@ export function LeadJourneyInline({
           </span>
         )}
       </div>
+
+      {!loading && !motivo && faltan.length > 0 ? (
+        <div className="mb-3">
+          <AvisoDeRecorridoIncompleto faltan={faltan} />
+        </div>
+      ) : null}
 
       {loading ? (
         <JourneySkeleton />

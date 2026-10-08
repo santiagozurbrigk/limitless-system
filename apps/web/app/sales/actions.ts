@@ -21,7 +21,7 @@ import {
   mockFrequentObjectionSummaries,
 } from "@/lib/metrics/frequent-objections";
 import { getLeadJourney, getZernioLeadJourney } from "@/lib/sales/lead-journey";
-import type { LeadJourneyStep, LeadJourneyContext } from "@/lib/sales/lead-journey";
+import type { LeadJourneyContext, RecorridoDelLead } from "@/lib/sales/lead-journey";
 import {
   FallaDeLaBase,
   mutacionConErroresEsperables,
@@ -215,8 +215,8 @@ export async function getMockCallAnalysisKeysAction() {
 export async function getLeadJourneyAction(
   conversationId: string,
   context?: LeadJourneyContext
-): Promise<MutationResult<LeadJourneyStep[]>> {
-  if (!isSupabaseConfigured()) return { success: true, data: [] };
+): Promise<MutationResult<RecorridoDelLead>> {
+  if (!isSupabaseConfigured()) return { success: true, data: { pasos: [], faltan: [] } };
 
   // Antes atrapaba todo y devolvía `[]`: sin sesión o con una falla, el panel
   // decía "Sin recorrido registrado" (AR de SCRUM-504).
@@ -234,8 +234,8 @@ export async function getZernioLeadJourneyAction(
   accountId: string,
   participantId: string,
   participantName: string
-): Promise<MutationResult<LeadJourneyStep[]>> {
-  if (!isSupabaseConfigured()) return { success: true, data: [] };
+): Promise<MutationResult<RecorridoDelLead>> {
+  if (!isSupabaseConfigured()) return { success: true, data: { pasos: [], faltan: [] } };
 
   return mutacionConErroresEsperables("[getZernioLeadJourney]", async () => {
     const organizationId = await requireOrganizationId();

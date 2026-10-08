@@ -64,6 +64,8 @@ type FinanceDataContextValue = {
   clientPayments: ClientPayment[];
   /** Por qué no se pudieron leer los pagos, si falló (SCRUM-504). */
   clientPaymentsError: string | null;
+  /** Los totales recibidos por plataforma no están al día: fallaron los pagos (SCRUM-504). */
+  totalesDePlataformasSinLeer: boolean;
   financeSummary: FinanceSummary;
   /** Métricas históricas importadas (snapshot más reciente). Null si no hay datos importados.
    *  Usar como fallback cuando los datos live (conversaciones, closing calls) están en cero. */
@@ -142,6 +144,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const [totalesDePlataformasSinLeer, setTotalesDePlataformasSinLeer] = useState(false);
+
   const refreshFinanceConfig = useCallback(async () => {
     if (!useSupabase) return;
     setFinanceConfigLoading(true);
@@ -151,6 +155,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setFixedExpenses(config.fixedExpenses);
       setSubscriptions(config.subscriptions);
       setTeamCompensation(config.teamCompensation);
+      setTotalesDePlataformasSinLeer(config.pagosSinLeer);
     } catch (e) {
       console.error("[FinanceDataProvider] loadFinanceConfig", e);
     } finally {
@@ -482,6 +487,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       financeConfigLoading,
       clientPayments,
       clientPaymentsError,
+      totalesDePlataformasSinLeer,
       addPaymentPlatform,
       updatePaymentPlatform,
       removePaymentPlatform,
@@ -509,6 +515,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       financeConfigLoading,
       clientPayments,
       clientPaymentsError,
+      totalesDePlataformasSinLeer,
       addPaymentPlatform,
       updatePaymentPlatform,
       removePaymentPlatform,

@@ -57,11 +57,11 @@ vi.mock("@/lib/metrics/frequent-objections", () => ({
 vi.mock("@/lib/sales/lead-journey", () => ({
   getLeadJourney: async (organizationId: string) => {
     if (sim.lanza) throw sim.lanza;
-    return [{ type: "dm", org: organizationId }];
+    return { pasos: [{ type: "dm", org: organizationId }], faltan: [] };
   },
   getZernioLeadJourney: async (organizationId: string) => {
     if (sim.lanza) throw sim.lanza;
-    return [{ type: "comment", org: organizationId }];
+    return { pasos: [{ type: "comment", org: organizationId }], faltan: [] };
   },
 }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -344,7 +344,7 @@ describe("recorrido del lead (antes devolvía [] ante cualquier falla)", () => {
 
   it.each(llamadas)("%s lee el recorrido de la organización de la sesión", async (_n, _e, llamar) => {
     const r = await llamar();
-    expect(r).toMatchObject({ success: true, data: [{ org: "org-1" }] });
+    expect(r).toMatchObject({ success: true, data: { pasos: [{ org: "org-1" }], faltan: [] } });
   });
 
   it.each(llamadas)("⭐ %s sin sesión devuelve el motivo", async (_n, _e, llamar) => {

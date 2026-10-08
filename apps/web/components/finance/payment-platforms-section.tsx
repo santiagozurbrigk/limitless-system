@@ -21,6 +21,7 @@ import { formatMoney } from "@/lib/finance/format";
 import { formatearFechaGuardada } from "@/lib/fechas/calendario";
 import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import type { PaymentPlatformConfig } from "@/types/finance";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 
 /**
  * La fecha de la última transacción, con su día. `new Date("2026-10-04")` es
@@ -42,6 +43,7 @@ export function PaymentPlatformsSection() {
     addPaymentPlatform,
     updatePaymentPlatform,
     removePaymentPlatform,
+    totalesDePlataformasSinLeer,
   } = useFinanceData();
   const { push } = useToast();
   const [open, setOpen] = useState(false);
@@ -49,6 +51,12 @@ export function PaymentPlatformsSection() {
 
   return (
     <section className="space-y-4">
+      {totalesDePlataformasSinLeer ? (
+        <AvisoDeLecturaFallida
+          titulo="No se pudieron leer los pagos."
+          motivo="Lo recibido por cada plataforma no está al día."
+        />
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-medium">Plataformas de pago</h3>

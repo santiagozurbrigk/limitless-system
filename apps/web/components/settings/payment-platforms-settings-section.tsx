@@ -17,6 +17,7 @@ import { CreditCard, Pencil, Trash2 } from "lucide-react";
 import { useFinanceData } from "@/providers";
 import { useToast } from "@/providers/toast-provider";
 import type { PaymentPlatformConfig } from "@/types/finance";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 
 export function PaymentPlatformsSettingsSection() {
   const {
@@ -24,6 +25,7 @@ export function PaymentPlatformsSettingsSection() {
     addPaymentPlatform,
     updatePaymentPlatform,
     removePaymentPlatform,
+    totalesDePlataformasSinLeer,
     financeConfigLoading,
   } = useFinanceData();
   const { push } = useToast();
@@ -32,6 +34,12 @@ export function PaymentPlatformsSettingsSection() {
 
   return (
     <section className="space-y-4">
+      {totalesDePlataformasSinLeer ? (
+        <AvisoDeLecturaFallida
+          titulo="No se pudieron leer los pagos."
+          motivo="Lo recibido por cada plataforma no está al día."
+        />
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-medium">Plataformas de pago</h3>

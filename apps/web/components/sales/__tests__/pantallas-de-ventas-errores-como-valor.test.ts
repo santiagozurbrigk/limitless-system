@@ -92,7 +92,7 @@ import { FrequentObjectionsSection } from "../frequent-objections-section";
 import { AvisoDeCobradoSinLeer, cargarCobradoPorCliente } from "../cobros-page";
 import { cargarPagosDelCliente } from "../client-payments-section";
 import { uploadPaymentReceiptFile } from "../payment-receipt-dropzone";
-import { cargarRecorridoDelLead } from "../lead-journey-inline";
+import { AvisoDeRecorridoIncompleto, cargarRecorridoDelLead } from "../lead-journey-inline";
 
 const caida = () => new Error("An error occurred in the Server Components render.");
 
@@ -496,6 +496,15 @@ describe("Recorrido del lead", () => {
   });
 
   it("sin datos para buscar, recorrido vacío", async () => {
-    await expect(cargarRecorridoDelLead({})).resolves.toEqual({ ok: true, data: [] });
+    await expect(cargarRecorridoDelLead({})).resolves.toEqual({ ok: true, data: { pasos: [], faltan: [] } });
+  });
+
+  it("⭐ con fuentes que faltan, el aviso las nombra; sin faltantes no avisa", () => {
+    const html = renderToStaticMarkup(
+      createElement(AvisoDeRecorridoIncompleto, { faltan: ["la llamada", "los comentarios"] })
+    );
+    expect(html).toContain("Faltan datos del recorrido:");
+    expect(html).toContain("no se pudieron leer la llamada y los comentarios.");
+    expect(renderToStaticMarkup(createElement(AvisoDeRecorridoIncompleto, { faltan: [] }))).toBe("");
   });
 });
