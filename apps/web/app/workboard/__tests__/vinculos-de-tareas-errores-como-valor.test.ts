@@ -38,6 +38,8 @@ const sim = vi.hoisted(() => ({
     valores?: unknown;
     filtros: Array<[string, unknown]>;
   }>,
+  // Base sin la columna workboard_tasks.sop_id: un select que embebe `sops(...)` falla.
+  sinColumnaSop: false,
   storage: {
     error: null as null | Error,
     sinUrl: false,
@@ -86,12 +88,17 @@ vi.mock("@/lib/supabase/server", () => ({
     auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
     from(tabla: string) {
       if (sim.lanza) throw sim.lanza;
-      const consulta: Consulta = { tabla, op: "select", filtros: [] };
+      const consulta: Consulta & { columnas?: string } = { tabla, op: "select", filtros: [] };
       sim.consultas.push(consulta);
       const coincidentes = () =>
         (sim.tablas[tabla] ?? []).filter((f) => consulta.filtros.every(([c, v]) => f[c] === v));
       const resolver = (modo: "lista" | "una" | "quizas") => {
-        const error = sim.errores[`${tabla}:${consulta.op}`] ?? sim.errores[tabla] ?? null;
+        const error =
+          sim.errores[`${tabla}:${consulta.op}`] ??
+          sim.errores[tabla] ??
+          (sim.sinColumnaSop && tabla === "workboard_tasks" && consulta.columnas?.includes("sops(")
+            ? { message: "column workboard_tasks.sop_id does not exist", code: "42703" }
+            : null);
         if (error) return { data: null, error };
         let filas: Array<Record<string, unknown>>;
         if (consulta.op === "insert") {
@@ -115,7 +122,10 @@ vi.mock("@/lib/supabase/server", () => ({
         return { data: filas[0], error: null };
       };
       const builder = {
-        select: () => builder,
+        select(columnas?: string) {
+          if (consulta.op === "select") consulta.columnas = columnas;
+          return builder;
+        },
         order: () => builder,
         not: () => builder,
         eq(columna: string, valor: unknown) {
@@ -217,6 +227,7 @@ beforeEach(() => {
   sim.lanza = null;
   sim.consultas = [];
   sim.storage = { error: null, sinUrl: false, borradas: [] };
+  sim.sinColumnaSop = false;
   consola = vi.spyOn(console, "error").mockImplementation(() => {});
   aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -428,6 +439,17 @@ describe("getWorkboardTaskByIdAction", () => {
       error: TAREA_NO_ENCONTRADA,
     });
     expect(sim.reportes).toEqual([]);
+  });
+
+  it("⭐ sin la columna sop_id (migración sin aplicar) relee la tarea sin el SOP, sin reportar", async () => {
+    sim.sinColumnaSop = true;
+    const r = await getWorkboardTaskByIdAction(T1);
+    expect(r.success && r.data.id).toBe(T1);
+    expect(sim.reportes).toEqual([]);
+    const relecturas = sim.consultas.filter(
+      (c) => c.tabla === "workboard_tasks" && c.filtros.some(([col, v]) => col === "id" && v === T1)
+    );
+    expect(relecturas).toHaveLength(2);
   });
 
   it("un id inválido vuelve con el mensaje de validación", async () => {

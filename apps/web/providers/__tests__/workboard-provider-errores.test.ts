@@ -11,7 +11,7 @@
  * servidor; lo que se mira es el aviso y lo que devuelve cada función.
  */
 
-import { createElement } from "react";
+import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -40,6 +40,7 @@ vi.mock("@/app/workboard/actions", () => {
 });
 
 import {
+  completarConTiempo,
   correrEnElTablero,
   useWorkboard,
   WorkboardProvider,
@@ -67,16 +68,16 @@ function contexto() {
     valor = useWorkboard();
     return null;
   }
-  renderToStaticMarkup(
-    createElement(WorkboardProvider, {
-      initialTasks: [TAREA],
-      members: [],
-      initialSprints: [],
-      initialSprintFilterId: "all",
-      launches: [],
-      children: createElement(Sonda),
-    })
-  );
+  // Los hijos van como tercer argumento (`react/no-children-prop`); el tipo
+  // de las props los pide, así que se le dice que vienen por ahí.
+  const props = {
+    initialTasks: [TAREA],
+    members: [],
+    initialSprints: [],
+    initialSprintFilterId: "all",
+    launches: [],
+  } as unknown as ComponentProps<typeof WorkboardProvider>;
+  renderToStaticMarkup(createElement(WorkboardProvider, props, createElement(Sonda)));
   if (!valor) throw new Error("sin contexto");
   return valor as ReturnType<typeof useWorkboard>;
 }
@@ -207,17 +208,23 @@ describe("WorkboardProvider", () => {
     ]);
   });
 
-  it("⭐ moveTask: el motivo se muestra y la promesa no rechaza (el kanban la llama con void)", async () => {
+  it("⭐ moveTask: el motivo se muestra, devuelve false y la promesa no rechaza (el kanban la llama con void)", async () => {
     sim.acciones.moveWorkboardTaskAction = rechaza("Sesión no válida");
-    await expect(contexto().moveTask("t1", "in_progress")).resolves.toBeUndefined();
+    await expect(contexto().moveTask("t1", "in_progress")).resolves.toBe(false);
     expect(sim.avisos).toEqual([
       { title: "No se pudo mover la tarea", description: "Sesión no válida", variant: "default" },
     ]);
   });
 
+  it("moveTask: con éxito devuelve true", async () => {
+    sim.acciones.moveWorkboardTaskAction = async () => ({ success: true, data: undefined });
+    await expect(contexto().moveTask("t1", "in_progress")).resolves.toBe(true);
+    expect(sim.avisos).toEqual([]);
+  });
+
   it("moveTask: si la acción lanza, el texto fijo", async () => {
     sim.acciones.moveWorkboardTaskAction = lanza;
-    await expect(contexto().moveTask("t1", "in_progress")).resolves.toBeUndefined();
+    await expect(contexto().moveTask("t1", "in_progress")).resolves.toBe(false);
     expect(sim.avisos[0]?.description).toBe(TEXTO_FIJO);
   });
 
@@ -266,5 +273,54 @@ describe("WorkboardProvider", () => {
         variant: "default",
       },
     ]);
+  });
+});
+
+/**
+ * M3 de la AR de SCRUM-503: completar una tarea con tiempo son dos acciones.
+ * Si el registro sale y el completado rechaza, el reintento no vuelve a
+ * registrar el tiempo (`logTaskTimeAction` acumula y lo sumaría dos veces), y
+ * si completar falla (también el movimiento del Kanban) el modal no se cierra.
+ */
+describe("completarConTiempo", () => {
+  it("⭐ registro bien y completado rechazado: no completada, con el tiempo ya registrado", async () => {
+    const registrarTiempo = vi.fn(async () => true);
+    const completar = vi.fn(async () => false);
+    await expect(
+      completarConTiempo({ minutos: 30, tiempoYaRegistrado: false, registrarTiempo, completar })
+    ).resolves.toEqual({ completada: false, tiempoRegistrado: true });
+    expect(registrarTiempo).toHaveBeenCalledWith(30);
+    expect(completar).toHaveBeenCalledWith(true);
+  });
+
+  it("⭐ el reintento con el tiempo ya registrado no lo vuelve a registrar", async () => {
+    const registrarTiempo = vi.fn(async () => true);
+    const completar = vi.fn(async () => true);
+    await expect(
+      completarConTiempo({ minutos: 30, tiempoYaRegistrado: true, registrarTiempo, completar })
+    ).resolves.toEqual({ completada: true, tiempoRegistrado: true });
+    expect(registrarTiempo).not.toHaveBeenCalled();
+    expect(completar).toHaveBeenCalledWith(true);
+  });
+
+  it("si el registro rechaza, no se completa", async () => {
+    const completar = vi.fn(async () => true);
+    await expect(
+      completarConTiempo({
+        minutos: 30,
+        tiempoYaRegistrado: false,
+        registrarTiempo: async () => false,
+        completar,
+      })
+    ).resolves.toEqual({ completada: false, tiempoRegistrado: false });
+    expect(completar).not.toHaveBeenCalled();
+  });
+
+  it("sin minutos sólo completa, y un completado que falla (el Kanban) no se da por hecho", async () => {
+    const registrarTiempo = vi.fn(async () => true);
+    await expect(
+      completarConTiempo({ tiempoYaRegistrado: false, registrarTiempo, completar: async () => false })
+    ).resolves.toEqual({ completada: false, tiempoRegistrado: false });
+    expect(registrarTiempo).not.toHaveBeenCalled();
   });
 });

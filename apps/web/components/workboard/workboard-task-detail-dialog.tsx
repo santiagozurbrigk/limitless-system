@@ -33,6 +33,22 @@ import { useWorkboard } from "@/providers/workboard-provider";
 import type { TaskArea, TaskPriority, TaskStatus } from "@/types/workboard";
 import { WorkboardTaskResources } from "./workboard-task-resources";
 
+/**
+ * Cambia un selector del detalle (sprint o lanzamiento) en el acto y lo vuelve
+ * a lo que había si la acción rechaza; el aviso ya lo dio el provider
+ * (SCRUM-503).
+ */
+export async function cambiarConReversion<T>(op: {
+  anterior: T;
+  siguiente: T;
+  setValor: (valor: T) => void;
+  asignar: () => Promise<boolean>;
+}): Promise<void> {
+  op.setValor(op.siguiente);
+  const hecho = await op.asignar();
+  if (!hecho) op.setValor(op.anterior);
+}
+
 export function WorkboardTaskDetailDialog() {
   const {
     selectedTask,
@@ -250,14 +266,11 @@ export function WorkboardTaskDetailDialog() {
               disabled={isSaving}
               onChange={(e) => {
                 const next = e.target.value;
-                const anterior = sprintId;
-                setSprintId(next);
-                // Si rechaza, el provider avisa y el selector vuelve a lo que había.
-                void assignTaskToSprint(
-                  selectedTask.id,
-                  next ? next : null
-                ).then((hecho) => {
-                  if (!hecho) setSprintId(anterior);
+                void cambiarConReversion({
+                  anterior: sprintId,
+                  siguiente: next,
+                  setValor: setSprintId,
+                  asignar: () => assignTaskToSprint(selectedTask.id, next ? next : null),
                 });
               }}
             >
@@ -280,14 +293,11 @@ export function WorkboardTaskDetailDialog() {
                 disabled={isSaving}
                 onChange={(e) => {
                   const next = e.target.value;
-                  const anterior = launchId;
-                  setLaunchId(next);
-                  // Si rechaza, el provider avisa y el selector vuelve a lo que había.
-                  void assignTaskToLaunch(
-                    selectedTask.id,
-                    next ? next : null
-                  ).then((hecho) => {
-                    if (!hecho) setLaunchId(anterior);
+                  void cambiarConReversion({
+                    anterior: launchId,
+                    siguiente: next,
+                    setValor: setLaunchId,
+                    asignar: () => assignTaskToLaunch(selectedTask.id, next ? next : null),
                   });
                 }}
               >

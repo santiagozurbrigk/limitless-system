@@ -34,6 +34,19 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}m`;
 }
 
+/**
+ * Confirma el tiempo y dice si mostrar "listo": no, si quien llama devolvió
+ * `false` porque no se guardó (ya avisó el motivo) (SCRUM-503).
+ */
+export async function confirmarTiempo(
+  onConfirm: LogTimeModalProps["onConfirm"],
+  minutos: number,
+  nota?: string
+): Promise<boolean> {
+  const guardado = await onConfirm(minutos, nota);
+  return guardado !== false;
+}
+
 export function LogTimeModal({
   taskTitle,
   estimatedMinutes,
@@ -84,8 +97,8 @@ export function LogTimeModal({
     if (totalMinutes <= 0) return;
     setSubmitting(true);
     try {
-      const guardado = await onConfirm(totalMinutes, note.trim() || undefined);
-      if (guardado === false) return;
+      const mostrarExito = await confirmarTiempo(onConfirm, totalMinutes, note.trim() || undefined);
+      if (!mostrarExito) return;
       setSuccess(true);
       setTimeout(() => setSuccess(false), 1200);
     } finally {
