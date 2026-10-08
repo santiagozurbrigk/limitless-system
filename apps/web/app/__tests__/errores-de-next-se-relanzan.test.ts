@@ -98,26 +98,40 @@ function componentesDeServidor(dir: string): string[] {
   });
 }
 
+/** Los `catch` de `archivos` que no relanzan los errores de Next en sus primeras líneas. */
+function catchSinRelanzar(archivos: string[], base: string): string[] {
+  const sinRelanzar: string[] = [];
+  for (const archivo of archivos) {
+    // Se vacían los template strings (conservando los saltos de línea): el
+    // script del navegador de `app/layout.tsx` tiene su propio try/catch y
+    // no es código de servidor.
+    const codigo = readFileSync(archivo, "utf8").replace(/`[^`]*`/g, (t) =>
+      t.replace(/[^\n]/g, " ")
+    );
+    const lineas = codigo.split("\n");
+    lineas.forEach((linea, i) => {
+      if (!/\bcatch\s*(\(|\{)|\.catch\(/.test(linea)) return;
+      const siguientes = lineas.slice(i, i + 5).join("\n");
+      if (!siguientes.includes("unstable_rethrow(")) {
+        sinRelanzar.push(`${relative(base, archivo)}:${i + 1}`);
+      }
+    });
+  }
+  return sinRelanzar;
+}
+
+describe("el módulo común de las server actions", () => {
+  it("⭐ todo catch de `lib/server/action-result.ts` empieza relanzando los errores de Next (SCRUM-503)", () => {
+    const web = join(__dirname, "..", "..");
+    const archivo = join(web, "lib", "server", "action-result.ts");
+    expect(readFileSync(archivo, "utf8")).toMatch(/\bcatch\b/);
+    expect(catchSinRelanzar([archivo], web)).toEqual([]);
+  });
+});
+
 describe("los catch de páginas y layouts", () => {
   it("⭐ todo catch de una página o layout empieza relanzando los errores de Next", () => {
     const app = join(__dirname, "..");
-    const sinRelanzar: string[] = [];
-    for (const archivo of componentesDeServidor(app)) {
-      // Se vacían los template strings (conservando los saltos de línea): el
-      // script del navegador de `app/layout.tsx` tiene su propio try/catch y
-      // no es código de servidor.
-      const codigo = readFileSync(archivo, "utf8").replace(/`[^`]*`/g, (t) =>
-        t.replace(/[^\n]/g, " ")
-      );
-      const lineas = codigo.split("\n");
-      lineas.forEach((linea, i) => {
-        if (!/\bcatch\s*(\(|\{)|\.catch\(/.test(linea)) return;
-        const siguientes = lineas.slice(i, i + 5).join("\n");
-        if (!siguientes.includes("unstable_rethrow(")) {
-          sinRelanzar.push(`${relative(app, archivo)}:${i + 1}`);
-        }
-      });
-    }
-    expect(sinRelanzar).toEqual([]);
+    expect(catchSinRelanzar(componentesDeServidor(app), app)).toEqual([]);
   });
 });

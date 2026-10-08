@@ -1,4 +1,4 @@
-import { isNextRouterError } from "next/dist/client/components/is-next-router-error";
+import { unstable_rethrow } from "next/navigation";
 import { ERROR_INESPERADO } from "@/lib/client/correr-accion";
 import { reportarFalla } from "@/lib/observability/reportar-falla";
 import { esErrorEsperable } from "@/lib/server/error-esperable";
@@ -123,7 +123,9 @@ export function esFallaParaReportar(error: unknown): boolean {
  * (`[ACTIONS-ERRORES-EN-PRODUCCION]`, SCRUM-496): su mensaje no cambia. Lo que
  * sí suma (SCRUM-497) es que lo inesperado no se pierde: una falla que
  * `esFallaParaReportar` reconoce se registra y va a Sentry; el resto de los
- * `Error` sin marcar se anota como aviso en los logs del servidor.
+ * `Error` sin marcar se anota como aviso en los logs del servidor. Un error
+ * interno de Next se relanza (SCRUM-503): antes un redirect volvía como
+ * `{ success: false, error: "NEXT_REDIRECT" }` y Next no navegaba.
  */
 export async function runMutation<T>(
   fn: () => Promise<T>
@@ -132,7 +134,10 @@ export async function runMutation<T>(
     const data = await fn();
     return { success: true, data };
   } catch (error) {
-    if (!esErrorEsperable(error) && !isNextRouterError(error)) {
+    // Los errores internos de Next (redirect, notFound, el de ruta dinámica
+    // del prerender de `next build`) siguen su camino: no son fallas.
+    unstable_rethrow(error);
+    if (!esErrorEsperable(error)) {
       if (esFallaParaReportar(error)) registrarFallaDeAccion("[runMutation]", error);
       else console.warn("[runMutation] rechazo sin marcar:", actionErrorMessage(error));
     }
@@ -146,7 +151,8 @@ export async function runMutation<T>(
  * `FallaDeLaBase`, un `TypeError` de la red, un bug) se registra en el
  * servidor y en Sentry con `etiqueta`, y vuelve con un texto fijo en voseo
  * (`mensajeInesperado`, por defecto el de la interfaz): el usuario nunca ve el
- * texto técnico. Un redirect o un notFound de Next se relanza.
+ * texto técnico. Un error interno de Next (redirect, notFound, el de ruta
+ * dinámica del prerender) se relanza con `unstable_rethrow` (SCRUM-503).
  */
 export async function mutacionConErroresEsperables<T>(
   etiqueta: string,
@@ -157,7 +163,9 @@ export async function mutacionConErroresEsperables<T>(
     const data = await fn();
     return { success: true, data };
   } catch (error) {
-    if (isNextRouterError(error)) throw error;
+    // Los errores internos de Next (redirect, notFound, el de ruta dinámica
+    // del prerender de `next build`) siguen su camino: no son fallas.
+    unstable_rethrow(error);
     if (esErrorEsperable(error)) return { success: false, error: error.message };
     registrarFallaDeAccion(etiqueta, error);
     return { success: false, error: mensajeInesperado };
