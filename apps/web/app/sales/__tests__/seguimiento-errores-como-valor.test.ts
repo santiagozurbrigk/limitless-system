@@ -224,7 +224,29 @@ describe("lecturas del seguimiento", () => {
     sim.errores.sales_follow_up_options = { message: "permission denied" };
     const deFabrica = await getFollowUpCatalogAction();
     expect(deFabrica.success && deFabrica.data.nextActions.some((o) => o.slug === "propio")).toBe(false);
-    expect(sim.reportes).toEqual([]);
+    // ⭐ La falla no se pierde: queda en la consola y en Sentry (AR, MAYOR-1).
+    const detalle = expect.objectContaining({ name: "FallaDeLaBase", message: "permission denied" });
+    expect(consola).toHaveBeenCalledWith("[getFollowUpCatalog]", detalle);
+    expect(sim.reportes).toEqual([{ error: detalle, contexto: { accion: "[getFollowUpCatalog]" } }]);
+  });
+
+  it("⭐ la tabla con el catálogo caído usa el de fábrica y reporta la falla", async () => {
+    sim.errores.sales_follow_up_options = { message: "TypeError: fetch failed" };
+    const r = await listLeadsTableAction({ scope: "all" });
+    expect(r.success && r.data.rows.map((row) => row.leadId)).toEqual(["lead-c1"]);
+    expect(sim.reportes).toEqual([
+      {
+        error: expect.objectContaining({ name: "FallaDeLaBase" }),
+        contexto: { accion: "[listLeadsTable] catálogo" },
+      },
+    ]);
+  });
+
+  it("⭐ el hilo con el catálogo caído usa el de fábrica y reporta la falla", async () => {
+    sim.errores.sales_follow_up_options = { message: "TypeError: fetch failed" };
+    const r = await getLeadThreadAction("lead-c1");
+    expect(r.success && r.data?.leadId).toBe("lead-c1");
+    expect(sim.reportes).toHaveLength(1);
   });
 
   it("el catálogo sin sesión devuelve el motivo", async () => {
@@ -283,6 +305,23 @@ describe("mutaciones del seguimiento", () => {
     await linkLeadToClientAction({ callId: "c1", clientId: "cli-1" });
     expect(sim.tablas.sales_leads[0].client_id).toBe("cli-1");
     expect(sim.tablas.sales_leads[1].client_id).toBeNull();
+  });
+});
+
+describe("escrituras con el catálogo caído (AR, MAYOR-1)", () => {
+  // Antes caían en el catálogo de fábrica y rechazaban un valor propio válido
+  // con "no existe en el catálogo", sin registrar nada.
+  it.each([
+    ["setNextActionAction", "[setNextAction]", () => setNextActionAction({ callId: "c1", nextAction: "propio", nextActionAt: "2026-10-10T15:00:00Z" })],
+    ["saveCallFollowUpAction", "[saveCallFollowUp]", () => saveCallFollowUpAction({ callId: "c1", nextAction: "propio", nextActionAt: "2026-10-10T15:00:00Z" })],
+    ["setLeadQualificationAction", "[setLeadQualification]", () => setLeadQualificationAction({ callId: "c1", moment: "post", qualification: "propio" })],
+  ])("⭐ %s devuelve el texto fijo y reporta, no un rechazo falso", async (_nombre, etiqueta, llamar) => {
+    sim.errores.sales_follow_up_options = { message: "TypeError: fetch failed" };
+    await expect(llamar()).resolves.toEqual({ success: false, error: ERROR_INESPERADO });
+    const detalle = expect.objectContaining({ name: "FallaDeLaBase", message: "TypeError: fetch failed" });
+    expect(consola).toHaveBeenCalledWith(etiqueta, detalle);
+    expect(sim.reportes).toEqual([{ error: detalle, contexto: { accion: etiqueta } }]);
+    expect(sim.tablas.closing_calls[0].next_action).toBeNull();
   });
 });
 

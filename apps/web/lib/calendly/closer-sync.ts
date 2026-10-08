@@ -49,8 +49,8 @@ export type CloserSyncResult = {
  * falla del sistema: la sync manual (`syncCloserCalendlyAction`) lo devuelve
  * con un motivo claro y la del cron lo anota como `reason`, igual que antes.
  *   - `conexion_vencida`: el refresh token ya no sirve (400 `invalid_grant`)
- *     o la API rechaza el access token (401) o sus permisos (403). Hay que
- *     volver a conectar Calendly.
+ *     o la API rechaza el access token (401). Hay que volver a conectar
+ *     Calendly. Un 403 no: es una falla.
  *   - `limite_de_consultas`: la API respondió 429.
  * El mensaje es el detalle de Calendly, para el log; el usuario no lo ve.
  */
@@ -117,7 +117,7 @@ async function getValidCloserToken(row: CloserIntegrationRow): Promise<CloserCal
   const refreshed = await refreshCloserToken(config);
 
   const admin = createAdminClient();
-  await admin
+  const { error } = await admin
     .from("team_member_integrations")
     .update({
       config: refreshed,
@@ -126,6 +126,11 @@ async function getValidCloserToken(row: CloserIntegrationRow): Promise<CloserCal
     .eq("organization_id", row.organization_id)
     .eq("user_id", row.user_id)
     .eq("integration_type", "calendly");
+
+  // Calendly rota el refresh token: si no se guarda, el próximo sync falla con
+  // `invalid_grant` y parecería que la conexión venció. Es una falla de la
+  // base y se dice como tal (AR de SCRUM-504).
+  if (error) throw new FallaDeLaBase(error);
 
   return refreshed;
 }
@@ -164,7 +169,10 @@ export async function sincronizarEventosDelCloser(
   } catch (err) {
     const status = statusDeLaApiDeCalendly(err);
     const detalle = err instanceof Error ? err.message : String(err);
-    if (status === 401 || status === 403) throw new RechazoDeCalendly("conexion_vencida", detalle);
+    // Sólo el 401 está verificado contra Calendly ("The access token is
+    // invalid"). Un 403 puede ser un permiso o el plan de la app: es una falla
+    // y va a Sentry (AR de SCRUM-504, MENOR-3).
+    if (status === 401) throw new RechazoDeCalendly("conexion_vencida", detalle);
     if (status === 429) throw new RechazoDeCalendly("limite_de_consultas", detalle);
     throw err;
   }
@@ -425,7 +433,9 @@ export async function getCloserCalendlyIntegration(
     .eq("integration_type", "calendly")
     .maybeSingle();
 
-  if (error || !data) return { connected: false };
+  // Una falla de la base no es "No conectado" (AR de SCRUM-504, MENOR-4).
+  if (error) throw new FallaDeLaBase(error);
+  if (!data) return { connected: false };
 
   const config = data.config as CloserCalendlyConfig | null;
   if (!config?.access_token) return { connected: false };

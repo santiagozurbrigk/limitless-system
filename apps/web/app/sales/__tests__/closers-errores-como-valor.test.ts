@@ -113,6 +113,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => clienteFalso("
 
 import {
   disconnectMyCalendlyAction,
+  getMyCalendlyIntegrationAction,
   getCloserCallsAction,
   getCloserMetricsAction,
   getClosersWithCalendlyStatusAction,
@@ -498,5 +499,42 @@ describe("lecturas de closers", () => {
     await expect(getCloserCallsAction("closer-ajeno")).resolves.toEqual({ success: true, data: [] });
     const r = await getCloserCallsAction("closer-1");
     expect(r.success && r.data.map((c) => c.id)).toEqual(["c1"]);
+  });
+});
+
+describe("getMyCalendlyIntegrationAction (AR, MENOR-4)", () => {
+  it("devuelve el estado del Calendly propio", async () => {
+    await expect(getMyCalendlyIntegrationAction()).resolves.toEqual({
+      success: true,
+      data: { connected: true, calendlyUserUri: "https://api.calendly.com/users/yo", lastSyncAt: undefined },
+    });
+  });
+
+  it("⭐ sin perfil devuelve el motivo", async () => {
+    sim.perfil = null;
+    await expect(getMyCalendlyIntegrationAction()).resolves.toEqual({
+      success: false,
+      error: "Sesión no válida",
+    });
+  });
+
+  it("⭐ si la base falla, texto fijo y se reporta (antes \"No conectado\")", async () => {
+    sim.errores.team_member_integrations = { message: "TypeError: fetch failed" };
+    await expect(getMyCalendlyIntegrationAction()).resolves.toEqual({
+      success: false,
+      error: ERROR_INESPERADO,
+    });
+    esperarFallaRegistrada(
+      "[getMyCalendlyIntegration]",
+      expect.objectContaining({ name: "FallaDeLaBase", message: "TypeError: fetch failed" })
+    );
+  });
+});
+
+describe("sync con Calendly que responde 403 (AR, MENOR-3)", () => {
+  it("⭐ es una falla: texto fijo y se reporta", async () => {
+    calendly = () => ({ status: 403, json: { title: "Permission Denied" } });
+    await expect(syncCloserCalendlyAction()).resolves.toEqual({ success: false, error: ERROR_INESPERADO });
+    expect(sim.reportes).toHaveLength(1);
   });
 });

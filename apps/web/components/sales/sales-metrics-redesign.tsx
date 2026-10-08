@@ -16,6 +16,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { GlassPanel } from "@ai-coo/ui";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { formatPercent } from "@/lib/format";
 import { formatMoney } from "@/lib/finance/format";
 import {
@@ -41,21 +42,6 @@ import type { FrequentObjectionsResult } from "@/types/sales";
 import type { MetricsSnapshot } from "@/app/sales/metrics-actions";
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-
-/**
- * Aviso de una lectura que no se pudo hacer, con su motivo (SCRUM-504): lo
- * devuelve la acción; si fue inesperado, el texto fijo.
- */
-export function AvisoDeLecturaFallida({ titulo, motivo }: { titulo: string; motivo: string }) {
-  return (
-    <div
-      role="alert"
-      className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-    >
-      <span className="font-medium">{titulo}</span> {motivo}
-    </div>
-  );
-}
 
 export function SalesMetricsRedesign({
   frequentObjections,

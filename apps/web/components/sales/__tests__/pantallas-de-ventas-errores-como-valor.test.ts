@@ -22,6 +22,10 @@ const sim = vi.hoisted(() => ({
   metricasDeClosers: null as unknown,
   tablaDeLeads: null as unknown,
   objeciones: null as unknown,
+  pagosDelCliente: null as unknown,
+  cobrado: null as unknown,
+  prepararSubida: null as unknown,
+  estadoCalendly: null as unknown,
 }));
 
 /** Devuelve el resultado simulado, o lo lanza si es una excepción. */
@@ -45,23 +49,32 @@ vi.mock("@/app/sales/metrics-actions", () => ({
 vi.mock("@/app/sales/closer-actions", () => ({
   syncCloserCalendlyAction: () => responder(sim.sync),
   disconnectMyCalendlyAction: () => responder(sim.desconectar),
-  getMyCalendlyIntegrationAction: async () => ({ connected: true }),
+  getMyCalendlyIntegrationAction: () => responder(sim.estadoCalendly),
   getCloserMetricsAction: () => responder(sim.metricasDeClosers),
+}));
+vi.mock("@/app/sales/payment-actions", () => ({
+  listClientPaymentsAction: () => responder(sim.pagosDelCliente),
+  prepareClientPaymentReceiptUploadAction: () => responder(sim.prepararSubida),
+}));
+vi.mock("@/app/clients/plan-duration-actions", () => ({
+  getClientsTableEnrichmentAction: () => responder(sim.cobrado),
 }));
 vi.mock("@/app/sales/lead-actions", () => ({
   listLeadsTableAction: () => responder(sim.tablaDeLeads),
 }));
 
-import { leerConMotivo } from "@/lib/sales/lectura-con-motivo";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import { RendimientoDelEquipo } from "../sales-team-performance-section";
 import { cargarMetricasDeRendimiento } from "../sales-performance-metrics-section";
-import { AvisoDeLecturaFallida } from "../sales-metrics-redesign";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import {
   cargarEvolucionDelCloser,
   EvolucionDelCloser,
 } from "@/components/clients/client-linked-calls";
 import {
+  cargarEstadoDeMiCalendly,
   desconectarMiCalendly,
+  EstadoDeCalendlySinLeer,
   sincronizarMiCalendly,
 } from "@/components/settings/closer-calendly-settings";
 import {
@@ -73,6 +86,9 @@ import {
   recargarTablaDeLeads,
 } from "@/components/closing/leads-table";
 import { FrequentObjectionsSection } from "../frequent-objections-section";
+import { AvisoDeCobradoSinLeer, cargarCobradoPorCliente } from "../cobros-page";
+import { cargarPagosDelCliente } from "../client-payments-section";
+import { uploadPaymentReceiptFile } from "../payment-receipt-dropzone";
 
 const caida = () => new Error("An error occurred in the Server Components render.");
 
@@ -87,39 +103,6 @@ beforeEach(() => {
   consola = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => consola.mockRestore());
-
-describe("leerConMotivo", () => {
-  it("con éxito devuelve el dato", async () => {
-    await expect(leerConMotivo(async () => ({ success: true, data: 1 }), "[x]")).resolves.toEqual({
-      ok: true,
-      data: 1,
-    });
-  });
-
-  it("⭐ con un error devuelto como valor da ese motivo, sin registrar nada", async () => {
-    await expect(
-      leerConMotivo(async () => ({ success: false, error: "Sesión no válida" }), "[x]")
-    ).resolves.toEqual({ ok: false, motivo: "Sesión no válida" });
-    expect(consola).not.toHaveBeenCalled();
-  });
-
-  it("⭐ si la acción lanza, el motivo es el texto fijo y queda en la consola", async () => {
-    const error = caida();
-    await expect(leerConMotivo(() => Promise.reject(error), "[x]")).resolves.toEqual({
-      ok: false,
-      motivo: ERROR_INESPERADO,
-    });
-    expect(consola).toHaveBeenCalledWith("[x]", error);
-  });
-
-  it("un redirect de Next se relanza para que Next navegue", async () => {
-    const redirect = Object.assign(new Error("NEXT_REDIRECT"), {
-      digest: "NEXT_REDIRECT;replace;/login;307;",
-    });
-    await expect(leerConMotivo(() => Promise.reject(redirect), "[x]")).rejects.toBe(redirect);
-    expect(consola).not.toHaveBeenCalled();
-  });
-});
 
 describe("Rendimiento del equipo (Ventas → Métricas)", () => {
   it("⭐ muestra el motivo que devolvió la acción", async () => {
@@ -436,5 +419,58 @@ describe("Tabla de seguimiento", () => {
       description: ERROR_INESPERADO,
       variant: "default",
     });
+  });
+});
+
+describe("Cobros (AR, MAYOR-2)", () => {
+  it("⭐ lo cobrado que no se pudo leer da el motivo, y el aviso lo muestra", async () => {
+    sim.cobrado = { success: false, error: ERROR_INESPERADO };
+    const lectura = await cargarCobradoPorCliente();
+    expect(lectura).toEqual({ ok: false, motivo: ERROR_INESPERADO });
+    const html = renderToStaticMarkup(createElement(AvisoDeCobradoSinLeer, { motivo: ERROR_INESPERADO }));
+    expect(html).toContain("No se pudieron cargar los pagos.");
+    expect(html).toContain(ERROR_INESPERADO);
+  });
+
+  it("⭐ si la acción de lo cobrado lanza, el motivo es el texto fijo", async () => {
+    sim.cobrado = caida();
+    await expect(cargarCobradoPorCliente()).resolves.toEqual({ ok: false, motivo: ERROR_INESPERADO });
+  });
+
+  it("⭐ los pagos del cliente que no se pudieron leer dan el motivo (no \"aún no hay pagos\")", async () => {
+    sim.pagosDelCliente = { success: false, error: "Sesión no válida" };
+    await expect(cargarPagosDelCliente("c1")).resolves.toEqual({ ok: false, motivo: "Sesión no válida" });
+    sim.pagosDelCliente = caida();
+    await expect(cargarPagosDelCliente("c1")).resolves.toEqual({ ok: false, motivo: ERROR_INESPERADO });
+  });
+
+  it("⭐ subir un comprobante no rechaza: el motivo devuelto o el texto fijo", async () => {
+    const archivo = new File(["x"], "c.pdf", { type: "application/pdf" });
+    sim.prepararSubida = { success: false, error: "Cliente no encontrado" };
+    await expect(uploadPaymentReceiptFile(archivo, "c1")).resolves.toEqual({
+      ok: false,
+      error: "Cliente no encontrado",
+    });
+    sim.prepararSubida = caida();
+    await expect(uploadPaymentReceiptFile(archivo, "c1")).resolves.toEqual({
+      ok: false,
+      error: ERROR_INESPERADO,
+    });
+  });
+});
+
+describe("Estado del Calendly propio (AR, MENOR-4)", () => {
+  it("⭐ si no se pudo leer, el motivo, y la pantalla no dice \"No conectado\"", async () => {
+    sim.estadoCalendly = { success: false, error: ERROR_INESPERADO };
+    await expect(cargarEstadoDeMiCalendly()).resolves.toEqual({ ok: false, motivo: ERROR_INESPERADO });
+    const html = renderToStaticMarkup(createElement(EstadoDeCalendlySinLeer, { motivo: ERROR_INESPERADO }));
+    expect(html).toContain("No se pudo leer el estado de tu Calendly.");
+    expect(html).toContain(ERROR_INESPERADO);
+    expect(html).not.toContain("No conectado");
+  });
+
+  it("con el estado, el dato", async () => {
+    sim.estadoCalendly = { success: true, data: { connected: true } };
+    await expect(cargarEstadoDeMiCalendly()).resolves.toEqual({ ok: true, data: { connected: true } });
   });
 });

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getFrequentObjectionsAction } from "@/app/sales/actions";
 import { FrequentObjectionsPanel } from "@/components/sales/frequent-objections-panel";
 import type { FrequentObjectionsResult } from "@/types/sales";
-import { leerConMotivo } from "@/lib/sales/lectura-con-motivo";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 
 export function FrequentObjectionsSection({
   initialData,

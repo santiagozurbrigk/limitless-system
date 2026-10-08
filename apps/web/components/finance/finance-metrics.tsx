@@ -29,6 +29,7 @@ import {
 import { BentoCellPlace, BentoGrid } from "@/components/shared/bento-grid";
 import { FacturacionPeriodFilter } from "./facturacion-period-filter";
 import { paths } from "@/routes";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 
 export function FinanceMetrics() {
   const {
@@ -37,7 +38,7 @@ export function FinanceMetrics() {
     clientsLoading,
     closingCallsLoading,
   } = usePlatformData();
-  const { paymentPlatforms, expensesSummary, monthlySeries, clientPayments, financeSummary: baselineFinanceSummary } =
+  const { paymentPlatforms, expensesSummary, monthlySeries, clientPayments, clientPaymentsError, financeSummary: baselineFinanceSummary } =
     useFinanceData();
 
   const [revenueRange, setRevenueRange] =
@@ -131,6 +132,12 @@ export function FinanceMetrics() {
 
   return (
     <div className="space-y-4">
+      {clientPaymentsError ? (
+        <AvisoDeLecturaFallida
+          titulo="No se pudieron cargar los pagos: lo cobrado no está al día."
+          motivo={clientPaymentsError}
+        />
+      ) : null}
       <FacturacionPeriodFilter
         value={revenueRange}
         onChange={setRevenueRange}

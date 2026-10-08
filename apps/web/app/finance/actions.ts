@@ -7,6 +7,7 @@ import {
   getCurrentProfile,
 } from "@/lib/auth/bootstrap";
 import {
+  registrarFallaDeAccion,
   runMutation,
   type MutationResult,
 } from "@/lib/server/action-result";
@@ -23,7 +24,8 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { listOrganizationPaymentsAction } from "@/app/sales/payment-actions";
+import { leerPagosDeLaOrganizacion } from "@/lib/sales/pagos";
+import type { ClientPayment } from "@/types/clients";
 import { matchesCloser } from "@/lib/metrics/match-closer";
 import type {
   FixedExpense,
@@ -61,7 +63,7 @@ async function requireFounderRole(): Promise<void> {
  */
 function paymentPlatformTotals(
   platforms: PaymentPlatformRow[],
-  payments: Awaited<ReturnType<typeof listOrganizationPaymentsAction>>,
+  payments: ClientPayment[],
   hoy: string
 ): PaymentPlatformConfig[] {
   const byPlatform = new Map<string, { total: number; lastAt: string }>();
@@ -112,7 +114,9 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
 
     const supabase = await createClient();
 
-    const payments = await listOrganizationPaymentsAction();
+    // Si los pagos no se pueden leer, lanza `FallaDeLaBase` (SCRUM-504): antes
+    // los totales por plataforma quedaban en cero sin aviso.
+    const payments = await leerPagosDeLaOrganizacion(supabase, organizationId);
 
   const [fixedRes, subsRes, teamRes, platRes, hoy] = await Promise.all([
     supabase
@@ -163,7 +167,8 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
       ),
     };
   } catch (e) {
-    console.error("[loadFinanceConfig]", e);
+    // Se registra y va a Sentry (SCRUM-504: incluye la falla al leer los pagos).
+    registrarFallaDeAccion("[loadFinanceConfig]", e);
     return EMPTY_FINANCE_CONFIG;
   }
 }
@@ -448,7 +453,7 @@ export async function updatePaymentPlatformAction(
 
     if (error || !data) throw new Error(mapFinanceError(error?.message ?? "Error"));
     const [payments, hoy] = await Promise.all([
-      listOrganizationPaymentsAction(),
+      leerPagosDeLaOrganizacion(supabase, organizationId),
       fechaDeHoyDeLaOrganizacion(supabase, organizationId),
     ]);
     return paymentPlatformTotals([data as PaymentPlatformRow], payments, hoy)[0];

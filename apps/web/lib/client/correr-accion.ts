@@ -99,3 +99,42 @@ export async function datoDeLaMutacion<T>(
   if (!resultado.success) throw new Error(resultado.error);
   return resultado.data;
 }
+
+/**
+ * Para una lectura (o una mutación de un formulario) que tiene que mostrar su
+ * propio estado de error en vez de un aviso (SCRUM-504): devuelve el dato o el
+ * motivo, sin lanzar.
+ * - Con un error que la acción devolvió como valor, ese motivo.
+ * - Si la acción lanzó (en producción el cliente sólo recibe un digest), es
+ *   inesperado: se registra en la consola con `etiqueta` y el motivo es el
+ *   texto fijo.
+ * Un redirect o un notFound de Next se relanza para que Next navegue.
+ */
+export type Lectura<T> = { ok: true; data: T } | { ok: false; motivo: string };
+
+/**
+ * El motivo para el usuario de algo que lanzó una server action (o un flujo de
+ * varias): se registra en la consola con `etiqueta` y el motivo es el texto
+ * fijo. Un redirect o un notFound de Next se relanza. Es la mitad de
+ * `leerConMotivo` que atrapa; sirve suelta para un flujo con varios pasos.
+ */
+export function falloInesperado(etiqueta: string, error: unknown): string {
+  if (isNextRouterError(error)) throw error;
+  console.error(etiqueta, error);
+  return ERROR_INESPERADO;
+}
+
+export async function leerConMotivo<T>(
+  accion: () => Promise<MutationResult<T>>,
+  etiqueta: string
+): Promise<Lectura<T>> {
+  let resultado: MutationResult<T>;
+  try {
+    resultado = await accion();
+  } catch (error) {
+    return { ok: false, motivo: falloInesperado(etiqueta, error) };
+  }
+  return resultado.success
+    ? { ok: true, data: resultado.data }
+    : { ok: false, motivo: resultado.error };
+}

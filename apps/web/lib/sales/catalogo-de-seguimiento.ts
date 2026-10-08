@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { FallaDeLaBase, registrarFallaDeAccion } from "@/lib/server/action-result";
 import {
   BUILT_IN_CATALOG,
   buildFollowUpCatalog,
@@ -46,22 +47,44 @@ export function rowToOption(row: OptionRow): FollowUpOption {
   };
 }
 
-/** Catálogo completo: de fábrica + propios, listo para la UI y para el motor. */
-export async function leerCatalogoDeSeguimiento(
-  supabase: SupabaseClient,
-  organizationId: string
-): Promise<FollowUpCatalog> {
-  const { data, error } = await supabase
+async function consultarCatalogo(supabase: SupabaseClient, organizationId: string) {
+  return supabase
     .from("sales_follow_up_options")
     .select(OPTION_COLUMNS)
     .eq("organization_id", organizationId)
     .order("sort_order", { ascending: true });
+}
 
-  // Sin catálogo propio la pantalla sigue funcionando con los de fábrica: es
-  // preferible a dejar la tabla sin valores porque falló una query. Queda en
-  // el log.
-  if (error) console.warn("[leerCatalogoDeSeguimiento]", error.message);
-  if (error || !data) return BUILT_IN_CATALOG;
+/**
+ * Catálogo completo (de fábrica + propios) para **validar una escritura**. Si
+ * la lectura falla, lanza `FallaDeLaBase`: con el catálogo de fábrica, un
+ * valor propio válido se rechazaría como "no existe en el catálogo", que no es
+ * cierto (AR de SCRUM-504, MAYOR-1). La acción la registra y devuelve el texto
+ * fijo.
+ */
+export async function leerCatalogoParaEscribir(
+  supabase: SupabaseClient,
+  organizationId: string
+): Promise<FollowUpCatalog> {
+  const { data, error } = await consultarCatalogo(supabase, organizationId);
+  if (error) throw new FallaDeLaBase(error);
+  return buildFollowUpCatalog(((data ?? []) as OptionRow[]).map(rowToOption));
+}
 
-  return buildFollowUpCatalog((data as OptionRow[]).map(rowToOption));
+/**
+ * Catálogo completo para **mostrar**. Si la lectura falla, la pantalla sigue
+ * funcionando con los valores de fábrica, pero la falla se registra y va a
+ * Sentry con la etiqueta de la acción (`etiqueta`): no se pierde.
+ */
+export async function leerCatalogoConRespaldo(
+  supabase: SupabaseClient,
+  organizationId: string,
+  etiqueta: string
+): Promise<FollowUpCatalog> {
+  const { data, error } = await consultarCatalogo(supabase, organizationId);
+  if (error) {
+    registrarFallaDeAccion(etiqueta, new FallaDeLaBase(error));
+    return BUILT_IN_CATALOG;
+  }
+  return buildFollowUpCatalog(((data ?? []) as OptionRow[]).map(rowToOption));
 }

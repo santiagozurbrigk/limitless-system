@@ -434,15 +434,22 @@ export async function syncCloserCalendlyAction(
 }
 
 /**
- * Estado de la integración Calendly del closer actual.
+ * Estado de la integración Calendly del closer actual. Devuelve su error como
+ * valor (AR de SCRUM-504, MENOR-4): una falla de la base ya no se muestra como
+ * "No conectado".
  */
-export async function getMyCalendlyIntegrationAction() {
-  if (!isSupabaseConfigured()) return { connected: false };
+export async function getMyCalendlyIntegrationAction(): Promise<
+  MutationResult<{ connected: boolean; calendlyUserUri?: string; lastSyncAt?: string }>
+> {
+  if (!isSupabaseConfigured()) return { success: true, data: { connected: false } };
 
-  const profile = await getCurrentProfile();
-  if (!profile?.id || !profile?.organization_id) return { connected: false };
-
-  return getCloserCalendlyIntegration(profile.organization_id, profile.id);
+  return mutacionConErroresEsperables("[getMyCalendlyIntegration]", async () => {
+    const profile = await getCurrentProfile();
+    if (!profile?.id || !profile?.organization_id) {
+      throw new ErrorEsperable("Sesión no válida");
+    }
+    return getCloserCalendlyIntegration(profile.organization_id, profile.id);
+  });
 }
 
 /**

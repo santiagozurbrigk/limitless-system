@@ -18,8 +18,7 @@ import {
   type CloserMetrics,
 } from "@/app/sales/closer-actions";
 import { useToast } from "@/providers/toast-provider";
-import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
-import { leerConMotivo } from "@/lib/sales/lectura-con-motivo";
+import { correrMutacion, leerConMotivo, type Aviso } from "@/lib/client/correr-accion";
 import { RadarPerformanceChart } from "@/components/charts/platform/radar-performance-chart";
 import { brandColors } from "@/lib/brand";
 

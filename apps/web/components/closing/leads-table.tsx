@@ -57,8 +57,7 @@ import { useToast } from "@/providers/toast-provider";
 import { FollowUpOptionPicker } from "./follow-up-option-picker";
 import { LeadDetailDrawer } from "./lead-detail-drawer";
 import { ManageFollowUpOptionsDialog } from "./manage-follow-up-options-dialog";
-import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
-import { leerConMotivo } from "@/lib/sales/lectura-con-motivo";
+import { correrMutacion, leerConMotivo, type Aviso } from "@/lib/client/correr-accion";
 import type { MutationResult } from "@/lib/server/action-result";
 
 /**

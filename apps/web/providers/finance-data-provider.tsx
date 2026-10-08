@@ -28,6 +28,7 @@ import { listOrganizationPaymentsAction } from "@/app/sales/payment-actions";
 import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
 import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { getSalesMetricsSnapshotsAction } from "@/app/sales/metrics-actions";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import {
   mockFinanceSummary,
   mockMonthlySeries,
@@ -61,6 +62,8 @@ type FinanceDataContextValue = {
   ) => Promise<string | undefined>;
   removePaymentPlatform: (id: string) => Promise<string | undefined>;
   clientPayments: ClientPayment[];
+  /** Por qué no se pudieron leer los pagos, si falló (SCRUM-504). */
+  clientPaymentsError: string | null;
   financeSummary: FinanceSummary;
   /** Métricas históricas importadas (snapshot más reciente). Null si no hay datos importados.
    *  Usar como fallback cuando los datos live (conversaciones, closing calls) están en cero. */
@@ -121,10 +124,22 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   // Baseline: métricas históricas importadas por el usuario (fallback cuando no hay datos en vivo)
   const [salesBaselineMetrics, setSalesBaselineMetrics] = useState<Record<string, number> | null>(null);
 
+  // Si los pagos no se pueden leer, se avisa (SCRUM-504): antes la falla se veía
+  // como "sin pagos" en Finanzas y el Panel. Lo que ya se veía queda.
+  const [clientPaymentsError, setClientPaymentsError] = useState<string | null>(null);
+
   const refreshClientPayments = useCallback(async () => {
     if (!useSupabase) return;
-    const payments = await listOrganizationPaymentsAction();
-    setClientPayments(payments);
+    const lectura = await leerConMotivo(
+      listOrganizationPaymentsAction,
+      "[FinanceDataProvider] pagos"
+    );
+    if (lectura.ok) {
+      setClientPayments(lectura.data);
+      setClientPaymentsError(null);
+    } else {
+      setClientPaymentsError(lectura.motivo);
+    }
   }, []);
 
   const refreshFinanceConfig = useCallback(async () => {
@@ -464,6 +479,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       paymentPlatforms,
       financeConfigLoading,
       clientPayments,
+      clientPaymentsError,
       addPaymentPlatform,
       updatePaymentPlatform,
       removePaymentPlatform,
@@ -490,6 +506,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       paymentPlatforms,
       financeConfigLoading,
       clientPayments,
+      clientPaymentsError,
       addPaymentPlatform,
       updatePaymentPlatform,
       removePaymentPlatform,

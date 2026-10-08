@@ -8,7 +8,7 @@ import {
   getSalesPerformanceMetricsAction,
 } from "@/app/sales/metrics-actions";
 import type { SalesPerformanceMetrics } from "@/types/sales";
-import { leerConMotivo } from "@/lib/sales/lectura-con-motivo";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import type { DateRange } from "./date-range-picker";
 import { brandColors } from "@/lib/brand";
 

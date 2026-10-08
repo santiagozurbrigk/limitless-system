@@ -16,6 +16,7 @@ import type { ComputedCustomMetric } from "@/lib/metrics/custom-metrics";
 import { PageLoading } from "@/components/shared/page-loading";
 import { SetupChecklist } from "@/components/onboarding/setup-checklist";
 import { DashboardOverview } from "./dashboard-overview";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 
 const useSupabase = isSupabaseConfigured();
 
@@ -43,7 +44,7 @@ export function DashboardPageContent({
     closingCallsLoading,
   } = usePlatformData();
 
-  const { expensesSummary, paymentPlatforms, financeConfigLoading, clientPayments, financeSummary, salesBaselineMetrics } =
+  const { expensesSummary, paymentPlatforms, financeConfigLoading, clientPayments, clientPaymentsError, financeSummary, salesBaselineMetrics } =
     useFinanceData();
 
   const loading =
@@ -119,6 +120,12 @@ export function DashboardPageContent({
   return (
     <div className="space-y-6">
       <SetupChecklist />
+      {clientPaymentsError ? (
+        <AvisoDeLecturaFallida
+          titulo="No se pudieron cargar los pagos: lo cobrado no está al día."
+          motivo={clientPaymentsError}
+        />
+      ) : null}
       <DashboardOverview data={data} zernioAnalytics={zernioAnalytics} />
     </div>
   );

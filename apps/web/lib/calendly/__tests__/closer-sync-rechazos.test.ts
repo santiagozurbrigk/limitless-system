@@ -7,7 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * y anota el mismo `reason` que antes.
  */
 
-const sim = vi.hoisted(() => ({ errorAlBorrar: null as { message: string } | null }));
+const sim = vi.hoisted(() => ({
+  errorAlBorrar: null as { message: string } | null,
+  errorAlGuardar: null as { message: string } | null,
+  errorAlLeer: null as { message: string } | null,
+  fila: null as unknown,
+}));
 
 vi.mock("@/lib/observability/reportar-falla", () => ({ reportarFalla: vi.fn() }));
 vi.mock("@/lib/conversations/repair-links", () => ({
@@ -16,11 +21,21 @@ vi.mock("@/lib/conversations/repair-links", () => ({
 vi.mock("@/lib/utm/attribute-booking", () => ({ attributeBookingToUTM: async () => undefined }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => {
+    let op = "select";
     const builder = {
-      update: () => builder,
-      delete: () => builder,
+      select: () => builder,
+      update: () => {
+        op = "update";
+        return builder;
+      },
+      delete: () => {
+        op = "delete";
+        return builder;
+      },
       eq: () => builder,
-      then: (resolver: (r: unknown) => void) => resolver({ data: null, error: sim.errorAlBorrar }),
+      maybeSingle: async () => ({ data: sim.fila, error: sim.errorAlLeer }),
+      then: (resolver: (r: unknown) => void) =>
+        resolver({ data: null, error: op === "update" ? sim.errorAlGuardar : sim.errorAlBorrar }),
     };
     return { from: () => builder };
   },
@@ -28,6 +43,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 import {
   disconnectCloserCalendly,
+  getCloserCalendlyIntegration,
   RechazoDeCalendly,
   sincronizarEventosDelCloser,
   syncCloserCalendlyEvents,
@@ -61,6 +77,9 @@ function responder(status: number, json: unknown) {
 let consola: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   sim.errorAlBorrar = null;
+  sim.errorAlGuardar = null;
+  sim.errorAlLeer = null;
+  sim.fila = null;
   process.env.CALENDLY_CLIENT_ID = "cliente";
   process.env.CALENDLY_CLIENT_SECRET = "secreto";
   consola = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -87,7 +106,6 @@ describe("sincronizarEventosDelCloser", () => {
 
   it.each([
     [401, "conexion_vencida"],
-    [403, "conexion_vencida"],
     [429, "limite_de_consultas"],
   ])("la API de eventos con %i es un rechazo (%s)", async (status, motivo) => {
     responder(status, { message: "rechazo de Calendly" });
@@ -95,6 +113,20 @@ describe("sincronizarEventosDelCloser", () => {
     expect(error).toBeInstanceOf(RechazoDeCalendly);
     expect(error.motivo).toBe(motivo);
     expect(error.message).toBe("rechazo de Calendly");
+  });
+
+  it("⭐ la API de eventos con 403 es una falla, no \"conexión vencida\" (AR, MENOR-3)", async () => {
+    responder(403, { title: "Permission Denied", message: "You do not have permission" });
+    const error = await sincronizarEventosDelCloser(fila()).catch((e) => e);
+    expect(error).not.toBeInstanceOf(RechazoDeCalendly);
+    expect(error.status).toBe(403);
+  });
+
+  it("⭐ si no se puede guardar el token renovado es una falla de la base, no \"conexión vencida\"", async () => {
+    responder(200, { access_token: "nuevo", refresh_token: "rotado", expires_in: 7200 });
+    sim.errorAlGuardar = { message: "TypeError: fetch failed" };
+    const error = await sincronizarEventosDelCloser(fila(AYER)).catch((e) => e);
+    expect(error).toBeInstanceOf(FallaDeLaBase);
   });
 
   it("la API de eventos con 500 es una falla, con el status", async () => {
@@ -138,5 +170,25 @@ describe("disconnectCloserCalendly", () => {
 
   it("si el borrado sale bien no lanza", async () => {
     await expect(disconnectCloserCalendly("org-1", "closer-1")).resolves.toBeUndefined();
+  });
+});
+
+describe("getCloserCalendlyIntegration (AR, MENOR-4)", () => {
+  it("⭐ si la base falla lanza FallaDeLaBase, no \"No conectado\"", async () => {
+    sim.errorAlLeer = { message: "TypeError: fetch failed" };
+    await expect(getCloserCalendlyIntegration("org-1", "closer-1")).rejects.toBeInstanceOf(FallaDeLaBase);
+  });
+
+  it("sin fila, no conectado", async () => {
+    await expect(getCloserCalendlyIntegration("org-1", "closer-1")).resolves.toEqual({ connected: false });
+  });
+
+  it("con token, conectado", async () => {
+    sim.fila = { config: { access_token: "t", calendly_user_uri: "u" }, last_sync_at: null };
+    await expect(getCloserCalendlyIntegration("org-1", "closer-1")).resolves.toEqual({
+      connected: true,
+      calendlyUserUri: "u",
+      lastSyncAt: undefined,
+    });
   });
 });

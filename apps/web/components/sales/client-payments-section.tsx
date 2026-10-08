@@ -26,6 +26,7 @@ import {
 import { usePlatformData } from "@/providers";
 import { useFinanceData } from "@/providers/finance-data-provider";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 import type { Client, ClientPayment } from "@/types/clients";
 import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
 import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
@@ -71,6 +72,14 @@ function PaymentProgressBar({ paid, total }: { paid: number; total: number }) {
   );
 }
 
+/** Los pagos de un cliente, o el motivo si no se pudieron leer (SCRUM-504). */
+export function cargarPagosDelCliente(clientId: string): Promise<Lectura<ClientPayment[]>> {
+  return leerConMotivo(
+    () => listClientPaymentsAction(clientId),
+    "[ClientPaymentsSection] pagos"
+  );
+}
+
 export function ClientPaymentsSection({ client }: { client: Client }) {
   const { updateClient } = usePlatformData();
   /**
@@ -111,29 +120,47 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
 
   const showGenericButton = client.paymentType !== "installments";
 
+  // Por qué no se pudieron leer los pagos (SCRUM-504): antes la falla se veía
+  // como "Aún no hay pagos registrados".
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void listClientPaymentsAction(client.id).then((rows) => {
-      if (!cancelled) {
-        setPayments(rows);
-        setLoading(false);
+    void cargarPagosDelCliente(client.id).then((lectura) => {
+      if (cancelled) return;
+      if (lectura.ok) {
+        setPayments(lectura.data);
+        setLoadError(null);
+      } else {
+        setLoadError(lectura.motivo);
       }
+      setLoading(false);
     });
     return () => {
       cancelled = true;
     };
   }, [client.id]);
 
+  /** Relee la lista después de registrar; si falla, queda lo que se ve. */
+  function releerPagos() {
+    void cargarPagosDelCliente(client.id).then((lectura) => {
+      if (lectura.ok) setPayments(lectura.data);
+    });
+  }
+
   async function openReceipt(paymentId: string) {
     setOpeningId(paymentId);
     try {
-      const res = await getClientPaymentReceiptUrlAction(paymentId);
-      if (!res.success) {
-        push({ title: "No se pudo abrir el comprobante", description: res.error });
-        return;
-      }
-      window.open(res.data.url, "_blank", "noopener,noreferrer");
+      await correrMutacion({
+        accion: () => getClientPaymentReceiptUrlAction(paymentId),
+        avisar: push,
+        tituloError: "No se pudo abrir el comprobante",
+        etiqueta: "[ClientPaymentsSection] comprobante",
+        alExito: (data) => {
+          window.open(data.url, "_blank", "noopener,noreferrer");
+        },
+      });
     } finally {
       setOpeningId(null);
     }
@@ -170,7 +197,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
       </div>
 
       {/* Barra de progreso de cobros */}
-      {!loading && client.totalAmount > 0 ? (
+      {!loading && !loadError && client.totalAmount > 0 ? (
         <GlassPanel className="p-4">
           <PaymentProgressBar paid={paidTotal} total={client.totalAmount} />
         </GlassPanel>
@@ -179,6 +206,10 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
       <GlassPanel className="p-5 text-sm">
         {loading ? (
           <p className="text-muted-foreground">Cargando pagos…</p>
+        ) : loadError ? (
+          <p className="text-destructive" role="alert">
+            No se pudieron cargar los pagos. {loadError}
+          </p>
         ) : payments.length === 0 ? (
           <p className="text-muted-foreground">
             Aún no hay pagos registrados para este cliente.
@@ -249,7 +280,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
           clientId={client.id}
           defaultAmount={nextPending.amount}
           installmentLabel={nextPending.label}
-          onSuccess={(updatedClient, newPayments) => {
+          onSuccess={(updatedClient, newPayment) => {
             // `updateClient` lanza con el motivo (SCRUM-497): sin este catch
             // quedaba como una promesa rechazada que nadie veía.
             updateClient(updatedClient.id, {
@@ -260,7 +291,8 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
                 description: e instanceof Error ? e.message : undefined,
               });
             });
-            setPayments(newPayments);
+            setPayments((prev) => [newPayment, ...prev]);
+            releerPagos();
             void refreshClientPayments();
             push({
               title: "Cuota registrada",
@@ -304,7 +336,7 @@ function AddInstallmentPaymentDialog({
   clientId: string;
   defaultAmount: number;
   installmentLabel: string;
-  onSuccess: (client: Client, payments: ClientPayment[]) => void;
+  onSuccess: (client: Client, payment: ClientPayment) => void;
 }) {
   const [amount, setAmount] = useState(String(defaultAmount));
   const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
@@ -352,21 +384,24 @@ function AddInstallmentPaymentDialog({
         mimeType = uploaded.mimeType;
       }
 
-      const res = await addInstallmentPaymentAction({
-        clientId,
-        amount: parsedAmount,
-        paymentDate,
-        storagePath,
-        mimeType,
-      });
+      const res = await leerConMotivo(
+        () =>
+          addInstallmentPaymentAction({
+            clientId,
+            amount: parsedAmount,
+            paymentDate,
+            storagePath,
+            mimeType,
+          }),
+        "[ClientPaymentsSection] registrar cuota"
+      );
 
-      if (!res.success) {
-        setError(res.error);
+      if (!res.ok) {
+        setError(res.motivo);
         return;
       }
 
-      const refreshed = await listClientPaymentsAction(clientId);
-      onSuccess(res.data.client, refreshed);
+      onSuccess(res.data.client, res.data.payment);
       onOpenChange(false);
     });
   }
@@ -477,16 +512,20 @@ function AddGenericPaymentDialog({
         mimeType = uploaded.mimeType;
       }
 
-      const res = await recordClientPaymentAction({
-        clientId,
-        amount: parsedAmount,
-        paymentDate,
-        storagePath,
-        mimeType,
-      });
+      const res = await leerConMotivo(
+        () =>
+          recordClientPaymentAction({
+            clientId,
+            amount: parsedAmount,
+            paymentDate,
+            storagePath,
+            mimeType,
+          }),
+        "[ClientPaymentsSection] registrar pago"
+      );
 
-      if (!res.success) {
-        setError(res.error);
+      if (!res.ok) {
+        setError(res.motivo);
         return;
       }
 

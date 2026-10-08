@@ -8,7 +8,7 @@ import {
 } from "@/components/sales/team-call-ranking";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { TeamRankingEntry } from "@/types/call-analysis";
-import { leerConMotivo } from "@/lib/sales/lectura-con-motivo";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 
 export function SalesTeamPerformanceSection() {
   const [ranking, setRanking] = useState<TeamRankingEntry[]>([]);

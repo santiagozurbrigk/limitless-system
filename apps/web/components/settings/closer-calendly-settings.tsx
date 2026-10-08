@@ -11,7 +11,7 @@ import {
 } from "@/app/sales/closer-actions";
 import { useToast } from "@/providers/toast-provider";
 import { formatRelativeTime } from "@/lib/format";
-import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
+import { correrMutacion, leerConMotivo, type Aviso, type Lectura } from "@/lib/client/correr-accion";
 
 /**
  * Sincroniza el Calendly del closer actual (SCRUM-504). Un rechazo esperable
@@ -55,6 +55,25 @@ export function desconectarMiCalendly(
   });
 }
 
+/** El estado del Calendly propio, o el motivo si no se pudo leer. */
+export function cargarEstadoDeMiCalendly(): Promise<
+  Lectura<{ connected: boolean; calendlyUserUri?: string; lastSyncAt?: string }>
+> {
+  return leerConMotivo(getMyCalendlyIntegrationAction, "[CloserCalendlySettings] estado");
+}
+
+/** Lo que se ve si no se pudo leer el estado: ni "conectado" ni "No conectado". */
+export function EstadoDeCalendlySinLeer({ motivo }: { motivo: string }) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold text-foreground">Calendly personal</h3>
+      <p className="text-sm text-destructive" role="alert">
+        No se pudo leer el estado de tu Calendly. {motivo}
+      </p>
+    </div>
+  );
+}
+
 export function CloserCalendlySettings() {
   const { push } = useToast();
   const searchParams = useSearchParams();
@@ -82,11 +101,16 @@ export function CloserCalendlySettings() {
     }
   }, [searchParams, push]);
 
+  // Por qué no se pudo leer el estado (AR de SCRUM-504, MENOR-4): antes una
+  // falla se mostraba como "No conectado" y ofrecía conectar.
+  const [statusError, setStatusError] = useState<string | null>(null);
+
   useEffect(() => {
-    getMyCalendlyIntegrationAction()
-      .then(setStatus)
-      .catch(() => setStatus({ connected: false }))
-      .finally(() => setLoading(false));
+    void cargarEstadoDeMiCalendly().then((lectura) => {
+      if (lectura.ok) setStatus(lectura.data);
+      else setStatusError(lectura.motivo);
+      setLoading(false);
+    });
   }, []);
 
   function handleConnect() {
@@ -96,13 +120,10 @@ export function CloserCalendlySettings() {
   function handleSync() {
     startSync(() =>
       sincronizarMiCalendly(push, async () => {
-        // Refrescar status. La sync ya terminó bien: si esto falla, sólo queda
-        // en la consola.
-        try {
-          setStatus(await getMyCalendlyIntegrationAction());
-        } catch (err) {
-          console.error("[CloserCalendlySettings] estado", err);
-        }
+        // Refrescar status. La sync ya terminó bien: si esto falla, queda lo
+        // que se veía (y la falla, en la consola o en Sentry).
+        const lectura = await cargarEstadoDeMiCalendly();
+        if (lectura.ok) setStatus(lectura.data);
       })
     );
   }
@@ -111,6 +132,10 @@ export function CloserCalendlySettings() {
     startDisconnect(() =>
       desconectarMiCalendly(push, () => setStatus({ connected: false }))
     );
+  }
+
+  if (!loading && statusError) {
+    return <EstadoDeCalendlySinLeer motivo={statusError} />;
   }
 
   if (loading) {

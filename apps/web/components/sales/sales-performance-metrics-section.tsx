@@ -8,7 +8,7 @@ import {
 import { formatPercent } from "@/lib/format";
 import type { SalesPerformanceMetrics } from "@/types/sales";
 import { Button, cn } from "@ai-coo/ui";
-import { leerConMotivo, type Lectura } from "@/lib/sales/lectura-con-motivo";
+import { leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 
 /**
  * Lee las métricas del período. `motivo` si no se pudieron leer (lo devuelve

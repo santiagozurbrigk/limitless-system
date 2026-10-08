@@ -18,7 +18,7 @@ import type { ClientLinkedCall } from "@/types/clients";
 import { FichaSection } from "@/components/clients/ficha-section";
 import type { TeamRankingEntry } from "@/types/call-analysis";
 import { cn } from "@/lib/utils";
-import { leerConMotivo, type Lectura } from "@/lib/sales/lectura-con-motivo";
+import { leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 
 function CallAnalysisEmptyState() {
   return (

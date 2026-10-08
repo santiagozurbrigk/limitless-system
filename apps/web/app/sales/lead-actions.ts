@@ -20,7 +20,10 @@ import {
   selectableOptions,
   type FollowUpCatalog,
 } from "@/lib/sales/follow-up-options";
-import { leerCatalogoDeSeguimiento } from "@/lib/sales/catalogo-de-seguimiento";
+import {
+  leerCatalogoConRespaldo,
+  leerCatalogoParaEscribir,
+} from "@/lib/sales/catalogo-de-seguimiento";
 import {
   ErrorEsperable,
   FallaDeLaBase,
@@ -201,7 +204,7 @@ async function leerTablaDeLeads(params: LeadTableParams): Promise<LeadTableResul
   // La zona se lee una vez por pedido, no por lead: el vencimiento del próximo
   // paso se cuenta en el día de la organización (SCRUM-493).
   const [catalog, timezone] = await Promise.all([
-    leerCatalogoDeSeguimiento(supabase, organizationId),
+    leerCatalogoConRespaldo(supabase, organizationId, "[listLeadsTable] catálogo"),
     leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
   ]);
   const closing = closingActionSlugs(catalog.nextActions);
@@ -323,7 +326,7 @@ async function leerHiloDelLead(leadId: string): Promise<LeadSummary | null> {
       .eq("id", leadId)
       .eq("organization_id", organizationId)
       .maybeSingle(),
-    leerCatalogoDeSeguimiento(supabase, organizationId),
+    leerCatalogoConRespaldo(supabase, organizationId, "[getLeadThread] catálogo"),
     leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
   ]);
 
@@ -366,7 +369,7 @@ export async function setNextActionAction(params: {
     // El catálogo decide: qué valores existen y cuáles piden fecha. Antes esto era
     // una comparación contra el string `lost`, que dejaba afuera a cualquier valor
     // propio que también cierre el hilo.
-    const catalog = await leerCatalogoDeSeguimiento(await createClient(), organizationId);
+    const catalog = await leerCatalogoParaEscribir(await createClient(), organizationId);
     const wantsDate = params.nextAction
       ? needsDate(catalog.nextActions, params.nextAction)
       : false;
@@ -445,7 +448,7 @@ export async function saveCallFollowUpAction(params: {
 }): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[saveCallFollowUp]", async () => {
     const organizationId = await requireOrganizationId();
-    const catalog = await leerCatalogoDeSeguimiento(await createClient(), organizationId);
+    const catalog = await leerCatalogoParaEscribir(await createClient(), organizationId);
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
@@ -561,7 +564,7 @@ export async function setLeadQualificationAction(params: {
     const organizationId = await requireOrganizationId();
 
     if (params.qualification) {
-      const catalog = await leerCatalogoDeSeguimiento(await createClient(), organizationId);
+      const catalog = await leerCatalogoParaEscribir(await createClient(), organizationId);
       const option = findOption(
         selectableOptions(catalog.qualifications),
         params.qualification

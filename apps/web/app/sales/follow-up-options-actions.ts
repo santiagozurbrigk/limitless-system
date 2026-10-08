@@ -14,7 +14,7 @@ import {
   type FollowUpOption,
 } from "@/lib/sales/follow-up-options";
 import {
-  leerCatalogoDeSeguimiento,
+  leerCatalogoConRespaldo,
   OPTION_COLUMNS,
   rowToOption,
   type OptionRow,
@@ -48,7 +48,7 @@ export async function getFollowUpCatalogAction(): Promise<MutationResult<FollowU
   return mutacionConErroresEsperables("[getFollowUpCatalog]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
-    return leerCatalogoDeSeguimiento(supabase, organizationId);
+    return leerCatalogoConRespaldo(supabase, organizationId, "[getFollowUpCatalog]");
   });
 }
 
