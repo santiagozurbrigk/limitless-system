@@ -166,10 +166,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   // Cargar baseline de ventas una vez al montar (datos históricos importados)
   useEffect(() => {
     if (!useSupabase) return;
+    // El baseline es opcional y no tiene pantalla propia: si no se puede leer,
+    // queda registrado en la consola como antes (SCRUM-504: ahora el motivo
+    // vuelve como valor).
     getSalesMetricsSnapshotsAction()
-      .then((snapshots) => {
-        if (snapshots.length > 0) {
-          setSalesBaselineMetrics(snapshots[0].metrics);
+      .then((resultado) => {
+        if (!resultado.success) {
+          console.error("[FinanceDataProvider] baseline load", resultado.error);
+          return;
+        }
+        if (resultado.data.length > 0) {
+          setSalesBaselineMetrics(resultado.data[0].metrics);
         }
       })
       .catch((e) => console.error("[FinanceDataProvider] baseline load", e));

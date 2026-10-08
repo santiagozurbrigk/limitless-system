@@ -8,6 +8,7 @@ import {
   getSalesPerformanceMetricsAction,
 } from "@/app/sales/metrics-actions";
 import type { SalesPerformanceMetrics } from "@/types/sales";
+import { leerConMotivo } from "@/lib/sales/lectura-con-motivo";
 import type { DateRange } from "./date-range-picker";
 import { brandColors } from "@/lib/brand";
 
@@ -20,17 +21,31 @@ export function useSalesMetrics(dateRange: DateRange) {
   // ── Métricas de performance (server action) ────────────────────────────────
   const [perfMetrics, setPerfMetrics] = useState<SalesPerformanceMetrics | null>(null);
   const [perfLoading, setPerfLoading] = useState(true);
+  // Por qué no se pudieron leer las métricas del rango (SCRUM-504): la
+  // pantalla lo muestra en vez de quedarse en cero sin explicación.
+  const [perfError, setPerfError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setPerfLoading(true);
-    getSalesPerformanceMetricsAction("custom", {
-      from: dateRange.from.toISOString(),
-      to: dateRange.to.toISOString(),
-    })
-      .then((d) => { if (!cancelled) setPerfMetrics(d); })
-      .catch(() => { if (!cancelled) setPerfMetrics(null); })
-      .finally(() => { if (!cancelled) setPerfLoading(false); });
+    setPerfError(null);
+    void leerConMotivo(
+      () =>
+        getSalesPerformanceMetricsAction("custom", {
+          from: dateRange.from.toISOString(),
+          to: dateRange.to.toISOString(),
+        }),
+      "[useSalesMetrics] rendimiento"
+    ).then((lectura) => {
+      if (cancelled) return;
+      if (lectura.ok) {
+        setPerfMetrics(lectura.data);
+      } else {
+        setPerfMetrics(null);
+        setPerfError(lectura.motivo);
+      }
+      setPerfLoading(false);
+    });
     return () => { cancelled = true; };
   }, [dateRange]);
 
@@ -191,6 +206,7 @@ export function useSalesMetrics(dateRange: DateRange) {
   return {
     isLoading: salesMetricsLoading || perfLoading || financeConfigLoading,
     perfMetrics,
+    perfError,
     filteredMetrics,
     filteredConversations,
     // finanzas

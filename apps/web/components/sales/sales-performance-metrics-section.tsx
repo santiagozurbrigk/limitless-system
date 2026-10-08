@@ -8,6 +8,20 @@ import {
 import { formatPercent } from "@/lib/format";
 import type { SalesPerformanceMetrics } from "@/types/sales";
 import { Button, cn } from "@ai-coo/ui";
+import { leerConMotivo, type Lectura } from "@/lib/sales/lectura-con-motivo";
+
+/**
+ * Lee las métricas del período. `motivo` si no se pudieron leer (lo devuelve
+ * la acción; si fue inesperado, el texto fijo).
+ */
+export function cargarMetricasDeRendimiento(
+  period: SalesMetricsPeriod
+): Promise<Lectura<SalesPerformanceMetrics>> {
+  return leerConMotivo(
+    () => getSalesPerformanceMetricsAction(period),
+    "[SalesPerformanceMetricsSection]"
+  );
+}
 
 function MetricTile({
   label,
@@ -53,19 +67,16 @@ export function SalesPerformanceMetricsSection() {
     setLoading(true);
     setError(null);
 
-    void getSalesPerformanceMetricsAction(period)
-      .then((data) => {
-        if (!cancelled) setMetrics(data);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Error al cargar métricas");
-          setMetrics(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void cargarMetricasDeRendimiento(period).then((lectura) => {
+      if (cancelled) return;
+      if (lectura.ok) {
+        setMetrics(lectura.data);
+      } else {
+        setError(lectura.motivo);
+        setMetrics(null);
+      }
+      setLoading(false);
+    });
 
     return () => {
       cancelled = true;

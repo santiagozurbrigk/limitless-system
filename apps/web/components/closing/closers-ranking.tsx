@@ -18,6 +18,7 @@ import {
   type CloserMetrics,
 } from "@/app/sales/closer-actions";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
 import { RadarPerformanceChart } from "@/components/charts/platform/radar-performance-chart";
 import { brandColors } from "@/lib/brand";
 
@@ -176,6 +177,33 @@ const PERIOD_OPTIONS = [
   { label: "Últimos 90 días", value: 90 },
 ] as const;
 
+
+/**
+ * Sincroniza el Calendly de un closer (SCRUM-504). Un rechazo esperable (sin
+ * integración, conexión vencida, Calendly que limita las consultas) se avisa
+ * con su motivo; si la acción lanza, con el texto fijo. Con éxito avisa los
+ * números y llama a `alSincronizar`.
+ */
+export function sincronizarCalendlyDelCloser(
+  closerId: string,
+  avisar: (aviso: Aviso) => void,
+  alSincronizar: () => void
+): Promise<void> {
+  return correrMutacion({
+    accion: () => syncCloserCalendlyAction(closerId),
+    avisar,
+    tituloError: "Error en sync",
+    etiqueta: "[ClosersRanking] sincronizar",
+    alExito: (result) => {
+      avisar({
+        title: `Sync: ${result.inserted} nuevas, ${result.updated} actualizadas`,
+        variant: "success",
+      });
+      alSincronizar();
+    },
+  });
+}
+
 export function ClosersRanking() {
   const { push } = useToast();
   const [metrics, setMetrics] = useState<CloserMetrics[]>([]);
@@ -204,16 +232,7 @@ export function ClosersRanking() {
     setSyncingId(closerId);
     startTransition(async () => {
       try {
-        const result = await syncCloserCalendlyAction(closerId);
-        push({
-          title: `Sync: ${result.inserted} nuevas, ${result.updated} actualizadas`,
-          variant: "success",
-        });
-        loadMetrics(period);
-      } catch (err) {
-        push({
-          title: err instanceof Error ? err.message : "Error en sync",
-        });
+        await sincronizarCalendlyDelCloser(closerId, push, () => loadMetrics(period));
       } finally {
         setSyncingId(null);
       }

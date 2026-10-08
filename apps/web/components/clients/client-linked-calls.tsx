@@ -18,6 +18,7 @@ import type { ClientLinkedCall } from "@/types/clients";
 import { FichaSection } from "@/components/clients/ficha-section";
 import type { TeamRankingEntry } from "@/types/call-analysis";
 import { cn } from "@/lib/utils";
+import { leerConMotivo, type Lectura } from "@/lib/sales/lectura-con-motivo";
 
 function CallAnalysisEmptyState() {
   return (
@@ -29,6 +30,80 @@ function CallAnalysisEmptyState() {
       </p>
     </div>
   );
+}
+
+/**
+ * El contenido del panel según el estado de la carga. `motivo`: por qué no se
+ * pudo leer (lo devuelve la acción; si fue inesperado, el texto fijo).
+ */
+export function EvolucionDelCloser({
+  loading,
+  motivo,
+  closerName,
+  scores,
+  teamAverage,
+  ranking,
+}: {
+  loading: boolean;
+  motivo: string | null;
+  closerName: string;
+  scores: number[];
+  teamAverage: number[];
+  ranking: TeamRankingEntry[];
+}) {
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Cargando evolución…</p>;
+  }
+  if (motivo) {
+    return (
+      <p className="text-sm text-destructive">
+        No pudimos cargar la evolución. {motivo}
+      </p>
+    );
+  }
+  if (scores.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Todavía no hay análisis de calls para este closer.
+      </p>
+    );
+  }
+  return (
+    <>
+      <CloserEvolutionChart
+        closerName={closerName}
+        scores={scores}
+        teamAverage={teamAverage}
+      />
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium text-muted-foreground">
+          Ranking del equipo
+        </h3>
+        <TeamCallRanking entries={ranking} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * Las tres lecturas del panel de evolución. Si una falla, el motivo de la
+ * primera que falló (lo devuelve la acción; si fue inesperado, el texto fijo).
+ */
+export async function cargarEvolucionDelCloser(closerName: string): Promise<
+  Lectura<{ scores: number[]; teamAverage: number[]; ranking: TeamRankingEntry[] }>
+> {
+  const [evolution, avg, team] = await Promise.all([
+    leerConMotivo(() => getCloserEvolutionAction(closerName), "[CloserEvolutionSheet] evolución"),
+    leerConMotivo(getTeamAverageEvolutionAction, "[CloserEvolutionSheet] promedio"),
+    leerConMotivo(getTeamRankingAction, "[CloserEvolutionSheet] ranking"),
+  ]);
+  if (!evolution.ok) return evolution;
+  if (!avg.ok) return avg;
+  if (!team.ok) return team;
+  return {
+    ok: true,
+    data: { scores: evolution.data, teamAverage: avg.data, ranking: team.data },
+  };
 }
 
 function CloserEvolutionSheet({
@@ -45,33 +120,26 @@ function CloserEvolutionSheet({
   const [ranking, setRanking] = useState<TeamRankingEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
 
     let cancelled = false;
     setLoading(true);
-    setLoadError(false);
+    setLoadError(null);
 
-    Promise.all([
-      getCloserEvolutionAction(closerName),
-      getTeamAverageEvolutionAction(),
-      getTeamRankingAction(),
-    ])
-      .then(([evolution, avg, team]) => {
-        if (cancelled) return;
-        setScores(evolution);
-        setTeamAverage(avg);
-        setRanking(team);
-      })
-      .catch((error) => {
-        console.error("[CloserEvolutionSheet]", error);
-        if (!cancelled) setLoadError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void cargarEvolucionDelCloser(closerName).then((lectura) => {
+      if (cancelled) return;
+      if (lectura.ok) {
+        setScores(lectura.data.scores);
+        setTeamAverage(lectura.data.teamAverage);
+        setRanking(lectura.data.ranking);
+      } else {
+        setLoadError(lectura.motivo);
+      }
+      setLoading(false);
+    });
 
     return () => {
       cancelled = true;
@@ -112,31 +180,14 @@ function CloserEvolutionSheet({
         </div>
 
         <div className="flex-1 space-y-8 overflow-y-auto">
-          {loading ? (
-            <p className="text-sm text-muted-foreground">Cargando evolución…</p>
-          ) : loadError ? (
-            <p className="text-sm text-destructive">
-              No pudimos cargar la evolución. Intentá de nuevo.
-            </p>
-          ) : scores.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Todavía no hay análisis de calls para este closer.
-            </p>
-          ) : (
-            <>
-              <CloserEvolutionChart
-                closerName={closerName}
-                scores={scores}
-                teamAverage={teamAverage}
-              />
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Ranking del equipo
-                </h3>
-                <TeamCallRanking entries={ranking} />
-              </div>
-            </>
-          )}
+          <EvolucionDelCloser
+            loading={loading}
+            motivo={loadError}
+            closerName={closerName}
+            scores={scores}
+            teamAverage={teamAverage}
+            ranking={ranking}
+          />
         </div>
       </aside>
     </>

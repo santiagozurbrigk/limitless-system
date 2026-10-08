@@ -6,11 +6,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import {
-  syncCloserCalendlyEvents,
+  sincronizarEventosDelCloser,
   getCloserCalendlyIntegration,
   disconnectCloserCalendly,
+  RechazoDeCalendly,
   type CloserSyncResult,
 } from "@/lib/calendly/closer-sync";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -269,24 +276,83 @@ export async function getCloserMetricsAction(
   });
 }
 
+/*
+ * SCRUM-504: las mutaciones de closers devuelven sus errores esperables como
+ * valor (`MutationResult`): en producción Next no le manda al cliente el
+ * mensaje de un error lanzado por una server action. Sólo un `ErrorEsperable`
+ * vuelve con su mensaje (sesión, validación, closer o integración que no
+ * existe, Calendly que rechaza la conexión); el resto se registra, va a Sentry
+ * (tag `server_action`) y vuelve con el texto fijo de la interfaz.
+ */
+
+/** Código de Postgres de `insufficient_privilege` (el trigger `protect_profile_columns`). */
+const SIN_PRIVILEGIO = "42501";
+
 /**
  * Actualiza el % de comisión de un closer (solo admins/owners).
+ *
+ * El permiso lo pone la base: la policy de UPDATE de `profiles` (otro perfil
+ * de la org, sólo founder/admin) y el trigger `protect_profile_columns` (el
+ * propio perfil). Acá sólo se traduce el rechazo.
  */
 export async function updateCloserCommissionAction(
   closerId: string,
   commissionPct: number
-): Promise<void> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[updateCloserCommission]", async () => {
+    // Mismo rango que el CHECK de `profiles.commission_pct`.
+    if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > 100) {
+      throw new ErrorEsperable("La comisión tiene que ser un porcentaje entre 0 y 100.");
+    }
 
-  // Verificar que el profile pertenece a la org
-  const { error } = await supabase
-    .from("profiles")
-    .update({ commission_pct: commissionPct })
-    .eq("id", closerId)
-    .eq("organization_id", organizationId);
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  if (error) throw new Error(error.message);
+    // Verificar que el profile pertenece a la org
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ commission_pct: commissionPct })
+      .eq("id", closerId)
+      .eq("organization_id", organizationId)
+      .select("id");
+
+    if (error) {
+      if (error.code === SIN_PRIVILEGIO) {
+        throw new ErrorEsperable("Sólo un founder o un admin puede cambiar la comisión.");
+      }
+      throw new FallaDeLaBase(error);
+    }
+    // Un id de otra org o inexistente, o la policy de UPDATE que no deja tocar
+    // otro perfil: no se actualizó ninguna fila.
+    if (!data?.length) {
+      throw new ErrorEsperable(
+        "No se encontró el closer en tu organización o no tenés permiso para cambiar su comisión."
+      );
+    }
+  });
+}
+
+const SIN_INTEGRACION_CALENDLY = "No se encontró integración Calendly para este closer";
+
+/**
+ * El motivo para el usuario cuando Calendly rechaza la sync. `propio`: el
+ * closer sincroniza su propio Calendly (desde Configuración); si no, alguien
+ * sincroniza el de otro closer (ranking de closers).
+ */
+function motivoDelRechazoDeCalendly(
+  motivo: RechazoDeCalendly["motivo"] | "sin_usuario",
+  propio: boolean
+): string {
+  if (motivo === "limite_de_consultas") {
+    return "Calendly está limitando las consultas. Probá de nuevo en unos minutos.";
+  }
+  const problema =
+    motivo === "conexion_vencida"
+      ? "venció o fue revocada"
+      : "quedó incompleta (falta el usuario de Calendly)";
+  return propio
+    ? `Tu conexión con Calendly ${problema}. Desconectala y volvé a conectarla para sincronizar.`
+    : `La conexión con Calendly de este closer ${problema}. El closer tiene que volver a conectarla desde su configuración.`;
 }
 
 /**
@@ -294,30 +360,55 @@ export async function updateCloserCommissionAction(
  */
 export async function syncCloserCalendlyAction(
   closerId?: string
-): Promise<CloserSyncResult> {
-  const organizationId = await requireOrganizationId();
+): Promise<MutationResult<CloserSyncResult>> {
+  return mutacionConErroresEsperables("[syncCloserCalendly]", async () => {
+    const organizationId = await requireOrganizationId();
+    const propio = closerId === undefined;
 
-  const targetId = closerId ?? (await getCurrentProfile())?.id;
-  if (!targetId) throw new Error("No se pudo determinar el closer");
+    const targetId = closerId ?? (await getCurrentProfile())?.id;
+    if (!targetId) throw new ErrorEsperable("No se pudo determinar el closer");
 
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("team_member_integrations")
-    .select("user_id, organization_id, config, last_sync_at")
-    .eq("organization_id", organizationId)
-    .eq("user_id", targetId)
-    .eq("integration_type", "calendly")
-    .maybeSingle();
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("team_member_integrations")
+      .select("user_id, organization_id, config, last_sync_at")
+      .eq("organization_id", organizationId)
+      .eq("user_id", targetId)
+      .eq("integration_type", "calendly")
+      .maybeSingle();
 
-  if (error || !data) {
-    throw new Error("No se encontró integración Calendly para este closer");
-  }
+    if (error) throw new FallaDeLaBase(error);
 
-  return syncCloserCalendlyEvents({
-    user_id: data.user_id,
-    organization_id: data.organization_id,
-    config: data.config as Parameters<typeof syncCloserCalendlyEvents>[0]["config"],
-    last_sync_at: data.last_sync_at,
+    const config = data?.config as
+      | Parameters<typeof sincronizarEventosDelCloser>[0]["config"]
+      | null
+      | undefined;
+    // Sin fila o sin token es lo mismo que la pantalla muestra como "No conectado".
+    if (!data || !config?.access_token) {
+      throw new ErrorEsperable(SIN_INTEGRACION_CALENDLY);
+    }
+
+    let result: CloserSyncResult;
+    try {
+      result = await sincronizarEventosDelCloser({
+        user_id: data.user_id,
+        organization_id: data.organization_id,
+        config,
+        last_sync_at: data.last_sync_at,
+      });
+    } catch (err) {
+      if (err instanceof RechazoDeCalendly) {
+        // Esperable: se avisa con el motivo; el detalle de Calendly queda en el log.
+        console.warn("[syncCloserCalendly] Calendly rechazó la sync:", err.motivo, err.message);
+        throw new ErrorEsperable(motivoDelRechazoDeCalendly(err.motivo, propio));
+      }
+      throw err;
+    }
+
+    if (result.skipped && result.reason === "no_user_uri") {
+      throw new ErrorEsperable(motivoDelRechazoDeCalendly("sin_usuario", propio));
+    }
+    return result;
   });
 }
 
@@ -336,12 +427,14 @@ export async function getMyCalendlyIntegrationAction() {
 /**
  * Desconectar Calendly del closer actual.
  */
-export async function disconnectMyCalendlyAction(): Promise<void> {
-  const profile = await getCurrentProfile();
-  if (!profile?.id || !profile?.organization_id) {
-    throw new Error("Sesión no válida");
-  }
-  await disconnectCloserCalendly(profile.organization_id, profile.id);
+export async function disconnectMyCalendlyAction(): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[disconnectMyCalendly]", async () => {
+    const profile = await getCurrentProfile();
+    if (!profile?.id || !profile?.organization_id) {
+      throw new ErrorEsperable("Sesión no válida");
+    }
+    await disconnectCloserCalendly(profile.organization_id, profile.id);
+  });
 }
 
 /**
