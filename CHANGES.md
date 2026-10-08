@@ -34,6 +34,132 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 ---
 
+### 2026-10-08 · Cuarta revisión de SCRUM-503: tests que ven el cierre del modal, las deps del provider y el número de la confirmación
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `ad7fbce7` (tests, `duracion.ts` y `mapper.ts`), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero. Tests de `providers/` y `components/workboard/`; `lib/workboard/duracion.ts`, `lib/workboard/mapper.ts`
+
+**Qué se hizo** (4 MENOR de la revisión adversarial de SCRUM-503, pasada 4):
+- **MENOR-1:** test sin DOM del modal de tiempo (`modal-de-tiempo-cierre.test.ts`): hooks que guardan el estado y un Dialog y botones mockeados que guardan sus handlers. Mientras guarda ("Registrando…" o "Completando…"), `onOpenChange(false)` (Escape, overlay, X) no llama a `onCancel` y Cancelar está deshabilitado; después, sí cancela.
+- **MENOR-2:** en el test del provider con estado, `useCallback` y `useMemo` memorizan por deps (`Object.is`) y el `push` del toast es estable, como en la app: un callback con deps incompletas queda con su closure viejo y el test lo ve. Caso nuevo desde el detalle: `updateTask` con `status: "done"`, el update rechaza, el reintento completa y el tiempo queda registrado una sola vez.
+- **MENOR-3:** el test de cancelar y volver a completar verifica que el completado de la segunda apertura cierra la confirmación, y `intentarCompletar` se prueba con una tercera apertura.
+- **MENOR-4:** `formatearDuracion` dice "1 minuto" (antes "1 minutos"); test de 0, 1, 45, 60, 90 y 120.
+- Se sacaron dos imports de tipos sin usar de `lib/workboard/mapper.ts`, los únicos avisos de lint que quedaban en el Tablero.
+- Control negativo con los mutantes del informe (`control-negativo-ar-pasada-4.txt`): cada uno hace fallar al menos un test. Docs: `docs/operacion/testing.md` (211 archivos, ~2.175 casos, 2.576 ejecutados).
+
+**Por qué / finalidad:** la revisión aprobó con 4 MENOR, todos de tests salvo una línea; no queda deuda dentro del alcance.
+
+**Decisiones de diseño relevantes:** los tests sin DOM reemplazan los hooks por unos que se comportan como los de React en lo que importa (estado entre renders, memorizar por deps); no se agregó jsdom ni testing-library al proyecto.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Sigue pendiente aplicar la migración `20261008120000` en producción antes del merge.
+
+---
+
+### 2026-10-08 · Tercera revisión de SCRUM-503: confirmaciones que no se cruzan y textos del modal de tiempo
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `483b7e3d` (provider, modal de tiempo y tests), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero. `providers/workboard-provider.tsx`, `components/workboard/log-time-modal.tsx`, `lib/workboard/duracion.ts` (nuevo)
+
+**Qué se hizo** (3 MENOR y 2 observaciones de la revisión adversarial de SCRUM-503, pasada 3):
+- **MENOR-1:** cada apertura de la confirmación de "completar con tiempo" lleva un número, y los eventos `tiempoRegistrado` y `completada` traen el número y la tarea de la suya; el reducer ignora los que no son de la abierta. Antes la respuesta tardía de la tarea A (cerrando el modal a mitad de pedido y abriendo B) marcaba el tiempo de A en la confirmación de B, que se completaba sin registrar el suyo; y si A se completaba, cerraba la confirmación de B. Además el modal no se puede cerrar (Escape, overlay, X, Cancelar) mientras guarda (`sePuedeCerrar`).
+- **MENOR-2:** el aviso del modal dice "Tiempo ya registrado: 1 hora. Confirmá para completar la tarea; no se vuelve a cargar.", que no depende de la unidad (antes "Ya quedaron registrados 1 hora"), y con el tiempo ya registrado el botón dice "Completar tarea" / "Completando…".
+- **MENOR-3:** `finalizeComplete` usa `intentarCompletar`, una función pura exportada que corre el intento con lo que sabe la confirmación y devuelve el evento a despachar. Un test nuevo prueba el provider con estado de verdad (hooks mínimos que guardan el estado, sin DOM): el reintento no registra dos veces, cancelar avisa y olvida el tiempo, y el completado siguiente registra sus minutos. Otro prueba que el shell le pasa los minutos al modal. Los cuatro mutantes del informe que antes pasaban la suite ahora hacen fallar al menos un test cada uno (`control-negativo-ar-pasada-3.txt`).
+- **Observaciones:** el JSDoc de `completarConTiempo` vuelve a su lugar; cancelar con el tiempo ya registrado avisa con un toast "La tarea no se completó, pero el tiempo quedó registrado" para que no se vuelva a cargar (`avisoAlCancelar`). La duración se formatea en `lib/workboard/duracion.ts`, que comparten el modal y el aviso.
+- Docs: `docs/operacion/testing.md` (209 archivos, ~2.171 casos, 2.566 ejecutados).
+
+**Por qué / finalidad:** la revisión aprobó con 3 MENOR y no queda deuda dentro del alcance.
+
+**Decisiones de diseño relevantes:**
+- Un número por apertura y no sólo el id de la tarea: también distingue una apertura anterior de la misma tarea (cancelar y volver a abrir).
+- Se hicieron las dos protecciones del MENOR-1: el modal que no se cierra a mitad de pedido evita además que la tarjeta vuelva a su columna cuando la base ya la tiene hecha.
+- Los textos de la interfaz siguen en voseo.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Sigue pendiente aplicar la migración `20261008120000` en producción antes del merge.
+
+---
+
+### 2026-10-08 · Segunda revisión de SCRUM-503: el tiempo registrado no sobrevive a la confirmación
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `ea2a2c5a` (provider, modal de tiempo y tests), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero. `providers/workboard-provider.tsx`, `components/workboard/{log-time-modal,workboard-shell}.tsx`
+
+**Qué se hizo** (MAYOR-1 de la revisión adversarial de SCRUM-503, pasada 2):
+- El recuerdo del tiempo ya registrado (fix-pack de M3) vivía en un `useRef` por tarea toda la sesión: después de cancelar, un completado posterior de la misma tarea se salteaba el registro y el modal decía "listo" sin guardar los minutos nuevos; y si se cambiaban los minutos y se reintentaba, se ignoraban sin aviso. Ahora la confirmación de "completar con tiempo" es un reducer (`confirmacionDeCompletado`) con la tarea, el patch, el estado anterior y los minutos registrados: abrir una confirmación nueva (aunque sea de la misma tarea), cancelar o completar olvidan el tiempo.
+- Mientras el tiempo ya quedó registrado en la confirmación abierta, el modal dice "Ya quedaron registrados N. Confirmá para completar la tarea; el tiempo no se vuelve a cargar." y deshabilita los minutos y la nota; confirmar sólo completa (`minutosAConfirmar`).
+- Tests: el reducer (cancelar olvida, una confirmación nueva empieza sin tiempo, el escenario de cancelar y volver a completar con otros minutos que ahora sí se registran) y el modal dibujado con y sin tiempo registrado. Control negativo por mutante en `control-negativo-ar-pasada-2.txt`.
+- `verificacion-manual.md` suma § Tablero: errores como valor y crear sprint atómico, con la prueba de humo de crear un sprint en producción (la primera vez que `.rpc("crear_sprint").single()` corre contra PostgREST real).
+- Docs: `docs/operacion/testing.md` (207 archivos, ~2.155 casos, 2.548 ejecutados).
+
+**Por qué / finalidad:** el arreglo de M3 cambiaba el riesgo de duplicar tiempo por el de perderlo sin aviso.
+
+**Decisiones de diseño relevantes:**
+- El tiempo registrado queda atado a la confirmación y no a la tarea: es lo único que garantiza que un intento nuevo registre sus minutos. Para que ningún camino se olvide de limpiarlo, abrir y cerrar la confirmación son eventos del mismo reducer que guarda el tiempo.
+- El texto del modal va en voseo, como el resto de la interfaz.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Sigue pendiente aplicar la migración `20261008120000` en producción antes del merge.
+
+---
+
+### 2026-10-08 · Fix-pack de la AR de SCRUM-503: crear sprint atómico, sin doble registro de tiempo y lint de todo web
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `b55515e0` (pantallas, provider y lint), `91c3e1ad` (migración `crear_sprint` y acción), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero; base de datos. `supabase/migrations/20261008120000_crear_sprint_atomico.sql`, `supabase/ci/tests/95_crear_sprint.sql`, `app/workboard/actions.ts`, `providers/workboard-provider.tsx`, `components/workboard/{workboard-task-detail-dialog,log-time-modal,workboard-shell}.tsx`, `next.config.ts`
+
+**Qué se hizo** (los 5 MENOR de la revisión adversarial de SCRUM-503, pasada 1):
+- **M1:** las tres protecciones de pantalla pasan a funciones puras con tests y control negativo: `cambiarConReversion` (el selector de sprint o lanzamiento del detalle vuelve a lo que había si la acción rechaza), `confirmarTiempo` (el modal de tiempo no muestra "listo" si no se guardó) y `altaDeTarea` (si la acción rechaza, el formulario queda abierto y no se aplican recursos).
+- **M2:** el test del provider pasa los hijos como tercer argumento de `createElement` (`react/no-children-prop`). `next lint` revisa además `providers`, `hooks`, `layouts`, `constants`, `mocks`, `routes`, `types`, `scripts`, `workspaces` y `e2e` (`eslint.dirs`); se arreglaron los dos avisos del provider del Tablero. Quedan 13 avisos de `react-hooks/exhaustive-deps` en `providers/finance-data-provider.tsx`, que ya estaban y no son del Tablero.
+- **M3:** completar una tarea con tiempo (`completarConTiempo`) recuerda que el tiempo ya se registró si el completado rechazó: el reintento sólo completa y el aviso dice "Se registró el tiempo, pero no se pudo completar la tarea". `performMove` y `moveTask` devuelven si salió, así el modal no se cierra cuando falla el movimiento del Kanban.
+- **M4:** migración `20261008120000_crear_sprint_atomico`: normaliza las organizaciones con más de un sprint activo (deja activo el que la app mostraba, el de `start_date` más reciente), índice único parcial `sprints_un_activo_por_org` y la función `crear_sprint` (SECURITY INVOKER: la RLS de `sprints` sigue decidiendo; lock por organización para dos altas a la vez), que completa el activo e inserta el nuevo en una transacción. `createSprintAction` la llama por RPC; si no existe (`PGRST202`) es una falla de despliegue que va a Sentry. `updateSprintAction` devuelve "Ya hay un sprint activo. Completalo antes de activar otro." si choca con el índice. Test de CI `95_crear_sprint.sql`. SQL de producción en `limitless-auditoria/sql-produccion/scrum-503/` (precheck, migración en transacción idéntica al repo, verificación con `todo_ok` y prueba local con dos altas a la vez).
+- **M5:** el comentario del mock de la relectura apunta al test que existe, y hay un caso para la relectura de una tarea sin la columna `sop_id`.
+- Docs: `docs/arquitectura/base-de-datos.md`, `docs/areas/operaciones.md`, `docs/operacion/testing.md` (206 archivos, ~2.146 casos, 2.539 ejecutados; 11 archivos de tests de RLS; carpetas del lint), `PENDIENTES.md`.
+
+**Por qué / finalidad:** la revisión aprobó con 5 MENOR y no queda deuda dentro del alcance. M3 y M4 venían de antes: un reintento sumaba el tiempo dos veces, y un alta de sprint que fallaba a la mitad dejaba la organización sin sprint activo (o dos activos con dos pestañas).
+
+**Decisiones de diseño relevantes:**
+- `crear_sprint` es SECURITY INVOKER y recibe la organización: la acción ya la resuelve con `requireOrganizationId` (incluido el negocio activo de un holding) y la RLS impide escribir en otra. Un DEFINER habría tenido que repetir esa lógica.
+- La migración normaliza los duplicados en vez de fallar: deja activo el mismo sprint que la app ya mostraba, sin borrar nada. El precheck dice cuántos hay y trae la consulta para revisarlos antes.
+- Para M3 se eligió recordar el registro en vez de completar primero: completar antes de registrar dejaba una tarea cerrada sin su tiempo si el registro fallaba, y el modal quedaba con la tarea ya hecha.
+
+**Riesgos / deuda técnica pendiente:** la migración **va antes del merge y del deploy**: con el código nuevo sin la función, "Nuevo sprint" muestra el texto fijo y la falla va a Sentry; el código viejo funciona igual con la migración aplicada. Los 13 avisos de `finance-data-provider.tsx` quedan visibles en `next lint` (decisión de la coordinación si entran en Finanzas).
+
+---
+
+### 2026-10-08 · Los errores esperables del Tablero vuelven como valor (SCRUM-503)
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `261d1120` (acciones, llamadores y tests), `d2c65573` y su reversión `2fa73f71` (`force-dynamic` en `/workboard`, ya no hace falta), `7e9ed651` (`unstable_rethrow` en el módulo común), `96db6e69` (vínculos de tareas, cierre del sprint activo y alta sin fallas calladas), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero, y el módulo común de errores de las server actions. `app/workboard/{actions,task-link-actions}.ts`, `lib/workboard/tarea-con-vinculos.ts` (nuevo), `lib/server/action-result.ts`, `app/(platform)/workboard/page.tsx`, `providers/workboard-provider.tsx`, `components/workboard/{create-sprint-modal,log-time-modal,workboard-shell,workboard-task-detail-dialog,workboard-task-resources,workboard-time-report}.tsx`
+
+**Qué se hizo** (parte de `[ACTIONS-ERRORES-EN-PRODUCCION]`, historia SCRUM-496):
+- Las 16 funciones de `app/workboard/actions.ts` que lanzaban (33 throws) y `loadWorkboardPageDataAction`, que las junta, devuelven `MutationResult` y corren dentro de `mutacionConErroresEsperables`. Vuelven con su motivo: validación (zod), "Sesión no válida", "Sin permisos para configurar sueldos", tarea inexistente o de otra organización (`PGRST116` de `.single()` y la lectura de `logTaskTimeAction`: "No se encontró la tarea. Puede que la hayan eliminado."), responsable, sprint, lanzamiento o SOP que ya no existe (`23503`) y la tabla que falta. Lo demás es una `FallaDeLaBase` o una excepción: consola, Sentry con el tag `server_action` y el texto fijo.
+- Las 9 acciones de `app/workboard/task-link-actions.ts` (preparar y finalizar un adjunto, borrarlo, su URL, SOP, vincular y desvincular documentos, opciones de vínculos y la tarea por id) pasan de `runMutation` al mismo contrato. No estaban en el conteo de throws, pero devolvían crudo el mensaje de la base o de Storage. `getWorkboardTaskByIdAction` lanzaba sin sesión y devolvía `null` ante cualquier otro error; `listWorkboardLinkOptionsAction` lanzaba sin sesión e ignoraba los errores de la base. Una ruta de Storage de otra organización en `finalizeTaskAttachmentAction` es inesperada (manipulación): va a Sentry.
+- `loadTaskLinksBundle`, la relectura de una tarea con sus vínculos (`leerTareaConVinculos`, antes `fetchTaskRow`) y `deleteTaskAttachmentsForTask` pasan a `lib/workboard/tarea-con-vinculos.ts`: exportadas desde un archivo `"use server"` eran server actions que aceptaban cualquier `organizationId` (la RLS cortaba las filas ajenas).
+- Las lecturas internas de `actions.ts` (miembros, tareas, sprints, sprint activo) pasan a funciones privadas que lanzan `FallaDeLaBase`; las acciones exportadas las envuelven.
+- `createSprintAction` no crea el sprint si no pudo cerrar el activo anterior (antes la falla se ignoraba y quedaban dos activos). `updateSprintCompletionAction` ya no devuelve éxito si la base falla; el recálculo como efecto de mover, editar o asignar sigue ignorando la falla, como antes.
+- Módulo común: `mutacionConErroresEsperables` y `runMutation` empiezan su `catch` con `unstable_rethrow`. Un redirect, un notFound o el error con que el prerender de `next build` marca una ruta como dinámica siguen su camino y no se registran ni van a Sentry. Antes ese error se registraba en cada build (`[getTeamMembers]` desde `/sales/closing`, y `[loadWorkboardPageData]` con esta rama) y un redirect dentro de `runMutation` volvía como `{ success: false, error: "NEXT_REDIRECT" }`. El chequeo estático de `app/__tests__/errores-de-next-se-relanzan.test.ts` suma `lib/server/action-result.ts`.
+- `/workboard` muestra "No se pudo cargar el tablero" con el motivo si la carga falla. El `force-dynamic` que se había agregado (`d2c65573`) se revirtió: con `unstable_rethrow` la ruta se marca dinámica sola y el build no registra nada.
+- `WorkboardProvider` corre todas las acciones con `correrEnElTablero` (sobre `correrMutacion`): el motivo sale en un toast, si la acción lanza el texto fijo y la consola, y la función le dice a la pantalla si salió. El alta deja el formulario abierto, el detalle no se cierra, el modal de tiempo no muestra "listo" (`onConfirm` puede devolver `false`), el Kanban deshace el movimiento y los selectores de sprint y lanzamiento vuelven a lo que había. El cambio de lanzamiento del detalle pasa al provider (`assignTaskToLaunch`). Crear sprint (`crearSprint`) avisa con un toast y el reporte de tiempo (`leerReporteDeTiempo`) muestra el motivo en su estado de error. Los recursos de una tarea (`workboard-task-resources.tsx`) usan `correrMutacion`; `uploadTaskAttachmentFile` y `applyDraftTaskResources` devuelven el texto fijo si algo lanza (también la subida a Storage), y la recarga después del alta avisa si falla.
+- Tests: 55 casos declarados de las acciones del Tablero y 30 de los vínculos, con un Supabase simulado que aplica los filtros (rechazo esperable con el mensaje exacto, éxito, filtro por organización, falla de la red lanzada y devuelta por supabase-js para cada acción), 15 del provider, 11 de los componentes, 3 de la página, 3 más del módulo común y uno más del chequeo estático.
+- Docs: `docs/areas/operaciones.md`, `docs/arquitectura/jobs-webhooks-y-colas.md`, `docs/operacion/alertas.md`, `docs/operacion/testing.md` (205 archivos, ~2.131 casos, 2.524 ejecutados), `PENDIENTES.md` (avance y reconteo: quedan 78 funciones, 139 throws, 25 archivos).
+
+**Por qué / finalidad:** en producción Next no le manda al cliente el mensaje de un error lanzado por una server action. Quien movía una tarea que ya no existía o creaba un sprint sin nombre veía un párrafo técnico en inglés (y en el Kanban, nada: la promesa rechazada no se atendía), una lectura que fallaba dejaba `/workboard` en la pantalla de error de Next y un error de Storage al adjuntar llegaba crudo.
+
+**Decisiones de diseño relevantes:**
+- El provider es el único lugar que avisa: los componentes sólo reaccionan al resultado (dejar abierto, deshacer). Así no hay toasts dobles y ningún `void` deja una promesa sin atender.
+- Las lecturas devuelven valor y la página muestra el motivo, en vez de lanzar hacia un boundary: la plataforma no tiene `error.tsx` (lo suma SCRUM-108).
+- `createSprintAction` aborta en vez de avisar y seguir: crear el nuevo con el anterior todavía activo deja dos sprints activos, y el tablero toma el primero.
+- `unstable_rethrow` va en el servidor (`lib/server/action-result.ts`). `correrAccion` y `datoDeLaMutacion` (`lib/client/correr-accion.ts`) corren en el navegador, donde el error de ruta dinámica no existe; ya tratan el redirect y el notFound con `isNextRouterError`, así que no cambian.
+- "Tarea no encontrada" de `logTaskTimeAction` y de los vínculos pasa al mismo texto que el resto de las acciones del tablero; en producción nunca había llegado a la pantalla.
+- Un `update` sin `.single()` sobre una tarea de otra organización sigue tocando 0 filas y devolviendo éxito, como antes: el filtro por organización no cambia y sumar una lectura para distinguirlo es otra lógica.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo dentro del alcance. `runMutation` ahora relanza un redirect en vez de devolverlo como error: ningún llamador actual redirige dentro de `runMutation` (revisado `app/onboarding/actions.ts` y `app/(platform)/holding/actions.ts`, que redirigen fuera) y la suite completa pasa.
+
+---
+
 ### 2026-10-07 · Fix-pack de la AR de SCRUM-85: fila fantasma, saneado, fan-out y aviso de producción
 
 **Rama:** `fix/SCRUM-85-salud-y-monitoreo`

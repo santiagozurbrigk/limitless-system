@@ -1256,3 +1256,19 @@ aplicada en producción (`limitless-auditoria/sql-produccion/scrum-85/`, con `02
 6. En Supabase → SQL Editor, la consulta de [`alertas.md`](./alertas.md) § Registro de corridas: las filas coinciden
    con lo que muestra la página; a los 31 días, ninguna fila tiene más de 30 días.
 
+
+## Tablero: errores como valor y crear sprint atómico (SCRUM-503)
+
+**Prerrequisitos:** la migración `20261008120000_crear_sprint_atomico` aplicada en producción **antes** del merge
+(`limitless-auditoria/sql-produccion/scrum-503/`: `00_precheck.sql`, `01_migracion.sql` y `02_verificacion.sql` en
+`todo_ok`); el PR de SCRUM-503 mergeado y desplegado. Usar una org de prueba o una donde se pueda crear un sprint.
+
+1. ⭐ Prueba de humo de `crear_sprint`: Tablero → "Nuevo sprint" con nombre y fechas. → Toast "Sprint creado ✓", el
+   sprint nuevo aparece activo y el anterior pasa a completado. Es la primera vez que la llamada
+   `.rpc("crear_sprint").single()` corre contra PostgREST real: si aparece "Ocurrió un error inesperado", revisar en
+   Sentry el evento con `server_action = [createSprint]` (un `PGRST202` es la migración sin aplicar).
+2. En Supabase → SQL Editor: `select organization_id, count(*) from public.sprints where status = 'active' group by 1
+   having count(*) > 1;` no devuelve filas.
+3. Mover una tarea a "Hecho", cargar 30 minutos y confirmar. → La tarea queda hecha con 30 minutos.
+4. Con la red cortada (DevTools → Offline), mover una tarea entre columnas. → Toast "No se pudo mover la tarea" con
+   "Ocurrió un error inesperado. Intentá de nuevo." y la tarjeta vuelve a su columna; nada del párrafo técnico de Next.

@@ -15,6 +15,7 @@ import {
 import { Panel } from "@/components/shared/panel";
 import { EmptyState } from "@/components/shared/empty-state";
 import { getTimeByMemberAction } from "@/app/workboard/actions";
+import { correrAccion } from "@/lib/client/correr-accion";
 import { mockMemberTimeReports } from "@/mocks/workboard-time";
 import { buildAutomationInsights } from "@/lib/workboard/time-report";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -166,17 +167,45 @@ function MemberTimeCard({ report }: { report: MemberTimeReport }) {
   );
 }
 
+/**
+ * Lee el reporte de tiempo (SCRUM-503). La lectura devuelve su error como
+ * valor: el motivo se muestra en la pantalla. Si la acción lanza, se registra
+ * en la consola y se muestra el texto fijo. `null` si Next está navegando (un
+ * redirect): no hay nada que mostrar.
+ */
+export async function leerReporteDeTiempo(): Promise<
+  { ok: true; reports: MemberTimeReport[] } | { ok: false; error: string } | null
+> {
+  const salida: {
+    leido: { ok: true; reports: MemberTimeReport[] } | { ok: false; error: string } | null;
+  } = { leido: null };
+  await correrAccion({
+    accion: () => getTimeByMemberAction(),
+    alTerminar: (resultado) => {
+      salida.leido = resultado.success
+        ? { ok: true, reports: resultado.data ?? [] }
+        : { ok: false, error: resultado.error };
+    },
+    avisar: (aviso) => {
+      salida.leido = { ok: false, error: aviso.description ?? aviso.title };
+    },
+    tituloError: "No pudimos cargar el reporte de tiempo",
+    etiqueta: "[WorkboardTimeReport]",
+  });
+  return salida.leido;
+}
+
 export function WorkboardTimeReport() {
   const [reports, setReports] = useState<MemberTimeReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [usingDemo, setUsingDemo] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       setLoading(true);
-      setLoadError(false);
+      setLoadError(null);
 
       if (!useSupabase) {
         if (!cancelled) {
@@ -187,20 +216,16 @@ export function WorkboardTimeReport() {
         return;
       }
 
-      try {
-        const real = await getTimeByMemberAction();
-        if (cancelled) return;
-        setReports(real ?? []);
+      const leido = await leerReporteDeTiempo();
+      if (cancelled || !leido) return;
+      if (leido.ok) {
+        setReports(leido.reports);
         setUsingDemo(false);
-      } catch (error) {
-        console.error("[WorkboardTimeReport]", error);
-        if (!cancelled) {
-          setReports([]);
-          setLoadError(true);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+      } else {
+        setReports([]);
+        setLoadError(leido.error);
       }
+      setLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -222,7 +247,7 @@ export function WorkboardTimeReport() {
       <EmptyState
         variant="inline"
         title="No pudimos cargar el reporte de tiempo"
-        description="Intentá de nuevo en unos segundos."
+        description={loadError}
       />
     );
   }

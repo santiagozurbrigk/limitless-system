@@ -5,8 +5,6 @@ import type {
   TaskStatus,
   WorkboardMember,
   WorkboardTask,
-  WorkboardTaskAttachment,
-  WorkboardTaskLinkedDocument,
   WorkboardTaskLinkedSop,
 } from "@/types/workboard";
 import { mergeTaskLinks, type TaskLinksByTaskId } from "./task-links";

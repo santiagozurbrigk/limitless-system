@@ -17,6 +17,8 @@ import {
   type WorkboardLinkPickerOption,
 } from "@/app/workboard/task-link-actions";
 import { WORKBOARD_ATTACHMENTS_ACCEPT } from "@/lib/workboard/constants";
+import { isNextRouterError } from "next/dist/client/components/is-next-router-error";
+import { correrMutacion, ERROR_INESPERADO } from "@/lib/client/correr-accion";
 import { paths } from "@/routes";
 import { useToast } from "@/providers/toast-provider";
 import type { WorkboardTask } from "@/types/workboard";
@@ -33,7 +35,30 @@ const EMPTY_DRAFT: WorkboardTaskResourcesDraft = {
   documentIds: [],
 };
 
+/**
+ * Lo que devuelven `uploadTaskAttachmentFile` y `applyDraftTaskResources`
+ * cuando algo lanza (la red, la subida a Storage, una acción): se registra en
+ * la consola y el motivo es el texto fijo. Nunca rechazan (SCRUM-503). Un
+ * redirect de Next se relanza para que navegue.
+ */
+function falloInesperado(etiqueta: string, error: unknown): string {
+  if (isNextRouterError(error)) throw error;
+  console.error(etiqueta, error);
+  return ERROR_INESPERADO;
+}
+
 export async function uploadTaskAttachmentFile(
+  taskId: string,
+  file: File
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    return await subirAdjunto(taskId, file);
+  } catch (error) {
+    return { ok: false, error: falloInesperado("[Workboard] subir adjunto", error) };
+  }
+}
+
+async function subirAdjunto(
   taskId: string,
   file: File
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -74,6 +99,17 @@ export async function uploadTaskAttachmentFile(
 }
 
 export async function applyDraftTaskResources(
+  taskId: string,
+  draft: WorkboardTaskResourcesDraft
+): Promise<string | null> {
+  try {
+    return await aplicarRecursos(taskId, draft);
+  } catch (error) {
+    return falloInesperado("[Workboard] recursos de la tarea nueva", error);
+  }
+}
+
+async function aplicarRecursos(
   taskId: string,
   draft: WorkboardTaskResourcesDraft
 ): Promise<string | null> {
@@ -124,13 +160,21 @@ export function WorkboardTaskResources({
 
   useEffect(() => {
     let cancelled = false;
-    void listWorkboardLinkOptionsAction().then((data) => {
-      if (!cancelled) setOptions(data);
+    void correrMutacion({
+      accion: () => listWorkboardLinkOptionsAction(),
+      alExito: (data) => {
+        if (!cancelled) setOptions(data);
+      },
+      avisar: (aviso) => {
+        if (!cancelled) push(aviso);
+      },
+      tituloError: "No se pudieron cargar los SOPs y documentos",
+      etiqueta: "[Workboard] opciones de vínculos",
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [push]);
 
   function updateDraft(patch: Partial<WorkboardTaskResourcesDraft>) {
     onDraftChange?.({ ...currentDraft, ...patch });
@@ -153,8 +197,13 @@ export function WorkboardTaskResources({
           return;
         }
       }
-      const refresh = await getWorkboardTaskByIdAction(taskId);
-      if (refresh) onTaskUpdated?.(refresh);
+      await correrMutacion({
+        accion: () => getWorkboardTaskByIdAction(taskId),
+        alExito: (tarea) => onTaskUpdated?.(tarea),
+        avisar: push,
+        tituloError: "El archivo se adjuntó, pero no se pudo recargar la tarea",
+        etiqueta: "[Workboard] recargar tarea",
+      });
     });
   }
 
@@ -167,12 +216,13 @@ export function WorkboardTaskResources({
     if (!taskId) return;
 
     startTransition(async () => {
-      const res = await setTaskLinkedSopAction({ taskId, sopId });
-      if (!res.success) {
-        push({ title: "No se pudo vincular el SOP", description: res.error });
-        return;
-      }
-      onTaskUpdated?.(res.data);
+      await correrMutacion({
+        accion: () => setTaskLinkedSopAction({ taskId, sopId }),
+        alExito: (tarea) => onTaskUpdated?.(tarea),
+        avisar: push,
+        tituloError: "No se pudo vincular el SOP",
+        etiqueta: "[Workboard] vincular SOP",
+      });
     });
   }
 
@@ -189,25 +239,30 @@ export function WorkboardTaskResources({
 
     const linked = task?.linkedDocuments.some((d) => d.id === documentId);
     startTransition(async () => {
-      const res = linked
-        ? await unlinkTaskDocumentAction({ taskId, documentId })
-        : await linkTaskDocumentAction({ taskId, documentId });
-      if (!res.success) {
-        push({ title: "No se pudo actualizar el vínculo", description: res.error });
-        return;
-      }
-      onTaskUpdated?.(res.data);
+      await correrMutacion({
+        accion: () =>
+          linked
+            ? unlinkTaskDocumentAction({ taskId, documentId })
+            : linkTaskDocumentAction({ taskId, documentId }),
+        alExito: (tarea) => onTaskUpdated?.(tarea),
+        avisar: push,
+        tituloError: "No se pudo actualizar el vínculo",
+        etiqueta: "[Workboard] vincular documento",
+      });
     });
   }
 
   function handleOpenAttachment(attachmentId: string) {
     startTransition(async () => {
-      const res = await getTaskAttachmentUrlAction(attachmentId);
-      if (!res.success) {
-        push({ title: "No se pudo abrir", description: res.error });
-        return;
-      }
-      window.open(res.data.url, "_blank", "noopener,noreferrer");
+      await correrMutacion({
+        accion: () => getTaskAttachmentUrlAction(attachmentId),
+        alExito: (adjunto) => {
+          window.open(adjunto.url, "_blank", "noopener,noreferrer");
+        },
+        avisar: push,
+        tituloError: "No se pudo abrir",
+        etiqueta: "[Workboard] abrir adjunto",
+      });
     });
   }
 
@@ -218,13 +273,14 @@ export function WorkboardTaskResources({
     }
 
     startTransition(async () => {
-      const res = await deleteTaskAttachmentAction(attachmentId);
+      await correrMutacion({
+        accion: () => deleteTaskAttachmentAction(attachmentId),
+        alExito: (tarea) => onTaskUpdated?.(tarea),
+        avisar: push,
+        tituloError: "No se pudo eliminar",
+        etiqueta: "[Workboard] eliminar adjunto",
+      });
       setConfirmRemoveId(null);
-      if (!res.success) {
-        push({ title: "No se pudo eliminar", description: res.error });
-        return;
-      }
-      onTaskUpdated?.(res.data);
     });
   }
 

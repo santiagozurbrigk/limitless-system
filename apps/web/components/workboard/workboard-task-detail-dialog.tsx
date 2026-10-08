@@ -17,10 +17,6 @@ import {
   Textarea,
 } from "@ai-coo/ui";
 import {
-  assignTaskToLaunchAction,
-  assignTaskToSprintAction,
-} from "@/app/workboard/actions";
-import {
   STATUS_COLORS,
   STATUS_LABELS,
   TASK_AREA_LABELS,
@@ -37,6 +33,22 @@ import { useWorkboard } from "@/providers/workboard-provider";
 import type { TaskArea, TaskPriority, TaskStatus } from "@/types/workboard";
 import { WorkboardTaskResources } from "./workboard-task-resources";
 
+/**
+ * Cambia un selector del detalle (sprint o lanzamiento) en el acto y lo vuelve
+ * a lo que había si la acción rechaza; el aviso ya lo dio el provider
+ * (SCRUM-503).
+ */
+export async function cambiarConReversion<T>(op: {
+  anterior: T;
+  siguiente: T;
+  setValor: (valor: T) => void;
+  asignar: () => Promise<boolean>;
+}): Promise<void> {
+  op.setValor(op.siguiente);
+  const hecho = await op.asignar();
+  if (!hecho) op.setValor(op.anterior);
+}
+
 export function WorkboardTaskDetailDialog() {
   const {
     selectedTask,
@@ -47,6 +59,7 @@ export function WorkboardTaskDetailDialog() {
     updateTask,
     deleteTask,
     assignTaskToSprint,
+    assignTaskToLaunch,
     upsertTaskInState,
     isSaving,
   } = useWorkboard();
@@ -88,7 +101,9 @@ export function WorkboardTaskDetailDialog() {
   async function handleSave() {
     const completing =
       status === "done" && selectedTask!.status !== "done";
-    await updateTask(selectedTask!.id, {
+    // Si la acción rechaza, el provider ya avisó con el motivo y el detalle
+    // queda abierto con lo que escribiste.
+    const guardada = await updateTask(selectedTask!.id, {
       title,
       description,
       status,
@@ -101,7 +116,7 @@ export function WorkboardTaskDetailDialog() {
         .map((t) => t.trim())
         .filter(Boolean),
     });
-    if (!completing) {
+    if (guardada && !completing) {
       setSelectedTask(null);
     }
   }
@@ -251,11 +266,12 @@ export function WorkboardTaskDetailDialog() {
               disabled={isSaving}
               onChange={(e) => {
                 const next = e.target.value;
-                setSprintId(next);
-                void assignTaskToSprint(
-                  selectedTask.id,
-                  next ? next : null
-                );
+                void cambiarConReversion({
+                  anterior: sprintId,
+                  siguiente: next,
+                  setValor: setSprintId,
+                  asignar: () => assignTaskToSprint(selectedTask.id, next ? next : null),
+                });
               }}
             >
               <option value="">Sin sprint</option>
@@ -277,12 +293,11 @@ export function WorkboardTaskDetailDialog() {
                 disabled={isSaving}
                 onChange={(e) => {
                   const next = e.target.value;
-                  setLaunchId(next);
-                  void assignTaskToLaunchAction(
-                    selectedTask.id,
-                    next ? next : null
-                  ).then((updated) => {
-                    upsertTaskInState(updated);
+                  void cambiarConReversion({
+                    anterior: launchId,
+                    siguiente: next,
+                    setValor: setLaunchId,
+                    asignar: () => assignTaskToLaunch(selectedTask.id, next ? next : null),
                   });
                 }}
               >
