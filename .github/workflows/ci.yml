@@ -9,9 +9,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Ningún job escribe en el repo ni usa secretos.
+permissions:
+  contents: read
+
+# Los cuatro jobs corren en paralelo; el tiempo total es el del más lento (build).
 jobs:
+  # typecheck, lint y test de todo el monorepo vía turbo: web, ui, types,
+  # reel-worker y discord-bot (cada paquete declara sus scripts).
   checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -32,11 +40,50 @@ jobs:
 
       - run: pnpm test
 
+  # `next build` de apps/web: frena lo que pasa tsc y lint pero rompe el build
+  # (por ejemplo un import de servidor en un componente cliente), antes de que
+  # falle en Vercel. Usa variables públicas ficticias y ningún secreto: la URL de
+  # Supabase usa el dominio reservado .invalid, que nunca resuelve.
+  web-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.invalid
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # Caché incremental de Next. La clave cambia con las dependencias y con el
+      # código de web y de los paquetes que transpila; si no hay coincidencia
+      # exacta, parte de la última caché con el mismo lockfile.
+      - uses: actions/cache@v4
+        with:
+          path: apps/web/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx', 'apps/web/**/*.js', 'apps/web/**/*.mjs', 'apps/web/**/*.css', 'packages/*/src/**') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @ai-coo/web build
+
   # Arma una base desde cero con todas las migraciones de supabase/migrations.
   # Frena una migración que no corre, una versión repetida o un nombre inválido
   # antes de que lleguen a producción. Ver supabase/ci/check-migrations.sh.
   migrations:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         # Misma versión mayor que producción (Supabase, Postgres 17), con pgvector.
@@ -59,3 +106,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - run: supabase/ci/check-migrations.sh
+
+  # Valida PENDIENTES.md (IDs únicos, P0/P1 con criterio, índice por área al
+  # día) y docs/backlog/historias.md. Los scripts sólo usan la biblioteca estándar.
+  backlog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python3 docs/backlog/pendientes_a_jira.py --check
+
+      - run: python3 docs/backlog/historias_a_jira.py --check

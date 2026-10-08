@@ -60,8 +60,8 @@ La app corre en Vercel (funciones serverless con tope de duración; en agosto la
   con ffmpeg dentro de una lambda (`/api/queue/process-sop-video`, `maxDuration` 800) y carga el archivo entero en
   memoria (`[OPS-SOP-VIDEO-MEMORIA]`); el fallback de reels en la lambda no acepta jobs de Drive
   (`[TRIAL-FALLBACK-ROTO]`).
-- El CI no construye ni prueba el reel-worker (`[AUD-SALUD-5 / CI-COBERTURA]`); `cleanup-trial-reels` reprocesa
-  los mismos jobs (`[TRIAL-CLEANUP-LOOP]`).
+- El CI revisa los tipos y el lint del reel-worker (SCRUM-261) pero no arma su imagen ni tiene tests propios;
+  `cleanup-trial-reels` reprocesa los mismos jobs (`[TRIAL-CLEANUP-LOOP]`).
 
 ## Evidencia
 

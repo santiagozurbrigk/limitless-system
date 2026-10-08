@@ -2793,15 +2793,6 @@ Fuente: PENDIENTES.md [AUD-SALUD-2] · Doc del área: docs/arquitectura/vision-g
 *Dónde:* {{apps/web/app/api/cron/*}}, {{apps/web/lib/queue/}}.
 
 Fuente: PENDIENTES.md [AUD-SALUD-3] · Doc del área: docs/arquitectura/vision-general.md",AUD-SALUD-3,"Infraestructura, seguridad y tests (transversal)",P2,,deuda técnica
-"[AUD-SALUD-5 / CI-COBERTURA] El CI no corre build, e2e ni el reel-worker",Task,Medium,infra,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
-
-*Estado verificado:* {{.github/workflows/ci.yml}} corre typecheck, lint, test y migraciones (el chequeo de migraciones ya está). No corre {{next build}}, Playwright ni nada de {{apps/reel-worker}} (sin script {{typecheck}}).
-
-*Qué hay que hacer:* agregar {{typecheck}} al reel-worker; job de {{next build}} (o confiar en el preview de Vercel y documentarlo); decidir E2E en CI ({{[T-INFRA-E2E-CI]}}).
-
-*Dónde:* {{.github/workflows/ci.yml}}, {{apps/reel-worker/package.json}}.
-
-Fuente: PENDIENTES.md [AUD-SALUD-5 / CI-COBERTURA] · Doc del área: docs/arquitectura/vision-general.md",AUD-SALUD-5 / CI-COBERTURA,"Infraestructura, seguridad y tests (transversal)",P2,,deuda técnica
 "[AUD-SALUD-6] Helpers exportados desde archivos ""use server""",Bug,Medium,infra,p2,seguridad,,,,"*Tipo:* seguridad
 
 *Estado verificado:* siguen exportados {{getConversationIdByExternalRef}} ({{app/conversations/actions.ts:29}}), {{loadTaskLinksBundle}} ({{app/workboard/task-link-actions.ts:47}}), {{getProductContextForOrg}} ({{app/product/actions.ts:673}}). Cada export es un endpoint.
@@ -2957,9 +2948,9 @@ Fuente: PENDIENTES.md [T-18] · Doc del área: docs/arquitectura/vision-general.
 Fuente: PENDIENTES.md [T-19] · Doc del área: docs/arquitectura/vision-general.md",T-19,"Infraestructura, seguridad y tests (transversal)",P2,,tests
 [T-INFRA-E2E-CI] Correr Playwright en CI,Task,Medium,infra,p2,decision-de-negocio,,,,"*Tipo:* decisión de negocio
 
-*Estado verificado:* {{playwright.config.ts}} tiene rama de CI; el workflow no lo invoca; necesita una cuenta de test y una base.
+*Estado verificado:* {{playwright.config.ts}} tiene rama de CI; el workflow no lo invoca; necesita una cuenta de test y una base. Desde SCRUM-261 el CI ya corre {{next build}} (job {{web-build}}) y {{e2e/auth.setup.ts}} entra por {{/login}}; lo que falta es dónde correr los e2e (ver {{docs/operacion/testing.md}} § E2E).
 
-*Qué hay que hacer:* decidir cuenta/base de test (proyecto Supabase aparte) y agregar el job.
+*Qué hay que hacer:* crear el proyecto Supabase de staging con cuentas sembradas por rol (propuesta de arquitectura, ADR-016) y agregar el job ({{next build && next start}} contra staging y Playwright en cada PR); después sumarlo a los checks obligatorios de {{main}} ({{docs/operacion/entorno-y-deploy.md}}).
 
 *Dónde:* {{.github/workflows/ci.yml}}.
 

@@ -10,6 +10,7 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { paths } from "../routes/paths";
 import { HOLDING_AUTH_FILE } from "./constants";
 
 test.use({ storageState: HOLDING_AUTH_FILE });
@@ -23,9 +24,7 @@ test.describe("Holding — dashboard", () => {
       page.getByText(/negocios|businesses/i).first()
     ).toBeVisible({ timeout: 10_000 });
 
-    // Al menos un negocio listado
-    const businessCards = page.locator("[data-testid='business-card'], .business-card");
-    // Fallback: buscar por texto del botón "Entrar" que aparece por negocio
+    // Al menos un negocio listado: cada negocio tiene su botón "Entrar"
     const enterButtons = page.getByRole("button", { name: /entrar|enter/i });
     const count = await enterButtons.count();
     expect(count).toBeGreaterThan(0);
@@ -122,15 +121,15 @@ test.describe("Holding — navegación dentro de negocio", () => {
     // que enterBusinessAction puede usar sin conflictos, sin importar cuántas
     // rotaciones ocurrieron en los tests anteriores.
     //
-    // Nota: clearCookies() hace que el middleware no redirija desde /auth/login,
-    // lo que evita el race condition donde goto("/auth/login") llegaba a /holding
+    // Nota: clearCookies() hace que el middleware no redirija desde /login,
+    // lo que evita el race condition donde goto("/login") llegaba a /holding
     // (sesión aún válida) antes de que pudiéramos llenar el formulario.
     await context.clearCookies();
 
     const email = process.env.E2E_HOLDING_EMAIL!;
     const password = process.env.E2E_HOLDING_PASSWORD!;
 
-    await page.goto("/auth/login");
+    await page.goto(paths.auth.login);
     await page.getByLabel(/email/i).fill(email);
     await page.getByLabel(/contraseña|password/i).fill(password);
     await page.getByRole("button", { name: /iniciar sesión|login|entrar/i }).click();

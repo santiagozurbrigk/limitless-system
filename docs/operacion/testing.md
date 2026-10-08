@@ -6,22 +6,34 @@
 
 | Capa | Herramienta | Dónde | Corre en CI |
 |---|---|---|---|
-| Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot` | sí (`pnpm typecheck`) |
-| Lint | ESLint 9 (`next lint` en web, `eslint src/` en ui) | `apps/web`, `packages/ui` | sí (`pnpm lint`) |
+| Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot`, `apps/reel-worker` | sí (`pnpm typecheck`, job `checks`) |
+| Lint | ESLint 9 (`next lint` en web; `eslint src/` con la base de `packages/config` en ui, reel-worker y bot) | `apps/web`, `packages/ui`, `apps/reel-worker`, `apps/discord-bot` | sí (`pnpm lint`, job `checks`) |
 | Unitarios | Vitest 3, entorno `node` | `apps/web` (200 archivos) | sí (`pnpm test`) |
-| E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** |
+| E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** (se activa con staging, ver E2E) |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
-| Build | `next build` | — | **no** (lo hace Vercel en el preview) |
+| Build | `next build` de `apps/web` | `apps/web` | sí (job `web-build`) |
+| Backlog | `pendientes_a_jira.py --check`, `historias_a_jira.py --check` | `PENDIENTES.md`, `docs/backlog/historias.md` | sí (job `backlog`) |
 
-`apps/reel-worker` no declara `typecheck` ni `lint`: el CI no lo compila. `packages/*` no tienen tests.
+En el reel-worker y el bot el lint corre con `--max-warnings=0`: hoy no tienen avisos y así se mantienen. `packages/*`, el reel-worker y el bot no tienen tests propios; las copias del worker y del bot que tienen que coincidir con web (`org-path.ts`, `limpiar-evento-sentry.ts`) se prueban desde los tests de web.
 
 ## Cómo se corre
 
 ```bash
-pnpm typecheck                     # todo el monorepo vía turbo
+pnpm typecheck                     # todo el monorepo vía turbo (incluye reel-worker y bot)
 pnpm lint
 pnpm test                          # sólo apps/web declara test
+pnpm --filter @ai-coo/reel-worker typecheck   # una sola app
+
+# next build como en el CI (variables públicas ficticias, sin secretos)
+NEXT_PUBLIC_APP_URL=http://localhost:3000 \
+NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.invalid \
+NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder-anon-key \
+  pnpm --filter @ai-coo/web build
+
+# checks del backlog (sólo biblioteca estándar de Python)
+python3 docs/backlog/pendientes_a_jira.py --check
+python3 docs/backlog/historias_a_jira.py --check
 cd apps/web && pnpm test           # vitest run
 cd apps/web && pnpm test:watch     # modo watch
 cd apps/web && pnpm exec vitest run lib/funnels   # una carpeta
@@ -136,18 +148,34 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 
 ### E2E
 
-`apps/web/e2e/holding.spec.ts` (6 tests: dashboard del holding, dropdown de negocios, entrar/salir de un negocio, agente, clientes) con `auth.setup.ts`, que guarda la sesión en `e2e/.auth/holding.json`. Necesita `E2E_HOLDING_EMAIL`, `E2E_HOLDING_PASSWORD` y opcionalmente `E2E_BASE_URL` (default `http://localhost:3000`); el `webServer` está comentado, así que la app tiene que estar levantada. En CI (`CI=1`) usa 2 reintentos y 1 worker, pero el workflow no lo invoca.
+`apps/web/e2e/holding.spec.ts` (6 tests: dashboard del holding, dropdown de negocios, entrar/salir de un negocio, agente, clientes) con `auth.setup.ts`, que entra por `/login` (la ruta sale de `routes/paths.ts`) y guarda la sesión en `e2e/.auth/holding.json`. Necesita `E2E_HOLDING_EMAIL`, `E2E_HOLDING_PASSWORD` y opcionalmente `E2E_BASE_URL` (default `http://localhost:3000`); el `webServer` está comentado, así que la app tiene que estar levantada. Si el Chromium que trae Playwright no está instalado, `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` apunta a otro (por ejemplo `/usr/bin/google-chrome`). En CI (`CI=1`) usa 2 reintentos y 1 worker.
+
+**Los e2e todavía no corren en CI, a propósito.** Necesitan una base con cuentas conocidas, y hoy no hay staging ni cuentas de prueba: correrlos contra producción no es una opción. Se activan cuando exista el proyecto de staging con cuentas sembradas por rol (founder, member viewer, closer, holding con dos negocios, super admin), como plantea la propuesta de arquitectura del 2026-10-06 (ADR-016, "Entrega verificada", todavía no está en `docs/arquitectura/decisiones/`): un job que hace `next build && next start` contra staging y corre Playwright en cada PR. Seguimiento en `[T-INFRA-E2E-CI]`.
 
 ## CI
 
 `.github/workflows/ci.yml`, en push a `main`, `claude/**`, `Claude-*`, `feat/**`, `fix/**`, `chore/**` y en todo PR, con `concurrency` que cancela corridas viejas de la misma ref.
 
+Los cuatro jobs corren en paralelo, con permisos de sólo lectura sobre el repo y sin ningún secreto.
+
 | Job | Pasos |
 |---|---|
-| `checks` | checkout → pnpm 9.15.0 → Node 20 con caché de pnpm → `pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm lint` → `pnpm test` |
-| `migrations` | servicio `pgvector/pgvector:pg17` → `supabase/ci/check-migrations.sh` (nombres, versiones únicas, las 191 desde cero y los 10 archivos de tests de RLS) |
+| `checks` | checkout → pnpm 9.15.0 → Node 20 con caché de pnpm → `pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm lint` → `pnpm test` (turbo corre cada script en web, ui, types, reel-worker y bot) |
+| `web-build` | checkout → pnpm → Node 20 con caché de pnpm → caché de `apps/web/.next/cache` → `pnpm install --frozen-lockfile` → `pnpm --filter @ai-coo/web build`, con `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL` (dominio `.invalid`) y `NEXT_PUBLIC_SUPABASE_ANON_KEY` ficticias |
+| `migrations` | servicio `pgvector/pgvector:pg17` → `supabase/ci/check-migrations.sh` (nombres, versiones únicas, todas desde cero, tests de RLS) |
+| `backlog` | checkout → Python 3.12 → `pendientes_a_jira.py --check` → `historias_a_jira.py --check` |
 
-No corre `next build`, Playwright ni nada de `apps/reel-worker`. No hay branch protection configurada en el repo (no verificable desde el código).
+`web-build` frena lo que pasa `tsc` y lint pero rompe `next build`, por ejemplo un import de servidor (`next/headers`) en un componente cliente. Como `next build` también revisa los tipos de todo lo que incluye el `tsconfig.json` de web, un error en un archivo del reel-worker que web importa en sus tests (`org-path.ts`) aparece en los dos jobs. La caché de `.next/cache` se guarda por rama; un PR arranca con la de `main`.
+
+Tiempos medidos el 2026-10-07 (SCRUM-261), con los cuatro jobs en paralelo:
+
+| Corrida | `checks` | `web-build` | `migrations` | `backlog` | Total |
+|---|---|---|---|---|---|
+| Antes (sólo `checks` y `migrations`) | 1 min 47 s | | 27 s | | 1 min 48 s |
+| Con caché de `.next` vacía | 2 min 1 s | 4 min 4 s | 33 s | 5 s | 4 min 8 s |
+| Con caché de `.next` (lo habitual) | 1 min 55 s | 2 min 56 s | 28 s | 8 s | 2 min 56 s |
+
+Qué jobs conviene exigir para mergear a `main`: `docs/operacion/entorno-y-deploy.md` § Branch protection.
 
 Aparte del CI, `.github/workflows/produccion-al-dia.yml` (SCRUM-85) no prueba código: después de cada push a `main` y una vez por día comprueba que producción tenga desplegado el commit de `main` ([`alertas.md`](./alertas.md) § Producción desactualizada).
 

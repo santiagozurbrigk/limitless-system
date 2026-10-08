@@ -85,7 +85,6 @@ async function downloadFromDrive(
   }
 
   // Escribir en streaming para evitar acumular el video entero en memoria
-  const { Writable } = await import("stream");
   const { pipeline } = await import("stream/promises");
   const { createWriteStream } = await import("fs");
 

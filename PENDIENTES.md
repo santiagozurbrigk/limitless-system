@@ -88,7 +88,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 19 | 44 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 19 | 43 | 13 |
 
 ---
 
@@ -2424,12 +2424,6 @@ Prioridad sugerida P2: no hay una filtración conocida; el procedimiento se nece
 - **Qué hay que hacer:** helper `runPerOrg()` (ADR-015: `correrPorOrganizacion()`) con aislamiento de errores, lock (fila en tabla o advisory lock) y resultado uniforme. Desde SCRUM-85 cada corrida ya queda en `corridas_de_procesos`, pero las orgs procesadas y fallidas sólo las informan las syncs de GHL, Calendly, Fathom y métricas de contenido, y los crons con fan-out sólo informan los jobs encolados (estado `encolado`: lo que haga cada worker va a Sentry, no al registro): el helper tiene que anotarlas para todos (`anotarOrganizacion`, `lib/observability/corrida-en-curso.ts`), registrar el resultado de cada worker y sumar la tabla por org con `corrida_id`.
 - **Dónde:** `apps/web/app/api/cron/*`, `apps/web/lib/queue/`.
 
-#### [AUD-SALUD-5 / CI-COBERTURA] El CI no corre build, e2e ni el reel-worker
-- **Tipo:** deuda técnica
-- **Estado verificado:** `.github/workflows/ci.yml` corre typecheck, lint, test y migraciones (el chequeo de migraciones ya está). No corre `next build`, Playwright ni nada de `apps/reel-worker` (sin script `typecheck`).
-- **Qué hay que hacer:** agregar `typecheck` al reel-worker; job de `next build` (o confiar en el preview de Vercel y documentarlo); decidir E2E en CI (`[T-INFRA-E2E-CI]`).
-- **Dónde:** `.github/workflows/ci.yml`, `apps/reel-worker/package.json`.
-
 #### [AUD-SALUD-6] Helpers exportados desde archivos `"use server"`
 - **Tipo:** seguridad
 - **Estado verificado:** siguen exportados `getConversationIdByExternalRef` (`app/conversations/actions.ts:29`), `loadTaskLinksBundle` (`app/workboard/task-link-actions.ts:47`), `getProductContextForOrg` (`app/product/actions.ts:673`). Cada export es un endpoint.
@@ -2534,8 +2528,8 @@ Prioridad sugerida P2: no hay una filtración conocida; el procedimiento se nece
 
 #### [T-INFRA-E2E-CI] Correr Playwright en CI
 - **Tipo:** decisión de negocio
-- **Estado verificado:** `playwright.config.ts` tiene rama de CI; el workflow no lo invoca; necesita una cuenta de test y una base.
-- **Qué hay que hacer:** decidir cuenta/base de test (proyecto Supabase aparte) y agregar el job.
+- **Estado verificado:** `playwright.config.ts` tiene rama de CI; el workflow no lo invoca; necesita una cuenta de test y una base. Desde SCRUM-261 el CI ya corre `next build` (job `web-build`) y `e2e/auth.setup.ts` entra por `/login`; lo que falta es dónde correr los e2e (ver `docs/operacion/testing.md` § E2E).
+- **Qué hay que hacer:** crear el proyecto Supabase de staging con cuentas sembradas por rol (propuesta de arquitectura, ADR-016) y agregar el job (`next build && next start` contra staging y Playwright en cada PR); después sumarlo a los checks obligatorios de `main` (`docs/operacion/entorno-y-deploy.md`).
 - **Dónde:** `.github/workflows/ci.yml`.
 
 #### [CAMPO-FECHA-MIGRAR] 14 campos de fecha todavía no usan `CampoFecha`
