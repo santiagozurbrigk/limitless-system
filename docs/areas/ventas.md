@@ -117,26 +117,33 @@ GHL            ── cron /api/cron/ghl-sync (hora) ─────────
   `updateClosingCallAction` → `patchToClosingUpdateRow` (`lib/closing/mapper.ts`), que marca
   `status_source = 'manual'` (las ediciones de seguimiento de `lead-actions.ts` no tocan `status`); los syncs consultan
   `syncMayOverwriteStatus`.
-- **Errores como valor (SCRUM-504):** todas las acciones de `app/sales` devuelven `MutationResult`.
-  En el seguimiento (`lead-actions.ts`, `follow-up-options-actions.ts`) la sesión y la validación
+- **Errores como valor (SCRUM-504):** todas las acciones de `app/sales` que leen o escriben la base
+  devuelven `MutationResult` (incluidas Cobros y el recorrido del lead); la única que no es
+  `getMockCallAnalysisKeysAction`, que no tiene llamadores ni lee la base. En el seguimiento (`lead-actions.ts`, `follow-up-options-actions.ts`) la sesión y la validación
   (valor que no está en el catálogo, archivado, sin fecha, nombre vacío o repetido) vuelven con su
   motivo; un error de la base se registra, va a Sentry y vuelve con el texto fijo (antes llegaba el
   mensaje crudo de la base). Si `listLeadsTableAction` falla, `/sales/closing` se dibuja igual y la
   pestaña de seguimiento muestra el motivo (antes mostraba la tabla vacía); una edición rechazada
-  vuelve atrás la fila y avisa. El catálogo se lee con `leerCatalogoDeSeguimiento`
-  (`lib/sales/catalogo-de-seguimiento.ts`), que sigue cayendo en los valores de fábrica si su lectura
-  falla. Las lecturas de closers (`getCloserMetricsAction` y las sin llamador) registran los errores
+  vuelve atrás la fila y avisa. El catálogo vive en `lib/sales/catalogo-de-seguimiento.ts`: para
+  validar una escritura se lee con `leerCatalogoParaEscribir`, que lanza `FallaDeLaBase` si la lectura
+  falla (texto fijo y Sentry; con los valores de fábrica, un valor propio válido se rechazaría como
+  "no existe en el catálogo"); para mostrar, `leerCatalogoConRespaldo` cae en los valores de fábrica
+  y registra la falla. Las lecturas de closers (`getCloserMetricsAction` y las sin llamador) registran los errores
   de la base que antes ignoraban: el ranking de closers (escondido) ya no se ve como "sin closers"
   cuando falla ([CLOSER-AMOUNT-CLOSED]).
 - **Sync manual del Calendly de un closer** (botón "Sincronizar ahora" en Configuración y el del ranking
   de closers): `syncCloserCalendlyAction` devuelve `MutationResult` (SCRUM-504). Vuelven con un motivo
   claro: sin integración (sin fila o sin token), conexión vencida o revocada (el refresh responde 400
-  `invalid_grant` o la API de eventos 401/403: hay que desconectar y volver a conectar), conexión sin el
+  `invalid_grant` o la API de eventos 401: hay que desconectar y volver a conectar; un 403 no está
+  verificado y se trata como falla), conexión sin el
   usuario de Calendly y límite de consultas (429). Lo distingue `sincronizarEventosDelCloser`
   (`lib/calendly/closer-sync.ts`), que lanza `RechazoDeCalendly`; cualquier otra falla (la red, la base,
   un 5xx de Calendly) se registra, va a Sentry y vuelve con el texto fijo. El cron usa
   `syncCloserCalendlyEvents`, que no lanza y anota el mismo `reason` que antes. `disconnectMyCalendlyAction`
-  también devuelve `MutationResult` y ya no avisa "desconectado" si el borrado falla.
+  también devuelve `MutationResult` y ya no avisa "desconectado" si el borrado falla. Si al renovar el
+  token no se puede guardar el nuevo, es una falla de la base (Calendly rota el refresh token). El
+  estado (`getMyCalendlyIntegrationAction`) devuelve `MutationResult`: una falla de la base ya no se
+  muestra como "No conectado".
 
 ### Resultado de un turno (cliente)
 
@@ -322,7 +329,7 @@ devuelven `MutationResult` (SCRUM-504): la sesión que falta vuelve con su motiv
 y vuelve con el texto fijo. `/sales/metrics` (server component) se dibuja igual y avisa el motivo de las
 métricas importadas y de las objeciones; la pantalla avisa también el de las de rendimiento, y el rendimiento del equipo y la
 evolución del closer (ficha del cliente) muestran el motivo en su estado de error (`leerConMotivo`,
-`lib/sales/lectura-con-motivo.ts`). `updateCloserCommissionAction` (sin llamadores) también devuelve
+`lib/client/correr-accion.ts`, junto a `correrAccion` y `correrMutacion`). `updateCloserCommissionAction` (sin llamadores) también devuelve
 `MutationResult`: porcentaje fuera de 0-100, closer de otra org o sin permiso y el `42501` del trigger de
 perfiles vuelven como motivo.
 
@@ -333,6 +340,15 @@ calcula con `computeOutstandingBalance` / `computeRemainingProgramDays` (`lib/cl
 Registrar una cuota: `prepareClientPaymentReceiptUploadAction` (URL firmada al bucket, path
 `<org>/<client>/<uuid>-<nombre>`) → subida directa → `recordClientPaymentAction` (inserta y marca la
 cuota pagada en `clients.installments`) o `addInstallmentPaymentAction`.
+
+Las 6 acciones de `app/sales/payment-actions.ts` devuelven `MutationResult` (SCRUM-504): validación,
+sesión, cliente de otra org, sin plan de cuotas, sin cuotas pendientes, archivo no permitido, comprobante
+inexistente y una ruta de comprobante que no es de la org vuelven con su motivo; un error de la base o del
+Storage se registra, va a Sentry y vuelve con el texto fijo (antes llegaba el mensaje crudo). Las lecturas
+de pagos (`lib/sales/pagos.ts`, que usan también Finanzas, Clientes y la cuota) ya no devuelven `[]` ante
+una falla: Cobros (`getClientsTableEnrichmentAction`), la ficha de pagos, Finanzas y el Panel avisan que
+lo cobrado no está al día en vez de mostrar todo adeudado. Si el pago se guarda pero la cuota no se puede
+marcar, el pago queda y la falla se registra.
 
 ## Integraciones externas
 
