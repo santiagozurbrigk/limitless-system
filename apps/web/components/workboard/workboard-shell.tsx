@@ -37,6 +37,7 @@ import {
 } from "@ai-coo/ui";
 import { Users } from "lucide-react";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion } from "@/lib/client/correr-accion";
 
 const AREA_FILTER_OPTIONS = [
   { value: "all", label: "Todas las áreas" },
@@ -119,9 +120,16 @@ export function WorkboardShell() {
     });
     if (!created) return;
 
+    // Ninguno de los dos rechaza: los recursos devuelven el motivo y la
+    // recarga avisa con un toast si falla (SCRUM-503).
     const resourceError = await applyDraftTaskResources(created.id, resourcesDraft);
-    const refreshed = await getWorkboardTaskByIdAction(created.id);
-    if (refreshed) upsertTaskInState(refreshed);
+    await correrMutacion({
+      accion: () => getWorkboardTaskByIdAction(created.id),
+      alExito: upsertTaskInState,
+      avisar: push,
+      tituloError: "La tarea se creó, pero no se pudo recargar",
+      etiqueta: "[Workboard] recargar tarea creada",
+    });
     if (resourceError) {
       push({
         title: "Tarea creada con advertencias",

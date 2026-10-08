@@ -64,19 +64,27 @@ vi.mock("@/lib/auth/bootstrap", async () => {
       msg.includes("does not exist") || msg.includes("Could not find the table"),
   };
 });
-vi.mock("@/app/workboard/task-link-actions", () => ({
-  loadTaskLinksBundle: async () => ({
-    attachments: new Map(),
-    documents: new Map(),
-    sops: new Map(),
-  }),
-  deleteTaskAttachmentsForTask: async () => undefined,
-  getWorkboardTaskByIdAction: async (id: string) => {
-    if (!sim.tareaReleida) return null;
-    const fila = (sim.tablas.workboard_tasks ?? []).find((f) => f.id === id);
-    return fila ? { id, title: fila.title } : null;
-  },
-}));
+vi.mock("@/lib/workboard/tarea-con-vinculos", async () => {
+  const { FallaDeLaBase } = await import("@/lib/server/action-result");
+  return {
+    TAREA_NO_ENCONTRADA: "No se encontró la tarea. Puede que la hayan eliminado.",
+    loadTaskLinksBundle: async () => ({
+      attachments: new Map(),
+      documents: new Map(),
+      sops: new Map(),
+    }),
+    deleteTaskAttachmentsForTask: async () => undefined,
+    // La relectura de la tarea creada: se prueba aparte, en
+    // `tarea-con-vinculos.test.ts`.
+    leerTareaConVinculos: async (id: string, organizationId: string) => {
+      if (!sim.tareaReleida) throw new FallaDeLaBase({ message: "boom al releer" });
+      const fila = (sim.tablas.workboard_tasks ?? []).find(
+        (f) => f.id === id && f.organization_id === organizationId
+      );
+      return { id, title: fila?.title };
+    },
+  };
+});
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     from(tabla: string) {
@@ -374,7 +382,7 @@ describe("createWorkboardTaskAction", () => {
     });
     expect(sim.reportes).toEqual([
       {
-        error: expect.objectContaining({ name: "FallaDeLaBase", message: "No se pudo cargar la tarea creada" }),
+        error: expect.objectContaining({ name: "FallaDeLaBase", message: "boom al releer" }),
         contexto: { accion: "[createWorkboardTask]" },
       },
     ]);
@@ -580,6 +588,22 @@ describe("createSprintAction", () => {
     expect(filaDe("sprints", S_OTRA_ORG)?.status).toBe("active");
     const alta = escrituras().find((c) => c.op === "insert");
     expect(alta?.valores).toMatchObject({ organization_id: ORG });
+  });
+
+  it("⭐ si no se puede cerrar el sprint activo, no crea el nuevo: texto fijo y se reporta", async () => {
+    sim.errores["sprints:update"] = { message: "TypeError: fetch failed" };
+    await expect(createSprintAction(NUEVO_SPRINT)).resolves.toEqual({
+      success: false,
+      error: TEXTO_FIJO,
+    });
+    expect(escrituras().map((c) => c.op)).toEqual(["update"]);
+    expect(sim.tablas.sprints.filter((f) => f.status === "active")).toHaveLength(2);
+    expect(sim.reportes).toEqual([
+      {
+        error: expect.objectContaining({ name: "FallaDeLaBase" }),
+        contexto: { accion: "[createSprint]" },
+      },
+    ]);
   });
 
   it("⭐ sin nombre vuelve con el mensaje de validación, sin escribir", async () => {

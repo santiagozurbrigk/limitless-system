@@ -34,7 +34,12 @@ import {
   uuidSchema,
 } from "@/lib/validations";
 import { paths } from "@/routes/paths";
-import { loadTaskLinksBundle, deleteTaskAttachmentsForTask, getWorkboardTaskByIdAction } from "./task-link-actions";
+import {
+  deleteTaskAttachmentsForTask,
+  leerTareaConVinculos,
+  loadTaskLinksBundle,
+  TAREA_NO_ENCONTRADA,
+} from "@/lib/workboard/tarea-con-vinculos";
 import type {
   MemberTimeReport,
   WorkboardMember,
@@ -54,7 +59,6 @@ const SIN_FILAS = "PGRST116";
 const REFERENCIA_INEXISTENTE = "23503";
 
 const SESION_NO_VALIDA = "Sesión no válida";
-const TAREA_NO_ENCONTRADA = "No se encontró la tarea. Puede que la hayan eliminado.";
 const REFERENCIA_DE_LA_TAREA_INEXISTENTE =
   "El responsable, el sprint, el lanzamiento o el SOP que elegiste ya no existe. Recargá la página e intentá de nuevo.";
 const LANZAMIENTO_INEXISTENTE =
@@ -340,11 +344,9 @@ export async function createWorkboardTaskAction(
       await refreshSprintCompletionForTask(supabase, organizationId, taskId);
     }
     revalidateWorkboard();
-    const created = await getWorkboardTaskByIdAction(taskId);
-    if (!created) {
-      throw new FallaDeLaBase({ message: "No se pudo cargar la tarea creada" });
-    }
-    return created;
+    // La tarea recién creada, con sus vínculos. Si no se puede leer es una
+    // falla: la acción la registra y avisa con el texto fijo.
+    return leerTareaConVinculos(taskId, organizationId);
   });
 }
 
@@ -706,11 +708,15 @@ export async function createSprintAction(
     const profile = await getCurrentProfile();
     const supabase = await createClient();
 
-    await supabase
+    // Sólo puede haber un sprint activo: si no se pudo cerrar el anterior, no
+    // se crea el nuevo (quedarían dos activos). Antes la falla se ignoraba.
+    const { error: cierreError } = await supabase
       .from("sprints")
       .update({ status: "completed", updated_at: new Date().toISOString() })
       .eq("organization_id", organizationId)
       .eq("status", "active");
+
+    if (cierreError) throw errorDeEscritura(cierreError, "sprints");
 
     const { data: sprint, error } = await supabase
       .from("sprints")
