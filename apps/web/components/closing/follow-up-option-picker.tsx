@@ -26,6 +26,7 @@ import {
   type FollowUpOption,
 } from "@/lib/sales/follow-up-options";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion } from "@/lib/client/correr-accion";
 
 /**
  * Celda editable de un valor de seguimiento.
@@ -111,22 +112,26 @@ export function FollowUpOptionPicker({
   function handleCreate() {
     const trimmed = label.trim();
     if (!trimmed) return;
-    startTransition(async () => {
-      const result = await createFollowUpOptionAction({
-        kind,
-        label: trimmed,
-        color,
-        behavior: kind === "qualification" ? "neutral" : behavior,
-      });
-      if (!result.ok || !result.option) {
-        push({ title: "No se pudo crear el valor", description: result.error });
-        return;
-      }
-      onCreated?.(result.option);
-      onSelect(result.option.slug);
-      reset();
-      setOpen(false);
-    });
+    startTransition(() =>
+      correrMutacion({
+        accion: () =>
+          createFollowUpOptionAction({
+            kind,
+            label: trimmed,
+            color,
+            behavior: kind === "qualification" ? "neutral" : behavior,
+          }),
+        avisar: push,
+        tituloError: "No se pudo crear el valor",
+        etiqueta: "[FollowUpOptionPicker] crear",
+        alExito: (option) => {
+          onCreated?.(option);
+          onSelect(option.slug);
+          reset();
+          setOpen(false);
+        },
+      })
+    );
   }
 
   return (

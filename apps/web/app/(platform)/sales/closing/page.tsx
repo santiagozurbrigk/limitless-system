@@ -9,6 +9,8 @@ import { getTeamMembersAction } from "@/app/team/actions";
 async function ClosingPageContent() {
   const [ghlStatus, leadsTable, teamMembers] = await Promise.all([
     getGHLIntegrationStatusAction(),
+    // Devuelve su error como valor (SCRUM-504): la pantalla se dibuja igual
+    // (calendario y llamadas) y el seguimiento muestra el motivo.
     listLeadsTableAction(),
     // El equipo es para asignar responsables: si falla, la tabla igual sirve.
     getTeamMembersAction()
@@ -23,7 +25,8 @@ async function ClosingPageContent() {
     <ClosingOverview
       ghlCalendars={ghlStatus.connected ? ghlStatus.connectedCalendars : []}
       ghlSelectedCalendarIds={ghlStatus.selectedCalendarIds}
-      leadsTable={leadsTable}
+      leadsTable={leadsTable.success ? leadsTable.data : null}
+      leadsTableError={leadsTable.success ? null : leadsTable.error}
       teamMembers={teamMembers}
     />
   );

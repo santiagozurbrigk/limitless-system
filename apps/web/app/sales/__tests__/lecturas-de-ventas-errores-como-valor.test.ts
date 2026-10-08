@@ -40,7 +40,18 @@ vi.mock("@/lib/auth/bootstrap", async () => {
   };
 });
 vi.mock("@/lib/metrics/frequent-objections", () => ({
-  getFrequentObjections: vi.fn(),
+  // Como la real: lee `call_analyses` de la org y, si la base falla, lanza un
+  // `Error` con el mensaje de la base.
+  getFrequentObjections: async (organizationId: string) => {
+    if (sim.lanza) throw sim.lanza;
+    const error = sim.errores.call_analyses;
+    if (error) {
+      const { FallaDeLaBase } = await import("@/lib/server/action-result");
+      throw new FallaDeLaBase(error);
+    }
+    sim.filtrosOrg.objeciones = [organizationId];
+    return { objections: [], dataSource: "calls" };
+  },
   mockFrequentObjectionSummaries: () => [],
 }));
 vi.mock("@/lib/sales/lead-journey", () => ({
@@ -171,6 +182,7 @@ const casos: Array<{
   { nombre: "getCloserEvolutionAction", etiqueta: "[getCloserEvolution]", tabla: "call_analyses", llamar: () => getCloserEvolutionAction("Laura") },
   { nombre: "getTeamAverageEvolutionAction", etiqueta: "[getTeamAverageEvolution]", tabla: "call_analyses", llamar: () => getTeamAverageEvolutionAction() },
   { nombre: "getSalesMetricsSnapshotsAction", etiqueta: "[getSalesMetricsSnapshots]", tabla: "metrics_snapshots", llamar: () => getSalesMetricsSnapshotsAction() },
+  { nombre: "getFrequentObjectionsAction", etiqueta: "[getFrequentObjections]", tabla: "call_analyses", llamar: () => acciones.getFrequentObjectionsAction() },
   { nombre: "getSalesPerformanceMetricsAction", etiqueta: "[getSalesPerformanceMetrics]", tabla: "closing_calls", llamar: () => getSalesPerformanceMetricsAction("month") },
 ];
 
@@ -253,6 +265,11 @@ describe("getTeamAverageEvolutionAction", () => {
 });
 
 describe("getSalesMetricsSnapshotsAction", () => {
+  it("sin Supabase configurado no hay métricas importadas", async () => {
+    sim.configurado = false;
+    await expect(getSalesMetricsSnapshotsAction()).resolves.toEqual({ success: true, data: [] });
+  });
+
   it("devuelve las métricas importadas de la organización de la sesión, y no las de otra", async () => {
     await expect(getSalesMetricsSnapshotsAction()).resolves.toEqual({
       success: true,
@@ -286,6 +303,24 @@ describe("getSalesPerformanceMetricsAction", () => {
       error: ERROR_INESPERADO,
     });
     expect(sim.reportes).toHaveLength(1);
+  });
+});
+
+describe("getFrequentObjectionsAction", () => {
+  it("lee las objeciones de la organización de la sesión", async () => {
+    await expect(acciones.getFrequentObjectionsAction()).resolves.toEqual({
+      success: true,
+      data: { objections: [], dataSource: "calls" },
+    });
+    expect(sim.filtrosOrg.objeciones).toEqual(["org-1"]);
+  });
+
+  it("sin Supabase configurado devuelve las de ejemplo", async () => {
+    sim.configurado = false;
+    await expect(acciones.getFrequentObjectionsAction()).resolves.toEqual({
+      success: true,
+      data: { objections: [], dataSource: "mock" },
+    });
   });
 });
 

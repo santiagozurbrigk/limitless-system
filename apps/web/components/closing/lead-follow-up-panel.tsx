@@ -21,6 +21,7 @@ import { fechaAInstanteEnZona, formatearFechaGuardada } from "@/lib/fechas/calen
 import { fechaPropuestaDelProximoPaso } from "@/lib/sales/follow-up-options";
 import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion } from "@/lib/client/correr-accion";
 
 /**
  * Seguimiento de leads: qué pasó con cada uno y qué sigue.
@@ -102,40 +103,42 @@ function LeadRow({ lead }: { lead: LeadSummary }) {
 
   function handleSave() {
     if (!target || !action) return;
-    startTransition(async () => {
-      const result = await setNextActionAction({
-        callId: target,
-        nextAction: action,
-        // `lost` cierra el hilo, así que no necesita fecha. La fecha se guarda
-        // al mediodía local: a medianoche UTC caía el día anterior en Argentina.
-        // Sin fecha va null y el servidor responde que el paso la necesita.
-        nextActionAt:
-          action === "lost" ? null : date ? fechaAInstanteEnZona(date, zonaDeLaOrganizacion) : null,
-        notes: notes.trim() || null,
-      });
-      if (!result.ok) {
-        push({ title: "No se pudo guardar", description: result.error });
-        return;
-      }
-      setResolved(true);
-      router.refresh();
-    });
+    startTransition(() =>
+      correrMutacion({
+        accion: () =>
+          setNextActionAction({
+            callId: target,
+            nextAction: action,
+            // `lost` cierra el hilo, así que no necesita fecha. La fecha se guarda
+            // al mediodía local: a medianoche UTC caía el día anterior en Argentina.
+            // Sin fecha va null y el servidor responde que el paso la necesita.
+            nextActionAt:
+              action === "lost" ? null : date ? fechaAInstanteEnZona(date, zonaDeLaOrganizacion) : null,
+            notes: notes.trim() || null,
+          }),
+        avisar: push,
+        tituloError: "No se pudo guardar",
+        etiqueta: "[LeadFollowUpPanel] próximo paso",
+        alExito: () => {
+          setResolved(true);
+          router.refresh();
+        },
+      })
+    );
   }
 
   function handleQualify(qualification: LeadQualification) {
     if (!target) return;
-    startTransition(async () => {
-      const result = await setLeadQualificationAction({
-        callId: target,
-        moment: "post",
-        qualification,
-      });
-      if (!result.ok) {
-        push({ title: "No se pudo calificar", description: result.error });
-        return;
-      }
-      router.refresh();
-    });
+    startTransition(() =>
+      correrMutacion({
+        accion: () =>
+          setLeadQualificationAction({ callId: target, moment: "post", qualification }),
+        avisar: push,
+        tituloError: "No se pudo calificar",
+        etiqueta: "[LeadFollowUpPanel] calificar",
+        alExito: () => router.refresh(),
+      })
+    );
   }
 
   if (resolved) return null;

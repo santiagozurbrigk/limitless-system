@@ -61,33 +61,51 @@ async function getCloserProfileIds(
   supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<string[]> {
   // Profiles con role de closer (custom_role_id → team_roles.name ILIKE 'closer')
-  const { data: roleRows } = await supabase
+  const { data: roleRows, error: rolesError } = await supabase
     .from("team_roles")
     .select("id")
     .eq("organization_id", organizationId)
     .ilike("name", "%closer%");
 
+  if (rolesError) throw new FallaDeLaBase(rolesError);
+
   const roleIds = (roleRows ?? []).map((r) => r.id as string);
 
   if (!roleIds.length) return [];
 
-  const { data: profileRows } = await supabase
+  const { data: profileRows, error: profilesError } = await supabase
     .from("profiles")
     .select("id")
     .eq("organization_id", organizationId)
     .in("custom_role_id", roleIds);
+
+  if (profilesError) throw new FallaDeLaBase(profilesError);
 
   return (profileRows ?? []).map((p) => p.id as string);
 }
 
 // ─── Acciones públicas ────────────────────────────────────────────────────────
 
+/*
+ * SCRUM-504: las acciones de closers (lecturas y mutaciones) devuelven sus
+ * errores esperables como valor (`MutationResult`): en producción Next no le
+ * manda al cliente el mensaje de un error lanzado por una server action. Sólo
+ * un `ErrorEsperable` vuelve con su mensaje (sesión, validación, closer o
+ * integración que no existe, Calendly que rechaza la conexión); el resto se
+ * registra, va a Sentry (tag `server_action`) y vuelve con el texto fijo.
+ */
+
 /**
  * Lista los closers de la org con su estado de integración Calendly.
  */
-export async function getClosersWithCalendlyStatusAction(): Promise<CloserProfile[]> {
-  if (!isSupabaseConfigured()) return [];
+export async function getClosersWithCalendlyStatusAction(): Promise<
+  MutationResult<CloserProfile[]>
+> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
+  return mutacionConErroresEsperables("[getClosersWithCalendlyStatus]", leerClosersConCalendly);
+}
 
+async function leerClosersConCalendly(): Promise<CloserProfile[]> {
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
@@ -99,16 +117,19 @@ export async function getClosersWithCalendlyStatusAction(): Promise<CloserProfil
     .select("id, full_name, email, avatar_url, commission_pct")
     .in("id", closerIds);
 
-  if (error || !profiles?.length) return [];
+  if (error) throw new FallaDeLaBase(error);
+  if (!profiles?.length) return [];
 
   // Buscar integraciones Calendly para estos profiles
   const admin = createAdminClient();
-  const { data: integrations } = await admin
+  const { data: integrations, error: integrationsError } = await admin
     .from("team_member_integrations")
     .select("user_id, config, last_sync_at")
     .eq("organization_id", organizationId)
     .eq("integration_type", "calendly")
     .in("user_id", closerIds);
+
+  if (integrationsError) throw new FallaDeLaBase(integrationsError);
 
   const integrationMap = new Map(
     (integrations ?? []).map((i) => [
@@ -140,9 +161,12 @@ export async function getClosersWithCalendlyStatusAction(): Promise<CloserProfil
  */
 export async function getCloserMetricsAction(
   since?: string // ISO date string; default últimos 90 días
-): Promise<CloserMetrics[]> {
-  if (!isSupabaseConfigured()) return [];
+): Promise<MutationResult<CloserMetrics[]>> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
+  return mutacionConErroresEsperables("[getCloserMetrics]", () => leerMetricasDeClosers(since));
+}
 
+async function leerMetricasDeClosers(since: string | undefined): Promise<CloserMetrics[]> {
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
@@ -160,33 +184,39 @@ export async function getCloserMetricsAction(
     .in("closer_id", closerIds)
     .gte("scheduled_at", sinceDate);
 
-  if (callsError) {
-    console.error("[getCloserMetricsAction] calls:", callsError.message);
-    return [];
-  }
+  // Antes devolvía la lista vacía, como si no hubiera closers (SCRUM-504). Hoy
+  // falla siempre por `amount_closed` ([CLOSER-AMOUNT-CLOSED]); la pestaña
+  // está escondida para el release.
+  if (callsError) throw new FallaDeLaBase(callsError);
 
   // Scores de call_analyses agrupados por closer_id
-  const { data: analyses } = await supabase
+  const { data: analyses, error: analysesError } = await supabase
     .from("call_analyses")
     .select("closer_id, overall_score")
     .eq("organization_id", organizationId)
     .in("closer_id", closerIds)
     .gte("call_date", sinceDate);
 
+  if (analysesError) throw new FallaDeLaBase(analysesError);
+
   // Profiles + comisión
-  const { data: profiles } = await supabase
+  const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
     .select("id, full_name, email, avatar_url, commission_pct")
     .in("id", closerIds);
 
+  if (profilesError) throw new FallaDeLaBase(profilesError);
+
   // Integración calendly
   const admin = createAdminClient();
-  const { data: integrations } = await admin
+  const { data: integrations, error: integrationsError } = await admin
     .from("team_member_integrations")
     .select("user_id, config")
     .eq("organization_id", organizationId)
     .eq("integration_type", "calendly")
     .in("user_id", closerIds);
+
+  if (integrationsError) throw new FallaDeLaBase(integrationsError);
 
   const integrationMap = new Map(
     (integrations ?? []).map((i) => [
@@ -275,15 +305,6 @@ export async function getCloserMetricsAction(
     };
   });
 }
-
-/*
- * SCRUM-504: las mutaciones de closers devuelven sus errores esperables como
- * valor (`MutationResult`): en producción Next no le manda al cliente el
- * mensaje de un error lanzado por una server action. Sólo un `ErrorEsperable`
- * vuelve con su mensaje (sesión, validación, closer o integración que no
- * existe, Calendly que rechaza la conexión); el resto se registra, va a Sentry
- * (tag `server_action`) y vuelve con el texto fijo de la interfaz.
- */
 
 /** Código de Postgres de `insufficient_privilege` (el trigger `protect_profile_columns`). */
 const SIN_PRIVILEGIO = "42501";
@@ -440,23 +461,24 @@ export async function disconnectMyCalendlyAction(): Promise<MutationResult<void>
 /**
  * Llamadas de un closer específico (para vista de detalle).
  */
-export async function getCloserCallsAction(closerId: string) {
-  if (!isSupabaseConfigured()) return [];
+export async function getCloserCallsAction(
+  closerId: string
+): Promise<MutationResult<Record<string, unknown>[]>> {
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
 
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+  return mutacionConErroresEsperables("[getCloserCalls]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("closing_calls")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .eq("closer_id", closerId)
-    .order("scheduled_at", { ascending: false })
-    .limit(100);
+    const { data, error } = await supabase
+      .from("closing_calls")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("closer_id", closerId)
+      .order("scheduled_at", { ascending: false })
+      .limit(100);
 
-  if (error) {
-    console.error("[getCloserCallsAction]", error.message);
-    return [];
-  }
-  return data ?? [];
+    if (error) throw new FallaDeLaBase(error);
+    return (data ?? []) as Record<string, unknown>[];
+  });
 }

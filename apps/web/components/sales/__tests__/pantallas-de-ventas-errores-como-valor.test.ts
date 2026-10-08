@@ -19,6 +19,9 @@ const sim = vi.hoisted(() => ({
   rendimiento: null as unknown,
   sync: null as unknown,
   desconectar: null as unknown,
+  metricasDeClosers: null as unknown,
+  tablaDeLeads: null as unknown,
+  objeciones: null as unknown,
 }));
 
 /** Devuelve el resultado simulado, o lo lanza si es una excepción. */
@@ -31,6 +34,7 @@ function responder(valor: unknown) {
 // acciones de servidor (`app/clients/actions.ts`).
 vi.mock("server-only", () => ({}));
 vi.mock("@/app/sales/actions", () => ({
+  getFrequentObjectionsAction: () => responder(sim.objeciones),
   getTeamRankingAction: () => responder(sim.ranking),
   getCloserEvolutionAction: () => responder(sim.evolucion),
   getTeamAverageEvolutionAction: () => responder(sim.promedio),
@@ -42,7 +46,10 @@ vi.mock("@/app/sales/closer-actions", () => ({
   syncCloserCalendlyAction: () => responder(sim.sync),
   disconnectMyCalendlyAction: () => responder(sim.desconectar),
   getMyCalendlyIntegrationAction: async () => ({ connected: true }),
-  getCloserMetricsAction: async () => [],
+  getCloserMetricsAction: () => responder(sim.metricasDeClosers),
+}));
+vi.mock("@/app/sales/lead-actions", () => ({
+  listLeadsTableAction: () => responder(sim.tablaDeLeads),
 }));
 
 import { leerConMotivo } from "@/lib/sales/lectura-con-motivo";
@@ -57,7 +64,15 @@ import {
   desconectarMiCalendly,
   sincronizarMiCalendly,
 } from "@/components/settings/closer-calendly-settings";
-import { sincronizarCalendlyDelCloser } from "@/components/closing/closers-ranking";
+import {
+  cargarMetricasDeClosers,
+  sincronizarCalendlyDelCloser,
+} from "@/components/closing/closers-ranking";
+import {
+  guardarCambioDeFila,
+  recargarTablaDeLeads,
+} from "@/components/closing/leads-table";
+import { FrequentObjectionsSection } from "../frequent-objections-section";
 
 const caida = () => new Error("An error occurred in the Server Components render.");
 
@@ -298,6 +313,126 @@ describe("Calendly de un closer (ranking de closers)", () => {
     await sincronizarCalendlyDelCloser("closer-1", avisar, vi.fn());
     expect(avisar).toHaveBeenCalledWith({
       title: "Error en sync",
+      description: ERROR_INESPERADO,
+      variant: "default",
+    });
+  });
+});
+
+describe("Objeciones frecuentes", () => {
+  it("⭐ con el motivo de la lectura del servidor lo muestra, sin volver a leer", () => {
+    const html = renderToStaticMarkup(
+      createElement(FrequentObjectionsSection, { initialError: "Sesión no válida" })
+    );
+    expect(html).toContain("No pudimos cargar las objeciones");
+    expect(html).toContain("Sesión no válida");
+  });
+
+  it("⭐ si la acción del cliente lanza, el motivo es el texto fijo", async () => {
+    sim.objeciones = caida();
+    const { getFrequentObjectionsAction } = await import("@/app/sales/actions");
+    await expect(leerConMotivo(getFrequentObjectionsAction, "[x]")).resolves.toEqual({
+      ok: false,
+      motivo: ERROR_INESPERADO,
+    });
+  });
+});
+
+describe("Ranking de closers: métricas", () => {
+  it("con éxito las ordena por cierres", async () => {
+    sim.metricasDeClosers = {
+      success: true,
+      data: [
+        { closerId: "a", closedCalls: 1 },
+        { closerId: "b", closedCalls: 3 },
+      ],
+    };
+    const avisar = vi.fn();
+    const r = await cargarMetricasDeClosers("2026-10-01", avisar);
+    expect(r?.map((m) => m.closerId)).toEqual(["b", "a"]);
+    expect(avisar).not.toHaveBeenCalled();
+  });
+
+  it("⭐ con un motivo lo avisa y no pisa lo que se ve", async () => {
+    sim.metricasDeClosers = { success: false, error: "Sesión no válida" };
+    const avisar = vi.fn();
+    await expect(cargarMetricasDeClosers("2026-10-01", avisar)).resolves.toBeNull();
+    expect(avisar).toHaveBeenCalledWith({ title: "Error al cargar métricas", description: "Sesión no válida" });
+  });
+
+  it("⭐ si la acción lanzó avisa el texto fijo", async () => {
+    sim.metricasDeClosers = caida();
+    const avisar = vi.fn();
+    await cargarMetricasDeClosers("2026-10-01", avisar);
+    expect(avisar).toHaveBeenCalledWith({ title: "Error al cargar métricas", description: ERROR_INESPERADO });
+  });
+});
+
+describe("Tabla de seguimiento", () => {
+  it("recargar con éxito devuelve la tabla", async () => {
+    sim.tablaDeLeads = { success: true, data: { rows: [], total: 0 } };
+    await expect(recargarTablaDeLeads({ scope: "all" }, vi.fn())).resolves.toEqual({ rows: [], total: 0 });
+  });
+
+  it("⭐ recargar con un motivo lo avisa y deja la tabla como estaba", async () => {
+    sim.tablaDeLeads = { success: false, error: "Sesión no válida" };
+    const avisar = vi.fn();
+    await expect(recargarTablaDeLeads({}, avisar)).resolves.toBeNull();
+    expect(avisar).toHaveBeenCalledWith({ title: "No se pudo cargar el seguimiento", description: "Sesión no válida" });
+  });
+
+  it("⭐ recargar con la acción que lanza avisa el texto fijo", async () => {
+    sim.tablaDeLeads = caida();
+    const avisar = vi.fn();
+    await recargarTablaDeLeads({}, avisar);
+    expect(avisar).toHaveBeenCalledWith({ title: "No se pudo cargar el seguimiento", description: ERROR_INESPERADO });
+  });
+
+  it("guardar un cambio con éxito no vuelve atrás ni avisa", async () => {
+    const deshacer = vi.fn();
+    const avisar = vi.fn();
+    await guardarCambioDeFila({
+      accion: async () => ({ success: true, data: undefined }),
+      deshacer,
+      avisar,
+      titulo: "No se pudo guardar",
+      etiqueta: "[x]",
+    });
+    expect(deshacer).not.toHaveBeenCalled();
+    expect(avisar).not.toHaveBeenCalled();
+  });
+
+  it("⭐ un cambio rechazado vuelve atrás la fila y avisa el motivo", async () => {
+    const deshacer = vi.fn();
+    const avisar = vi.fn();
+    await guardarCambioDeFila({
+      accion: async () => ({ success: false, error: "El próximo paso necesita una fecha." }),
+      deshacer,
+      avisar,
+      titulo: "No se pudo guardar",
+      etiqueta: "[x]",
+    });
+    expect(deshacer).toHaveBeenCalledTimes(1);
+    expect(avisar).toHaveBeenCalledWith({
+      title: "No se pudo guardar",
+      description: "El próximo paso necesita una fecha.",
+      variant: "default",
+    });
+  });
+
+  it("⭐ un cambio cuya acción lanza vuelve atrás la fila y avisa el texto fijo", async () => {
+    const deshacer = vi.fn();
+    const avisar = vi.fn();
+    await guardarCambioDeFila({
+      accion: () => Promise.reject(caida()),
+      deshacer,
+      avisar,
+      titulo: "No se pudo guardar",
+      etiqueta: "[x]",
+    });
+    expect(deshacer).toHaveBeenCalledTimes(1);
+    expect(avisar).toHaveBeenCalledWith({
+      title: "No se pudo guardar",
       description: ERROR_INESPERADO,
       variant: "default",
     });

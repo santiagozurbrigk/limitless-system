@@ -20,13 +20,24 @@ import {
   selectableOptions,
   type FollowUpCatalog,
 } from "@/lib/sales/follow-up-options";
-import { getFollowUpCatalogAction } from "@/app/sales/follow-up-options-actions";
+import { leerCatalogoDeSeguimiento } from "@/lib/sales/catalogo-de-seguimiento";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import type { ClosingCallStatus } from "@/types/closing";
 import { paths } from "@/routes";
 
 /**
  * Seguimiento de leads: el hilo de intentos y lo que hay que hacer con cada uno.
+ *
+ * SCRUM-504: las acciones devuelven sus errores como valor (`MutationResult`).
+ * Sesión y validación (valor que no está en el catálogo, archivado, sin fecha)
+ * vuelven con su motivo; un error de la base se registra, va a Sentry y vuelve
+ * con el texto fijo (antes llegaba el mensaje crudo de la base).
  */
 
 const ATTEMPT_COLUMNS =
@@ -173,7 +184,11 @@ function time(iso: string | null): number {
  */
 export async function listLeadsTableAction(
   params: LeadTableParams = {}
-): Promise<LeadTableResult> {
+): Promise<MutationResult<LeadTableResult>> {
+  return mutacionConErroresEsperables("[listLeadsTable]", () => leerTablaDeLeads(params));
+}
+
+async function leerTablaDeLeads(params: LeadTableParams): Promise<LeadTableResult> {
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
@@ -186,7 +201,7 @@ export async function listLeadsTableAction(
   // La zona se lee una vez por pedido, no por lead: el vencimiento del próximo
   // paso se cuenta en el día de la organización (SCRUM-493).
   const [catalog, timezone] = await Promise.all([
-    getFollowUpCatalogAction(),
+    leerCatalogoDeSeguimiento(supabase, organizationId),
     leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
   ]);
   const closing = closingActionSlugs(catalog.nextActions);
@@ -203,17 +218,8 @@ export async function listLeadsTableAction(
     { maxRows: MAX_LEADS }
   );
 
-  if (error) {
-    return {
-      rows: [],
-      total: 0,
-      page,
-      pageSize,
-      counts: { ...EMPTY_COUNTS },
-      catalog,
-      truncated: false,
-    };
-  }
+  // Antes devolvía la tabla vacía, como si no hubiera leads (SCRUM-504).
+  if (error) throw new FallaDeLaBase({ message: error });
 
   const raw = data;
   const now = new Date();
@@ -300,22 +306,29 @@ export async function listLeadsTableAction(
 /** El hilo completo de un lead. */
 export async function getLeadThreadAction(
   leadId: string
-): Promise<LeadSummary | null> {
+): Promise<MutationResult<LeadSummary | null>> {
+  return mutacionConErroresEsperables("[getLeadThread]", () => leerHiloDelLead(leadId));
+}
+
+async function leerHiloDelLead(leadId: string): Promise<LeadSummary | null> {
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
-  const [catalog, timezone, { data, error }] = await Promise.all([
-    getFollowUpCatalogAction(),
-    leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
+  // La consulta del lead va primera: si armarla lanza, no quedan las otras dos
+  // promesas rechazadas sin atender.
+  const [{ data, error }, catalog, timezone] = await Promise.all([
     supabase
       .from("sales_leads")
       .select(`id, name, email, client_id, closing_calls(${ATTEMPT_COLUMNS})`)
       .eq("id", leadId)
       .eq("organization_id", organizationId)
       .maybeSingle(),
+    leerCatalogoDeSeguimiento(supabase, organizationId),
+    leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
   ]);
 
-  if (error || !data) return null;
+  if (error) throw new FallaDeLaBase(error);
+  if (!data) return null;
 
   const attempts = Array.isArray(data.closing_calls)
     ? (data.closing_calls as AttemptRow[]).map(rowToAttempt)
@@ -346,65 +359,66 @@ export async function setNextActionAction(params: {
   nextActionAt?: string | null;
   ownerId?: string | null;
   notes?: string | null;
-}): Promise<{ ok: boolean; error?: string }> {
-  const organizationId = await requireOrganizationId();
+}): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[setNextAction]", async () => {
+    const organizationId = await requireOrganizationId();
 
-  // El catálogo decide: qué valores existen y cuáles piden fecha. Antes esto era
-  // una comparación contra el string `lost`, que dejaba afuera a cualquier valor
-  // propio que también cierre el hilo.
-  const catalog = await getFollowUpCatalogAction();
-  const wantsDate = params.nextAction
-    ? needsDate(catalog.nextActions, params.nextAction)
-    : false;
+    // El catálogo decide: qué valores existen y cuáles piden fecha. Antes esto era
+    // una comparación contra el string `lost`, que dejaba afuera a cualquier valor
+    // propio que también cierre el hilo.
+    const catalog = await leerCatalogoDeSeguimiento(await createClient(), organizationId);
+    const wantsDate = params.nextAction
+      ? needsDate(catalog.nextActions, params.nextAction)
+      : false;
 
-  if (params.nextAction) {
-    const option = findOption(catalog.nextActions, params.nextAction);
-    // Un slug que no está en el catálogo no se guarda: sería un valor inventado,
-    // y nada sabría después qué hacer con él.
-    if (!option) {
-      return { ok: false, error: "Ese próximo paso no existe en el catálogo." };
+    if (params.nextAction) {
+      const option = findOption(catalog.nextActions, params.nextAction);
+      // Un slug que no está en el catálogo no se guarda: sería un valor inventado,
+      // y nada sabría después qué hacer con él.
+      if (!option) {
+        throw new ErrorEsperable("Ese próximo paso no existe en el catálogo.");
+      }
+      if (option.archived) {
+        throw new ErrorEsperable("Ese valor está archivado.");
+      }
+      // Un próximo paso sin fecha no es un compromiso: nunca vencería, así que
+      // nunca volvería a aparecer en la cola. Los valores que cierran el hilo son
+      // la excepción, porque lo terminan.
+      if (wantsDate && !params.nextActionAt) {
+        throw new ErrorEsperable("El próximo paso necesita una fecha.");
+      }
     }
-    if (option.archived) {
-      return { ok: false, error: "Ese valor está archivado." };
+
+    const patch: Record<string, unknown> = {
+      next_action: params.nextAction,
+      // Un valor que cierra el hilo no lleva fecha: no hay nada que vencer.
+      next_action_at: wantsDate ? (params.nextActionAt ?? null) : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (!params.nextAction) {
+      // Sin próximo paso no hay responsable ni nota del paso: son del compromiso
+      // que se acaba de borrar.
+      patch.next_action_owner_id = null;
+      patch.next_action_notes = null;
+    } else {
+      // Cambiar el próximo paso desde la tabla no puede pisar el responsable ni la
+      // nota que alguien ya había cargado: sólo se tocan si vienen en la llamada.
+      if (params.ownerId !== undefined) patch.next_action_owner_id = params.ownerId;
+      if (params.notes !== undefined) patch.next_action_notes = params.notes;
     }
-    // Un próximo paso sin fecha no es un compromiso: nunca vencería, así que
-    // nunca volvería a aparecer en la cola. Los valores que cierran el hilo son
-    // la excepción, porque lo terminan.
-    if (wantsDate && !params.nextActionAt) {
-      return { ok: false, error: "El próximo paso necesita una fecha." };
-    }
-  }
 
-  const patch: Record<string, unknown> = {
-    next_action: params.nextAction,
-    // Un valor que cierra el hilo no lleva fecha: no hay nada que vencer.
-    next_action_at: wantsDate ? (params.nextActionAt ?? null) : null,
-    updated_at: new Date().toISOString(),
-  };
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("closing_calls")
+      .update(patch)
+      .eq("id", params.callId)
+      .eq("organization_id", organizationId);
 
-  if (!params.nextAction) {
-    // Sin próximo paso no hay responsable ni nota del paso: son del compromiso
-    // que se acaba de borrar.
-    patch.next_action_owner_id = null;
-    patch.next_action_notes = null;
-  } else {
-    // Cambiar el próximo paso desde la tabla no puede pisar el responsable ni la
-    // nota que alguien ya había cargado: sólo se tocan si vienen en la llamada.
-    if (params.ownerId !== undefined) patch.next_action_owner_id = params.ownerId;
-    if (params.notes !== undefined) patch.next_action_notes = params.notes;
-  }
+    if (error) throw new FallaDeLaBase(error);
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("closing_calls")
-    .update(patch)
-    .eq("id", params.callId)
-    .eq("organization_id", organizationId);
-
-  if (error) return { ok: false, error: error.message };
-
-  revalidatePath(paths.platform.sales.closing);
-  return { ok: true };
+    revalidatePath(paths.platform.sales.closing);
+  });
 }
 
 /**
@@ -428,110 +442,113 @@ export async function saveCallFollowUpAction(params: {
   nextActionAt?: string | null;
   ownerId?: string | null;
   notes?: string | null;
-}): Promise<{ ok: boolean; error?: string }> {
-  const organizationId = await requireOrganizationId();
-  const catalog = await getFollowUpCatalogAction();
+}): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[saveCallFollowUp]", async () => {
+    const organizationId = await requireOrganizationId();
+    const catalog = await leerCatalogoDeSeguimiento(await createClient(), organizationId);
 
-  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-  if (params.qualification !== undefined) {
-    if (params.qualification) {
-      const option = findOption(
-        selectableOptions(catalog.qualifications),
-        params.qualification
-      );
-      if (!option) {
-        return { ok: false, error: "Esa calificación no existe en el catálogo." };
+    if (params.qualification !== undefined) {
+      if (params.qualification) {
+        const option = findOption(
+          selectableOptions(catalog.qualifications),
+          params.qualification
+        );
+        if (!option) {
+          throw new ErrorEsperable("Esa calificación no existe en el catálogo.");
+        }
+      }
+      patch.post_call_qualification = params.qualification;
+    }
+
+    if (params.nextAction !== undefined) {
+      if (params.nextAction) {
+        const option = findOption(catalog.nextActions, params.nextAction);
+        if (!option) {
+          throw new ErrorEsperable("Ese próximo paso no existe en el catálogo.");
+        }
+        if (option.archived) throw new ErrorEsperable("Ese valor está archivado.");
+
+        const wantsDate = needsDate(catalog.nextActions, params.nextAction);
+        if (wantsDate && !params.nextActionAt) {
+          throw new ErrorEsperable("El próximo paso necesita una fecha.");
+        }
+
+        patch.next_action = params.nextAction;
+        patch.next_action_at = wantsDate ? params.nextActionAt : null;
+        patch.next_action_owner_id = params.ownerId ?? null;
+        patch.next_action_notes = params.notes?.trim() || null;
+      } else {
+        // Sin próximo paso el lead queda en la cola como "Sin próximo paso". Es un
+        // estado legítimo —a veces todavía no se sabe qué sigue— y es preferible a
+        // inventar un compromiso que nadie asumió.
+        patch.next_action = null;
+        patch.next_action_at = null;
+        patch.next_action_owner_id = null;
+        patch.next_action_notes = null;
       }
     }
-    patch.post_call_qualification = params.qualification;
-  }
 
-  if (params.nextAction !== undefined) {
-    if (params.nextAction) {
-      const option = findOption(catalog.nextActions, params.nextAction);
-      if (!option) {
-        return { ok: false, error: "Ese próximo paso no existe en el catálogo." };
-      }
-      if (option.archived) return { ok: false, error: "Ese valor está archivado." };
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("closing_calls")
+      .update(patch)
+      .eq("id", params.callId)
+      .eq("organization_id", organizationId);
 
-      const wantsDate = needsDate(catalog.nextActions, params.nextAction);
-      if (wantsDate && !params.nextActionAt) {
-        return { ok: false, error: "El próximo paso necesita una fecha." };
-      }
+    if (error) throw new FallaDeLaBase(error);
 
-      patch.next_action = params.nextAction;
-      patch.next_action_at = wantsDate ? params.nextActionAt : null;
-      patch.next_action_owner_id = params.ownerId ?? null;
-      patch.next_action_notes = params.notes?.trim() || null;
-    } else {
-      // Sin próximo paso el lead queda en la cola como "Sin próximo paso". Es un
-      // estado legítimo —a veces todavía no se sabe qué sigue— y es preferible a
-      // inventar un compromiso que nadie asumió.
-      patch.next_action = null;
-      patch.next_action_at = null;
-      patch.next_action_owner_id = null;
-      patch.next_action_notes = null;
-    }
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("closing_calls")
-    .update(patch)
-    .eq("id", params.callId)
-    .eq("organization_id", organizationId);
-
-  if (error) return { ok: false, error: error.message };
-
-  revalidatePath(paths.platform.sales.closing);
-  return { ok: true };
+    revalidatePath(paths.platform.sales.closing);
+  });
 }
 
 /** Cambia sólo el responsable del próximo paso, sin tocar el resto. */
 export async function setNextActionOwnerAction(params: {
   callId: string;
   ownerId: string | null;
-}): Promise<{ ok: boolean; error?: string }> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+}): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[setNextActionOwner]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("closing_calls")
-    .update({
-      next_action_owner_id: params.ownerId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", params.callId)
-    .eq("organization_id", organizationId);
+    const { error } = await supabase
+      .from("closing_calls")
+      .update({
+        next_action_owner_id: params.ownerId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", params.callId)
+      .eq("organization_id", organizationId);
 
-  if (error) return { ok: false, error: error.message };
+    if (error) throw new FallaDeLaBase(error);
 
-  revalidatePath(paths.platform.sales.closing);
-  return { ok: true };
+    revalidatePath(paths.platform.sales.closing);
+  });
 }
 
 /** Cambia sólo las notas del próximo paso. */
 export async function setNextActionNotesAction(params: {
   callId: string;
   notes: string | null;
-}): Promise<{ ok: boolean; error?: string }> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+}): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[setNextActionNotes]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("closing_calls")
-    .update({
-      next_action_notes: params.notes?.trim() || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", params.callId)
-    .eq("organization_id", organizationId);
+    const { error } = await supabase
+      .from("closing_calls")
+      .update({
+        next_action_notes: params.notes?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", params.callId)
+      .eq("organization_id", organizationId);
 
-  if (error) return { ok: false, error: error.message };
+    if (error) throw new FallaDeLaBase(error);
 
-  revalidatePath(paths.platform.sales.closing);
-  return { ok: true };
+    revalidatePath(paths.platform.sales.closing);
+  });
 }
 
 /** Califica al lead, antes o después de la llamada. */
@@ -539,35 +556,36 @@ export async function setLeadQualificationAction(params: {
   callId: string;
   moment: "pre" | "post";
   qualification: LeadQualification | null;
-}): Promise<{ ok: boolean; error?: string }> {
-  const organizationId = await requireOrganizationId();
+}): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[setLeadQualification]", async () => {
+    const organizationId = await requireOrganizationId();
 
-  if (params.qualification) {
-    const catalog = await getFollowUpCatalogAction();
-    const option = findOption(
-      selectableOptions(catalog.qualifications),
-      params.qualification
-    );
-    if (!option) {
-      return { ok: false, error: "Esa calificación no existe en el catálogo." };
+    if (params.qualification) {
+      const catalog = await leerCatalogoDeSeguimiento(await createClient(), organizationId);
+      const option = findOption(
+        selectableOptions(catalog.qualifications),
+        params.qualification
+      );
+      if (!option) {
+        throw new ErrorEsperable("Esa calificación no existe en el catálogo.");
+      }
     }
-  }
 
-  const supabase = await createClient();
+    const supabase = await createClient();
 
-  const column =
-    params.moment === "pre" ? "pre_call_qualification" : "post_call_qualification";
+    const column =
+      params.moment === "pre" ? "pre_call_qualification" : "post_call_qualification";
 
-  const { error } = await supabase
-    .from("closing_calls")
-    .update({ [column]: params.qualification, updated_at: new Date().toISOString() })
-    .eq("id", params.callId)
-    .eq("organization_id", organizationId);
+    const { error } = await supabase
+      .from("closing_calls")
+      .update({ [column]: params.qualification, updated_at: new Date().toISOString() })
+      .eq("id", params.callId)
+      .eq("organization_id", organizationId);
 
-  if (error) return { ok: false, error: error.message };
+    if (error) throw new FallaDeLaBase(error);
 
-  revalidatePath(paths.platform.sales.closing);
-  return { ok: true };
+    revalidatePath(paths.platform.sales.closing);
+  });
 }
 
 /**
@@ -581,28 +599,31 @@ export async function setLeadQualificationAction(params: {
 export async function linkLeadToClientAction(params: {
   callId: string;
   clientId: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+}): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[linkLeadToClient]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { data: call } = await supabase
-    .from("closing_calls")
-    .select("lead_id")
-    .eq("id", params.callId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+    const { data: call, error: callError } = await supabase
+      .from("closing_calls")
+      .select("lead_id")
+      .eq("id", params.callId)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
 
-  const leadId = call?.lead_id as string | null | undefined;
-  // Un turno sin lead es un turno sin identidad estable (sin mail ni contacto).
-  // No es un error: simplemente no hay hilo que cerrar.
-  if (!leadId) return { ok: true };
+    if (callError) throw new FallaDeLaBase(callError);
 
-  const { error } = await supabase
-    .from("sales_leads")
-    .update({ client_id: params.clientId, updated_at: new Date().toISOString() })
-    .eq("id", leadId)
-    .eq("organization_id", organizationId);
+    const leadId = call?.lead_id as string | null | undefined;
+    // Un turno sin lead es un turno sin identidad estable (sin mail ni contacto).
+    // No es un error: simplemente no hay hilo que cerrar.
+    if (!leadId) return;
 
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+    const { error } = await supabase
+      .from("sales_leads")
+      .update({ client_id: params.clientId, updated_at: new Date().toISOString() })
+      .eq("id", leadId)
+      .eq("organization_id", organizationId);
+
+    if (error) throw new FallaDeLaBase(error);
+  });
 }

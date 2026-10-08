@@ -59,10 +59,13 @@ export function AvisoDeLecturaFallida({ titulo, motivo }: { titulo: string; moti
 
 export function SalesMetricsRedesign({
   frequentObjections,
+  frequentObjectionsError = null,
   importedSnapshots = [],
   importedSnapshotsError = null,
 }: {
   frequentObjections?: FrequentObjectionsResult;
+  /** Por qué no se pudieron leer las objeciones en el servidor, si falló. */
+  frequentObjectionsError?: string | null;
   importedSnapshots?: MetricsSnapshot[];
   /** Por qué no se pudieron leer las métricas importadas, si falló. */
   importedSnapshotsError?: string | null;
@@ -421,7 +424,10 @@ export function SalesMetricsRedesign({
             <p className="px-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Motivos de no cierre
             </p>
-            <FrequentObjectionsSection initialData={frequentObjections} />
+            <FrequentObjectionsSection
+              initialData={frequentObjections}
+              initialError={frequentObjectionsError}
+            />
           </div>
 
           {/* Estado de conversaciones */}

@@ -58,19 +58,31 @@ function clienteFalso(cliente: string) {
     from(tabla: string) {
       if (sim.lanza) throw sim.lanza;
       const operacion: Operacion = { cliente, tabla, op: "select", filtros: [] };
+      const enLista: Array<[string, unknown[]]> = [];
       const ejecutar = () => {
         sim.operaciones.push(operacion);
         const error = sim.errores[tabla] ?? null;
         if (error) return { data: null, error };
         const filas = sim.tablas[tabla] ?? [];
-        const coincidentes = filas.filter((f) => operacion.filtros.every(([c, v]) => f[c] === v));
+        const coincidentes = filas.filter(
+          (f) =>
+            operacion.filtros.every(([c, v]) => f[c] === v) &&
+            enLista.every(([c, vs]) => vs.includes(f[c]))
+        );
         if (operacion.op === "update") coincidentes.forEach((f) => Object.assign(f, operacion.valores));
         if (operacion.op === "delete") sim.tablas[tabla] = filas.filter((f) => !coincidentes.includes(f));
         return { data: coincidentes, error: null };
       };
       const builder = {
         select: () => builder,
-        in: () => builder,
+        ilike: () => builder,
+        gte: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        in(columna: string, valores: unknown[]) {
+          enLista.push([columna, valores]);
+          return builder;
+        },
         update(valores: unknown) {
           operacion.op = "update";
           operacion.valores = valores;
@@ -101,6 +113,9 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => clienteFalso("
 
 import {
   disconnectMyCalendlyAction,
+  getCloserCallsAction,
+  getCloserMetricsAction,
+  getClosersWithCalendlyStatusAction,
   syncCloserCalendlyAction,
   updateCloserCommissionAction,
 } from "../closer-actions";
@@ -140,9 +155,18 @@ beforeEach(() => {
   sim.operaciones = [];
   sim.tablas = {
     profiles: [
-      { id: "closer-1", organization_id: "org-1", commission_pct: 10 },
-      { id: "closer-ajeno", organization_id: "org-2", commission_pct: 10 },
+      { id: "closer-1", organization_id: "org-1", commission_pct: 10, custom_role_id: "rol-closer", full_name: "Closer Uno" },
+      { id: "closer-ajeno", organization_id: "org-2", commission_pct: 10, custom_role_id: "rol-ajeno", full_name: "Ajeno" },
     ],
+    team_roles: [
+      { id: "rol-closer", organization_id: "org-1", name: "Closer" },
+      { id: "rol-ajeno", organization_id: "org-2", name: "Closer" },
+    ],
+    closing_calls: [
+      { organization_id: "org-1", closer_id: "closer-1", status: "closed", amount_closed: 1000, id: "c1" },
+      { organization_id: "org-2", closer_id: "closer-ajeno", status: "closed", amount_closed: 5000, id: "c-ajena" },
+    ],
+    call_analyses: [{ organization_id: "org-1", closer_id: "closer-1", overall_score: 80 }],
     team_member_integrations: [
       integracion("yo", "org-1", configCalendly()),
       integracion("closer-1", "org-1", configCalendly({ calendly_user_uri: "https://api.calendly.com/users/c1" })),
@@ -417,5 +441,62 @@ describe("disconnectMyCalendlyAction", () => {
     sim.lanza = new TypeError("fetch failed");
     await expect(disconnectMyCalendlyAction()).resolves.toEqual({ success: false, error: ERROR_INESPERADO });
     esperarFallaRegistrada("[disconnectMyCalendly]", sim.lanza);
+  });
+});
+
+describe("lecturas de closers", () => {
+  const lecturas: Array<{ nombre: string; etiqueta: string; tabla: string; llamar: () => Promise<{ success: boolean }> }> = [
+    { nombre: "getClosersWithCalendlyStatusAction", etiqueta: "[getClosersWithCalendlyStatus]", tabla: "team_roles", llamar: () => getClosersWithCalendlyStatusAction() },
+    { nombre: "getCloserMetricsAction", etiqueta: "[getCloserMetrics]", tabla: "closing_calls", llamar: () => getCloserMetricsAction() },
+    { nombre: "getCloserCallsAction", etiqueta: "[getCloserCalls]", tabla: "closing_calls", llamar: () => getCloserCallsAction("closer-1") },
+  ];
+
+  describe.each(lecturas)("$nombre", ({ etiqueta, tabla, llamar }) => {
+    it("⭐ sin sesión devuelve el motivo como valor y no lo reporta", async () => {
+      sim.sesion = false;
+      await expect(llamar()).resolves.toEqual({ success: false, error: "Sesión no válida" });
+      esperarSinReporte();
+    });
+
+    it("⭐ una excepción de la red vuelve con el texto fijo y se reporta", async () => {
+      sim.lanza = new TypeError("fetch failed");
+      await expect(llamar()).resolves.toEqual({ success: false, error: ERROR_INESPERADO });
+      esperarFallaRegistrada(etiqueta, sim.lanza);
+    });
+
+    it("⭐ un error de la base que supabase-js devuelve como valor no llega crudo", async () => {
+      sim.errores[tabla] = { message: "TypeError: fetch failed" };
+      await expect(llamar()).resolves.toEqual({ success: false, error: ERROR_INESPERADO });
+      esperarFallaRegistrada(
+        etiqueta,
+        expect.objectContaining({ name: "FallaDeLaBase", message: "TypeError: fetch failed" })
+      );
+    });
+  });
+
+  it("los closers con su Calendly son los de la organización de la sesión", async () => {
+    const r = await getClosersWithCalendlyStatusAction();
+    expect(r.success && r.data.map((c) => [c.id, c.calendly_connected])).toEqual([["closer-1", true]]);
+  });
+
+  it("las métricas son las de los closers de la organización de la sesión", async () => {
+    const r = await getCloserMetricsAction();
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    expect(r.data.map((m) => [m.closerId, m.closedCalls, m.totalRevenue, m.avgScore])).toEqual([
+      ["closer-1", 1, 1000, 80],
+    ]);
+  });
+
+  it("⭐ antes la falla de la lectura de llamadas se veía como \"sin closers\"; ahora es una falla", async () => {
+    sim.errores.closing_calls = { message: 'column closing_calls.amount_closed does not exist', code: "42703" };
+    await expect(getCloserMetricsAction()).resolves.toEqual({ success: false, error: ERROR_INESPERADO });
+    expect(sim.reportes).toHaveLength(1);
+  });
+
+  it("las llamadas de un closer de otra organización no se leen", async () => {
+    await expect(getCloserCallsAction("closer-ajeno")).resolves.toEqual({ success: true, data: [] });
+    const r = await getCloserCallsAction("closer-1");
+    expect(r.success && r.data.map((c) => c.id)).toEqual(["c1"]);
   });
 });

@@ -2,6 +2,7 @@
 
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { SalesPerformanceMetrics } from "@/types/sales";
 import type { ClosingCallStatus } from "@/types/closing";
 import { callWasAttended } from "@/lib/closing/call-status";
@@ -32,6 +33,9 @@ export type MetricsSnapshot = {
 export async function getSalesMetricsSnapshotsAction(): Promise<
   MutationResult<MetricsSnapshot[]>
 > {
+  // Sin Supabase no hay métricas importadas (lo que antes resolvía la página).
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
+
   return mutacionConErroresEsperables("[getSalesMetricsSnapshots]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

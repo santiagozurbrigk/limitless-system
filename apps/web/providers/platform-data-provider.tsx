@@ -657,10 +657,16 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
 
       // Cierra el ciclo lead → cliente. Sin esto el hilo se corta justo en el
       // momento en que el lead se convierte en cliente.
+      // Es de mejor esfuerzo: si falla, el cierre sigue y queda en la consola
+      // (también el rechazo devuelto como valor, SCRUM-504).
       if (useSupabase) {
-        await linkLeadToClientAction({ callId, clientId: client.id }).catch(
-          (err) => console.error("[markCallClosed] link lead → cliente:", err)
-        );
+        await linkLeadToClientAction({ callId, clientId: client.id })
+          .then((resultado) => {
+            if (!resultado.success) {
+              console.error("[markCallClosed] link lead → cliente:", resultado.error);
+            }
+          })
+          .catch((err) => console.error("[markCallClosed] link lead → cliente:", err));
       }
 
       if (useSupabase && payment.proof) {

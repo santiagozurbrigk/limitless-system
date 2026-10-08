@@ -19,6 +19,7 @@ import {
 } from "@/app/sales/closer-actions";
 import { useToast } from "@/providers/toast-provider";
 import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
+import { leerConMotivo } from "@/lib/sales/lectura-con-motivo";
 import { RadarPerformanceChart } from "@/components/charts/platform/radar-performance-chart";
 import { brandColors } from "@/lib/brand";
 
@@ -204,6 +205,26 @@ export function sincronizarCalendlyDelCloser(
   });
 }
 
+/**
+ * Lee las métricas de los closers, ordenadas por cierres (SCRUM-504). Si no se
+ * pudieron leer, avisa el motivo (o el texto fijo si la acción lanzó) y
+ * devuelve `null`.
+ */
+export async function cargarMetricasDeClosers(
+  since: string,
+  avisar: (aviso: Aviso) => void
+): Promise<CloserMetrics[] | null> {
+  const lectura = await leerConMotivo(
+    () => getCloserMetricsAction(since),
+    "[ClosersRanking] métricas"
+  );
+  if (!lectura.ok) {
+    avisar({ title: "Error al cargar métricas", description: lectura.motivo });
+    return null;
+  }
+  return [...lectura.data].sort((a, b) => b.closedCalls - a.closedCalls);
+}
+
 export function ClosersRanking() {
   const { push } = useToast();
   const [metrics, setMetrics] = useState<CloserMetrics[]>([]);
@@ -215,12 +236,10 @@ export function ClosersRanking() {
   function loadMetrics(days: number) {
     setLoading(true);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    getCloserMetricsAction(since)
-      .then((data) =>
-        setMetrics(data.sort((a, b) => b.closedCalls - a.closedCalls))
-      )
-      .catch(() => push({ title: "Error al cargar métricas" }))
-      .finally(() => setLoading(false));
+    void cargarMetricasDeClosers(since, push).then((data) => {
+      if (data) setMetrics(data);
+      setLoading(false);
+    });
   }
 
   useEffect(() => {

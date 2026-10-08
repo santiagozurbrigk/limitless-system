@@ -249,14 +249,18 @@ export async function getZernioLeadJourneyAction(
   }
 }
 
-export async function getFrequentObjectionsAction(): Promise<FrequentObjectionsResult> {
+export async function getFrequentObjectionsAction(): Promise<
+  MutationResult<FrequentObjectionsResult>
+> {
   if (!isSupabaseConfigured()) {
     return {
-      objections: mockFrequentObjectionSummaries(),
-      dataSource: "mock",
+      success: true,
+      data: { objections: mockFrequentObjectionSummaries(), dataSource: "mock" },
     };
   }
 
-  const organizationId = await requireOrganizationId();
-  return getFrequentObjections(organizationId);
+  return mutacionConErroresEsperables("[getFrequentObjections]", async () => {
+    const organizationId = await requireOrganizationId();
+    return getFrequentObjections(organizationId);
+  });
 }

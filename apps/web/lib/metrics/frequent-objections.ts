@@ -1,5 +1,6 @@
 import { mockFrequentObjections } from "@/mocks/sales";
 import { createClient } from "@/lib/supabase/server";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 import type {
   FrequentObjectionSummary,
   FrequentObjectionsResult,
@@ -225,10 +226,8 @@ export async function getFrequentObjections(
     .gte("created_at", sixtyDaysAgo)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("[getFrequentObjections] call_analyses", error);
-    throw new Error(error.message);
-  }
+  // Quien llama la registra (`getFrequentObjectionsAction`, SCRUM-504).
+  if (error) throw new FallaDeLaBase(error);
 
   if (recentAnalyses?.length) {
     const recent = recentAnalyses.filter((row) => row.created_at >= thirtyDaysAgo);

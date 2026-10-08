@@ -57,6 +57,9 @@ import { useToast } from "@/providers/toast-provider";
 import { FollowUpOptionPicker } from "./follow-up-option-picker";
 import { LeadDetailDrawer } from "./lead-detail-drawer";
 import { ManageFollowUpOptionsDialog } from "./manage-follow-up-options-dialog";
+import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
+import { leerConMotivo } from "@/lib/sales/lectura-con-motivo";
+import type { MutationResult } from "@/lib/server/action-result";
 
 /**
  * La tabla de seguimiento.
@@ -117,6 +120,48 @@ function formatDate(iso: string | null): string {
  * organización, guardada al mediodía de esa zona para que la celda la muestre
  * igual a todos los miembros.
  */
+/**
+ * Guarda un cambio de una fila (SCRUM-504). La fila ya se actualizó en
+ * pantalla: si la acción devuelve un rechazo, se vuelve atrás (`deshacer`) y se
+ * avisa el motivo; si lanzó, lo mismo con el texto fijo.
+ */
+export function guardarCambioDeFila(opciones: {
+  accion: () => Promise<MutationResult<void>>;
+  deshacer: () => void;
+  avisar: (aviso: Aviso) => void;
+  titulo: string;
+  etiqueta: string;
+}): Promise<void> {
+  return correrMutacion({
+    accion: opciones.accion,
+    alExito: () => {},
+    // `correrMutacion` sólo avisa cuando falla.
+    avisar: (aviso) => {
+      opciones.deshacer();
+      opciones.avisar(aviso);
+    },
+    tituloError: opciones.titulo,
+    etiqueta: opciones.etiqueta,
+  });
+}
+
+/**
+ * Recarga la tabla con los filtros. Si no se pudo, avisa el motivo y devuelve
+ * `null`: la tabla se queda con lo que mostraba.
+ */
+export async function recargarTablaDeLeads(
+  params: Parameters<typeof listLeadsTableAction>[0],
+  avisar: (aviso: Aviso) => void
+): Promise<LeadTableResult | null> {
+  const lectura = await leerConMotivo(
+    () => listLeadsTableAction(params),
+    "[LeadsTable] recargar"
+  );
+  if (lectura.ok) return lectura.data;
+  avisar({ title: "No se pudo cargar el seguimiento", description: lectura.motivo });
+  return null;
+}
+
 function defaultNextActionAt(zona: string | null): string {
   return fechaAInstanteEnZona(fechaPropuestaDelProximoPaso(zona), zona);
 }
@@ -155,19 +200,17 @@ export function LeadsTable({
 
   const load = useCallback(() => {
       startTransition(async () => {
-        const next = await listLeadsTableAction({
-          scope,
-          state: stateFilter,
-          search,
-          sort,
-          page,
-        });
+        const next = await recargarTablaDeLeads(
+          { scope, state: stateFilter, search, sort, page },
+          push
+        );
+        if (!next) return;
         setResult(next);
         setRows(next.rows);
         setCatalog(next.catalog);
       });
     },
-    [scope, stateFilter, search, sort, page]
+    [scope, stateFilter, search, sort, page, push]
   );
 
   useEffect(() => {
@@ -241,17 +284,20 @@ export function LeadsTable({
       ...(slug ? {} : { nextActionOwnerId: null, nextActionNotes: null }),
     });
 
-    startTransition(async () => {
-      const res = await setNextActionAction({
-        callId: row.targetAttemptId!,
-        nextAction: slug,
-        nextActionAt,
-      });
-      if (!res.ok) {
-        restore(previous);
-        push({ title: "No se pudo guardar", description: res.error });
-      }
-    });
+    startTransition(() =>
+      guardarCambioDeFila({
+        accion: () =>
+          setNextActionAction({
+            callId: row.targetAttemptId!,
+            nextAction: slug,
+            nextActionAt,
+          }),
+        deshacer: () => restore(previous),
+        avisar: push,
+        titulo: "No se pudo guardar",
+        etiqueta: "[LeadsTable] setNextActionAction",
+      })
+    );
   }
 
   function handleDate(row: LeadTableRow, value: string | null) {
@@ -269,17 +315,20 @@ export function LeadsTable({
     const previous = snapshot(row.leadId);
     patchRow(row.leadId, { nextActionAt: iso });
 
-    startTransition(async () => {
-      const res = await setNextActionAction({
-        callId: row.targetAttemptId!,
-        nextAction: row.nextAction,
-        nextActionAt: iso,
-      });
-      if (!res.ok) {
-        restore(previous);
-        push({ title: "No se pudo guardar la fecha", description: res.error });
-      }
-    });
+    startTransition(() =>
+      guardarCambioDeFila({
+        accion: () =>
+          setNextActionAction({
+            callId: row.targetAttemptId!,
+            nextAction: row.nextAction,
+            nextActionAt: iso,
+          }),
+        deshacer: () => restore(previous),
+        avisar: push,
+        titulo: "No se pudo guardar la fecha",
+        etiqueta: "[LeadsTable] setNextActionAction",
+      })
+    );
   }
 
   function handleQualification(row: LeadTableRow, slug: string | null) {
@@ -287,17 +336,20 @@ export function LeadsTable({
     const previous = snapshot(row.leadId);
     patchRow(row.leadId, { postCallQualification: slug });
 
-    startTransition(async () => {
-      const res = await setLeadQualificationAction({
-        callId: row.targetAttemptId!,
-        moment: "post",
-        qualification: slug,
-      });
-      if (!res.ok) {
-        restore(previous);
-        push({ title: "No se pudo calificar", description: res.error });
-      }
-    });
+    startTransition(() =>
+      guardarCambioDeFila({
+        accion: () =>
+          setLeadQualificationAction({
+            callId: row.targetAttemptId!,
+            moment: "post",
+            qualification: slug,
+          }),
+        deshacer: () => restore(previous),
+        avisar: push,
+        titulo: "No se pudo calificar",
+        etiqueta: "[LeadsTable] setLeadQualificationAction",
+      })
+    );
   }
 
   function handleOwner(row: LeadTableRow, ownerId: string | null) {
@@ -305,16 +357,19 @@ export function LeadsTable({
     const previous = snapshot(row.leadId);
     patchRow(row.leadId, { nextActionOwnerId: ownerId });
 
-    startTransition(async () => {
-      const res = await setNextActionOwnerAction({
-        callId: row.targetAttemptId!,
-        ownerId,
-      });
-      if (!res.ok) {
-        restore(previous);
-        push({ title: "No se pudo asignar", description: res.error });
-      }
-    });
+    startTransition(() =>
+      guardarCambioDeFila({
+        accion: () =>
+          setNextActionOwnerAction({
+            callId: row.targetAttemptId!,
+            ownerId,
+          }),
+        deshacer: () => restore(previous),
+        avisar: push,
+        titulo: "No se pudo asignar",
+        etiqueta: "[LeadsTable] setNextActionOwnerAction",
+      })
+    );
   }
 
   function handleNotes(row: LeadTableRow, notes: string) {
@@ -324,16 +379,19 @@ export function LeadsTable({
     const previous = snapshot(row.leadId);
     patchRow(row.leadId, { nextActionNotes: clean });
 
-    startTransition(async () => {
-      const res = await setNextActionNotesAction({
-        callId: row.targetAttemptId!,
-        notes: clean,
-      });
-      if (!res.ok) {
-        restore(previous);
-        push({ title: "No se pudo guardar la nota", description: res.error });
-      }
-    });
+    startTransition(() =>
+      guardarCambioDeFila({
+        accion: () =>
+          setNextActionNotesAction({
+            callId: row.targetAttemptId!,
+            notes: clean,
+          }),
+        deshacer: () => restore(previous),
+        avisar: push,
+        titulo: "No se pudo guardar la nota",
+        etiqueta: "[LeadsTable] setNextActionNotesAction",
+      })
+    );
   }
 
   function addOption(option: FollowUpOption) {
