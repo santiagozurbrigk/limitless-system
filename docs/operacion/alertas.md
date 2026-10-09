@@ -56,9 +56,14 @@ Qué hay que revisar y borrar en Sentry, desde el 2026-09-22:
 
 ## Una vez comprado el plan Team
 
+Hecho el 2026-10-09 (Santiago): plan Team, las 3 reglas de abajo y `SENTRY_DSN` en Fly y Railway. En la UI
+actual de Sentry las reglas están en **Monitors → Alerts → Create Alert** (antes "Alerts"); el mail sale con la
+acción *Notify on preferred channel* → Team o Members, y cada persona tiene que tener *Issue Alerts* por Email en
+Settings → Account → Notifications.
+
 1. **Monitores de crons:** aparecen solos en Sentry → Crons después de la primera corrida de cada uno (19). Cada uno
    abre un issue a las 2 fallas seguidas. Revisar que estén los 19 y que el horario coincida con `vercel.json`.
-2. **Regla "issue nuevo de un proceso de fondo"** (Alerts → Create alert → Issues):
+2. **Regla "issue nuevo de un proceso de fondo"** (Monitors → Alerts → Create Alert, source *all issues in selected projects*):
    - Cuándo: *A new issue is created*.
    - Filtro: tag `proceso_de_fondo` igual a `true`.
    - Acción: mail a los miembros del equipo.

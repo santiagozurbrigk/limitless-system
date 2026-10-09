@@ -28,6 +28,20 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-09 — El sync de Calendly ya no se corta por tiempo; alertas de Sentry andando (SCRUM-84)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** ventas / crons — `app/api/cron/calendly-sync/route.ts`; docs `jobs-webhooks-y-colas.md`, `operacion/alertas.md`, `verificacion-manual.md`
+
+**Qué se hizo:** `maxDuration` de `/api/cron/calendly-sync` pasa de 60 a 300 s. En `corridas_de_procesos`, de las últimas 30 corridas 10 quedaron `en_curso` sin `fin`, y las que terminaron tardaron entre 43 y 59 s: Vercel cortaba la función al llegar a 60 s y los turnos de esa hora no se terminaban de guardar. Además se actualiza `alertas.md` con la navegación actual de Sentry (Monitors → Alerts) y se anota en `verificacion-manual.md` lo verificado de SCRUM-84: plan Team comprado, `SENTRY_DSN` en Fly y Railway, las 3 alertas creadas y conectadas a los monitores (20 monitores entre crons, Error y Uptime; los crons semanal y mensual aparecen después de su primera corrida).
+
+**Por qué / finalidad:** lo destapó la prueba de SCRUM-84: es exactamente el tipo de falla silenciosa que las alertas tienen que avisar.
+
+**Decisiones de diseño relevantes:** subir el límite es la mitigación inmediata (300 ya se usa en otras rutas del proyecto); partir el sync por org con QStash queda para `[AUD-SALUD-3]`.
+
+**Riesgos / deuda técnica pendiente:** si el sync crece más de 300 s vuelve a cortarse; el monitor de Sentry lo marcaría como timeout y avisaría por mail. Sentry mostró "Errors were encountered while ingesting check-ins" para este monitor: hasta la compra del plan Team sólo se registró 1 check-in en 14 días.
+
 ### 2026-10-09 — Recuperar la contraseña verificado en producción (SCRUM-16)
 
 **Rama:** `claude/great-thompson-n7ts63`

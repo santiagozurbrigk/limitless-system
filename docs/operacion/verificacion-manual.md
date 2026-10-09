@@ -1225,7 +1225,9 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 
 ## Alertas de procesos de fondo (SCRUM-84)
 
-**Prerrequisitos:** plan Team de Sentry comprado, las reglas de [`alertas.md`](./alertas.md) creadas y `SENTRY_DSN` cargada en Railway y Fly.
+**Prerrequisitos:** plan Team de Sentry comprado, las reglas de [`alertas.md`](./alertas.md) creadas y `SENTRY_DSN` cargada en Railway y Fly. Hecho el 2026-10-09.
+
+**Verificado el 2026-10-09:** Sentry → Monitors muestra 20 monitores (crons + Error + Uptime), cada uno con las alertas conectadas. `cron-calendly-sync` registra check-ins desde la compra del plan (antes: "Errors were encountered while ingesting check-ins").
 
 1. Sentry → Crons: aparecen los 19 monitores, con el horario de `vercel.json`, después de su primera corrida.
 2. ⭐ Error por org: en una org de prueba con GHL, poner un token inválido y esperar la corrida de las :00 de `cron-ghl-sync`. En Sentry aparece el issue con tag `org_id` de esa org y `provider=ghl`, y llega el mail.
