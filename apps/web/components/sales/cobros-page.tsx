@@ -31,7 +31,7 @@ import {
 } from "@ai-coo/ui";
 import { BookOpen, Settings2, X } from "lucide-react";
 import { assignClientPlanAction } from "@/app/clients/actions";
-import { correrMutacion } from "@/lib/client/correr-accion";
+import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 import { listPlansAction } from "@/app/clients/plan-actions";
 import { getClientsTableEnrichmentAction } from "@/app/clients/plan-duration-actions";
 import { FilterPills } from "@/components/marketing/filter-pills";
@@ -161,6 +161,26 @@ function AssignPlanDialog({
   );
 }
 
+/** Lo cobrado por cliente y las duraciones de plan, o el motivo si no se pudo leer. */
+export function cargarCobradoPorCliente(): Promise<
+  Lectura<{ paidByClientId: Record<string, number>; planDurations: PlanDuration[] }>
+> {
+  return leerConMotivo(getClientsTableEnrichmentAction, "[CobrosPage] cobrado");
+}
+
+/** Aviso cuando no se pudieron leer los pagos: lo cobrado y adeudado no está al día. */
+export function AvisoDeCobradoSinLeer({ motivo }: { motivo: string }) {
+  return (
+    <div
+      role="alert"
+      className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+    >
+      <span className="font-medium">No se pudieron cargar los pagos.</span> {motivo} Lo cobrado y
+      lo adeudado no están al día.
+    </div>
+  );
+}
+
 export function CobrosPage({
   initialClientId = null,
 }: {
@@ -190,14 +210,23 @@ export function CobrosPage({
   const [loadingEnrichment, startLoad] = useTransition();
   const [pending, startTransition] = useTransition();
 
+  // Por qué no se pudo leer lo cobrado (SCRUM-504): sin esto, todos los
+  // clientes se verían con la deuda completa.
+  const [cobradoError, setCobradoError] = useState<string | null>(null);
+
   useEffect(() => {
     startLoad(async () => {
       const [enrichment, fetchedPlans] = await Promise.all([
-        getClientsTableEnrichmentAction(),
+        cargarCobradoPorCliente(),
         listPlansAction(),
       ]);
-      setPaidByClientId(enrichment.paidByClientId);
-      setPlanDurations(enrichment.planDurations);
+      if (enrichment.ok) {
+        setPaidByClientId(enrichment.data.paidByClientId);
+        setPlanDurations(enrichment.data.planDurations);
+        setCobradoError(null);
+      } else {
+        setCobradoError(enrichment.motivo);
+      }
       setPlans(fetchedPlans);
     });
   }, [clients]);
@@ -318,6 +347,8 @@ export function CobrosPage({
   return (
     <div className="space-y-6">
       <PageHeader description="Plan, monto, adeudado y comprobantes de cada cliente" />
+
+      {cobradoError ? <AvisoDeCobradoSinLeer motivo={cobradoError} /> : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">

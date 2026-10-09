@@ -12,10 +12,11 @@ import {
   rowToPlanDuration,
   type PlanDurationRow,
 } from "@/lib/clients/plan-duration-mapper";
-import { listOrganizationPaymentsAction } from "@/app/sales/payment-actions";
+import { leerPagosDeLaOrganizacion } from "@/lib/sales/pagos";
 import { listClientsAction } from "@/app/clients/actions";
 import { extractPlanDurationsFromRAG } from "@/lib/rag/extract-plan-durations";
 import {
+  mutacionConErroresEsperables,
   runMutation,
   type MutationResult,
 } from "@/lib/server/action-result";
@@ -59,28 +60,39 @@ export async function listPlanDurationsAction(): Promise<PlanDuration[]> {
   }
 }
 
-export async function getClientsTableEnrichmentAction(): Promise<{
-  paidByClientId: Record<string, number>;
-  planDurations: PlanDuration[];
-  isFounder: boolean;
-}> {
-  const profile = await getCurrentProfile();
-  const [payments, planDurations] = await Promise.all([
-    listOrganizationPaymentsAction(),
-    listPlanDurationsAction(),
-  ]);
+/**
+ * Lo cobrado por cliente y las duraciones de plan, para Cobros. Devuelve su
+ * error como valor (SCRUM-504): si los pagos no se pueden leer, la pantalla
+ * avisa en vez de mostrar a todos los clientes con la deuda completa.
+ */
+export async function getClientsTableEnrichmentAction(): Promise<
+  MutationResult<{
+    paidByClientId: Record<string, number>;
+    planDurations: PlanDuration[];
+    isFounder: boolean;
+  }>
+> {
+  return mutacionConErroresEsperables("[getClientsTableEnrichment]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+    const [profile, payments, planDurations] = await Promise.all([
+      getCurrentProfile(),
+      leerPagosDeLaOrganizacion(supabase, organizationId),
+      listPlanDurationsAction(),
+    ]);
 
-  const paidByClientId: Record<string, number> = {};
-  for (const payment of payments) {
-    paidByClientId[payment.clientId] =
-      (paidByClientId[payment.clientId] ?? 0) + payment.amount;
-  }
+    const paidByClientId: Record<string, number> = {};
+    for (const payment of payments) {
+      paidByClientId[payment.clientId] =
+        (paidByClientId[payment.clientId] ?? 0) + payment.amount;
+    }
 
-  return {
-    paidByClientId,
-    planDurations,
-    isFounder: profile?.role === "founder",
-  };
+    return {
+      paidByClientId,
+      planDurations,
+      isFounder: profile?.role === "founder",
+    };
+  });
 }
 
 export async function resolvePlanDurationsAction(

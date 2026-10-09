@@ -657,26 +657,35 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
 
       // Cierra el ciclo lead → cliente. Sin esto el hilo se corta justo en el
       // momento en que el lead se convierte en cliente.
+      // Es de mejor esfuerzo: si falla, el cierre sigue y queda en la consola
+      // (también el rechazo devuelto como valor, SCRUM-504).
       if (useSupabase) {
-        await linkLeadToClientAction({ callId, clientId: client.id }).catch(
-          (err) => console.error("[markCallClosed] link lead → cliente:", err)
-        );
+        await linkLeadToClientAction({ callId, clientId: client.id })
+          .then((resultado) => {
+            if (!resultado.success) {
+              console.error("[markCallClosed] link lead → cliente:", resultado.error);
+            }
+          })
+          .catch((err) => console.error("[markCallClosed] link lead → cliente:", err));
       }
 
-      if (useSupabase && payment.proof) {
-        const recordResult = await recordClientPaymentAction({
-          clientId: client.id,
-          amount: getPaidAmountFromClosePayload(payment),
-          paymentDate: getPaymentDateFromClosePayload(payment, hoy),
-          storagePath: payment.proof.storagePath,
-          mimeType: payment.proof.mimeType,
-          installmentNumber: installmentNumberForClosePayload(payment),
-          paymentReceivedFrom: payment.paymentReceivedFrom,
-          paymentDestinationPlatformId: payment.paymentDestinationPlatformId,
-        });
-        if (!recordResult.success) {
-          throw new Error(recordResult.error);
-        }
+      const proof = payment.proof;
+      if (useSupabase && proof) {
+        // El motivo llega entero; si la acción lanzó, el texto fijo (SCRUM-504).
+        await datoDeLaMutacion(
+          () =>
+            recordClientPaymentAction({
+              clientId: client.id,
+              amount: getPaidAmountFromClosePayload(payment),
+              paymentDate: getPaymentDateFromClosePayload(payment, hoy),
+              storagePath: proof.storagePath,
+              mimeType: proof.mimeType,
+              installmentNumber: installmentNumberForClosePayload(payment),
+              paymentReceivedFrom: payment.paymentReceivedFrom,
+              paymentDestinationPlatformId: payment.paymentDestinationPlatformId,
+            }),
+          "[markCallClosed] pago"
+        );
         const { data: refreshed } = await listClientsAction().then((list) => ({
           data: list.find((c) => c.id === client.id) ?? client,
         }));

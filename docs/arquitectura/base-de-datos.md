@@ -38,7 +38,7 @@ Matices que un dev tiene que saber:
 
 ### Chequeo en CI
 
-El job `migrations` de `.github/workflows/ci.yml` levanta `pgvector/pgvector:pg17`, carga `supabase/ci/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, schemas `auth`/`storage`, `auth.uid()`/`auth.jwt()`, tablas mínimas de storage, publicación de realtime) y corre `supabase/ci/check-migrations.sh`: valida nombres y versiones únicas y aplica las 191 en orden, cada una en su transacción; después corre los tests de RLS de `supabase/ci/tests/` (10 archivos). Si una migración nueva usa otra pieza de la plataforma (otro schema, otra extensión), hay que sumarla a los stubs.
+El job `migrations` de `.github/workflows/ci.yml` levanta `pgvector/pgvector:pg17`, carga `supabase/ci/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, schemas `auth`/`storage`, `auth.uid()`/`auth.jwt()`, tablas mínimas de storage, publicación de realtime) y corre `supabase/ci/check-migrations.sh`: valida nombres y versiones únicas y aplica las 193 en orden, cada una en su transacción; después corre los tests de RLS de `supabase/ci/tests/` (12 archivos). Si una migración nueva usa otra pieza de la plataforma (otro schema, otra extensión), hay que sumarla a los stubs.
 
 ## RLS y acceso
 
@@ -100,6 +100,7 @@ Excepciones que **sí** son editables por cualquier miembro: `discord_integratio
 | `client_last_activity(uuid)` | Última novedad por cliente (onboarding de clientes) | sólo service role |
 | `aceptar_invitacion_de_equipo(text, uuid)` | Acepta una invitación de equipo con la cuenta de la sesión, en una transacción con la invitación bloqueada; devuelve un motivo en texto (SECURITY DEFINER, `20261005150000`, SCRUM-495; ver `docs/arquitectura/auth-organizaciones-y-permisos.md`) | sólo service role (`aceptarInvitacionAction`) |
 | `crear_sprint(uuid, text, text, text, date, date, uuid)` | Completa el sprint activo de la organización y crea el nuevo en una transacción, con un lock por organización para dos altas a la vez (SECURITY INVOKER: la RLS de `sprints` decide; `20261008120000`, SCRUM-503) | `authenticated` (`createSprintAction`), service role |
+| `registrar_pago_de_cliente(uuid, numeric, date, text, text, integer, text, uuid, text)` | Registra un pago de un cliente y marca su cuota (`jsonb_set`) en una sola transacción, con el cliente bloqueado; con `p_clave_idempotencia`, un reintento devuelve el pago ya registrado (índice único parcial `client_payments_clave_idempotencia_key`) y la misma clave con otro cliente, monto (comparado con `round(p_amount, 2)`), fecha o cuota se rechaza con `IDM01`; si el reintento trae el comprobante que el pago no tenía, se le suma (policy `Org members add receipt to client_payments`: la única de UPDATE sobre `client_payments`, sólo filas de la org sin comprobante y sólo `storage_path`/`mime_type` por grant de columna). SECURITY INVOKER: la RLS y la org de la sesión (`get_my_organization_id()`); P0002 si el cliente no es de la org (`20261008150000`, SCRUM-504) | `authenticated` (`recordClientPaymentAction`, `addInstallmentPaymentAction`); no `anon` |
 | `onboarding_connected_source_count`, `onboarding_org_progress` | Checklist de onboarding | ver `docs/areas/plataforma.md` |
 | `get_current_week_start()` | Semana de weekly inputs | |
 | `set_updated_at()` | Trigger genérico de `updated_at` | trigger |

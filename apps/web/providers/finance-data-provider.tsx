@@ -28,6 +28,7 @@ import { listOrganizationPaymentsAction } from "@/app/sales/payment-actions";
 import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
 import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { getSalesMetricsSnapshotsAction } from "@/app/sales/metrics-actions";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import {
   mockFinanceSummary,
   mockMonthlySeries,
@@ -61,6 +62,10 @@ type FinanceDataContextValue = {
   ) => Promise<string | undefined>;
   removePaymentPlatform: (id: string) => Promise<string | undefined>;
   clientPayments: ClientPayment[];
+  /** Por qué no se pudieron leer los pagos, si falló (SCRUM-504). */
+  clientPaymentsError: string | null;
+  /** Los totales recibidos por plataforma no están al día: fallaron los pagos (SCRUM-504). */
+  totalesDePlataformasSinLeer: boolean;
   financeSummary: FinanceSummary;
   /** Métricas históricas importadas (snapshot más reciente). Null si no hay datos importados.
    *  Usar como fallback cuando los datos live (conversaciones, closing calls) están en cero. */
@@ -121,11 +126,25 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   // Baseline: métricas históricas importadas por el usuario (fallback cuando no hay datos en vivo)
   const [salesBaselineMetrics, setSalesBaselineMetrics] = useState<Record<string, number> | null>(null);
 
+  // Si los pagos no se pueden leer, se avisa (SCRUM-504): antes la falla se veía
+  // como "sin pagos" en Finanzas y el Panel. Lo que ya se veía queda.
+  const [clientPaymentsError, setClientPaymentsError] = useState<string | null>(null);
+
   const refreshClientPayments = useCallback(async () => {
     if (!useSupabase) return;
-    const payments = await listOrganizationPaymentsAction();
-    setClientPayments(payments);
+    const lectura = await leerConMotivo(
+      listOrganizationPaymentsAction,
+      "[FinanceDataProvider] pagos"
+    );
+    if (lectura.ok) {
+      setClientPayments(lectura.data);
+      setClientPaymentsError(null);
+    } else {
+      setClientPaymentsError(lectura.motivo);
+    }
   }, []);
+
+  const [totalesDePlataformasSinLeer, setTotalesDePlataformasSinLeer] = useState(false);
 
   const refreshFinanceConfig = useCallback(async () => {
     if (!useSupabase) return;
@@ -136,6 +155,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setFixedExpenses(config.fixedExpenses);
       setSubscriptions(config.subscriptions);
       setTeamCompensation(config.teamCompensation);
+      setTotalesDePlataformasSinLeer(config.pagosSinLeer);
     } catch (e) {
       console.error("[FinanceDataProvider] loadFinanceConfig", e);
     } finally {
@@ -155,7 +175,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         setTeamCompensation(config.teamCompensation);
       });
     }
-  }, [refreshFinanceConfig]);
+    // Las dos funciones son estables (`useCallback` sin dependencias): sumar
+    // `refreshClientPayments` no cambia cuándo corre el efecto.
+  }, [refreshFinanceConfig, refreshClientPayments]);
 
   useEffect(() => {
     if (useSupabase && !clientsLoading) {
@@ -166,10 +188,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   // Cargar baseline de ventas una vez al montar (datos históricos importados)
   useEffect(() => {
     if (!useSupabase) return;
+    // El baseline es opcional y no tiene pantalla propia: si no se puede leer,
+    // queda registrado en la consola como antes (SCRUM-504: ahora el motivo
+    // vuelve como valor).
     getSalesMetricsSnapshotsAction()
-      .then((snapshots) => {
-        if (snapshots.length > 0) {
-          setSalesBaselineMetrics(snapshots[0].metrics);
+      .then((resultado) => {
+        if (!resultado.success) {
+          console.error("[FinanceDataProvider] baseline load", resultado.error);
+          return;
+        }
+        if (resultado.data.length > 0) {
+          setSalesBaselineMetrics(resultado.data[0].metrics);
         }
       })
       .catch((e) => console.error("[FinanceDataProvider] baseline load", e));
@@ -205,7 +234,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       ]);
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation, zonaDeLaOrganizacion]
+    [runFinanceMutation, zonaDeLaOrganizacion]
   );
 
   const updatePaymentPlatform = useCallback(
@@ -218,7 +247,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       );
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const removePaymentPlatform = useCallback(
@@ -229,7 +258,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setPaymentPlatforms((prev) => prev.filter((p) => p.id !== id));
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const addFixedExpense = useCallback(
@@ -243,7 +272,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       ]);
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const updateFixedExpense = useCallback(
@@ -256,7 +285,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       );
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const removeFixedExpense = useCallback(
@@ -267,7 +296,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setFixedExpenses((prev) => prev.filter((e) => e.id !== id));
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const addSubscription = useCallback(
@@ -278,7 +307,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setSubscriptions((prev) => [...prev, { ...sub, id: `sub-${Date.now()}` }]);
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const updateSubscription = useCallback(
@@ -291,7 +320,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       );
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const removeSubscription = useCallback(
@@ -302,7 +331,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setSubscriptions((prev) => prev.filter((s) => s.id !== id));
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const updateTeamCompensation = useCallback(
@@ -315,7 +344,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       );
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const addTeamCompensation = useCallback(
@@ -334,7 +363,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       ]);
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const removeTeamCompensation = useCallback(
@@ -345,7 +374,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setTeamCompensation((prev) => prev.filter((t) => t.id !== id));
       return undefined;
     },
-    [refreshFinanceConfig, runFinanceMutation]
+    [runFinanceMutation]
   );
 
   const enrichedTeamCompensation = useMemo(
@@ -457,6 +486,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       paymentPlatforms,
       financeConfigLoading,
       clientPayments,
+      clientPaymentsError,
+      totalesDePlataformasSinLeer,
       addPaymentPlatform,
       updatePaymentPlatform,
       removePaymentPlatform,
@@ -483,6 +514,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       paymentPlatforms,
       financeConfigLoading,
       clientPayments,
+      clientPaymentsError,
+      totalesDePlataformasSinLeer,
       addPaymentPlatform,
       updatePaymentPlatform,
       removePaymentPlatform,

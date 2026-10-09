@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getRedirectError } from "next/dist/client/components/redirect";
 import { RedirectType } from "next/dist/client/components/redirect-error";
 import { notFound } from "next/navigation";
-import { ERROR_INESPERADO, correrAccion, correrMutacion, datoDeLaMutacion } from "../correr-accion";
+import {
+  ERROR_INESPERADO,
+  correrAccion,
+  correrMutacion,
+  datoDeLaMutacion,
+  falloInesperado,
+  leerConMotivo,
+} from "../correr-accion";
 import { actionErrorMessage } from "@/lib/server/action-result";
 
 /**
@@ -169,5 +176,53 @@ describe("datoDeLaMutacion (capa que devuelve el dato o lanza, como PlatformData
       }, "[test]")
     ).rejects.toBe(redirect);
     expect(consola).not.toHaveBeenCalled();
+  });
+});
+
+describe("leerConMotivo", () => {
+  it("con éxito devuelve el dato", async () => {
+    await expect(leerConMotivo(async () => ({ success: true, data: 1 }), "[x]")).resolves.toEqual({
+      ok: true,
+      data: 1,
+    });
+  });
+
+  it("⭐ con un error devuelto como valor da ese motivo, sin registrar nada", async () => {
+    await expect(
+      leerConMotivo(async () => ({ success: false, error: "Sesión no válida" }), "[x]")
+    ).resolves.toEqual({ ok: false, motivo: "Sesión no válida" });
+    expect(consola).not.toHaveBeenCalled();
+  });
+
+  it("⭐ si la acción lanza, el motivo es el texto fijo y queda en la consola", async () => {
+    const error = new Error("An error occurred in the Server Components render.");
+    await expect(leerConMotivo(() => Promise.reject(error), "[x]")).resolves.toEqual({
+      ok: false,
+      motivo: ERROR_INESPERADO,
+    });
+    expect(consola).toHaveBeenCalledWith("[x]", error);
+  });
+
+  it("un redirect de Next se relanza para que Next navegue", async () => {
+    const redirect = Object.assign(new Error("NEXT_REDIRECT"), {
+      digest: "NEXT_REDIRECT;replace;/login;307;",
+    });
+    await expect(leerConMotivo(() => Promise.reject(redirect), "[x]")).rejects.toBe(redirect);
+    expect(consola).not.toHaveBeenCalled();
+  });
+});
+
+describe("falloInesperado", () => {
+  it("registra con la etiqueta y devuelve el texto fijo", () => {
+    const error = new TypeError("fetch failed");
+    expect(falloInesperado("[x]", error)).toBe(ERROR_INESPERADO);
+    expect(consola).toHaveBeenCalledWith("[x]", error);
+  });
+
+  it("relanza un redirect de Next", () => {
+    const redirect = Object.assign(new Error("NEXT_REDIRECT"), {
+      digest: "NEXT_REDIRECT;replace;/login;307;",
+    });
+    expect(() => falloInesperado("[x]", redirect)).toThrow(redirect);
   });
 });

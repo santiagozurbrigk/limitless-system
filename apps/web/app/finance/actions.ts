@@ -7,6 +7,7 @@ import {
   getCurrentProfile,
 } from "@/lib/auth/bootstrap";
 import {
+  registrarFallaDeAccion,
   runMutation,
   type MutationResult,
 } from "@/lib/server/action-result";
@@ -23,7 +24,8 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { listOrganizationPaymentsAction } from "@/app/sales/payment-actions";
+import { leerPagosDeLaOrganizacion } from "@/lib/sales/pagos";
+import type { ClientPayment } from "@/types/clients";
 import { matchesCloser } from "@/lib/metrics/match-closer";
 import type {
   FixedExpense,
@@ -37,6 +39,11 @@ export type FinanceConfigPayload = {
   subscriptions: Subscription[];
   teamCompensation: TeamCompensation[];
   paymentPlatforms: PaymentPlatformConfig[];
+  /**
+   * Los pagos no se pudieron leer: los totales recibidos por plataforma no
+   * están al día (SCRUM-504). El resto de la configuración llega igual.
+   */
+  pagosSinLeer: boolean;
 };
 
 export type { MutationResult };
@@ -61,7 +68,7 @@ async function requireFounderRole(): Promise<void> {
  */
 function paymentPlatformTotals(
   platforms: PaymentPlatformRow[],
-  payments: Awaited<ReturnType<typeof listOrganizationPaymentsAction>>,
+  payments: ClientPayment[],
   hoy: string
 ): PaymentPlatformConfig[] {
   const byPlatform = new Map<string, { total: number; lastAt: string }>();
@@ -91,6 +98,7 @@ const EMPTY_FINANCE_CONFIG: FinanceConfigPayload = {
   subscriptions: [],
   teamCompensation: [],
   paymentPlatforms: [],
+  pagosSinLeer: false,
 };
 
 export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
@@ -103,6 +111,7 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
       subscriptions: mockSubscriptions.map((s) => ({ ...s })),
       teamCompensation: mockTeamCompensation.map((t) => ({ ...t })),
       paymentPlatforms: mockPaymentPlatforms.map((p) => ({ ...p })),
+      pagosSinLeer: false,
     };
   }
 
@@ -112,7 +121,19 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
 
     const supabase = await createClient();
 
-    const payments = await listOrganizationPaymentsAction();
+    // Si los pagos no se pueden leer, lanza `FallaDeLaBase` (SCRUM-504): antes
+    // los totales por plataforma quedaban en cero sin aviso.
+    // Los pagos se leen aparte (AR de SCRUM-504, pasada 2): si fallan, se
+    // registra la falla y los totales por plataforma quedan en cero con el
+    // aviso, pero gastos, suscripciones, equipo y plataformas llegan igual.
+    let payments: ClientPayment[] = [];
+    let pagosSinLeer = false;
+    try {
+      payments = await leerPagosDeLaOrganizacion(supabase, organizationId);
+    } catch (e) {
+      registrarFallaDeAccion("[loadFinanceConfig] pagos", e);
+      pagosSinLeer = true;
+    }
 
   const [fixedRes, subsRes, teamRes, platRes, hoy] = await Promise.all([
     supabase
@@ -161,9 +182,11 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
         payments,
         hoy
       ),
+      pagosSinLeer,
     };
   } catch (e) {
-    console.error("[loadFinanceConfig]", e);
+    // Se registra y va a Sentry (SCRUM-504: incluye la falla al leer los pagos).
+    registrarFallaDeAccion("[loadFinanceConfig]", e);
     return EMPTY_FINANCE_CONFIG;
   }
 }
@@ -447,8 +470,14 @@ export async function updatePaymentPlatformAction(
       .single();
 
     if (error || !data) throw new Error(mapFinanceError(error?.message ?? "Error"));
+    // El cambio ya se guardó: si los pagos no se pueden leer, no se lo
+    // presenta como fallido. Los totales quedan en cero y la falla se registra
+    // (la pantalla relee la configuración y avisa con `pagosSinLeer`).
     const [payments, hoy] = await Promise.all([
-      listOrganizationPaymentsAction(),
+      leerPagosDeLaOrganizacion(supabase, organizationId).catch((e: unknown) => {
+        registrarFallaDeAccion("[updatePaymentPlatform] pagos", e);
+        return [] as ClientPayment[];
+      }),
       fechaDeHoyDeLaOrganizacion(supabase, organizationId),
     ]);
     return paymentPlatformTotals([data as PaymentPlatformRow], payments, hoy)[0];

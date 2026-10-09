@@ -25,6 +25,7 @@ import {
   type FollowUpOption,
 } from "@/lib/sales/follow-up-options";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion } from "@/lib/client/correr-accion";
 
 /**
  * Administrar los valores de seguimiento de la organización.
@@ -54,30 +55,33 @@ function OptionRow({
 
   function save(patch: { label?: string; color?: FollowUpColor }) {
     if (!option.id) return;
-    startTransition(async () => {
-      const result = await updateFollowUpOptionAction({ id: option.id!, ...patch });
-      if (!result.ok) {
-        push({ title: "No se pudo guardar", description: result.error });
-        setLabel(option.label);
-        return;
-      }
-      onChanged({ ...option, ...patch });
-    });
+    startTransition(() =>
+      correrMutacion({
+        accion: () => updateFollowUpOptionAction({ id: option.id!, ...patch }),
+        // `correrMutacion` sólo avisa cuando falla: el nombre vuelve al guardado.
+        avisar: (aviso) => {
+          setLabel(option.label);
+          push(aviso);
+        },
+        tituloError: "No se pudo guardar",
+        etiqueta: "[ManageFollowUpOptions] guardar",
+        alExito: () => onChanged({ ...option, ...patch }),
+      })
+    );
   }
 
   function toggleArchived() {
     if (!option.id) return;
-    startTransition(async () => {
-      const result = await setFollowUpOptionArchivedAction({
-        id: option.id!,
-        archived: !option.archived,
-      });
-      if (!result.ok) {
-        push({ title: "No se pudo archivar", description: result.error });
-        return;
-      }
-      onChanged({ ...option, archived: !option.archived });
-    });
+    startTransition(() =>
+      correrMutacion({
+        accion: () =>
+          setFollowUpOptionArchivedAction({ id: option.id!, archived: !option.archived }),
+        avisar: push,
+        tituloError: "No se pudo archivar",
+        etiqueta: "[ManageFollowUpOptions] archivar",
+        alExito: () => onChanged({ ...option, archived: !option.archived }),
+      })
+    );
   }
 
   if (option.builtIn) {

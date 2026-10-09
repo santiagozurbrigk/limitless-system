@@ -19,7 +19,7 @@ Team y crear las reglas de esta página. Decisión del 2026-10-02: las alertas v
 | Un error de una org dentro de un cron (GHL, Calendly, Fathom) | `reportarFalla` | `proceso_de_fondo`, `cron`, `org_id`, `provider` |
 | Un worker de QStash que falla | `reportarFalla` en el catch del worker | `proceso_de_fondo`, `cron`, `org_id` |
 | Un job de QStash que agotó sus reintentos | `/api/queue/failure` | `proceso_de_fondo`, `cron` (ruta del worker), `org_id`, `provider=qstash` |
-| Una server action que falla por algo inesperado (la red, la base, un bug) en los módulos que separan sus errores (SCRUM-497: Auth, Clientes, Equipo, Closing; SCRUM-503: Tablero) o una falla de infraestructura dentro de `runMutation` en el resto | `registrarFallaDeAccion` → `reportarFalla` (`lib/server/action-result.ts`) | `server_action` (etiqueta de la acción; sin `proceso_de_fondo`) |
+| Una server action que falla por algo inesperado (la red, la base, un bug) en los módulos que separan sus errores (SCRUM-497: Auth, Clientes, Equipo, Closing; SCRUM-503: Tablero; SCRUM-504: Ventas) o una falla de infraestructura dentro de `runMutation` en el resto | `registrarFallaDeAccion` → `reportarFalla` (`lib/server/action-result.ts`) | `server_action` (etiqueta de la acción; sin `proceso_de_fondo`) |
 | Errores del bot de Discord y del reel-worker | `@sentry/node` (si tienen `SENTRY_DSN`) | `app=discord-bot` / `app=reel-worker`, `proceso_de_fondo` |
 
 Detalle técnico en [`arquitectura/jobs-webhooks-y-colas.md`](../arquitectura/jobs-webhooks-y-colas.md) § Instrumentación y Sentry.

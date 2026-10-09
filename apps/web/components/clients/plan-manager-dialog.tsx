@@ -19,6 +19,7 @@ import {
 } from "@/app/clients/plan-actions";
 import { useToast } from "@/providers/toast-provider";
 import type { InstallmentSystem, Plan } from "@/types/plans";
+import { montoACentavos } from "@/lib/clients/payment-utils";
 
 // ── Formulario de sistema de cuotas (inline) ─────────────────────────────────
 
@@ -48,6 +49,23 @@ function draftToSystem(d: SystemDraft): InstallmentSystem {
 }
 
 // ── Estado del formulario de plan ─────────────────────────────────────────────
+
+/**
+ * El motivo por el que el plan no se puede guardar, o null. El monto por
+ * cuota admite hasta dos decimales (SCRUM-504): un plan con 333.333 dejaba
+ * el pago de la cuota sin registrar.
+ */
+export function validarPlan(form: PlanFormState): string | null {
+  if (!form.name.trim()) return "El nombre del plan es obligatorio.";
+  for (const s of form.systems) {
+    const count = Number(s.count);
+    if (!Number.isFinite(count) || count < 1)
+      return `Sistema "${s.name || "sin nombre"}": el número de cuotas debe ser positivo.`;
+    if (s.amountPerInstallment.trim() && montoACentavos(Number(s.amountPerInstallment)) === null)
+      return `Sistema "${s.name || "sin nombre"}": el monto por cuota puede tener hasta dos decimales.`;
+  }
+  return null;
+}
 
 type PlanFormState = {
   name: string;
@@ -222,18 +240,8 @@ export function PlanManagerDialog({
     setForm(emptyForm());
   };
 
-  const validateForm = (): string | null => {
-    if (!form.name.trim()) return "El nombre del plan es obligatorio.";
-    for (const s of form.systems) {
-      const count = Number(s.count);
-      if (!Number.isFinite(count) || count < 1)
-        return `Sistema "${s.name || "sin nombre"}": el número de cuotas debe ser positivo.`;
-    }
-    return null;
-  };
-
   const handleSave = () => {
-    const err = validateForm();
+    const err = validarPlan(form);
     if (err) {
       push({ title: err });
       return;

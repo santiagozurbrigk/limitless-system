@@ -8,8 +8,9 @@ import {
   resolveContentAssetFromConversation,
   type ResolvedContentAsset,
 } from "@/lib/marketing/resolve-content-from-conversation";
-import { getZernioClientForOrganization } from "@/lib/zernio/integration";
-import type { ZernioPostComment } from "@/lib/zernio/client";
+import { getZernioApiKeyForOrganization } from "@/lib/zernio/integration";
+import { createZernioClient, type ZernioPostComment } from "@/lib/zernio/client";
+import { FallaDeLaBase, registrarFallaDeAccion } from "@/lib/server/action-result";
 
 export type LeadJourneyStepType =
   | "content"      // vio contenido (vía UTM)
@@ -26,6 +27,47 @@ export interface LeadJourneyStep {
   description: string;
   date: string;
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * El recorrido y las fuentes que no se pudieron leer (SCRUM-504, AR pasada 2).
+ *
+ * La lectura principal (la conversación) es obligatoria: si falla, lanza
+ * `FallaDeLaBase` y la acción devuelve el texto fijo. Cada fuente opcional
+ * (la llamada, la venta, el contenido, los comentarios, los CTA de ManyChat, la
+ * atribución) corre en `fuenteOpcional`: si falla, se registra una vez en
+ * Sentry con la etiqueta de la fuente, su nombre va a `faltan` y el recorrido
+ * sigue con las demás. Antes se descartaban todos los errores y la pantalla
+ * decía "Sin recorrido registrado" o mostraba un recorrido incompleto sin
+ * aviso.
+ */
+export type RecorridoDelLead = { pasos: LeadJourneyStep[]; faltan: string[] };
+
+type Faltantes = { etiqueta: string; faltan: string[] };
+
+async function fuenteOpcional<T>(
+  ctx: Faltantes,
+  fuente: string,
+  vacio: T,
+  fn: () => Promise<T>
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    anotarFalta(ctx, fuente, error);
+    return vacio;
+  }
+}
+
+function anotarFalta(ctx: Faltantes, fuente: string, error: unknown) {
+  if (ctx.faltan.includes(fuente)) return;
+  ctx.faltan.push(fuente);
+  registrarFallaDeAccion(`${ctx.etiqueta} ${fuente}`, error);
+}
+
+/** Lanza la falla de una lectura de supabase-js. */
+function revisar(error: { message: string; code?: string | null } | null) {
+  if (error) throw new FallaDeLaBase(error);
 }
 
 // ─── Tipos de rows ────────────────────────────────────────────────────────────
@@ -150,7 +192,7 @@ async function findClosingCall(
   conversationId: string,
   leadName: string
 ): Promise<ClosingCallRow | null> {
-  const { data: byConversation } = await supabase
+  const { data: byConversation, error: conversationError } = await supabase
     .from("closing_calls")
     .select("id, scheduled_at, status, lead_name")
     .eq("organization_id", organizationId)
@@ -158,11 +200,12 @@ async function findClosingCall(
     .order("scheduled_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  revisar(conversationError);
 
   if (byConversation) return byConversation;
   if (!leadName.trim()) return null;
 
-  const { data: byName } = await supabase
+  const { data: byName, error: nameError } = await supabase
     .from("closing_calls")
     .select("id, scheduled_at, status, lead_name")
     .eq("organization_id", organizationId)
@@ -170,6 +213,7 @@ async function findClosingCall(
     .order("scheduled_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  revisar(nameError);
 
   return byName;
 }
@@ -180,17 +224,18 @@ async function findClient(
   closingCallId: string,
   leadName: string
 ): Promise<ClientRow | null> {
-  const { data: byClosingCall } = await supabase
+  const { data: byClosingCall, error: closingError } = await supabase
     .from("clients")
     .select("id, name, created_at, total_amount")
     .eq("organization_id", organizationId)
     .eq("closing_call_id", closingCallId)
     .maybeSingle();
+  revisar(closingError);
 
   if (byClosingCall) return byClosingCall;
   if (!leadName.trim()) return null;
 
-  const { data: byName } = await supabase
+  const { data: byName, error: nameError } = await supabase
     .from("clients")
     .select("id, name, created_at, total_amount")
     .eq("organization_id", organizationId)
@@ -198,6 +243,7 @@ async function findClient(
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  revisar(nameError);
 
   return byName;
 }
@@ -212,25 +258,25 @@ async function fetchZernioCommentSteps(
   supabase: Awaited<ReturnType<typeof createClient>>,
   zernioAccountId: string | null,
   participantId: string | null,
+  ctx: Faltantes,
 ): Promise<LeadJourneyStep[]> {
   // Sin participantId (IG user ID numérico) no hay forma de matchear con certeza
   if (!zernioAccountId || !participantId) return [];
 
-  let zernioClient;
-  try {
-    zernioClient = await getZernioClientForOrganization(organizationId);
-  } catch {
-    return [];
-  }
+  // Zernio sin conectar no es una falla: no hay comentarios que buscar.
+  const apiKey = await getZernioApiKeyForOrganization(organizationId);
+  if (!apiKey) return [];
+  const zernioClient = createZernioClient(apiKey);
 
   // Obtener piezas de contenido recientes de la org (reels, posts, carruseles, historias)
-  const { data: contentPieces } = await supabase
+  const { data: contentPieces, error: piecesError } = await supabase
     .from("content_pieces")
     .select("id, platform_post_id, type, title, caption, thumbnail_url, platform_post_url, published_at")
     .eq("organization_id", organizationId)
     .not("platform_post_id", "is", null)
     .order("published_at", { ascending: false })
     .limit(30);
+  revisar(piecesError);
 
   if (!contentPieces?.length) return [];
 
@@ -249,10 +295,8 @@ async function fetchZernioCommentSteps(
         );
         return { piece: piece as ContentPieceRow, comments: matching };
       } catch (err) {
-        console.warn("[leadJourney] getPostComments error", {
-          postId: piece.platform_post_id,
-          error: err instanceof Error ? err.message : err,
-        });
+        // Se avisa y se reporta una sola vez por recorrido, no una por pieza.
+        anotarFalta(ctx, "los comentarios", err);
         return { piece: piece as ContentPieceRow, comments: [] };
       }
     })
@@ -306,12 +350,13 @@ async function fetchManyChatEventSteps(
   if (!subscriberId) return [];
 
   const admin = createAdminClient();
-  const { data: events } = await admin
+  const { data: events, error } = await admin
     .from("manychat_events")
     .select("event_type, tag, flow_name, triggered_at")
     .eq("organization_id", organizationId)
     .eq("subscriber_id", subscriberId)
     .order("triggered_at", { ascending: true });
+  revisar(error);
 
   return (events ?? []).map((event: ManyChatEventRow): LeadJourneyStep => {
     const label = event.flow_name ?? event.tag ?? "CTA";
@@ -354,12 +399,12 @@ export interface LeadJourneyContext {
 export async function getZernioLeadJourney(
   organizationId: string,
   context: Required<LeadJourneyContext>
-): Promise<LeadJourneyStep[]> {
+): Promise<RecorridoDelLead> {
   const supabase = await createClient();
-  const steps: LeadJourneyStep[] = [];
 
-  // Intentar encontrar la conversación DB por nombre del lead (para steps de UTM/booking/sale)
-  const { data: matchedConversation } = await supabase
+  // Intentar encontrar la conversación DB por nombre del lead (para steps de UTM/booking/sale).
+  // Es la lectura principal: si falla, lanza.
+  const { data: matchedConversation, error } = await supabase
     .from("conversations")
     .select("id, external_ref, utm_link_id, source_video_title, utm_campaign, messages, lead_name, source, created_at, utm_link:utm_links(youtube_video_title, utm_campaign, utm_source, full_url)")
     .eq("organization_id", organizationId)
@@ -367,35 +412,41 @@ export async function getZernioLeadJourney(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  revisar(error);
 
   if (matchedConversation) {
     // Delegar al journey completo con el ID encontrado
     return getLeadJourney(organizationId, matchedConversation.id as string, context);
   }
 
-  // Sin conversación DB: solo comentarios Zernio + CTAs ManyChat
-  const commentSteps = await fetchZernioCommentSteps(
-    organizationId,
-    supabase,
-    context.zernioAccountId,
-    context.zernioParticipantId,
+  // Sin conversación DB: solo comentarios Zernio
+  const ctx: Faltantes = { etiqueta: "[getZernioLeadJourney]", faltan: [] };
+  const pasos = await fuenteOpcional(ctx, "los comentarios", [] as LeadJourneyStep[], () =>
+    fetchZernioCommentSteps(
+      organizationId,
+      supabase,
+      context.zernioAccountId,
+      context.zernioParticipantId,
+      ctx,
+    )
   );
-  steps.push(...commentSteps);
 
-  return steps.sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  return {
+    pasos: pasos.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    faltan: ctx.faltan,
+  };
 }
 
 export async function getLeadJourney(
   organizationId: string,
   conversationId: string,
   context?: LeadJourneyContext
-): Promise<LeadJourneyStep[]> {
+): Promise<RecorridoDelLead> {
   const supabase = await createClient();
   const steps: LeadJourneyStep[] = [];
+  const ctx: Faltantes = { etiqueta: "[getLeadJourney]", faltan: [] };
 
-  const { data: conversation } = await supabase
+  const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
     .select(
       `
@@ -418,9 +469,11 @@ export async function getLeadJourney(
     )
     .eq("id", conversationId)
     .eq("organization_id", organizationId)
-    .single();
+    .maybeSingle();
 
-  if (!conversation) return [];
+  // La conversación es la lectura principal: sin ella no hay recorrido.
+  revisar(conversationError);
+  if (!conversation) return { pasos: [], faltan: [] };
 
   const row = conversation as ConversationRow;
   const utmLink = normalizeUtmLink(row.utm_link);
@@ -428,10 +481,15 @@ export async function getLeadJourney(
 
   // ── 1. Contenido que lo trajo (UTM) ──────────────────────────────────────
   if (videoTitle) {
-    const asset = await resolveContentAssetFromConversation(supabase, organizationId, {
-      utm_link_id: row.utm_link_id,
-      source_video_title: row.source_video_title,
-    });
+    // Sin el contenido resuelto el paso queda con el título genérico.
+    const asset = await fuenteOpcional(ctx, "el contenido", null, () =>
+      resolveContentAssetFromConversation(
+        supabase,
+        organizationId,
+        { utm_link_id: row.utm_link_id, source_video_title: row.source_video_title },
+        { lanzarSiFalla: true }
+      )
+    );
     steps.push({
       type: "content",
       title: contentStepTitle(asset, !!utmLink?.youtube_video_title),
@@ -445,16 +503,21 @@ export async function getLeadJourney(
   }
 
   // ── 2. Comentarios en posts/reels/carruseles (Zernio live) ───────────────
-  const commentSteps = await fetchZernioCommentSteps(
-    organizationId,
-    supabase,
-    context?.zernioAccountId ?? null,
-    context?.zernioParticipantId ?? null,
+  const commentSteps = await fuenteOpcional(ctx, "los comentarios", [] as LeadJourneyStep[], () =>
+    fetchZernioCommentSteps(
+      organizationId,
+      supabase,
+      context?.zernioAccountId ?? null,
+      context?.zernioParticipantId ?? null,
+      ctx,
+    )
   );
   steps.push(...commentSteps);
 
   // ── 3. CTAs y flows de ManyChat ──────────────────────────────────────────
-  const ctaSteps = await fetchManyChatEventSteps(organizationId, row.external_ref);
+  const ctaSteps = await fuenteOpcional(ctx, "los CTA de ManyChat", [] as LeadJourneyStep[], () =>
+    fetchManyChatEventSteps(organizationId, row.external_ref)
+  );
   steps.push(...ctaSteps);
 
   // ── 4. Primer DM ─────────────────────────────────────────────────────────
@@ -481,7 +544,9 @@ export async function getLeadJourney(
   }
 
   // ── 5. Llamada agendada ──────────────────────────────────────────────────
-  const closingCall = await findClosingCall(supabase, organizationId, conversationId, row.lead_name);
+  const closingCall = await fuenteOpcional(ctx, "la llamada", null, () =>
+    findClosingCall(supabase, organizationId, conversationId, row.lead_name)
+  );
 
   if (closingCall) {
     steps.push({
@@ -498,7 +563,9 @@ export async function getLeadJourney(
     });
 
     // ── 6. Venta cerrada ─────────────────────────────────────────────────
-    const client = await findClient(supabase, organizationId, closingCall.id, row.lead_name);
+    const client = await fuenteOpcional(ctx, "la venta", null, () =>
+      findClient(supabase, organizationId, closingCall.id, row.lead_name)
+    );
 
     if (client) {
       steps.push({
@@ -515,14 +582,19 @@ export async function getLeadJourney(
       });
     }
   } else if (row.utm_link_id) {
-    const { data: bookingAttribution } = await supabase
-      .from("utm_booking_attributions")
-      .select("booked_at")
-      .eq("utm_link_id", row.utm_link_id)
-      .eq("organization_id", organizationId)
-      .order("booked_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    const utmLinkId = row.utm_link_id;
+    const bookingAttribution = await fuenteOpcional(ctx, "la atribución", null, async () => {
+      const { data, error } = await supabase
+        .from("utm_booking_attributions")
+        .select("booked_at")
+        .eq("utm_link_id", utmLinkId)
+        .eq("organization_id", organizationId)
+        .order("booked_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      revisar(error);
+      return data;
+    });
 
     if (bookingAttribution?.booked_at) {
       steps.push({
@@ -534,7 +606,8 @@ export async function getLeadJourney(
     }
   }
 
-  return steps.sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  return {
+    pasos: steps.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    faltan: ctx.faltan,
+  };
 }

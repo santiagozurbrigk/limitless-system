@@ -12,10 +12,12 @@ import {
   Image as ImageIcon,
   Zap,
 } from "lucide-react";
-import { Skeleton, SteppedAlert, cn } from "@ai-coo/ui";
+import { Skeleton, cn } from "@ai-coo/ui";
 import { getLeadJourneyAction, getZernioLeadJourneyAction } from "@/app/sales/actions";
 import { paths } from "@/routes";
-import type { LeadJourneyStep } from "@/lib/sales/lead-journey";
+import type { LeadJourneyStep, RecorridoDelLead } from "@/lib/sales/lead-journey";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
+import { leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 
 // ─── Configuración visual por tipo de paso ────────────────────────────────────
 
@@ -244,6 +246,54 @@ function StepContent({ step }: { step: LeadJourneyStep }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
+/** El recorrido del lead por conversación o por Zernio, o el motivo si no se pudo leer. */
+export function cargarRecorridoDelLead(params: {
+  conversationId?: string;
+  zernioAccountId?: string;
+  zernioParticipantId?: string;
+  zernioParticipantName?: string;
+}): Promise<Lectura<RecorridoDelLead>> {
+  const { conversationId, zernioAccountId, zernioParticipantId, zernioParticipantName } = params;
+  if (conversationId) {
+    return leerConMotivo(
+      () =>
+        getLeadJourneyAction(conversationId, {
+          zernioAccountId,
+          zernioParticipantId,
+          zernioParticipantName,
+        }),
+      "[LeadJourneyInline] recorrido"
+    );
+  }
+  if (zernioAccountId && zernioParticipantName) {
+    return leerConMotivo(
+      () => getZernioLeadJourneyAction(zernioAccountId, zernioParticipantId ?? "", zernioParticipantName),
+      "[LeadJourneyInline] recorrido de Zernio"
+    );
+  }
+  return Promise.resolve({ ok: true, data: { pasos: [], faltan: [] } });
+}
+
+/** "la llamada", "la venta" → "la llamada y la venta". */
+function enumerar(partes: string[]): string {
+  if (partes.length <= 1) return partes[0] ?? "";
+  return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
+}
+
+/**
+ * Aviso de las fuentes del recorrido que no se pudieron leer (SCRUM-504): los
+ * pasos que sí se leyeron se muestran igual.
+ */
+export function AvisoDeRecorridoIncompleto({ faltan }: { faltan: string[] }) {
+  if (faltan.length === 0) return null;
+  return (
+    <AvisoDeLecturaFallida
+      titulo="Faltan datos del recorrido:"
+      motivo={`no se pudieron leer ${enumerar(faltan)}.`}
+    />
+  );
+}
+
 export function LeadJourneyInline({
   conversationId,
   leadName,
@@ -261,33 +311,32 @@ export function LeadJourneyInline({
 }) {
   const [steps, setSteps] = useState<LeadJourneyStep[]>([]);
   const [loading, setLoading] = useState(true);
+  // Por qué no se pudo leer el recorrido (SCRUM-504): antes se veía como
+  // "Sin recorrido registrado".
+  const [motivo, setMotivo] = useState<string | null>(null);
+  const [faltan, setFaltan] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setMotivo(null);
+    setFaltan([]);
 
-    const fetchFn =
-      conversationId
-        ? getLeadJourneyAction(conversationId, {
-            zernioAccountId,
-            zernioParticipantId,
-            zernioParticipantName,
-          })
-        : zernioAccountId && zernioParticipantName
-          ? getZernioLeadJourneyAction(
-              zernioAccountId,
-              zernioParticipantId ?? "",
-              zernioParticipantName
-            )
-          : Promise.resolve([] as LeadJourneyStep[]);
-
-    fetchFn
-      .then((result) => {
-        if (!cancelled) setSteps(result);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void cargarRecorridoDelLead({
+      conversationId,
+      zernioAccountId,
+      zernioParticipantId,
+      zernioParticipantName,
+    }).then((lectura) => {
+      if (cancelled) return;
+      if (lectura.ok) {
+        setSteps(lectura.data.pasos);
+        setFaltan(lectura.data.faltan);
+      } else {
+        setMotivo(lectura.motivo);
+      }
+      setLoading(false);
+    });
 
     return () => {
       cancelled = true;
@@ -312,8 +361,18 @@ export function LeadJourneyInline({
         )}
       </div>
 
+      {!loading && !motivo && faltan.length > 0 ? (
+        <div className="mb-3">
+          <AvisoDeRecorridoIncompleto faltan={faltan} />
+        </div>
+      ) : null}
+
       {loading ? (
         <JourneySkeleton />
+      ) : motivo ? (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-4 text-[11px] text-destructive" role="alert">
+          No se pudo cargar el recorrido. {motivo}
+        </p>
       ) : steps.length === 0 ? (
         <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-4 text-center">
           <p className="text-[11px] font-medium text-muted-foreground">Sin recorrido registrado</p>

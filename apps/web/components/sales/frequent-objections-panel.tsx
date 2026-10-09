@@ -55,7 +55,8 @@ export function FrequentObjectionsPanel({
 }: {
   objections: FrequentObjectionSummary[];
   dataSource?: FrequentObjectionsDataSource;
-  loadError?: boolean;
+  /** Por qué no se pudieron leer las objeciones (SCRUM-504). */
+  loadError?: string | null;
 }) {
   if (loadError) {
     return (
@@ -64,7 +65,7 @@ export function FrequentObjectionsPanel({
           <EmptyState
             variant="inline"
             title="No pudimos cargar las objeciones"
-            description="Intentá de nuevo en unos segundos."
+            description={loadError}
             icon={<AlertTriangle className="h-4 w-4" />}
           />
         </Panel>

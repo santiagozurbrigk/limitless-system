@@ -16,6 +16,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { GlassPanel } from "@ai-coo/ui";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { formatPercent } from "@/lib/format";
 import { formatMoney } from "@/lib/finance/format";
 import {
@@ -44,10 +45,16 @@ import type { MetricsSnapshot } from "@/app/sales/metrics-actions";
 
 export function SalesMetricsRedesign({
   frequentObjections,
+  frequentObjectionsError = null,
   importedSnapshots = [],
+  importedSnapshotsError = null,
 }: {
   frequentObjections?: FrequentObjectionsResult;
+  /** Por qué no se pudieron leer las objeciones en el servidor, si falló. */
+  frequentObjectionsError?: string | null;
   importedSnapshots?: MetricsSnapshot[];
+  /** Por qué no se pudieron leer las métricas importadas, si falló. */
+  importedSnapshotsError?: string | null;
 }) {
   // "Este mes" en la zona de la organización (SCRUM-493).
   const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
@@ -58,6 +65,7 @@ export function SalesMetricsRedesign({
   const {
     isLoading,
     perfMetrics,
+    perfError,
     filteredMetrics,
     filteredConversations,
     financeSummary,
@@ -156,6 +164,19 @@ export function SalesMetricsRedesign({
 
       {/* ── Selector de período ─────────────────────────────────────────────── */}
       <DateRangePicker value={dateRange} onChange={setDateRange} />
+
+      {perfError && (
+        <AvisoDeLecturaFallida
+          titulo="No se pudieron cargar las métricas de rendimiento."
+          motivo={perfError}
+        />
+      )}
+      {importedSnapshotsError && (
+        <AvisoDeLecturaFallida
+          titulo="No se pudieron cargar las métricas importadas."
+          motivo={importedSnapshotsError}
+        />
+      )}
 
       {/* ── 1. KPI Heroes: 4 métricas principales ──────────────────────────── */}
       {useSnapshotFallback && (
@@ -389,7 +410,10 @@ export function SalesMetricsRedesign({
             <p className="px-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Motivos de no cierre
             </p>
-            <FrequentObjectionsSection initialData={frequentObjections} />
+            <FrequentObjectionsSection
+              initialData={frequentObjections}
+              initialError={frequentObjectionsError}
+            />
           </div>
 
           {/* Estado de conversaciones */}

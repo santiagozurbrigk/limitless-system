@@ -8,6 +8,7 @@ import {
   CLIENT_PAYMENT_RECEIPTS_MAX_BYTES,
 } from "@/lib/clients/constants";
 import { isAllowedPaymentReceipt } from "@/lib/clients/receipt-types";
+import { falloInesperado } from "@/lib/client/correr-accion";
 
 export function PaymentReceiptDropzone({
   file,
@@ -116,7 +117,26 @@ export function PaymentReceiptDropzone({
   );
 }
 
+/**
+ * Sube un comprobante. Nunca rechaza (SCRUM-504): el motivo que devuelve la
+ * acción, o el texto fijo si la acción o la subida lanzaron (queda en la
+ * consola).
+ */
 export async function uploadPaymentReceiptFile(
+  file: File,
+  clientId?: string
+): Promise<
+  | { ok: true; storagePath: string; mimeType: string; fileName: string }
+  | { ok: false; error: string }
+> {
+  try {
+    return await subirComprobante(file, clientId);
+  } catch (error) {
+    return { ok: false, error: falloInesperado("[uploadPaymentReceiptFile]", error) };
+  }
+}
+
+async function subirComprobante(
   file: File,
   clientId?: string
 ): Promise<

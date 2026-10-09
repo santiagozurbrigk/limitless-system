@@ -26,9 +26,11 @@ import {
 import { usePlatformData } from "@/providers";
 import { useFinanceData } from "@/providers/finance-data-provider";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 import type { Client, ClientPayment } from "@/types/clients";
 import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
 import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
+import { redondearACentavos } from "@/lib/clients/payment-utils";
 
 function formatMoney(amount: number) {
   return `$${amount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
@@ -71,6 +73,69 @@ function PaymentProgressBar({ paid, total }: { paid: number; total: number }) {
   );
 }
 
+/**
+ * Rótulos del botón y del diálogo de la próxima cuota. Si los pagos no se
+ * pudieron leer, la próxima pendiente se calcula sobre una lista vacía y puede
+ * ser otra: se dice "la próxima cuota" sin número (el servidor elige la
+ * correcta).
+ */
+export function rotulosDeLaProximaCuota(
+  etiqueta: string | null,
+  loadError: string | null
+): { boton: string; dialogo: string } {
+  if (loadError || !etiqueta) return { boton: "Registrar la próxima cuota", dialogo: "la próxima cuota" };
+  return { boton: `Registrar cuota ${etiqueta}`, dialogo: etiqueta };
+}
+
+/** Los pagos que muestra la ficha y, si la lectura falló, por qué. */
+export type EstadoDePagos = { payments: ClientPayment[]; loadError: string | null };
+
+/**
+ * Cómo queda la ficha después de leer los pagos (SCRUM-504). Toda la lógica de
+ * `loadError` vive acá; el componente sólo guarda lo que devuelve.
+ * - Con éxito: la lista, y sin error (si la primera lectura había fallado y
+ *   ahora se leyó bien, el error no aplica más).
+ * - Si falla la carga: el motivo, con lo que se veía.
+ * - Si falla una relectura (después de registrar): queda todo como estaba.
+ */
+export function aplicarLecturaDePagos(
+  actual: EstadoDePagos,
+  lectura: Lectura<ClientPayment[]>,
+  momento: "carga" | "relectura"
+): EstadoDePagos {
+  if (lectura.ok) return { payments: lectura.data, loadError: null };
+  if (momento === "relectura") return actual;
+  return { payments: actual.payments, loadError: lectura.motivo };
+}
+
+/** Un pago recién registrado, arriba de la lista. */
+export function agregarPago(actual: EstadoDePagos, pago: ClientPayment): EstadoDePagos {
+  return { ...actual, payments: [pago, ...actual.payments] };
+}
+
+/**
+ * El monto de la cuota para el formulario, en centavos: el plan de cuotas
+ * puede traer 333.333 y el servidor sólo acepta dos decimales (SCRUM-504).
+ */
+export function montoParaElFormulario(monto: number): string {
+  return String(redondearACentavos(monto));
+}
+
+/** El rótulo de la cuota que el servidor registró, para el aviso. */
+export function rotuloDeCuotaRegistrada(cliente: Client, pago: ClientPayment): string {
+  const numero = pago.installmentNumber;
+  const etiqueta = numero != null ? cliente.installments?.[numero - 1]?.label : undefined;
+  return etiqueta ?? "La cuota";
+}
+
+/** Los pagos de un cliente, o el motivo si no se pudieron leer (SCRUM-504). */
+export function cargarPagosDelCliente(clientId: string): Promise<Lectura<ClientPayment[]>> {
+  return leerConMotivo(
+    () => listClientPaymentsAction(clientId),
+    "[ClientPaymentsSection] pagos"
+  );
+}
+
 export function ClientPaymentsSection({ client }: { client: Client }) {
   const { updateClient } = usePlatformData();
   /**
@@ -82,7 +147,13 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
    */
   const { refreshClientPayments } = useFinanceData();
   const { push } = useToast();
-  const [payments, setPayments] = useState<ClientPayment[]>([]);
+  const [estadoDePagos, setEstadoDePagos] = useState<EstadoDePagos>({
+    payments: [],
+    loadError: null,
+  });
+  // Por qué no se pudieron leer los pagos (SCRUM-504): antes la falla se veía
+  // como "Aún no hay pagos registrados".
+  const { payments, loadError } = estadoDePagos;
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [addGenericOpen, setAddGenericOpen] = useState(false);
@@ -114,26 +185,37 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void listClientPaymentsAction(client.id).then((rows) => {
-      if (!cancelled) {
-        setPayments(rows);
-        setLoading(false);
-      }
+    void cargarPagosDelCliente(client.id).then((lectura) => {
+      if (cancelled) return;
+      setEstadoDePagos((actual) => aplicarLecturaDePagos(actual, lectura, "carga"));
+      setLoading(false);
     });
     return () => {
       cancelled = true;
     };
   }, [client.id]);
 
+  /** Relee la lista después de registrar; si falla, queda lo que se ve. */
+  function releerPagos() {
+    void cargarPagosDelCliente(client.id).then((lectura) => {
+      setEstadoDePagos((actual) => aplicarLecturaDePagos(actual, lectura, "relectura"));
+    });
+  }
+
+  const rotulos = rotulosDeLaProximaCuota(nextPending?.label ?? null, loadError);
+
   async function openReceipt(paymentId: string) {
     setOpeningId(paymentId);
     try {
-      const res = await getClientPaymentReceiptUrlAction(paymentId);
-      if (!res.success) {
-        push({ title: "No se pudo abrir el comprobante", description: res.error });
-        return;
-      }
-      window.open(res.data.url, "_blank", "noopener,noreferrer");
+      await correrMutacion({
+        accion: () => getClientPaymentReceiptUrlAction(paymentId),
+        avisar: push,
+        tituloError: "No se pudo abrir el comprobante",
+        etiqueta: "[ClientPaymentsSection] comprobante",
+        alExito: (data) => {
+          window.open(data.url, "_blank", "noopener,noreferrer");
+        },
+      });
     } finally {
       setOpeningId(null);
     }
@@ -152,7 +234,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
               onClick={() => setAddOpen(true)}
             >
               <Plus className="h-3.5 w-3.5" />
-              Registrar cuota {nextPending.label}
+              {rotulos.boton}
             </Button>
           ) : null}
           {showGenericButton ? (
@@ -170,7 +252,7 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
       </div>
 
       {/* Barra de progreso de cobros */}
-      {!loading && client.totalAmount > 0 ? (
+      {!loading && !loadError && client.totalAmount > 0 ? (
         <GlassPanel className="p-4">
           <PaymentProgressBar paid={paidTotal} total={client.totalAmount} />
         </GlassPanel>
@@ -179,6 +261,10 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
       <GlassPanel className="p-5 text-sm">
         {loading ? (
           <p className="text-muted-foreground">Cargando pagos…</p>
+        ) : loadError ? (
+          <p className="text-destructive" role="alert">
+            No se pudieron cargar los pagos. {loadError}
+          </p>
         ) : payments.length === 0 ? (
           <p className="text-muted-foreground">
             Aún no hay pagos registrados para este cliente.
@@ -248,8 +334,8 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
           onOpenChange={setAddOpen}
           clientId={client.id}
           defaultAmount={nextPending.amount}
-          installmentLabel={nextPending.label}
-          onSuccess={(updatedClient, newPayments) => {
+          installmentLabel={rotulos.dialogo}
+          onSuccess={(updatedClient, newPayment) => {
             // `updateClient` lanza con el motivo (SCRUM-497): sin este catch
             // quedaba como una promesa rechazada que nadie veía.
             updateClient(updatedClient.id, {
@@ -260,11 +346,12 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
                 description: e instanceof Error ? e.message : undefined,
               });
             });
-            setPayments(newPayments);
+            setEstadoDePagos((actual) => agregarPago(actual, newPayment));
+            releerPagos();
             void refreshClientPayments();
             push({
               title: "Cuota registrada",
-              description: `${nextPending.label} guardada con comprobante`,
+              description: `${rotuloDeCuotaRegistrada(updatedClient, newPayment)} guardada con comprobante`,
               variant: "success",
             });
           }}
@@ -277,7 +364,8 @@ export function ClientPaymentsSection({ client }: { client: Client }) {
           onOpenChange={setAddGenericOpen}
           clientId={client.id}
           onSuccess={(newPayment) => {
-            setPayments((prev) => [newPayment, ...prev]);
+            setEstadoDePagos((actual) => agregarPago(actual, newPayment));
+            releerPagos();
             void refreshClientPayments();
             push({
               title: "Pago registrado",
@@ -304,9 +392,9 @@ function AddInstallmentPaymentDialog({
   clientId: string;
   defaultAmount: number;
   installmentLabel: string;
-  onSuccess: (client: Client, payments: ClientPayment[]) => void;
+  onSuccess: (client: Client, payment: ClientPayment) => void;
 }) {
-  const [amount, setAmount] = useState(String(defaultAmount));
+  const [amount, setAmount] = useState(montoParaElFormulario(defaultAmount));
   const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const [paymentDate, setPaymentDate] = useState(() =>
     fechaDeHoyEnZona(zonaDeLaOrganizacion)
@@ -314,13 +402,17 @@ function AddInstallmentPaymentDialog({
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [claveIdempotencia, setClaveIdempotencia] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     if (open) {
-      setAmount(String(defaultAmount));
+      setAmount(montoParaElFormulario(defaultAmount));
       setPaymentDate(fechaDeHoyEnZona(zonaDeLaOrganizacion));
       setFile(null);
       setError(null);
+      // Una clave por formulario abierto: si la respuesta se pierde y se
+      // vuelve a guardar, el servidor no duplica el cobro (SCRUM-504).
+      setClaveIdempotencia(crypto.randomUUID());
     }
   }, [open, defaultAmount, zonaDeLaOrganizacion]);
 
@@ -352,21 +444,25 @@ function AddInstallmentPaymentDialog({
         mimeType = uploaded.mimeType;
       }
 
-      const res = await addInstallmentPaymentAction({
-        clientId,
-        amount: parsedAmount,
-        paymentDate,
-        storagePath,
-        mimeType,
-      });
+      const res = await leerConMotivo(
+        () =>
+          addInstallmentPaymentAction({
+            clientId,
+            amount: parsedAmount,
+            paymentDate,
+            storagePath,
+            mimeType,
+            claveIdempotencia,
+          }),
+        "[ClientPaymentsSection] registrar cuota"
+      );
 
-      if (!res.success) {
-        setError(res.error);
+      if (!res.ok) {
+        setError(res.motivo);
         return;
       }
 
-      const refreshed = await listClientPaymentsAction(clientId);
-      onSuccess(res.data.client, refreshed);
+      onSuccess(res.data.client, res.data.payment);
       onOpenChange(false);
     });
   }
@@ -439,6 +535,7 @@ function AddGenericPaymentDialog({
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [claveIdempotencia, setClaveIdempotencia] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     if (open) {
@@ -446,6 +543,9 @@ function AddGenericPaymentDialog({
       setPaymentDate(fechaDeHoyEnZona(zonaDeLaOrganizacion));
       setFile(null);
       setError(null);
+      // Una clave por formulario abierto: si la respuesta se pierde y se
+      // vuelve a guardar, el servidor no duplica el cobro (SCRUM-504).
+      setClaveIdempotencia(crypto.randomUUID());
     }
   }, [open, zonaDeLaOrganizacion]);
 
@@ -477,16 +577,21 @@ function AddGenericPaymentDialog({
         mimeType = uploaded.mimeType;
       }
 
-      const res = await recordClientPaymentAction({
-        clientId,
-        amount: parsedAmount,
-        paymentDate,
-        storagePath,
-        mimeType,
-      });
+      const res = await leerConMotivo(
+        () =>
+          recordClientPaymentAction({
+            clientId,
+            amount: parsedAmount,
+            paymentDate,
+            storagePath,
+            mimeType,
+            claveIdempotencia,
+          }),
+        "[ClientPaymentsSection] registrar pago"
+      );
 
-      if (!res.success) {
-        setError(res.error);
+      if (!res.ok) {
+        setError(res.motivo);
         return;
       }
 

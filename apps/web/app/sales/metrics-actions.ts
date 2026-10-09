@@ -2,9 +2,24 @@
 
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { SalesPerformanceMetrics } from "@/types/sales";
 import type { ClosingCallStatus } from "@/types/closing";
 import { callWasAttended } from "@/lib/closing/call-status";
+import {
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
+
+/*
+ * SCRUM-504: las lecturas de métricas de Ventas devuelven sus errores como
+ * valor (`MutationResult`). En producción Next no le manda al cliente el
+ * mensaje de un error lanzado por una server action, y `/sales/metrics` (un
+ * server component) no tiene error boundary. La sesión que falta vuelve con
+ * su motivo; un error de la base o cualquier otra excepción se registra, va a
+ * Sentry (tag `server_action`) y vuelve con el texto fijo de la interfaz.
+ */
 
 // ─── Snapshots de métricas importadas ─────────────────────────────────────────
 
@@ -15,25 +30,32 @@ export type MetricsSnapshot = {
   metrics: Record<string, number>;
 };
 
-export async function getSalesMetricsSnapshotsAction(): Promise<MetricsSnapshot[]> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+export async function getSalesMetricsSnapshotsAction(): Promise<
+  MutationResult<MetricsSnapshot[]>
+> {
+  // Sin Supabase no hay métricas importadas (lo que antes resolvía la página).
+  if (!isSupabaseConfigured()) return { success: true, data: [] };
 
-  const { data, error } = await supabase
-    .from("metrics_snapshots")
-    .select("id, period_start, period_label, metrics")
-    .eq("organization_id", organizationId)
-    .eq("category", "sales")
-    .order("period_start", { ascending: false });
+  return mutacionConErroresEsperables("[getSalesMetricsSnapshots]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  if (error) throw new Error(error.message);
+    const { data, error } = await supabase
+      .from("metrics_snapshots")
+      .select("id, period_start, period_label, metrics")
+      .eq("organization_id", organizationId)
+      .eq("category", "sales")
+      .order("period_start", { ascending: false });
 
-  return (data ?? []).map((row) => ({
-    id:          row.id,
-    periodStart: row.period_start as string,
-    periodLabel: (row.period_label as string | null) ?? (row.period_start as string).slice(0, 7),
-    metrics:     (row.metrics as Record<string, number>) ?? {},
-  }));
+    if (error) throw new FallaDeLaBase(error);
+
+    return (data ?? []).map((row) => ({
+      id:          row.id,
+      periodStart: row.period_start as string,
+      periodLabel: (row.period_label as string | null) ?? (row.period_start as string).slice(0, 7),
+      metrics:     (row.metrics as Record<string, number>) ?? {},
+    }));
+  });
 }
 
 export type SalesMetricsPeriod = "month" | "30d" | "custom";
@@ -69,6 +91,15 @@ const NURTURING_STAGES = new Set([
 export async function getSalesPerformanceMetricsAction(
   period: SalesMetricsPeriod = "month",
   dateRange?: SalesMetricsDateRange
+): Promise<MutationResult<SalesPerformanceMetrics>> {
+  return mutacionConErroresEsperables("[getSalesPerformanceMetrics]", () =>
+    calcularMetricasDeRendimiento(period, dateRange)
+  );
+}
+
+async function calcularMetricasDeRendimiento(
+  period: SalesMetricsPeriod,
+  dateRange: SalesMetricsDateRange | undefined
 ): Promise<SalesPerformanceMetrics> {
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
@@ -81,7 +112,7 @@ export async function getSalesPerformanceMetricsAction(
     .gte("scheduled_at", from)
     .lte("scheduled_at", to);
 
-  if (callsError) throw new Error(callsError.message);
+  if (callsError) throw new FallaDeLaBase(callsError);
 
   const { data: conversations, error: convError } = await supabase
     .from("conversations")
@@ -90,7 +121,7 @@ export async function getSalesPerformanceMetricsAction(
     .gte("last_message_at", from)
     .lte("last_message_at", to);
 
-  if (convError) throw new Error(convError.message);
+  if (convError) throw new FallaDeLaBase(convError);
 
   const callRows = calls ?? [];
   const convRows = conversations ?? [];

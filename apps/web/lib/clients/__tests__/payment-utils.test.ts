@@ -18,6 +18,8 @@
 import { describe, expect, it } from "vitest";
 import type { ClosePaymentPayload } from "@/types/closing";
 import {
+  montoACentavos,
+  redondearACentavos,
   getPaidAmountFromClosePayload,
   getPaymentDateFromClosePayload,
   installmentNumberForClosePayload,
@@ -138,5 +140,34 @@ describe("installmentNumberForClosePayload", () => {
   it("pago único y adelanto más fee no tienen número de cuota", () => {
     expect(installmentNumberForClosePayload(payload({ paymentType: "upfront" }))).toBeNull();
     expect(installmentNumberForClosePayload(payload({ paymentType: "upfront_fee" }))).toBeNull();
+  });
+});
+
+describe("montos en centavos (SCRUM-504, AR pasada 5)", () => {
+  it("montoACentavos redondea el ruido del punto flotante y rechaza más de dos decimales", () => {
+    expect(montoACentavos(0.1 + 0.2)).toBe(0.3);
+    expect(montoACentavos(333.33)).toBe(333.33);
+    expect(montoACentavos(333.333)).toBeNull();
+    expect(montoACentavos(Number.NaN)).toBeNull();
+  });
+
+  it("redondearACentavos no rechaza: 333.333 → 333.33", () => {
+    expect(redondearACentavos(333.333)).toBe(333.33);
+  });
+
+  it("⭐ redondea la mitad como la columna numeric(12,2): 1.005 → 1.01 (Math.round daría 1.00)", () => {
+    expect(Math.round(1.005 * 100) / 100).toBe(1);
+    expect(redondearACentavos(1.005)).toBe(1.01);
+    expect(redondearACentavos(2.675)).toBe(2.68);
+    expect(redondearACentavos(9_999_999.995)).toBe(10_000_000);
+    expect(redondearACentavos(1.004)).toBe(1);
+  });
+
+  it("⭐ lo pagado al cerrar una venta sale en centavos: el pago no se rechaza después de cerrar", () => {
+    expect(
+      getPaidAmountFromClosePayload(payload({ paymentType: "installments", installmentAmount: 333.333 }))
+    ).toBe(333.33);
+    expect(getPaidAmountFromClosePayload(payload({ paymentType: "upfront", paidAmount: 333.333 }))).toBe(333.33);
+    expect(getPaidAmountFromClosePayload(payload({ paymentType: "upfront", paidAmount: 0.1 + 0.2 }))).toBe(0.3);
   });
 });

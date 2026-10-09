@@ -21,7 +21,12 @@ import {
   mockFrequentObjectionSummaries,
 } from "@/lib/metrics/frequent-objections";
 import { getLeadJourney, getZernioLeadJourney } from "@/lib/sales/lead-journey";
-import type { LeadJourneyStep, LeadJourneyContext } from "@/lib/sales/lead-journey";
+import type { LeadJourneyContext, RecorridoDelLead } from "@/lib/sales/lead-journey";
+import {
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 
 type CallAnalysisRow = {
   closer_id: string | null;
@@ -65,42 +70,23 @@ function aggregateTeamAverageByDate(
     );
 }
 
-export async function getCallAnalysesAction(closerId?: string) {
-  if (!isSupabaseConfigured()) return null;
+/*
+ * SCRUM-504: las lecturas de análisis de llamadas (ranking y evolución)
+ * devuelven sus errores como valor (`MutationResult`): en producción Next no le
+ * manda al cliente el mensaje de un error lanzado por una server action. La
+ * sesión que falta vuelve con su motivo; un error de la base (salvo la tabla
+ * que falta, que se lee como "sin datos") o cualquier otra excepción se
+ * registra, va a Sentry (tag `server_action`) y vuelve con el texto fijo de la
+ * interfaz.
+ */
 
-  try {
-    const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
+export async function getTeamRankingAction(): Promise<MutationResult<TeamRankingEntry[]>> {
+  if (!isSupabaseConfigured()) return { success: true, data: mockTeamRanking };
 
-    let query = supabase
-      .from("call_analyses")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("call_date", { ascending: false });
-
-    if (closerId) {
-      query = query.eq("closer_id", closerId);
-    }
-
-    const { data, error } = await query;
-    if (error) {
-      if (isMissingTableError(error.message)) return null;
-      console.error("[getCallAnalysesAction]", error);
-      throw new Error(error.message);
-    }
-
-    return data?.length ? data : null;
-  } catch (error) {
-    if (error instanceof Error && !error.message.includes("call_analyses")) {
-      console.error("[getCallAnalysesAction]", error);
-    }
-    throw error;
-  }
+  return mutacionConErroresEsperables("[getTeamRanking]", leerRankingDelEquipo);
 }
 
-export async function getTeamRankingAction(): Promise<TeamRankingEntry[]> {
-  if (!isSupabaseConfigured()) return mockTeamRanking;
-
+async function leerRankingDelEquipo(): Promise<TeamRankingEntry[]> {
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -113,8 +99,7 @@ export async function getTeamRankingAction(): Promise<TeamRankingEntry[]> {
 
   if (error) {
     if (isMissingTableError(error.message)) return [];
-    console.error("[getTeamRankingAction]", error);
-    throw new Error(error.message);
+    throw new FallaDeLaBase(error);
   }
 
   if (!data?.length) return [];
@@ -164,60 +149,62 @@ export async function getTeamRankingAction(): Promise<TeamRankingEntry[]> {
 
 export async function getCloserEvolutionAction(
   closerName: string
-): Promise<number[]> {
+): Promise<MutationResult<number[]>> {
   if (!isSupabaseConfigured()) {
-    return mockCloserEvolutionForName(closerName);
+    return { success: true, data: mockCloserEvolutionForName(closerName) };
   }
 
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+  return mutacionConErroresEsperables("[getCloserEvolution]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("call_analyses")
-    .select("overall_score, call_date")
-    .eq("organization_id", organizationId)
-    .eq("closer_name", closerName)
-    .order("call_date", { ascending: true })
-    .limit(50);
-
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    console.error("[getCloserEvolutionAction]", error);
-    throw new Error(error.message);
-  }
-
-  if (!data?.length) return [];
-
-  return data.map((d) => d.overall_score ?? 0);
-}
-
-export async function getTeamAverageEvolutionAction(): Promise<number[]> {
-  if (!isSupabaseConfigured()) {
-    return getTeamAverageEvolution();
-  }
-
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
-
-  const [{ data, error }, zona] = await Promise.all([
-    supabase
+    const { data, error } = await supabase
       .from("call_analyses")
       .select("overall_score, call_date")
       .eq("organization_id", organizationId)
+      .eq("closer_name", closerName)
       .order("call_date", { ascending: true })
-      .limit(200),
-    leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
-  ]);
+      .limit(50);
 
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    console.error("[getTeamAverageEvolutionAction]", error);
-    throw new Error(error.message);
+    if (error) {
+      if (isMissingTableError(error.message)) return [];
+      throw new FallaDeLaBase(error);
+    }
+
+    if (!data?.length) return [];
+
+    return data.map((d) => d.overall_score ?? 0);
+  });
+}
+
+export async function getTeamAverageEvolutionAction(): Promise<MutationResult<number[]>> {
+  if (!isSupabaseConfigured()) {
+    return { success: true, data: getTeamAverageEvolution() };
   }
 
-  if (!data?.length) return [];
+  return mutacionConErroresEsperables("[getTeamAverageEvolution]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  return aggregateTeamAverageByDate(data, zona);
+    const [{ data, error }, zona] = await Promise.all([
+      supabase
+        .from("call_analyses")
+        .select("overall_score, call_date")
+        .eq("organization_id", organizationId)
+        .order("call_date", { ascending: true })
+        .limit(200),
+      leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
+    ]);
+
+    if (error) {
+      if (isMissingTableError(error.message)) return [];
+      throw new FallaDeLaBase(error);
+    }
+
+    if (!data?.length) return [];
+
+    return aggregateTeamAverageByDate(data, zona);
+  });
 }
 
 /** Expuesto para validar mocks en desarrollo */
@@ -228,15 +215,15 @@ export async function getMockCallAnalysisKeysAction() {
 export async function getLeadJourneyAction(
   conversationId: string,
   context?: LeadJourneyContext
-): Promise<LeadJourneyStep[]> {
-  if (!isSupabaseConfigured()) return [];
+): Promise<MutationResult<RecorridoDelLead>> {
+  if (!isSupabaseConfigured()) return { success: true, data: { pasos: [], faltan: [] } };
 
-  try {
+  // Antes atrapaba todo y devolvía `[]`: sin sesión o con una falla, el panel
+  // decía "Sin recorrido registrado" (AR de SCRUM-504).
+  return mutacionConErroresEsperables("[getLeadJourney]", async () => {
     const organizationId = await requireOrganizationId();
-    return await getLeadJourney(organizationId, conversationId, context);
-  } catch {
-    return [];
-  }
+    return getLeadJourney(organizationId, conversationId, context);
+  });
 }
 
 /**
@@ -247,29 +234,31 @@ export async function getZernioLeadJourneyAction(
   accountId: string,
   participantId: string,
   participantName: string
-): Promise<LeadJourneyStep[]> {
-  if (!isSupabaseConfigured()) return [];
+): Promise<MutationResult<RecorridoDelLead>> {
+  if (!isSupabaseConfigured()) return { success: true, data: { pasos: [], faltan: [] } };
 
-  try {
+  return mutacionConErroresEsperables("[getZernioLeadJourney]", async () => {
     const organizationId = await requireOrganizationId();
-    return await getZernioLeadJourney(organizationId, {
+    return getZernioLeadJourney(organizationId, {
       zernioAccountId: accountId,
       zernioParticipantId: participantId,
       zernioParticipantName: participantName,
     });
-  } catch {
-    return [];
-  }
+  });
 }
 
-export async function getFrequentObjectionsAction(): Promise<FrequentObjectionsResult> {
+export async function getFrequentObjectionsAction(): Promise<
+  MutationResult<FrequentObjectionsResult>
+> {
   if (!isSupabaseConfigured()) {
     return {
-      objections: mockFrequentObjectionSummaries(),
-      dataSource: "mock",
+      success: true,
+      data: { objections: mockFrequentObjectionSummaries(), dataSource: "mock" },
     };
   }
 
-  const organizationId = await requireOrganizationId();
-  return getFrequentObjections(organizationId);
+  return mutacionConErroresEsperables("[getFrequentObjections]", async () => {
+    const organizationId = await requireOrganizationId();
+    return getFrequentObjections(organizationId);
+  });
 }

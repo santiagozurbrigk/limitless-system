@@ -78,7 +78,8 @@ export async function getClosedBuyerJourneys(
     );
     if (!conversationId) continue;
 
-    const steps = await getLeadJourney(organizationId, conversationId);
+    // Las fuentes que faltan ya quedaron registradas en `getLeadJourney`.
+    const { pasos: steps } = await getLeadJourney(organizationId, conversationId);
     if (steps.length === 0) continue;
 
     journeys.push({

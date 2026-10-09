@@ -8,30 +8,46 @@ import {
 } from "@/components/sales/team-call-ranking";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { TeamRankingEntry } from "@/types/call-analysis";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 
 export function SalesTeamPerformanceSection() {
   const [ranking, setRanking] = useState<TeamRankingEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [motivo, setMotivo] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    getTeamRankingAction()
-      .then((data) => {
-        if (!cancelled) setRanking(data);
-      })
-      .catch((error) => {
-        console.error("[SalesTeamPerformanceSection]", error);
-        if (!cancelled) setLoadError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void leerConMotivo(getTeamRankingAction, "[SalesTeamPerformanceSection]").then(
+      (lectura) => {
+        if (cancelled) return;
+        if (lectura.ok) setRanking(lectura.data);
+        else setMotivo(lectura.motivo);
+        setLoading(false);
+      }
+    );
     return () => {
       cancelled = true;
     };
   }, []);
 
+  return (
+    <RendimientoDelEquipo loading={loading} motivo={motivo} ranking={ranking} />
+  );
+}
+
+/**
+ * Lo que se ve según el estado de la carga. `motivo`: por qué no se pudo leer
+ * el ranking (lo devuelve la acción; si fue inesperado, el texto fijo).
+ */
+export function RendimientoDelEquipo({
+  loading,
+  motivo,
+  ranking,
+}: {
+  loading: boolean;
+  motivo: string | null;
+  ranking: TeamRankingEntry[];
+}) {
   if (loading) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -40,12 +56,12 @@ export function SalesTeamPerformanceSection() {
     );
   }
 
-  if (loadError) {
+  if (motivo) {
     return (
       <EmptyState
         variant="inline"
         title="No pudimos cargar el rendimiento del equipo"
-        description="Intentá de nuevo en unos segundos."
+        description={motivo}
       />
     );
   }

@@ -23,6 +23,7 @@ import { isSameMonth, pickCalendarFocusDate } from "@/lib/closing/calendar";
 import { useHashTab } from "@/lib/hooks/use-hash-tab";
 import { usePlatformData } from "@/providers";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import { paths } from "@/routes";
 import { ESCONDIDO } from "@/lib/release/escondido";
 import type { ClosingCall, ClosingCallSource, ClosingCallStatus } from "@/types/closing";
@@ -35,7 +36,11 @@ import { CallOutcomeModal, type CallOutcomeKind } from "./call-outcome-modal";
 import { LeadsTable } from "./leads-table";
 import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { saveCallFollowUpAction } from "@/app/sales/lead-actions";
-import type { FollowUpCatalog, FollowUpOption } from "@/lib/sales/follow-up-options";
+import {
+  BUILT_IN_CATALOG,
+  type FollowUpCatalog,
+  type FollowUpOption,
+} from "@/lib/sales/follow-up-options";
 import type { LeadTableResult } from "@/app/sales/lead-actions";
 import type { TeamMember } from "@/types/team";
 
@@ -92,6 +97,7 @@ export function ClosingOverview({
   ghlCalendars = [],
   ghlSelectedCalendarIds = [],
   leadsTable,
+  leadsTableError = null,
   teamMembers = [],
 }: {
   /** Calendarios disponibles en GHL (fetched server-side). Vacío si no hay integración. */
@@ -99,7 +105,9 @@ export function ClosingOverview({
   /** IDs de calendarios actualmente seleccionados para sync. */
   ghlSelectedCalendarIds?: string[];
   /** Primera página de la tabla de seguimiento, resuelta en el servidor. */
-  leadsTable: LeadTableResult;
+  leadsTable: LeadTableResult | null;
+  /** Por qué no se pudo leer la tabla de seguimiento, si falló (SCRUM-504). */
+  leadsTableError?: string | null;
   /** Equipo de la organización, para asignar el responsable del próximo paso. */
   teamMembers?: TeamMember[];
 }) {
@@ -130,7 +138,9 @@ export function ClosingOverview({
   /** Qué resultado se está cargando: "no cerrada" o "no show". */
   const [outcomeKind, setOutcomeKind] = useState<CallOutcomeKind | null>(null);
   /** Catálogo de valores para el modal — un valor creado ahí queda disponible. */
-  const [catalog, setCatalog] = useState<FollowUpCatalog>(leadsTable.catalog);
+  const [catalog, setCatalog] = useState<FollowUpCatalog>(
+    leadsTable?.catalog ?? BUILT_IN_CATALOG
+  );
   const [calendarMode, setCalendarMode] = useState<"month" | "week">("month");
   const [calendarAnchor, setCalendarAnchor] = useState(() =>
     pickCalendarFocusDate(closingCalls)
@@ -222,7 +232,14 @@ export function ClosingOverview({
       />
 
       {activeTab === "seguimiento" ? (
-        <LeadsTable initial={leadsTable} teamMembers={teamMembers} />
+        leadsTable ? (
+          <LeadsTable initial={leadsTable} teamMembers={teamMembers} />
+        ) : (
+          <EmptyState
+            title="No se pudo cargar el seguimiento"
+            description={leadsTableError ?? undefined}
+          />
+        )
       ) : activeTab === "equipo" ? (
         <div className="space-y-4">
           <ClosersRanking />
@@ -488,31 +505,29 @@ export function ClosingOverview({
                 return;
               }
 
-              const followUp = await saveCallFollowUpAction({
-                callId: selected.id,
-                qualification: payload.qualification,
-                nextAction: payload.nextAction,
-                nextActionAt: payload.nextActionAt,
-                ownerId: payload.ownerId,
-                notes: payload.nextActionNotes,
+              await correrMutacion({
+                accion: () =>
+                  saveCallFollowUpAction({
+                    callId: selected.id,
+                    qualification: payload.qualification,
+                    nextAction: payload.nextAction,
+                    nextActionAt: payload.nextActionAt,
+                    ownerId: payload.ownerId,
+                    notes: payload.nextActionNotes,
+                  }),
+                avisar: push,
+                tituloError: "El resultado se guardó, el seguimiento no",
+                etiqueta: "[ClosingOverview] seguimiento",
+                alExito: () => {
+                  push({
+                    title: payload.nextAction
+                      ? "Resultado y seguimiento guardados"
+                      : "Resultado guardado — el lead queda sin próximo paso",
+                    variant: "success",
+                  });
+                  router.refresh();
+                },
               });
-
-              if (!followUp.ok) {
-                push({
-                  title: "El resultado se guardó, el seguimiento no",
-                  description: followUp.error,
-                  variant: "default",
-                });
-                return;
-              }
-
-              push({
-                title: payload.nextAction
-                  ? "Resultado y seguimiento guardados"
-                  : "Resultado guardado — el lead queda sin próximo paso",
-                variant: "success",
-              });
-              router.refresh();
             }}
           />
         </>

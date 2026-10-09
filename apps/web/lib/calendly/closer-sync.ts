@@ -6,7 +6,11 @@
  * asignamos closer_id en closing_calls.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchCalendlyScheduledEventPayloads } from "@/lib/calendly/fetch-scheduled-events";
+import {
+  fetchCalendlyScheduledEventPayloads,
+  statusDeLaApiDeCalendly,
+} from "@/lib/calendly/fetch-scheduled-events";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 import { repairClosingConversationLinks } from "@/lib/conversations/repair-links";
 import { syncMayOverwriteStatus } from "@/lib/closing/call-status";
 import type { ClosingCallStatus } from "@/types/closing";
@@ -40,6 +44,25 @@ export type CloserSyncResult = {
   reason?: string;
 };
 
+/**
+ * Calendly rechazó la conexión del closer o limitó las consultas. No es una
+ * falla del sistema: la sync manual (`syncCloserCalendlyAction`) lo devuelve
+ * con un motivo claro y la del cron lo anota como `reason`, igual que antes.
+ *   - `conexion_vencida`: el refresh token ya no sirve (400 `invalid_grant`)
+ *     o la API rechaza el access token (401). Hay que volver a conectar
+ *     Calendly. Un 403 no: es una falla.
+ *   - `limite_de_consultas`: la API respondió 429.
+ * El mensaje es el detalle de Calendly, para el log; el usuario no lo ve.
+ */
+export class RechazoDeCalendly extends Error {
+  readonly motivo: "conexion_vencida" | "limite_de_consultas";
+  constructor(motivo: RechazoDeCalendly["motivo"], detalle: string) {
+    super(detalle);
+    this.name = "RechazoDeCalendly";
+    this.motivo = motivo;
+  }
+}
+
 // ─── Token refresh para closers ────────────────────────────────────────────────
 
 async function refreshCloserToken(
@@ -65,8 +88,15 @@ async function refreshCloserToken(
   });
 
   const json = await resp.json().catch(() => null);
+  const detalle = json?.message ?? "No se pudo renovar el token del closer";
+  // OAuth 2.0: un refresh token vencido o revocado vuelve 400 `invalid_grant`
+  // (verificado contra auth.calendly.com el 2026-10-08). Un 401
+  // `invalid_client` es la configuración de la app, no del closer: falla.
+  if (resp.status === 400 && json?.error === "invalid_grant") {
+    throw new RechazoDeCalendly("conexion_vencida", detalle);
+  }
   if (!resp.ok || !json?.access_token) {
-    throw new Error(json?.message ?? "No se pudo renovar el token del closer");
+    throw new Error(detalle);
   }
 
   return {
@@ -87,7 +117,7 @@ async function getValidCloserToken(row: CloserIntegrationRow): Promise<CloserCal
   const refreshed = await refreshCloserToken(config);
 
   const admin = createAdminClient();
-  await admin
+  const { error } = await admin
     .from("team_member_integrations")
     .update({
       config: refreshed,
@@ -97,6 +127,11 @@ async function getValidCloserToken(row: CloserIntegrationRow): Promise<CloserCal
     .eq("user_id", row.user_id)
     .eq("integration_type", "calendly");
 
+  // Calendly rota el refresh token: si no se guarda, el próximo sync falla con
+  // `invalid_grant` y parecería que la conexión venció. Es una falla de la
+  // base y se dice como tal (AR de SCRUM-504).
+  if (error) throw new FallaDeLaBase(error);
+
   return refreshed;
 }
 
@@ -105,6 +140,70 @@ async function getValidCloserToken(row: CloserIntegrationRow): Promise<CloserCal
 /**
  * Fetch + upsert de closing_calls para un closer específico.
  * Los eventos se filtran por su calendly_user_uri y se asigna closer_id.
+ *
+ * Lanza: un `RechazoDeCalendly` si Calendly rechaza la conexión o limita las
+ * consultas, y cualquier otra excepción si algo falla (la red, la base, un
+ * bug). La usa la sync manual, que distingue los dos casos; el cron usa
+ * `syncCloserCalendlyEvents`, que no lanza.
+ */
+export async function sincronizarEventosDelCloser(
+  row: CloserIntegrationRow
+): Promise<CloserSyncResult> {
+  const { user_id: profileId, organization_id: organizationId } = row;
+
+  const config = await getValidCloserToken(row);
+  const { calendly_user_uri: calendlyUserUri } = config;
+
+  if (!calendlyUserUri) {
+    return { profileId, organizationId, inserted: 0, updated: 0, skippedManualStatus: 0, fetched: 0, skipped: true, reason: "no_user_uri" };
+  }
+
+  // Fetch eventos del closer (la API de Calendly permite filtrar por user)
+  let events: CalendlyEventSyncPayload[];
+  try {
+    events = await fetchCalendlyScheduledEventPayloads(
+      config.access_token,
+      calendlyUserUri, // pasamos el userUri como "orgUri" — Calendly acepta user URI aquí también
+      {}
+    );
+  } catch (err) {
+    const status = statusDeLaApiDeCalendly(err);
+    const detalle = err instanceof Error ? err.message : String(err);
+    // Sólo el 401 está verificado contra Calendly ("The access token is
+    // invalid"). Un 403 puede ser un permiso o el plan de la app: es una falla
+    // y va a Sentry (AR de SCRUM-504, MENOR-3).
+    if (status === 401) throw new RechazoDeCalendly("conexion_vencida", detalle);
+    if (status === 429) throw new RechazoDeCalendly("limite_de_consultas", detalle);
+    throw err;
+  }
+
+  if (!events.length) {
+    return { profileId, organizationId, inserted: 0, updated: 0, skippedManualStatus: 0, fetched: 0 };
+  }
+
+  // Upsert en closing_calls con closer_id asignado
+  const result = await upsertClosingCallsForCloser(
+    organizationId,
+    profileId,
+    calendlyUserUri,
+    events
+  );
+
+  // Actualizar last_sync_at
+  const admin = createAdminClient();
+  await admin
+    .from("team_member_integrations")
+    .update({ last_sync_at: new Date().toISOString() })
+    .eq("organization_id", organizationId)
+    .eq("user_id", profileId)
+    .eq("integration_type", "calendly");
+
+  return { profileId, organizationId, ...result, fetched: events.length };
+}
+
+/**
+ * Lo mismo para el cron: no lanza. Un error (también un rechazo de Calendly)
+ * se registra y vuelve como `skipped` con el mensaje en `reason`.
  */
 export async function syncCloserCalendlyEvents(
   row: CloserIntegrationRow
@@ -112,42 +211,7 @@ export async function syncCloserCalendlyEvents(
   const { user_id: profileId, organization_id: organizationId } = row;
 
   try {
-    const config = await getValidCloserToken(row);
-    const { calendly_user_uri: calendlyUserUri } = config;
-
-    if (!calendlyUserUri) {
-      return { profileId, organizationId, inserted: 0, updated: 0, skippedManualStatus: 0, fetched: 0, skipped: true, reason: "no_user_uri" };
-    }
-
-    // Fetch eventos del closer (la API de Calendly permite filtrar por user)
-    const events = await fetchCalendlyScheduledEventPayloads(
-      config.access_token,
-      calendlyUserUri, // pasamos el userUri como "orgUri" — Calendly acepta user URI aquí también
-      {}
-    );
-
-    if (!events.length) {
-      return { profileId, organizationId, inserted: 0, updated: 0, skippedManualStatus: 0, fetched: 0 };
-    }
-
-    // Upsert en closing_calls con closer_id asignado
-    const result = await upsertClosingCallsForCloser(
-      organizationId,
-      profileId,
-      calendlyUserUri,
-      events
-    );
-
-    // Actualizar last_sync_at
-    const admin = createAdminClient();
-    await admin
-      .from("team_member_integrations")
-      .update({ last_sync_at: new Date().toISOString() })
-      .eq("organization_id", organizationId)
-      .eq("user_id", profileId)
-      .eq("integration_type", "calendly");
-
-    return { profileId, organizationId, ...result, fetched: events.length };
+    return await sincronizarEventosDelCloser(row);
   } catch (err) {
     console.error(`[closer-sync] Error (profile=${profileId}):`, err);
     return {
@@ -369,7 +433,9 @@ export async function getCloserCalendlyIntegration(
     .eq("integration_type", "calendly")
     .maybeSingle();
 
-  if (error || !data) return { connected: false };
+  // Una falla de la base no es "No conectado" (AR de SCRUM-504, MENOR-4).
+  if (error) throw new FallaDeLaBase(error);
+  if (!data) return { connected: false };
 
   const config = data.config as CloserCalendlyConfig | null;
   if (!config?.access_token) return { connected: false };
@@ -386,10 +452,14 @@ export async function disconnectCloserCalendly(
   profileId: string
 ): Promise<void> {
   const admin = createAdminClient();
-  await admin
+  const { error } = await admin
     .from("team_member_integrations")
     .delete()
     .eq("organization_id", organizationId)
     .eq("user_id", profileId)
     .eq("integration_type", "calendly");
+
+  // Si el borrado falla, la integración sigue conectada: no se puede avisar
+  // "Calendly desconectado" (SCRUM-504).
+  if (error) throw new FallaDeLaBase(error);
 }
