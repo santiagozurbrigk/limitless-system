@@ -151,14 +151,17 @@ La configuración de Auth (confirmación de email, signups, duración del JWT) n
 ### Mails de autenticación: Resend como SMTP de Supabase Auth (SCRUM-16)
 
 Supabase Auth manda los mails de recuperar contraseña, confirmación e invitación. Su servidor por defecto sólo
-entrega a miembros del proyecto, así que en producción usa el SMTP de **Resend** (la misma cuenta que ya usa la
-app para bienvenida y waitlist: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`). Estado verificado el 2026-10-07 con el
+entrega a miembros del proyecto, así que en producción usa el SMTP de **Resend**. **Remitente:
+`noreply@send.limit-less.llc`** (decisión del 2026-10-09: los mails dejan de salir de `optimizatucontrol.com`).
+El DNS de `limit-less.llc` está en Google Cloud DNS; `send.limit-less.llc` ya tiene registros de Resend publicados
+(`resend._domainkey.send` y `send.send`), así que el dominio está dado de alta en alguna cuenta de Resend: la API
+key tiene que salir de esa cuenta. Estado verificado el 2026-10-07 con el
 endpoint de arriba: `mailer_autoconfirm: true` y `disable_signup: false`.
 
-1. **Resend → Domains:** el dominio de `RESEND_FROM_EMAIL` tiene que figurar *Verified*.
-2. **Resend → API Keys:** crear una key aparte para Supabase (permiso *Sending access*, limitada a ese dominio).
+1. **Resend → Domains:** `send.limit-less.llc` tiene que figurar *Verified* en la cuenta (o el equipo) de Resend que lo dio de alta.
+2. **Resend → API Keys** (en esa misma cuenta): crear una key aparte para Supabase (permiso *Sending access*, limitada a `send.limit-less.llc`).
 3. **Supabase → Authentication → Emails → SMTP Settings → Enable custom SMTP:**
-   - Sender email: el mismo remitente que `RESEND_FROM_EMAIL`.
+   - Sender email: `noreply@send.limit-less.llc`.
    - Sender name: `Limitless`.
    - Host: `smtp.resend.com` · Port: `465` · Username: `resend` · Password: la key del paso 2.
 4. **Supabase → Authentication → Rate Limits:** "emails sent" en 30 por hora (el default con SMTP propio).
@@ -173,7 +176,10 @@ endpoint de arriba: `mailer_autoconfirm: true` y `disable_signup: false`.
 7. **Probar:**
    - `/auth/forgot-password` con una cuenta real: el mail llega y el link lleva a `/auth/update-password`.
    - Guardar la contraseña nueva y entrar con ella.
-8. **Recién con el paso 7 bien:** Authentication → Sign In / Providers → Email → prender **Confirm email**.
+8. Para que los mails de la app (bienvenida, waitlist, reels) salgan del mismo remitente, en Vercel
+   `RESEND_FROM_EMAIL=noreply@send.limit-less.llc` y `RESEND_API_KEY` de la misma cuenta de Resend. El dominio
+   `optimizatucontrol.com` figura *Failed* en Resend (falta el MX de `send`), así que hoy esos mails no salen.
+9. **Recién con el paso 7 bien:** Authentication → Sign In / Providers → Email → prender **Confirm email**.
    - El endpoint de arriba tiene que pasar a `mailer_autoconfirm: false`.
    - Mientras siga en `true`, no agregar emails a `super_admin_users` sin crear antes la cuenta (regla de SCRUM-15).
 
