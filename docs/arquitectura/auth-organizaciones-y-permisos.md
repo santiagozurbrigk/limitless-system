@@ -102,7 +102,7 @@ page.tsx / Server Actions → requireOrganizationId() → createClient() (RLS) o
 
 | Camino | Dónde | Resultado |
 |---|---|---|
-| Signup público | `signUpAction` en `apps/web/app/auth/actions.ts` (toggle "Crear cuenta" en `/login`) | `ensureUserBootstrap` crea org nueva + perfil `founder` + `create_default_roles` |
+| ~~Signup público~~ | **Cerrado** (SCRUM-23, decisión de Santiago del 2026-10-09): no hay `signUpAction` ni "Crear cuenta" en `/login`, y "Allow new users to sign up" está apagado en Supabase Auth (`disable_signup: true`). Todas las altas de abajo usan `auth.admin.createUser`, que no depende de esa opción | — |
 | Super admin crea founder | `createFounderAccountAction` (`app/super-admin/actions.ts`) | Contraseña temporal (24 h, `lib/auth/temp-password-expiry.ts`) + `must_change_password` |
 | Holding agrega negocio | `addBusinessToMyHoldingAction` (`app/(platform)/holding/actions.ts`) | Org de negocio con `skip_onboarding = true` y founder con contraseña temporal |
 | Invitación de equipo | `inviteTeamMemberAction` (`app/team/actions.ts`, desde `components/team/team-invite-modal.tsx`) | Crea directo `auth.users` + perfil `role = 'member'` con `custom_role_id` y contraseña temporal; el founder ve las credenciales en pantalla (`TempCredentialsDialog`) y se las pasa. **No** manda mail ni crea fila en `team_invitations` |
@@ -263,8 +263,8 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
   holding y el servidor aplica los del negocio.
 - `[LOGIN-RATE-LIMIT]` Desde el 2026-09-30 (SCRUM-24) el login cuenta por IP + email y por IP (`lib/auth/limite-login.ts`); queda pendiente el captcha tras varios fallos.
 - `[AUTH-CALLBACK-NEXT]` resuelto el 2026-09-30 (SCRUM-2): `auth/callback` sólo redirige a un path interno (`lib/auth/redirect-seguro.ts`, `destinoSeguro`).
-- `[SIGNUP-PUBLICO]` (nuevo, decisión) Cualquiera puede crearse una cuenta founder desde `/login` y usar la
-  clave global de Anthropic. Confirmar si es buscado o si hay que apagarlo (código o Supabase Auth).
+- `[SIGNUP-PUBLICO]` resuelto el 2026-10-09 (SCRUM-23): el alta es **sólo por invitación** (super admin, holding
+  o invitación de equipo). Se sacó "Crear cuenta" y `signUpAction`, y se apagó el signup en Supabase Auth.
 - `[PERMISOS-LOG]` resuelto el 2026-10-04 (SCRUM-121): `getCurrentUserPermissions` ya no escribe en los
   registros el usuario, el rol ni los módulos de cada member.
 - Invitaciones: `customRoleId` no se valida contra la org (sólo lo puede mandar un founder).

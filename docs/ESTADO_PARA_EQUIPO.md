@@ -88,7 +88,7 @@ Las especificaciones viejas (hoy en `docs/archivo/`) prometen cosas que no exist
 1. **Qué entra en octubre.** Completar la columna "Octubre" de `FUNCIONAL.md` (`Sí` / `No` / `Después`).
    Con eso se ordenan los primeros sprints.
 2. **Siete decisiones de negocio que ya bloquean trabajo (P1):**
-   - ¿El alta de cuentas es pública o sólo por invitación? (`SIGNUP-PUBLICO`)
+   - ~~¿El alta de cuentas es pública o sólo por invitación?~~ Decidido el 2026-10-09: sólo por invitación (SCRUM-23).
    - Cuánto tiempo se guardan los mensajes de Discord de terceros (`E-RETENCION`)
    - Qué se hace con los clientes viejos sin mail (`CLIENTES-SIN-MAIL`)
    - Cómo se avisa que quien no tiene Ventas deja de ver montos en Clientes (`COBROS-AVISAR-PERMISOS`)

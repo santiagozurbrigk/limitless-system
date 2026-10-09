@@ -50,7 +50,7 @@ Limitless.
   10 minutos (`CHANGES.md` 2026-09-21). Sigue sin fallback el agente SSE (`[AGENTE-SIN-FALLBACK-CLAVE]`), una clave
   sin créditos no cae a la global (`[IA-CLAVE-SIN-CREDITOS]`), y sin clave global en producción una org con clave
   rota queda sin IA (`[1A1-CLAVE-ANTHROPIC-ROTA]`, `[IA-CLAVES-INVALIDAS]`).
-- Cualquier cuenta creada por signup público usa la clave global (`[SIGNUP-PUBLICO]`).
+- Hasta el 2026-10-09 cualquier cuenta creada por signup público usaba la clave global (`[SIGNUP-PUBLICO]`, cerrado en SCRUM-23: el alta es sólo por invitación).
 - El Batch API del super admin usa, a falta de global, **la clave de una org cliente**
   (commits `7cb646bd`, `aee2deb9` del 2026-07-18; `[IA-CLAVE-DE-CLIENTE-EN-SUPERADMIN]`).
 - Perder `ENCRYPTION_MASTER_KEY` deja todas las claves irrecuperables (hay que volver a pegarlas).

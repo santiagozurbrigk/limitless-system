@@ -2,7 +2,7 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { authRateLimit, rateLimit, rateLimitErrorMessage } from "@/lib/rate-limit";
+import { rateLimit, rateLimitErrorMessage } from "@/lib/rate-limit";
 import { ipDesdeHeaders, limiteDeLogin } from "@/lib/auth/limite-login";
 import {
   clavesDeRecuperacion,
@@ -256,59 +256,12 @@ export async function signInSuperAdminAction(
   redirect(paths.superAdmin.organizations);
 }
 
-export async function signUpAction(
-  _prev: AuthActionState,
-  formData: FormData
-): Promise<AuthActionState> {
-  const emailRaw = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-  const fullName = String(formData.get("fullName") ?? "").trim();
-
-  const emailParsed = emailSchema.safeParse(emailRaw);
-  if (!emailParsed.success) {
-    return { error: firstZodError(emailParsed.error) };
-  }
-  if (!password) {
-    return { error: "Completa email y contraseña." };
-  }
-
-  const { allowed, resetAt } = await authRateLimit(`signup:${emailParsed.data}`);
-  if (!allowed) {
-    return { error: rateLimitErrorMessage(resetAt) };
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({
-    email: emailParsed.data,
-    password,
-    options: {
-      data: fullName ? { full_name: fullName } : undefined,
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}${paths.auth.callback}`,
-    },
-  });
-
-  if (error) {
-    return { error: mapAuthError(error.message) };
-  }
-
-  if (data.user && data.session) {
-    try {
-      await ensureCurrentUserBootstrap();
-    } catch (e) {
-      return {
-        error:
-          e instanceof Error ? e.message : "No se pudo crear tu organización.",
-      };
-    }
-    await postAuthRedirect();
-    return {};
-  }
-
-  return {
-    success:
-      "Cuenta creada. Si activaste confirmación por email, revisa tu bandeja y luego inicia sesión.",
-  };
-}
+/**
+ * ⭐ No hay `signUpAction` (SCRUM-23, decisión del 2026-10-09): el alta pública de
+ * cuentas founder está cerrada. Las cuentas se crean por invitación (equipo,
+ * holding o super admin, todas con `auth.admin`) y "Allow new users to sign up"
+ * está apagado en Supabase Auth.
+ */
 
 export async function signOutAction() {
   const supabase = await createClient();

@@ -967,20 +967,6 @@ Funcionalidad: F-OPS-11 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/ba
 * [TESTS-AUTH] Auth, holding y middleware sin tests (auditoría §3 salud 4) (P2)
 
 Funcionalidad: F-PLA-01 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-01]",H-PLA-01,Plataforma,P1,Baja,LOGIN-RATE-LIMIT TESTS-AUTH,
-[H-PLA-02] Decidir quién puede crear una cuenta de founder,Story,High,historia,plataforma,p1,sev-alta,para-confirmar,,"*Historia:* Como super admin de Limitless, quiero que sólo se creen cuentas de founder por el camino que decidamos, para no pagar uso de IA de cuentas que nadie dio de alta ni cobra.
-
-*Criterios de aceptación:*
-* La decisión de si el alta de founders es pública o sólo por Limitless (o por la prueba gratis) quedó tomada y escrita en la documentación.
-* Si el alta es cerrada: la pantalla de ingreso ya no muestra ""Crear cuenta"" y cualquier intento de crear una cuenta por fuera de Limitless es rechazado.
-* Si el alta sigue abierta: el intento repetido desde un mismo lugar queda frenado y el mensaje al registrarse no revela si el email ya tiene cuenta.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [SIGNUP-PUBLICO] Cualquiera puede crearse una org founder (nuevo) (P1)
-
-*Para confirmar:*
-* Agustín: ¿el alta de founders es pública o sólo por Limitless / prueba gratis?
-
-Funcionalidad: F-PLA-02 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-02]",H-PLA-02,Plataforma,P1,Alta,SIGNUP-PUBLICO,
 [H-PLA-07] Que un miembro no pueda abrir los módulos donde no tiene acceso,Story,High,historia,plataforma,p1,sev-alta,para-confirmar,,"*Historia:* Como founder, quiero que un miembro del equipo no pueda abrir de ninguna forma las pantallas de los módulos que le dejé ""sin acceso"", para que cada uno vea sólo lo que le corresponde.
 
 *Criterios de aceptación:*
