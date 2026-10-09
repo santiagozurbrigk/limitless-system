@@ -28,6 +28,20 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-09 — Discord: el aviso de "mensajes sin texto" ya no da falsa alarma
+
+**Rama:** `claude/discord-intent-falsa-alarma`
+**Commit(s):** este
+**Módulo(s) afectado(s):** integraciones / Discord — `lib/discord/intent-contenido.ts` (nuevo), `app/integrations/actions.ts` (`discordIssues`)
+
+**Qué se hizo:** la tarjeta de Discord en `/integrations` marcaba "Con error — falta activar MESSAGE CONTENT INTENT" si había **un solo** mensaje vacío en toda la historia. Ahora mira los últimos 50 mensajes de la org y avisa sólo si al menos el 80% llegó sin texto **y** sin adjuntos (mínimo 5 mensajes). 5 tests nuevos.
+
+**Por qué / finalidad:** en producción Limitless tenía 17 de 257 mensajes vacíos (5 con foto, 12 sin nada: stickers, reenvíos, embeds) y 240 con texto, así que el intent sí está activado; el aviso quedaba en rojo para siempre. De los últimos 50, sólo 5 están vacíos sin adjunto (10%).
+
+**Decisiones de diseño relevantes:** se mira la tendencia reciente y no el total histórico: con el intent apagado *todos* los mensajes nuevos llegan vacíos, así que el 80% sobre 50 lo detecta en cuanto entran 5 mensajes, y los vacíos viejos dejan de pesar.
+
+**Riesgos / deuda técnica pendiente:** los stickers, reenvíos y embeds se siguen guardando con `content` vacío (no se clasifican); no afecta métricas de actividad.
+
 ---
 
 ## Historial

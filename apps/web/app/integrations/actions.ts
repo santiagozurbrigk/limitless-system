@@ -36,6 +36,11 @@ import {
   type IntegrationIssue,
   type IntegrationsSummary,
 } from "@/lib/integrations/health";
+import {
+  MENSAJES_RECIENTES_A_REVISAR,
+  diagnosticarIntentDeContenido,
+  type DiagnosticoIntentContenido,
+} from "@/lib/discord/intent-contenido";
 import { LISTED_INTEGRATIONS } from "@/lib/integrations/registry";
 import {
   requireOrgRole,
@@ -285,22 +290,23 @@ async function countContentAssets(platform: string): Promise<number> {
 }
 
 /**
- * Mensajes de Discord guardados **sin texto**.
+ * Diagnóstico del intent MESSAGE CONTENT a partir de los mensajes recientes.
  *
- * Es el modo de falla que el runbook del bot marca como el peligroso: si el
- * intent MESSAGE CONTENT no está activado en el portal de Discord, el bot
- * arranca, se conecta y guarda una fila por mensaje — todas en blanco. Parece
- * que anda. Contarlas es la única forma de verlo desde acá.
+ * Es el modo de falla que el runbook del bot marca como el peligroso: sin el
+ * intent el bot arranca, se conecta y guarda una fila por mensaje, todas en
+ * blanco. La regla (qué proporción de vacíos delata el intent apagado) vive en
+ * `lib/discord/intent-contenido.ts`.
  */
-async function countDiscordEmptyMessages(): Promise<number> {
-  if (!isSupabaseConfigured()) return 0;
+async function diagnoseDiscordContentIntent(): Promise<DiagnosticoIntentContenido | null> {
+  if (!isSupabaseConfigured()) return null;
   const { supabase, organizationId } = await countScope();
-  const { count } = await baseCount(
-    supabase,
-    organizationId,
-    "discord_messages",
-  ).or("content.is.null,content.eq.");
-  return count ?? 0;
+  const { data } = await supabase
+    .from("discord_messages")
+    .select("content, attachments")
+    .eq("organization_id", organizationId)
+    .order("sent_at", { ascending: false })
+    .limit(MENSAJES_RECIENTES_A_REVISAR);
+  return diagnosticarIntentDeContenido(data ?? []);
 }
 
 async function countForms(platform: string): Promise<number> {
@@ -376,7 +382,7 @@ export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverv
     youtubeRecords,
     typeformRecords,
     googleFormsRecords,
-    discordEmptyMessages,
+    discordContentIntent,
   ] = await Promise.all([
     calendlyStatus.connected ? countCalendlyClosingCalls() : 0,
     ghlStatus.connected ? countGHLAppointments() : 0,
@@ -385,7 +391,7 @@ export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverv
     youtubeStatus.connected ? countContentAssets("youtube") : 0,
     typeformStatus.connected ? countForms("typeform") : 0,
     googleFormsStatus.connected ? countForms("google_forms") : 0,
-    discordStatus?.connected ? countDiscordEmptyMessages() : 0,
+    discordStatus?.connected ? diagnoseDiscordContentIntent() : null,
   ]);
 
   const byProvider = new Map<string, IntegrationHealth>();
@@ -655,7 +661,7 @@ export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverv
       lastSyncAt: discordStatus?.integration?.last_event_at ?? null,
       records: discordStatus?.stats.messagesCount ?? 0,
       recordsLabel: "mensajes",
-      issues: discordIssues(discordStatus, discordEmptyMessages),
+      issues: discordIssues(discordStatus, discordContentIntent),
     }),
   );
 
@@ -691,7 +697,7 @@ function discordIssues(
     integration: { monitored_channels?: unknown[] | null } | null;
     stats: { messagesCount: number };
   } | null,
-  emptyMessages: number,
+  contentIntent: DiagnosticoIntentContenido | null,
 ): IntegrationIssue[] {
   if (!status?.connected) return [];
 
@@ -708,10 +714,10 @@ function discordIssues(
     });
   }
 
-  if (emptyMessages > 0) {
+  if (contentIntent?.faltaIntent) {
     issues.push({
       level: "error",
-      message: `${emptyMessages} mensajes se guardaron sin texto.`,
+      message: `${contentIntent.vacios} de los últimos ${contentIntent.revisados} mensajes se guardaron sin texto.`,
       action:
         "Falta activar MESSAGE CONTENT INTENT en discord.com/developers → tu app → Bot. Sin eso el bot guarda una fila por mensaje y todas quedan en blanco.",
     });
