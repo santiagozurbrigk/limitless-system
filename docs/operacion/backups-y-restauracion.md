@@ -1,7 +1,9 @@
 # Backups de producción y cómo restaurarlos (SCRUM-11)
 
-Producción (`nrzlylzbmsuowzhpdnjl`) está en plan **Free** de Supabase: Supabase no hace backups. Los backups los
-hace el workflow de GitHub `.github/workflows/backup-produccion.yml`.
+Producción (`nrzlylzbmsuowzhpdnjl`) está en el plan **Pro** de Supabase desde el 2026-10-09: Supabase hace un backup
+diario de la base y guarda 7 días (Database → Backups; desde ahí, "Restore to new project" crea una copia en un
+proyecto aparte). Los backups de Supabase **no incluyen Storage**. Además, el workflow de GitHub
+`.github/workflows/backup-produccion.yml` hace un dump propio y cifrado, fuera de Supabase:
 
 | Qué | Cuándo | Cuánto dura | Dónde |
 |---|---|---|---|
@@ -70,7 +72,7 @@ Medir el tiempo de cada paso y anotarlo abajo, en "Ensayos".
 
 | Fecha | Backup usado | Quién | Tiempos (base / archivos / config / total) | Resultado |
 |---|---|---|---|---|
-| — | — | — | — | Pendiente (SCRUM-11) |
+| 2026-10-09 | — | Santiago | — | Dado por hecho por Santiago al cerrar SCRUM-11; repetir con "Restore to new project" y anotar tiempos |
 
 ## Antes de una migración destructiva
 

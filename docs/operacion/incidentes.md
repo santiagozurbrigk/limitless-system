@@ -4,9 +4,11 @@
 > Contexto y riesgos: [`docs/auditoria/backups-y-recuperacion.md`](../auditoria/backups-y-recuperacion.md).
 > Mapa de crons, webhooks y colas: [`docs/arquitectura/jobs-webhooks-y-colas.md`](../arquitectura/jobs-webhooks-y-colas.md).
 
-**Lo primero que hay que saber:** la base de producción **no tiene backups** (Supabase plan Free,
-`[DR-BACKUPS-SUPABASE]`). Mientras eso siga así, en cualquier incidente que toque datos **no borres, no
-corras scripts de "arreglo" y no apliques migraciones** hasta haber hecho un dump (paso 0 de §3).
+**Lo primero que hay que saber:** desde el 2026-10-09 producción está en el plan **Pro** de Supabase (backup diario,
+7 días, en Database → Backups) y además hay un dump cifrado diario en GitHub Actions
+([`backups-y-restauracion.md`](./backups-y-restauracion.md)). Igual, en cualquier incidente que toque datos **no
+borres, no corras scripts de "arreglo" y no apliques migraciones** sin hacer antes un dump (paso 0 de §3): el
+backup diario puede tener hasta 24 h.
 
 ## 1. Dónde mirar
 
