@@ -10,6 +10,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.join(__dirname, "../..");
 
 const nextConfig: NextConfig = {
+  eslint: {
+    // `next lint` sólo revisa app, components, lib, pages y src por defecto.
+    // El resto de las carpetas con código también (SCRUM-503: un test de
+    // providers/ tenía un error que el lint del CI no veía).
+    dirs: [
+      "app",
+      "components",
+      "lib",
+      "providers",
+      "hooks",
+      "layouts",
+      "constants",
+      "mocks",
+      "routes",
+      "types",
+      "scripts",
+      "workspaces",
+      "e2e",
+    ],
+  },
   transpilePackages: ["@ai-coo/ui", "@ai-coo/types"],
   experimental: {
     serverActions: {

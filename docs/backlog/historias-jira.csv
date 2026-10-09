@@ -815,7 +815,7 @@ Funcionalidad: F-MKT-05 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * [MKT-HOLDING-ORG] Contenido, Drive y Trial Reels ignoran el negocio activo del holding (P1)
 
 Funcionalidad: F-MKT-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-07]",H-MKT-07,Marketing,P1,Media,MKT-HOLDING-ORG,
-[H-MKT-09] Generar las cinco versiones de prueba de un reel,Story,High,historia,marketing,p1,sev-critica,,,"*Historia:* Como founder, quiero generar cinco versiones de prueba de un reel y previsualizarlas, para probar cuál funciona mejor sin editarlas yo.
+[H-MKT-09] Generar las cinco versiones de prueba de un reel,Story,High,historia,marketing,p1,sev-media,,,"*Historia:* Como founder, quiero generar cinco versiones de prueba de un reel y previsualizarlas, para probar cuál funciona mejor sin editarlas yo.
 
 *Criterios de aceptación:*
 * Dado un usuario de un holding que cambió al negocio activo, cuando genera las versiones de un reel de ese negocio, entonces se generan a nombre de ese negocio.
@@ -823,23 +823,10 @@ Funcionalidad: F-MKT-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * La clave interna que protege la generación de videos no aparece en ningún registro ni dirección, fue cambiada por una nueva, y un pedido con clave incorrecta se rechaza: nadie ajeno puede pedir videos de otra empresa.
 
 *Tareas técnicas (PENDIENTES.md):*
-* [TRIAL-SECRET-EN-URL] WORKER_AUTH_SECRET en la URL de QStash y en logs (P1)
 * [MKT-HOLDING-ORG] Contenido, Drive y Trial Reels ignoran el negocio activo del holding (P1)
 * [TRIAL-FALLBACK-ROTO] El fallback en la lambda no acepta jobs de Drive (P2)
 
-Funcionalidad: F-MKT-09 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-09]",H-MKT-09,Marketing,P1,Crítica,TRIAL-SECRET-EN-URL MKT-HOLDING-ORG TRIAL-FALLBACK-ROTO,
-[H-MKT-10] Subir a Zernio las versiones de prueba que elijo,Story,High,historia,marketing,p1,sev-critica,,,"*Historia:* Como founder, quiero elegir qué versiones de prueba subir y que queden como borradores en Zernio, escalonadas en el tiempo, con un mail cuando termina, para probarlas sin cargarlas una por una.
-
-*Criterios de aceptación:*
-* Dadas las versiones elegidas, cuando las subo con una demora, entonces aparecen como borradores en Zernio escalonados y me llega el mail al terminar.
-* Dada una versión que falló al armarse (no al subirse), cuando la veo, entonces el botón ""Reintentar"" está deshabilitado o vuelve a armarla, en vez de fallar de nuevo igual.
-* La clave interna que protege la subida no aparece en ningún registro ni dirección.
-
-*Tareas técnicas (PENDIENTES.md):*
-* [TRIAL-SECRET-EN-URL] WORKER_AUTH_SECRET en la URL de QStash y en logs (P1)
-* [TRIAL-RETRY-GENERACION] Reintentar sólo sirve para fallas de publicación (P2)
-
-Funcionalidad: F-MKT-10 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-10]",H-MKT-10,Marketing,P1,Crítica,TRIAL-SECRET-EN-URL TRIAL-RETRY-GENERACION,
+Funcionalidad: F-MKT-09 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-09]",H-MKT-09,Marketing,P1,Media,MKT-HOLDING-ORG TRIAL-FALLBACK-ROTO,
 [H-MKT-11] Usar mi propia música en la versión con música,Story,High,historia,marketing,p1,sev-media,para-confirmar,,"*Historia:* Como founder, quiero subir mi propia música y que la versión con música de mis reels de prueba la use, para que suene a mi marca.
 
 *Criterios de aceptación:*
@@ -1277,6 +1264,17 @@ Funcionalidad: F-MKT-06 · No funciona · docs/FUNCIONAL.md · Fuente: docs/back
 * Decisión: construir lo que falta (generar variantes y mandarlas a Zernio desde la pantalla) o sacarlo y dejar sólo la vista.
 
 Funcionalidad: F-MKT-08 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-08]",H-MKT-08,Marketing,P2,,MKT-CODIGO-MUERTO,
+[H-MKT-10] Subir a Zernio las versiones de prueba que elijo,Story,Medium,historia,marketing,p2,,,,"*Historia:* Como founder, quiero elegir qué versiones de prueba subir y que queden como borradores en Zernio, escalonadas en el tiempo, con un mail cuando termina, para probarlas sin cargarlas una por una.
+
+*Criterios de aceptación:*
+* Dadas las versiones elegidas, cuando las subo con una demora, entonces aparecen como borradores en Zernio escalonados y me llega el mail al terminar.
+* Dada una versión que falló al armarse (no al subirse), cuando la veo, entonces el botón ""Reintentar"" está deshabilitado o vuelve a armarla, en vez de fallar de nuevo igual.
+* La clave interna que protege la subida no aparece en ningún registro ni dirección.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [TRIAL-RETRY-GENERACION] Reintentar sólo sirve para fallas de publicación (P2)
+
+Funcionalidad: F-MKT-10 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-MKT-10]",H-MKT-10,Marketing,P2,,TRIAL-RETRY-GENERACION,
 "[H-MKT-25] Registrar quién pidió cada lead magnet, venga de donde venga",Story,Medium,historia,marketing,p2,para-confirmar,,,"*Historia:* Como founder, quiero que cada persona que pide un lead magnet quede registrada sin importar el canal (Typeform, Google Forms, landing o ManyChat), para medir qué lead magnet me trae más leads.
 
 *Criterios de aceptación:*

@@ -80,7 +80,7 @@ Relevadas con grep de `process.env.*` en `apps/` y `packages/` (89 nombres, incl
 | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | **no** | sí | `next.config.ts` (source maps) |
 | `SENTRY_FORCE` | **no** | no | habilita Sentry fuera de producción |
 | `E2E_BASE_URL`, `E2E_HOLDING_EMAIL`, `E2E_HOLDING_PASSWORD`, `PLAYWRIGHT_*`, `CI` | **no** | — | `playwright.config.ts`, `e2e/` |
-| `VERCEL_URL`, `VERCEL_GIT_COMMIT_SHA`, `NODE_ENV`, `NEXT_RUNTIME` | — | automáticas | sistema |
+| `VERCEL_URL`, `VERCEL_GIT_COMMIT_SHA`, `VERCEL_ENV`, `NODE_ENV`, `NEXT_RUNTIME` | — | automáticas | sistema; `/api/health` devuelve el commit corto y el entorno (SCRUM-85) |
 
 ### Sobrantes
 
@@ -110,6 +110,7 @@ Opcional: `SENTRY_DSN` (el mismo de Vercel): con ella cada `logError` va a Sentr
 
 - Proyecto `otc-plaform` (sic) en el team `otcteam`, región **`gru1`** (São Paulo, `apps/web/vercel.json`).
 - **Auto-deploy desde `main`**: cada merge a `main` genera un deploy de producción. Verificado el 2026-09-23: los últimos tres deploys de producción salen de `santiagozurbrigk/limitless-system` (el renombre del repo no cortó la integración).
+- **Que el deploy ocurrió lo comprueba** `.github/workflows/produccion-al-dia.yml` (SCRUM-85): después de cada push a `main` y una vez por día espera hasta 20 min a que `/api/health` devuelva el commit de `main` y, si no, falla y avisa por mail (y en Discord si existe el secreto de GitHub Actions `DISCORD_WEBHOOK_ALERTAS`, opcional). Del 3 al 5 de octubre Vercel perdió el acceso al repo y no desplegó 7 PRs. Detalle en [`alertas.md`](./alertas.md) § Producción desactualizada.
 - Cada push a otra rama genera un preview. Los previews **no sirven para probar OAuth** (las redirect URIs son fijas a producción).
 - Build: `next build` (con `withSentryConfig`); `outputFileTracingRoot` en la raíz del monorepo; `serverExternalPackages` para ffmpeg; `serverActions.bodySizeLimit = 16mb` (adjuntos del inbox).
 - Límites de duración: la mayoría de las rutas declara `maxDuration` 60; agente y RAG 300; `daily-signals` 600; `process-sop-video` 800.
@@ -123,6 +124,29 @@ Opcional: `SENTRY_DSN` (el mismo de Vercel): con ella cada `logError` va a Sentr
 3. PR a `main` → CI verde → **Squash and merge**. Nunca push directo a `main`.
 4. La rama queda consumida; la próxima tarea arranca de `main` otra vez.
 5. El CI corre en push a `main`, `claude/**`, `feat/**`, `fix/**`, `chore/**`, `Claude-*` y en todo PR (ver `docs/operacion/testing.md`).
+
+## Secretos de GitHub Actions
+
+| Secreto | Lo usa |
+|---|---|
+| `DISCORD_WEBHOOK_ALERTAS` | `produccion-al-dia.yml` y `backup-produccion.yml` (opcional: avisos en Discord) |
+| `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BACKUP_PASSPHRASE` | `backup-produccion.yml` (SCRUM-11). Cómo cargarlos: [`backups-y-restauracion.md`](./backups-y-restauracion.md) |
+
+## Branch protection de `main`
+
+No se puede configurar desde el repo y no es verificable desde el código: la configura un admin del repo en GitHub (Settings → Branches, o un ruleset para `main`). Lo que conviene exigir:
+
+- **Pedir PR para mergear** y bloquear el push directo y el force push a `main`.
+- **Checks obligatorios** (status checks del workflow `CI`, con "Require branches to be up to date before merging"):
+
+| Check | Qué frena |
+|---|---|
+| `checks` | typecheck, lint y tests de web; typecheck de ui, types, reel-worker y bot; lint de ui, reel-worker y bot |
+| `web-build` | un cambio que rompe `next build` aunque pase `tsc` y lint (por ejemplo un import de servidor en un componente cliente) |
+| `migrations` | una migración que no corre desde cero, una versión repetida o un test de RLS que falla |
+| `backlog` | `PENDIENTES.md` o `docs/backlog/historias.md` inválidos (IDs repetidos, P0/P1 sin criterio, índice desactualizado) |
+
+El check del preview de Vercel queda afuera: depende de la integración de Vercel y no del repo, y `web-build` ya cubre el build. Los e2e de Playwright se suman a la lista cuando corran en CI contra staging (`[T-INFRA-E2E-CI]`). Si se renombra un job en `ci.yml`, hay que actualizar la lista de checks obligatorios: GitHub espera el nombre viejo y el PR queda trabado esperando un check que ya no existe.
 
 El repo se renombró de `ai-coo-platform` a `limitless-system` el 2026-09-22. No crear nunca un repo nuevo con el nombre viejo: rompe la redirección de GitHub. Copias locales viejas: `git remote set-url origin https://github.com/santiagozurbrigk/limitless-system`.
 
@@ -190,7 +214,7 @@ Vercel **no aplica migraciones**. El orden es: aplicar la migración en Supabase
 ## `apps/reel-worker` en Fly.io
 
 - App `otc-reel-worker`, región `gru`, VM `performance-2x` (2 vCPU, 4 GB), concurrencia 1 (soft) / 2 (hard), `auto_stop_machines` con `min_machines_running = 0` (arranca en frío con el primer job).
-- Deploy manual: `fly deploy --config apps/reel-worker/fly.toml` (o `cd apps/reel-worker && fly deploy`). **No hay deploy automático** ni CI para este worker.
+- Deploy manual: `fly deploy --config apps/reel-worker/fly.toml` (o `cd apps/reel-worker && fly deploy`). **No hay deploy automático.** El CI corre su typecheck y su lint (job `checks`) pero no arma la imagen de Docker.
 - Secrets con `fly secrets set` (lista arriba).
 - Rollback: `fly releases -a otc-reel-worker` y `fly deploy --image <imagen de la release anterior>`.
 - Endpoints: `GET /health`, `POST /` (procesa el job **sincrónicamente**, con la conexión abierta para que Fly no apague la máquina: descarga de Storage, 5 variantes con FFmpeg, captions con Haiku, sube a `trial-reels`, marca el job `preview_ready`; responde 200 aunque falle, para que QStash no reintente). `fly.toml` no define health check.
@@ -210,7 +234,7 @@ Prueba real: escribir en un canal monitoreado y ver una fila en `discord_message
 
 ## Nombres externos que todavía dicen OTC
 
-Vercel `otc-plaform`, Supabase `OTC`, Fly `otc-reel-worker`, Railway `otc-discord-bot`, verify token de Meta `otc_instagram_webhook_2024`, fallback `https://otc-plaform.vercel.app` en `lib/email/welcome-email.ts` y en `components/super-admin/infrastructure-page.tsx`. Renombrarlos rompe cosas si no se coordina (`[REBRAND-EXTERNO]`).
+Vercel `otc-plaform`, Supabase `OTC`, Fly `otc-reel-worker`, Railway `otc-discord-bot`, verify token de Meta `otc_instagram_webhook_2024`, fallback `https://otc-plaform.vercel.app` en `lib/email/welcome-email.ts` (la página de Infraestructura del super admin ya no lo muestra desde SCRUM-85). Renombrarlos rompe cosas si no se coordina (`[REBRAND-EXTERNO]`).
 
 ## Archivos clave
 

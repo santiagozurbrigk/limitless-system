@@ -553,7 +553,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un usuario de un holding que cambió al negocio activo, cuando genera las versiones de un reel de ese negocio, entonces se generan a nombre de ese negocio.
   - Si el servicio que arma los videos no está disponible, entonces el trabajo queda marcado como fallido con un mensaje, en vez de quedar "pendiente" para siempre.
   - La clave interna que protege la generación de videos no aparece en ningún registro ni dirección, fue cambiada por una nueva, y un pedido con clave incorrecta se rechaza: nadie ajeno puede pedir videos de otra empresa.
-- **Tareas técnicas:** `[TRIAL-SECRET-EN-URL]`, `[MKT-HOLDING-ORG]`, `[TRIAL-FALLBACK-ROTO]`
+- **Tareas técnicas:** `[MKT-HOLDING-ORG]`, `[TRIAL-FALLBACK-ROTO]`
 - **Para confirmar:** —
 
 ### [H-MKT-10] Subir a Zernio las versiones de prueba que elijo
@@ -563,7 +563,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dadas las versiones elegidas, cuando las subo con una demora, entonces aparecen como borradores en Zernio escalonados y me llega el mail al terminar.
   - Dada una versión que falló al armarse (no al subirse), cuando la veo, entonces el botón "Reintentar" está deshabilitado o vuelve a armarla, en vez de fallar de nuevo igual.
   - La clave interna que protege la subida no aparece en ningún registro ni dirección.
-- **Tareas técnicas:** `[TRIAL-SECRET-EN-URL]`, `[TRIAL-RETRY-GENERACION]`
+- **Tareas técnicas:** `[TRIAL-RETRY-GENERACION]`
 - **Para confirmar:** —
 
 ### [H-MKT-11] Usar mi propia música en la versión con música

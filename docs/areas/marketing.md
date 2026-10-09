@@ -108,7 +108,7 @@ TrialReelsButton (detalle de pieza) → createTrialReelsJobAction   app/marketin
   └─ QStash publishJSON → REEL_WORKER_URL (Fly.io, app otc-reel-worker, gru)
         body: jobId, driveFileId, driveAccessToken, reelMusicPath…; retries 2, timeout 900 s
 apps/reel-worker (Express)
-  ├─ auth: WORKER_AUTH_SECRET (header X-Worker-Secret, Bearer o ?workerSecret=) o firma QStash
+  ├─ auth: WORKER_AUTH_SECRET (header X-Worker-Secret o Bearer, comparado en tiempo constante; nunca en la URL — SCRUM-51) o firma QStash
   ├─ procesa sincrónicamente (si responde antes, Fly apaga la máquina)
   ├─ baja de Drive, 5 variantes FFmpeg (V1 +25 %, V2 ≈ −13 % (`setpts=1.15`, `atempo=0.87`), V3 música (sin archivo de música conserva el audio original), V4 subtítulos, V5 LUT warm.cube)
   ├─ anti-fingerprint: metadatos falsos, bitrate ±5 %, crop 1–2 px

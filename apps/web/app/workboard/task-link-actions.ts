@@ -9,22 +9,24 @@ import {
 } from "@/lib/auth/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import {
   isAllowedWorkboardAttachment,
   sanitizeFilename,
 } from "@/lib/workboard/attachment-types";
 import { WORKBOARD_ATTACHMENTS_BUCKET } from "@/lib/workboard/constants";
-import { rowToMember, rowToTask, type WorkboardTaskRow } from "@/lib/workboard/mapper";
 import {
-  emptyTaskLinks,
-  rowToLinkedDocument,
-  rowToTaskAttachment,
-  type TaskLinksByTaskId,
-} from "@/lib/workboard/task-links";
+  leerTareaConVinculos,
+  TAREA_NO_ENCONTRADA,
+} from "@/lib/workboard/tarea-con-vinculos";
 import { firstZodError, uuidSchema } from "@/lib/validations";
 import { paths } from "@/routes/paths";
-import type { WorkboardTask, WorkboardTaskLinkedDocument } from "@/types/workboard";
+import type { WorkboardTask } from "@/types/workboard";
 import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
 
 function revalidateWorkboard() {
@@ -39,150 +41,43 @@ async function currentUserId(): Promise<string | null> {
   return user?.id ?? null;
 }
 
-function unwrapEmbed<T>(value: T | T[] | null | undefined): T | null {
-  if (!value) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
+const ADJUNTO_NO_ENCONTRADO = "Adjunto no encontrado";
+
+function validar<T>(
+  resultado: { success: true; data: T } | { success: false; error: Parameters<typeof firstZodError>[0] }
+): T {
+  if (!resultado.success) throw new ErrorEsperable(firstZodError(resultado.error));
+  return resultado.data;
 }
 
-export async function loadTaskLinksBundle(
-  organizationId: string
-): Promise<TaskLinksByTaskId> {
-  const links = emptyTaskLinks();
-  const supabase = await createClient();
-
-  const attachmentsRes = await supabase
-    .from("workboard_task_attachments")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: true });
-
-  if (!attachmentsRes.error) {
-    for (const row of attachmentsRes.data ?? []) {
-      const taskId = row.task_id as string;
-      const list = links.attachments.get(taskId) ?? [];
-      list.push(rowToTaskAttachment(row));
-      links.attachments.set(taskId, list);
-    }
-  } else if (!isMissingTableError(attachmentsRes.error.message)) {
-    console.error("[Workboard] attachments:", attachmentsRes.error.message);
-  }
-
-  const docsRes = await supabase
-    .from("workboard_task_documents")
-    .select(
-      "task_id, document_id, business_context_documents(id, title, category)"
-    )
-    .eq("organization_id", organizationId);
-
-  if (!docsRes.error) {
-    for (const row of docsRes.data ?? []) {
-      const doc = unwrapEmbed(
-        row.business_context_documents as
-          | { id: string; title: string; category: string }
-          | { id: string; title: string; category: string }[]
-          | null
-      );
-      if (!doc) continue;
-      const linked: WorkboardTaskLinkedDocument = {
-        id: doc.id,
-        title: doc.title,
-        category: doc.category,
-      };
-      const taskId = row.task_id as string;
-      const list = links.documents.get(taskId) ?? [];
-      list.push(linked);
-      links.documents.set(taskId, list);
-    }
-  } else if (!isMissingTableError(docsRes.error.message)) {
-    console.error("[Workboard] task documents:", docsRes.error.message);
-  }
-
-  const sopsRes = await supabase
-    .from("workboard_tasks")
-    .select("id, sop_id, sops(id, title)")
-    .eq("organization_id", organizationId)
-    .not("sop_id", "is", null);
-
-  if (!sopsRes.error) {
-    for (const row of sopsRes.data ?? []) {
-      const sop = unwrapEmbed(
-        row.sops as { id: string; title: string } | { id: string; title: string }[] | null
-      );
-      if (sop) {
-        links.sops.set(row.id as string, { id: sop.id, title: sop.title });
-      }
-    }
-  } else if (
-    !isMissingColumnError(sopsRes.error.message, "sop_id") &&
-    !isMissingTableError(sopsRes.error.message)
-  ) {
-    console.error("[Workboard] task sops:", sopsRes.error.message);
-  }
-
-  return links;
-}
-
-async function fetchTaskRow(
+/** La tarea de la organización, o el rechazo esperable si ya no está. */
+async function exigirTarea(
+  supabase: Awaited<ReturnType<typeof createClient>>,
   taskId: string,
   organizationId: string
-): Promise<WorkboardTask> {
-  const supabase = await createClient();
-
-  const { data: membersData } = await supabase
-    .from("profiles")
-    .select("id, full_name, email, role")
-    .eq("organization_id", organizationId);
-
-  const memberMap = new Map(
-    (membersData ?? []).map((row) => [
-      row.id as string,
-      rowToMember({
-        id: row.id as string,
-        full_name: row.full_name as string | null,
-        email: row.email as string,
-        role: row.role as string,
-      }),
-    ])
-  );
-
-  const links = await loadTaskLinksBundle(organizationId);
-
-  const { data, error } = await supabase
+): Promise<void> {
+  const { data: task, error } = await supabase
     .from("workboard_tasks")
-    .select("*, sops(id, title)")
+    .select("id")
     .eq("id", taskId)
     .eq("organization_id", organizationId)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    if (isMissingColumnError(error.message, "sop_id")) {
-      const fallback = await supabase
-        .from("workboard_tasks")
-        .select("*")
-        .eq("id", taskId)
-        .eq("organization_id", organizationId)
-        .single();
-      if (fallback.error) throw new Error(fallback.error.message);
-      return rowToTask(fallback.data as WorkboardTaskRow, memberMap, links);
-    }
-    throw new Error(error.message);
-  }
-
-  return rowToTask(data as WorkboardTaskRow, memberMap, links);
+  if (error) throw new FallaDeLaBase(error);
+  if (!task) throw new ErrorEsperable(TAREA_NO_ENCONTRADA);
 }
 
-export async function getWorkboardTaskByIdAction(
-  taskId: string
-): Promise<WorkboardTask | null> {
-  const parsed = uuidSchema.safeParse(taskId);
-  if (!parsed.success) return null;
-  const organizationId = await requireOrganizationId();
-  try {
-    return await fetchTaskRow(parsed.data, organizationId);
-  } catch {
-    return null;
-  }
-}
+/*
+ * SCRUM-503: los vínculos de las tareas del Tablero (adjuntos, documentos,
+ * SOP) siguen el mismo contrato que `actions.ts`. Antes corrían con
+ * `runMutation`, que devolvía el mensaje de cualquier excepción: un error de
+ * la base o de Storage le llegaba crudo al usuario, en inglés. Ahora sólo un
+ * `ErrorEsperable` vuelve con su mensaje (validación, sesión, tarea, adjunto,
+ * SOP o documento que no está, formato o tamaño no permitido, tabla o columna
+ * que falta); lo demás se registra, va a Sentry y vuelve con el texto fijo.
+ * Una ruta de Storage ajena (`assertOrgStoragePath`) también: es una señal de
+ * manipulación, no un error del usuario.
+ */
 
 const prepareAttachmentSchema = z.object({
   taskId: uuidSchema,
@@ -196,27 +91,17 @@ export async function prepareTaskAttachmentUploadAction(
 ): Promise<
   MutationResult<{ storagePath: string; signedUrl: string; contentType: string }>
 > {
-  const parsed = prepareAttachmentSchema.safeParse(input);
-  if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
-  }
-
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[prepareTaskAttachmentUpload]", async () => {
+    const { taskId, fileName, fileSize, mimeType } = validar(
+      prepareAttachmentSchema.safeParse(input)
+    );
     const organizationId = await requireOrganizationId();
-    const { taskId, fileName, fileSize, mimeType } = parsed.data;
 
     const allowed = isAllowedWorkboardAttachment(fileName, mimeType, fileSize);
-    if (!allowed.ok) throw new Error(allowed.error);
+    if (!allowed.ok) throw new ErrorEsperable(allowed.error);
 
     const supabase = await createClient();
-    const { data: task } = await supabase
-      .from("workboard_tasks")
-      .select("id")
-      .eq("id", taskId)
-      .eq("organization_id", organizationId)
-      .maybeSingle();
-
-    if (!task) throw new Error("Tarea no encontrada");
+    await exigirTarea(supabase, taskId, organizationId);
 
     const attachmentId = crypto.randomUUID();
     const safeName = sanitizeFilename(fileName);
@@ -227,11 +112,11 @@ export async function prepareTaskAttachmentUploadAction(
       .from(WORKBOARD_ATTACHMENTS_BUCKET)
       .createSignedUploadUrl(storagePath);
 
-    if (error || !data?.signedUrl) {
-      throw new Error(
-        error?.message ??
-          `No se pudo preparar la subida. ¿Existe el bucket "${WORKBOARD_ATTACHMENTS_BUCKET}"?`
-      );
+    if (error) throw error;
+    if (!data?.signedUrl) {
+      throw new FallaDeLaBase({
+        message: `Storage no devolvió la URL de subida (bucket "${WORKBOARD_ATTACHMENTS_BUCKET}")`,
+      });
     }
 
     return {
@@ -253,29 +138,18 @@ const finalizeAttachmentSchema = z.object({
 export async function finalizeTaskAttachmentAction(
   input: unknown
 ): Promise<MutationResult<WorkboardTask>> {
-  const parsed = finalizeAttachmentSchema.safeParse(input);
-  if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
-  }
-
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[finalizeTaskAttachment]", async () => {
+    const datos = validar(finalizeAttachmentSchema.safeParse(input));
     const organizationId = await requireOrganizationId();
     const uploadedBy = await currentUserId();
-    const { taskId, fileName, mimeType, fileSize } = parsed.data;
-    const storagePath = assertOrgStoragePath(parsed.data.storagePath, organizationId);
+    const { taskId, fileName, mimeType, fileSize } = datos;
+    const storagePath = assertOrgStoragePath(datos.storagePath, organizationId);
 
     const allowed = isAllowedWorkboardAttachment(fileName, mimeType, fileSize);
-    if (!allowed.ok) throw new Error(allowed.error);
+    if (!allowed.ok) throw new ErrorEsperable(allowed.error);
 
     const supabase = await createClient();
-    const { data: task } = await supabase
-      .from("workboard_tasks")
-      .select("id")
-      .eq("id", taskId)
-      .eq("organization_id", organizationId)
-      .maybeSingle();
-
-    if (!task) throw new Error("Tarea no encontrada");
+    await exigirTarea(supabase, taskId, organizationId);
 
     const { error } = await supabase.from("workboard_task_attachments").insert({
       organization_id: organizationId,
@@ -289,39 +163,36 @@ export async function finalizeTaskAttachmentAction(
 
     if (error) {
       if (isMissingTableError(error.message)) {
-        throw new Error(
+        throw new ErrorEsperable(
           "Falta la tabla workboard_task_attachments. Aplicá la migración 20260714100000_workboard_task_links.sql."
         );
       }
-      throw new Error(error.message);
+      throw new FallaDeLaBase(error);
     }
 
     revalidateWorkboard();
-    return fetchTaskRow(taskId, organizationId);
+    return leerTareaConVinculos(taskId, organizationId);
   });
 }
 
 export async function deleteTaskAttachmentAction(
   attachmentId: unknown
 ): Promise<MutationResult<WorkboardTask>> {
-  const parsed = uuidSchema.safeParse(attachmentId);
-  if (!parsed.success) {
-    return { success: false, error: firstZodError(parsed.error) };
-  }
-
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteTaskAttachment]", async () => {
+    const id = validar(uuidSchema.safeParse(attachmentId));
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
     const admin = createAdminClient();
 
-    const { data: row } = await supabase
+    const { data: row, error: lecturaError } = await supabase
       .from("workboard_task_attachments")
       .select("id, task_id, storage_path")
-      .eq("id", parsed.data)
+      .eq("id", id)
       .eq("organization_id", organizationId)
       .maybeSingle();
 
-    if (!row) throw new Error("Adjunto no encontrado");
+    if (lecturaError) throw new FallaDeLaBase(lecturaError);
+    if (!row) throw new ErrorEsperable(ADJUNTO_NO_ENCONTRADO);
 
     const rutas = soloRutasDeLaOrg([row.storage_path as string | null], organizationId, "workboard");
     if (rutas.length > 0) {
@@ -331,44 +202,42 @@ export async function deleteTaskAttachmentAction(
     const { error } = await supabase
       .from("workboard_task_attachments")
       .delete()
-      .eq("id", parsed.data)
+      .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
     revalidateWorkboard();
-    return fetchTaskRow(row.task_id as string, organizationId);
+    return leerTareaConVinculos(row.task_id as string, organizationId);
   });
 }
 
 export async function getTaskAttachmentUrlAction(
   attachmentId: unknown
 ): Promise<MutationResult<{ url: string; fileName: string; mimeType: string | null }>> {
-  const parsed = uuidSchema.safeParse(attachmentId);
-  if (!parsed.success) {
-    return { success: false, error: firstZodError(parsed.error) };
-  }
-
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[getTaskAttachmentUrl]", async () => {
+    const id = validar(uuidSchema.safeParse(attachmentId));
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
     const admin = createAdminClient();
 
-    const { data: row } = await supabase
+    const { data: row, error: lecturaError } = await supabase
       .from("workboard_task_attachments")
       .select("storage_path, file_name, mime_type")
-      .eq("id", parsed.data)
+      .eq("id", id)
       .eq("organization_id", organizationId)
       .maybeSingle();
 
-    if (!row?.storage_path) throw new Error("Adjunto no encontrado");
+    if (lecturaError) throw new FallaDeLaBase(lecturaError);
+    if (!row?.storage_path) throw new ErrorEsperable(ADJUNTO_NO_ENCONTRADO);
 
     const { data, error } = await admin.storage
       .from(WORKBOARD_ATTACHMENTS_BUCKET)
       .createSignedUrl(assertOrgStoragePath(row.storage_path, organizationId), 3600);
 
-    if (error || !data?.signedUrl) {
-      throw new Error(error?.message ?? "No se pudo abrir el archivo");
+    if (error) throw error;
+    if (!data?.signedUrl) {
+      throw new FallaDeLaBase({ message: "Storage no devolvió la URL firmada del adjunto" });
     }
 
     return {
@@ -387,24 +256,20 @@ const taskSopSchema = z.object({
 export async function setTaskLinkedSopAction(
   input: unknown
 ): Promise<MutationResult<WorkboardTask>> {
-  const parsed = taskSopSchema.safeParse(input);
-  if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
-  }
-
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[setTaskLinkedSop]", async () => {
+    const { taskId, sopId } = validar(taskSopSchema.safeParse(input));
     const organizationId = await requireOrganizationId();
-    const { taskId, sopId } = parsed.data;
     const supabase = await createClient();
 
     if (sopId) {
-      const { data: sop } = await supabase
+      const { data: sop, error: sopError } = await supabase
         .from("sops")
         .select("id")
         .eq("id", sopId)
         .eq("organization_id", organizationId)
         .maybeSingle();
-      if (!sop) throw new Error("SOP no encontrado");
+      if (sopError) throw new FallaDeLaBase(sopError);
+      if (!sop) throw new ErrorEsperable("SOP no encontrado");
     }
 
     const { error } = await supabase
@@ -418,15 +283,15 @@ export async function setTaskLinkedSopAction(
 
     if (error) {
       if (isMissingColumnError(error.message, "sop_id")) {
-        throw new Error(
+        throw new ErrorEsperable(
           "Falta la columna workboard_tasks.sop_id. Aplicá la migración 20260714100000_workboard_task_links.sql."
         );
       }
-      throw new Error(error.message);
+      throw new FallaDeLaBase(error);
     }
 
     revalidateWorkboard();
-    return fetchTaskRow(taskId, organizationId);
+    return leerTareaConVinculos(taskId, organizationId);
   });
 }
 
@@ -438,17 +303,12 @@ const taskDocumentSchema = z.object({
 export async function linkTaskDocumentAction(
   input: unknown
 ): Promise<MutationResult<WorkboardTask>> {
-  const parsed = taskDocumentSchema.safeParse(input);
-  if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
-  }
-
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[linkTaskDocument]", async () => {
+    const { taskId, documentId } = validar(taskDocumentSchema.safeParse(input));
     const organizationId = await requireOrganizationId();
-    const { taskId, documentId } = parsed.data;
     const supabase = await createClient();
 
-    const [{ data: task }, { data: doc }] = await Promise.all([
+    const [tareaRes, docRes] = await Promise.all([
       supabase
         .from("workboard_tasks")
         .select("id")
@@ -463,8 +323,10 @@ export async function linkTaskDocumentAction(
         .maybeSingle(),
     ]);
 
-    if (!task) throw new Error("Tarea no encontrada");
-    if (!doc) throw new Error("Documento no encontrado");
+    if (tareaRes.error) throw new FallaDeLaBase(tareaRes.error);
+    if (docRes.error) throw new FallaDeLaBase(docRes.error);
+    if (!tareaRes.data) throw new ErrorEsperable(TAREA_NO_ENCONTRADA);
+    if (!docRes.data) throw new ErrorEsperable("Documento no encontrado");
 
     const { error } = await supabase.from("workboard_task_documents").insert({
       task_id: taskId,
@@ -473,31 +335,26 @@ export async function linkTaskDocumentAction(
     });
 
     if (error) {
-      if (error.code === "23505") return fetchTaskRow(taskId, organizationId);
+      if (error.code === "23505") return leerTareaConVinculos(taskId, organizationId);
       if (isMissingTableError(error.message)) {
-        throw new Error(
+        throw new ErrorEsperable(
           "Falta la tabla workboard_task_documents. Aplicá la migración 20260714100000_workboard_task_links.sql."
         );
       }
-      throw new Error(error.message);
+      throw new FallaDeLaBase(error);
     }
 
     revalidateWorkboard();
-    return fetchTaskRow(taskId, organizationId);
+    return leerTareaConVinculos(taskId, organizationId);
   });
 }
 
 export async function unlinkTaskDocumentAction(
   input: unknown
 ): Promise<MutationResult<WorkboardTask>> {
-  const parsed = taskDocumentSchema.safeParse(input);
-  if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
-  }
-
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[unlinkTaskDocument]", async () => {
+    const { taskId, documentId } = validar(taskDocumentSchema.safeParse(input));
     const organizationId = await requireOrganizationId();
-    const { taskId, documentId } = parsed.data;
     const supabase = await createClient();
 
     const { error } = await supabase
@@ -507,10 +364,10 @@ export async function unlinkTaskDocumentAction(
       .eq("document_id", documentId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
     revalidateWorkboard();
-    return fetchTaskRow(taskId, organizationId);
+    return leerTareaConVinculos(taskId, organizationId);
   });
 }
 
@@ -520,60 +377,57 @@ export type WorkboardLinkPickerOption = {
   subtitle?: string;
 };
 
-export async function listWorkboardLinkOptionsAction(): Promise<{
-  sops: WorkboardLinkPickerOption[];
-  documents: WorkboardLinkPickerOption[];
-}> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+export async function listWorkboardLinkOptionsAction(): Promise<
+  MutationResult<{
+    sops: WorkboardLinkPickerOption[];
+    documents: WorkboardLinkPickerOption[];
+  }>
+> {
+  return mutacionConErroresEsperables("[listWorkboardLinkOptions]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const [sopsRes, docsRes] = await Promise.all([
-    supabase
-      .from("sops")
-      .select("id, title, department")
-      .eq("organization_id", organizationId)
-      .order("updated_at", { ascending: false }),
-    supabase
-      .from("business_context_documents")
-      .select("id, title, category")
-      .eq("organization_id", organizationId)
-      .order("created_at", { ascending: false }),
-  ]);
+    const [sopsRes, docsRes] = await Promise.all([
+      supabase
+        .from("sops")
+        .select("id, title, department")
+        .eq("organization_id", organizationId)
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("business_context_documents")
+        .select("id, title, category")
+        .eq("organization_id", organizationId)
+        .order("created_at", { ascending: false }),
+    ]);
 
-  return {
-    sops: (sopsRes.data ?? []).map((row) => ({
-      id: row.id as string,
-      title: row.title as string,
-      subtitle: row.department as string | undefined,
-    })),
-    documents: (docsRes.data ?? []).map((row) => ({
-      id: row.id as string,
-      title: row.title as string,
-      subtitle: row.category as string | undefined,
-    })),
-  };
+    // Una tabla que falta se lee como vacía, como antes; otro error es una falla.
+    for (const res of [sopsRes, docsRes]) {
+      if (res.error && !isMissingTableError(res.error.message)) {
+        throw new FallaDeLaBase(res.error);
+      }
+    }
+
+    return {
+      sops: (sopsRes.data ?? []).map((row) => ({
+        id: row.id as string,
+        title: row.title as string,
+        subtitle: row.department as string | undefined,
+      })),
+      documents: (docsRes.data ?? []).map((row) => ({
+        id: row.id as string,
+        title: row.title as string,
+        subtitle: row.category as string | undefined,
+      })),
+    };
+  });
 }
 
-export async function deleteTaskAttachmentsForTask(
-  organizationId: string,
+export async function getWorkboardTaskByIdAction(
   taskId: string
-): Promise<void> {
-  const supabase = await createClient();
-  const admin = createAdminClient();
-
-  const { data: rows } = await supabase
-    .from("workboard_task_attachments")
-    .select("storage_path")
-    .eq("organization_id", organizationId)
-    .eq("task_id", taskId);
-
-  const paths = soloRutasDeLaOrg(
-    (rows ?? []).map((row) => row.storage_path as string | null),
-    organizationId,
-    "workboard"
-  );
-
-  if (paths.length) {
-    await admin.storage.from(WORKBOARD_ATTACHMENTS_BUCKET).remove(paths);
-  }
+): Promise<MutationResult<WorkboardTask>> {
+  return mutacionConErroresEsperables("[getWorkboardTaskById]", async () => {
+    const id = validar(uuidSchema.safeParse(taskId));
+    const organizationId = await requireOrganizationId();
+    return leerTareaConVinculos(id, organizationId);
+  });
 }

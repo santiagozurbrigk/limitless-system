@@ -10,6 +10,7 @@
  */
 
 import { test as setup, expect } from "@playwright/test";
+import { paths } from "../routes/paths";
 import { HOLDING_AUTH_FILE } from "./constants";
 
 setup("autenticar cuenta holding", async ({ page }) => {
@@ -22,8 +23,10 @@ setup("autenticar cuenta holding", async ({ page }) => {
     );
   }
 
-  await page.goto("/auth/login");
-  await expect(page).toHaveURL(/.*login.*/);
+  // La ruta sale de routes/paths.ts para no volver a apuntar a una que no existe
+  // (antes iba a /auth/login, que no existe).
+  await page.goto(paths.auth.login);
+  await expect(page).toHaveURL((url) => url.pathname === paths.auth.login);
 
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/contraseña|password/i).fill(password);

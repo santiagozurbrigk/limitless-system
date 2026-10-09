@@ -88,8 +88,31 @@ miembros de la org; `20260616100000`). Migraciones: `20260522300000_workboard_ta
 - **Adjuntos:** `prepareTaskAttachmentUploadAction` (signed upload URL con admin client, path
   `{org}/{task}/{uuid}-{nombre}`) → subida directa del navegador → `finalizeTaskAttachmentAction` valida el
   path con `assertOrgStoragePath`. Lectura con URL firmada de 1 h.
-- **Sprints:** `createSprintAction` **completa el sprint activo anterior** y crea el nuevo como `active`.
+- **Sprints:** `createSprintAction` **completa el sprint activo anterior** y crea el nuevo como `active`, en una
+  sola transacción: llama a la función `crear_sprint` de la base (`20261008120000`, SCRUM-503), con un lock por
+  organización para dos altas a la vez. Un índice único parcial impide dos sprints activos en la misma organización;
+  activar otro con `updateSprintAction` vuelve con "Ya hay un sprint activo. Completalo antes de activar otro.".
 - **Tarifas:** `setMemberHourlyRateAction` (founder/admin) escribe `profiles.hourly_rate`.
+- **Errores (SCRUM-503):** las 17 acciones de `app/workboard/actions.ts` y las 9 de `app/workboard/task-link-actions.ts`
+  (adjuntos, SOP y documentos de una tarea) devuelven `MutationResult` y no lanzan, porque en producción Next no le
+  manda al cliente el mensaje de un error lanzado por una server action. Corren dentro de
+  `mutacionConErroresEsperables` (`lib/server/action-result.ts`): validación, sesión, "Sin permisos para configurar
+  sueldos", tarea inexistente o de otra organización ("No se encontró la tarea..."), adjunto, SOP o documento que no
+  está, formato o tamaño de archivo no permitido, un responsable, sprint, lanzamiento o SOP que ya no existe (`23503`)
+  y la tabla o columna que falta vuelven con su motivo; lo demás (la base, Storage, la red, una ruta de Storage de otra
+  organización) se registra, va a Sentry con el tag `server_action` y vuelve con "Ocurrió un error inesperado. Intentá
+  de nuevo.". Completar una tarea con tiempo son dos acciones (registrar y completar): si la segunda rechaza, el
+  modal queda abierto y el reintento no vuelve a registrar el tiempo (el aviso lo dice); si el movimiento del
+  Kanban falla, el modal tampoco se cierra.
+  `updateSprintCompletionAction` ya no devuelve éxito si la base falla; el mismo recálculo como efecto de mover, editar
+  o asignar sigue ignorando la falla, porque la escritura principal ya se hizo. `/workboard` muestra "No se pudo
+  cargar el tablero" con el motivo si la carga falla (no hay error boundary). La lectura de una tarea con sus vínculos,
+  `loadTaskLinksBundle` y el borrado de los adjuntos de una tarea viven en `lib/workboard/tarea-con-vinculos.ts`, fuera
+  del archivo `"use server"`, para que no sean server actions. El provider corre todas las acciones con
+  `correrEnElTablero` (sobre `correrMutacion`): el motivo sale en un toast y quien llama sabe si salió, así el
+  formulario de alta, el detalle y el modal de tiempo quedan abiertos, y el selector de sprint o de lanzamiento vuelve
+  a lo que había. Crear sprint, los recursos de una tarea y la recarga después del alta avisan con un toast; el
+  reporte de tiempo muestra el motivo en su estado de error.
 
 ### SOPs
 

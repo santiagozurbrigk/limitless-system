@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getRedirectError } from "next/dist/client/components/redirect";
 import { RedirectType } from "next/dist/client/components/redirect-error";
+import { DynamicServerError } from "next/dist/client/components/hooks-server-context";
+import { notFound } from "next/navigation";
 
 /**
  * SCRUM-497: cómo las server actions separan lo esperable de lo inesperado.
@@ -187,5 +189,53 @@ describe("esFallaParaReportar", () => {
 
   it("un rechazo de negocio sin code ni texto de infraestructura no se reporta", () => {
     expect(esFallaParaReportar(new Error("El nombre de la etapa ya está en uso"))).toBe(false);
+  });
+});
+
+/**
+ * SCRUM-503: los errores internos de Next no son fallas. El de ruta dinámica
+ * (`DYNAMIC_SERVER_USAGE`) lo lanza `cookies()` en el prerender de `next build`;
+ * atrapado, se registraba como falla en cada build (`[getTeamMembers]` desde
+ * `/sales/closing`) y llegaba a Sentry si el build tenía DSN. Un redirect dentro
+ * de `runMutation` volvía como `{ success: false, error: "NEXT_REDIRECT" }`.
+ */
+function errorDeNotFound(): unknown {
+  try {
+    notFound();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("notFound no lanzó");
+}
+
+const ERRORES_DE_NEXT = [
+  ["un redirect", () => getRedirectError("/login", RedirectType.replace)],
+  ["un notFound", errorDeNotFound],
+  ["el error de ruta dinámica", () => new DynamicServerError("Route /x couldn't be rendered statically because it used `cookies`")],
+] as const;
+
+describe.each([
+  ["mutacionConErroresEsperables", (fn: () => Promise<unknown>) => mutacionConErroresEsperables("[x]", fn)],
+  ["runMutation", (fn: () => Promise<unknown>) => runMutation(fn)],
+] as const)("%s y los errores internos de Next", (_helper, correr) => {
+  it.each(ERRORES_DE_NEXT)("⭐ %s se relanza sin registrarse ni ir a Sentry", async (_c, crear) => {
+    const error = crear();
+    await expect(correr(lanza(error))).rejects.toBe(error);
+    expect(sim.reportes).toEqual([]);
+    expect(consola).not.toHaveBeenCalled();
+    expect(aviso).not.toHaveBeenCalled();
+  });
+
+  it("un error que envuelve uno de Next relanza el de Next, sin registrarse", async () => {
+    const causa = new DynamicServerError("cookies");
+    await expect(correr(lanza(new Error("envuelto", { cause: causa })))).rejects.toBe(causa);
+    expect(sim.reportes).toEqual([]);
+    expect(consola).not.toHaveBeenCalled();
+  });
+
+  it("lo demás sigue igual: una falla vuelve como valor y se reporta", async () => {
+    const r = await correr(lanza(new TypeError("fetch failed")));
+    expect(r).toMatchObject({ success: false });
+    expect(sim.reportes).toHaveLength(1);
   });
 });

@@ -1,0 +1,95 @@
+# Backup automático de producción (SCRUM-11 · [DR-BACKUPS-SUPABASE]).
+#
+# - Base: todos los días, dump de roles + schema + datos con `supabase db dump`.
+# - Archivos: lunes y jueves, copia de los buckets que no se pueden reconstruir.
+#
+# Todo sale cifrado (gpg simétrico, AES256) con BACKUP_PASSPHRASE y queda como
+# artifact de este workflow: fuera de Supabase, sin datos de clientes legibles
+# para quien sólo tenga acceso al repo. Si falla, GitHub lo marca en Actions y,
+# si existe DISCORD_WEBHOOK_ALERTAS, avisa en ese canal.
+#
+# Secretos (Settings → Secrets and variables → Actions) y cómo restaurar:
+# docs/operacion/backups-y-restauracion.md.
+name: Backup de producción
+
+on:
+  schedule:
+    # Base: todos los días a las 06:23 UTC (03:23 en Argentina, poco uso).
+    - cron: "23 6 * * *"
+    # Archivos: lunes y jueves a las 06:47 UTC.
+    - cron: "47 6 * * 1,4"
+  workflow_dispatch:
+    inputs:
+      que:
+        description: "Qué respaldar"
+        type: choice
+        options: [base, archivos, todo]
+        default: todo
+
+concurrency:
+  group: backup-produccion-${{ github.event.schedule || inputs.que }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_URL: https://nrzlylzbmsuowzhpdnjl.supabase.co
+
+jobs:
+  base:
+    if: github.event.schedule == '23 6 * * *' || inputs.que == 'base' || inputs.que == 'todo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Dump de la base (cifrado)
+        run: bash .github/scripts/backup-base.sh
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      # La base sólo necesita uno de menos de 24 h; 3 días dan margen sin llenar la cuota.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: base-${{ github.run_id }}
+          path: salida/*.gpg
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+      - name: Avisar si falló
+        if: failure()
+        run: bash .github/scripts/avisar-discord.sh "El backup diario de la base de producción falló. Detalle en $URL_CORRIDA"
+        env:
+          URL_CORRIDA: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DISCORD_WEBHOOK_ALERTAS: ${{ secrets.DISCORD_WEBHOOK_ALERTAS }}
+
+  archivos:
+    if: github.event.schedule == '47 6 * * 1,4' || inputs.que == 'archivos' || inputs.que == 'todo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copia de los buckets no reconstruibles (cifrada)
+        run: bash .github/scripts/backup-archivos.sh
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      # Lunes y jueves con 4 días de vida: siempre hay una copia de menos de 7 días
+      # y casi nunca dos a la vez (son ~420 MB cada una).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archivos-${{ github.run_id }}
+          path: salida/*.gpg
+          retention-days: 4
+          compression-level: 0
+          if-no-files-found: error
+      - name: Avisar si falló
+        if: failure()
+        run: bash .github/scripts/avisar-discord.sh "La copia de archivos de producción falló. Detalle en $URL_CORRIDA"
+        env:
+          URL_CORRIDA: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DISCORD_WEBHOOK_ALERTAS: ${{ secrets.DISCORD_WEBHOOK_ALERTAS }}

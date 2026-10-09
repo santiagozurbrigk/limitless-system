@@ -8,7 +8,13 @@ import { FilterPills } from "@/components/marketing/filter-pills";
 import { TASK_AREA_OPTIONS } from "@/lib/workboard/constants";
 import { WORKBOARD_STATUSES, STATUS_LABELS } from "@/lib/workboard/constants";
 import { useWorkboard } from "@/providers/workboard-provider";
-import type { TaskArea, TaskPriority, TaskStatus, WorkboardMember } from "@/types/workboard";
+import type {
+  TaskArea,
+  TaskPriority,
+  TaskStatus,
+  WorkboardMember,
+  WorkboardTask,
+} from "@/types/workboard";
 import {
   WorkboardTaskResources,
   applyDraftTaskResources,
@@ -37,6 +43,7 @@ import {
 } from "@ai-coo/ui";
 import { Users } from "lucide-react";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
 
 const AREA_FILTER_OPTIONS = [
   { value: "all", label: "Todas las áreas" },
@@ -48,6 +55,33 @@ const VIEW_OPTIONS = [
   { value: "calendar", label: "Calendario" },
   { value: "time", label: "Tiempo por persona" },
 ];
+
+/**
+ * El alta de una tarea desde el formulario (SCRUM-503). Si la acción rechaza
+ * (el provider ya avisó el motivo) devuelve `false` y el formulario queda
+ * abierto con lo escrito. Si se creó, aplica los recursos del borrador, la
+ * recarga con sus vínculos y avisa si algún recurso no se pudo aplicar. Ni los
+ * recursos ni la recarga rechazan.
+ */
+export async function altaDeTarea(op: {
+  crear: () => Promise<WorkboardTask | null>;
+  aplicarRecursos: (taskId: string) => Promise<string | null>;
+  recargar: (taskId: string) => Promise<void>;
+  avisar: (aviso: Aviso) => void;
+}): Promise<boolean> {
+  const creada = await op.crear();
+  if (!creada) return false;
+
+  const resourceError = await op.aplicarRecursos(creada.id);
+  await op.recargar(creada.id);
+  if (resourceError) {
+    op.avisar({
+      title: "Tarea creada con advertencias",
+      description: resourceError,
+    });
+  }
+  return true;
+}
 
 export function WorkboardShell() {
   const searchParams = useSearchParams();
@@ -64,6 +98,7 @@ export function WorkboardShell() {
     isSaving,
     upsertTaskInState,
     pendingCompleteTask,
+    pendingTimeLoggedMinutes,
     confirmCompleteWithTime,
     skipTimeAndComplete,
     cancelComplete,
@@ -101,30 +136,36 @@ export function WorkboardShell() {
 
   async function handleAddTask() {
     if (!newTask.title.trim()) return;
-    const created = await createTask({
-      title: newTask.title,
-      description: newTask.description,
-      status: selectedStatus,
-      area: newTask.area,
-      priority: newTask.priority,
-      assigneeIds: newTask.assigneeIds,
-      dueDate: newTask.dueDate || null,
-      tags: newTask.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-      launchId: newTask.launchId || null,
+    // Si la acción rechaza, el provider ya avisó con el motivo y el formulario
+    // queda abierto con lo que escribiste.
+    const creada = await altaDeTarea({
+      crear: () =>
+        createTask({
+          title: newTask.title,
+          description: newTask.description,
+          status: selectedStatus,
+          area: newTask.area,
+          priority: newTask.priority,
+          assigneeIds: newTask.assigneeIds,
+          dueDate: newTask.dueDate || null,
+          tags: newTask.tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean),
+          launchId: newTask.launchId || null,
+        }),
+      aplicarRecursos: (taskId) => applyDraftTaskResources(taskId, resourcesDraft),
+      recargar: (taskId) =>
+        correrMutacion({
+          accion: () => getWorkboardTaskByIdAction(taskId),
+          alExito: upsertTaskInState,
+          avisar: push,
+          tituloError: "La tarea se creó, pero no se pudo recargar",
+          etiqueta: "[Workboard] recargar tarea creada",
+        }),
+      avisar: push,
     });
-
-    const resourceError = await applyDraftTaskResources(created.id, resourcesDraft);
-    const refreshed = await getWorkboardTaskByIdAction(created.id);
-    if (refreshed) upsertTaskInState(refreshed);
-    if (resourceError) {
-      push({
-        title: "Tarea creada con advertencias",
-        description: resourceError,
-      });
-    }
+    if (!creada) return;
 
     setNewTask({
       title: "",
@@ -240,9 +281,8 @@ export function WorkboardShell() {
         taskId={pendingCompleteTask?.id ?? ""}
         taskTitle={pendingCompleteTask?.title ?? ""}
         estimatedMinutes={pendingCompleteTask?.estimatedMinutes}
-        onConfirm={async (minutes, note) => {
-          await confirmCompleteWithTime(minutes, note);
-        }}
+        minutosYaRegistrados={pendingTimeLoggedMinutes}
+        onConfirm={(minutes, note) => confirmCompleteWithTime(minutes, note)}
         onSkip={async () => {
           await skipTimeAndComplete();
         }}

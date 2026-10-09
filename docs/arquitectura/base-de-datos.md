@@ -34,11 +34,11 @@ Matices que un dev tiene que saber:
    - SQL Editor: no registra nada; insertar la fila a mano.
 3. En la misma migración: RLS, policies y grants. En Supabase las tablas y funciones nuevas nacen con GRANT explícito a `anon`/`authenticated`; `revoke ... from public` no alcanza, hay que revocar a cada rol (comentario en `20260922110000_rpcs_y_policies_entre_organizaciones.sql`).
 4. Una migración ya aplicada **no se edita**: cualquier corrección es un archivo nuevo.
-5. Si la migración borra o transforma datos (`drop`, `delete`, `update` masivo, cambio de tipo), antes de aplicarla hacer un dump de las tablas afectadas (`supabase db dump --data-only -t <tabla>`), guardarlo fuera del repo y escribir en el comentario del archivo cómo se revierte. Preferir expand/contract: primero agregar, después (en otro deploy) borrar, para que un rollback de Vercel siga funcionando.
+5. Si la migración borra o transforma datos (`drop`, `delete`, `update` masivo, cambio de tipo), antes de aplicarla hacer un dump de las tablas afectadas (`supabase db dump --data-only -t <tabla>`), guardarlo fuera del repo y escribir en el comentario del archivo cómo se revierte. Alternativa: correr a mano el workflow **Backup de producción** (`base`) y esperar el verde (`docs/operacion/backups-y-restauracion.md`). Preferir expand/contract: primero agregar, después (en otro deploy) borrar, para que un rollback de Vercel siga funcionando.
 
 ### Chequeo en CI
 
-El job `migrations` de `.github/workflows/ci.yml` levanta `pgvector/pgvector:pg17`, carga `supabase/ci/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, schemas `auth`/`storage`, `auth.uid()`/`auth.jwt()`, tablas mínimas de storage, publicación de realtime) y corre `supabase/ci/check-migrations.sh`: valida nombres y versiones únicas y aplica las 175 en orden, cada una en su transacción. Si una migración nueva usa otra pieza de la plataforma (otro schema, otra extensión), hay que sumarla a los stubs.
+El job `migrations` de `.github/workflows/ci.yml` levanta `pgvector/pgvector:pg17`, carga `supabase/ci/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, schemas `auth`/`storage`, `auth.uid()`/`auth.jwt()`, tablas mínimas de storage, publicación de realtime) y corre `supabase/ci/check-migrations.sh`: valida nombres y versiones únicas y aplica las 191 en orden, cada una en su transacción; después corre los tests de RLS de `supabase/ci/tests/` (10 archivos). Si una migración nueva usa otra pieza de la plataforma (otro schema, otra extensión), hay que sumarla a los stubs.
 
 ## RLS y acceso
 
@@ -74,7 +74,7 @@ Estas tablas se leen sólo con `createAdminClient()` (service role). El cliente 
 | `zernio_integrations` | `api_key` (cifrada) y `webhook_secret` |
 | `instagram_integrations`, `stripe_integrations`, `mercadopago_integrations`, `vturb_integrations`, `webinarjam_integrations`, `hyros_integrations`, `payment_integrations`, `super_admin_google_tokens` | RLS sin policies |
 | `ghl_integrations` | El miembro puede insertar/actualizar/borrar la de su org, pero no leerla |
-| `ai_brain_documents`, `super_admin_users`, `super_admin_deletions`, `platform_ai_credentials`, `fathom_webhook_events`, `fathom_sync_fallas`, `waitlist_leads`, `rate_limits`, `holding_active_sessions` | Sólo service role / plataforma |
+| `ai_brain_documents`, `super_admin_users`, `super_admin_deletions`, `platform_ai_credentials`, `fathom_webhook_events`, `fathom_sync_fallas`, `corridas_de_procesos`, `waitlist_leads`, `rate_limits`, `holding_active_sessions` | Sólo service role / plataforma |
 
 Excepciones que **sí** son editables por cualquier miembro: `discord_integrations` y `unipile_integrations` (policy `FOR ALL` por org) y `team_member_integrations` (sólo la fila propia).
 
@@ -99,6 +99,7 @@ Excepciones que **sí** son editables por cualquier miembro: `discord_integratio
 | `create_default_roles(uuid)` | Siembra roles al crear una org | `authenticated`, service role |
 | `client_last_activity(uuid)` | Última novedad por cliente (onboarding de clientes) | sólo service role |
 | `aceptar_invitacion_de_equipo(text, uuid)` | Acepta una invitación de equipo con la cuenta de la sesión, en una transacción con la invitación bloqueada; devuelve un motivo en texto (SECURITY DEFINER, `20261005150000`, SCRUM-495; ver `docs/arquitectura/auth-organizaciones-y-permisos.md`) | sólo service role (`aceptarInvitacionAction`) |
+| `crear_sprint(uuid, text, text, text, date, date, uuid)` | Completa el sprint activo de la organización y crea el nuevo en una transacción, con un lock por organización para dos altas a la vez (SECURITY INVOKER: la RLS de `sprints` decide; `20261008120000`, SCRUM-503) | `authenticated` (`createSprintAction`), service role |
 | `onboarding_connected_source_count`, `onboarding_org_progress` | Checklist de onboarding | ver `docs/areas/plataforma.md` |
 | `get_current_week_start()` | Semana de weekly inputs | |
 | `set_updated_at()` | Trigger genérico de `updated_at` | trigger |
@@ -136,6 +137,7 @@ Una línea por tabla de producción. Filas = conteo aproximado de prod el 2026-0
 | `holdings`, `holding_organizations` | Modelo de holdings del super-admin (panel de holdings) |
 | `super_admin_users`, `super_admin_deletions`, `super_admin_google_tokens` | Staff Limitless, registro de bajas, Drive del super-admin |
 | `platform_ai_credentials` | Una fila (id = 1): la clave de Claude de la plataforma, cifrada, para el trabajo de super-admin (SCRUM-7). RLS sin políticas |
+| `corridas_de_procesos` | Una fila por corrida de cada cron de `vercel.json`: `proceso` (la ruta), `inicio`, `fin`, `estado` (`en_curso`, `ok`, `encolado`, `fallo`, `parcial`; `encolado` = fan-out con todos los jobs publicados, no terminados), `orgs_procesadas`, `orgs_fallidas`, `organizaciones_fallidas` (uuid[]), `jobs_encolados` (sólo crons con fan-out) y `error` saneado. La escribe `conMonitorDeCron` con un `id` generado en el código (apertura y cierre por upsert de ese `id`) y la lee Super-admin → Infraestructura con el cliente admin (la última por `inicio desc, fin desc nulls last`). Índice `(proceso, inicio desc)`; checks de coherencia (fin según estado, fallidas y jobs encolados dentro de procesadas); cada cierre borra las de más de 30 días del proceso. Pensada para `correrPorOrganizacion()` (ADR-015). RLS sin políticas (SCRUM-85) |
 | `organization_notes` | Notas internas por org del super-admin |
 | `ai_brain_documents` | "Cerebro de IA" del super-admin |
 
@@ -189,7 +191,7 @@ Propósito de cada una en el doc del área. Las notas del cliente son columnas d
 `agent_conversations`, `agent_messages`, `agent_graph_proposals`, `business_stages`, `business_context_documents`, `knowledge_base_categories`, `rag_documents`, `rag_chunks` (pgvector), `founder_communication_tone`.
 
 ### Operaciones (`docs/areas/operaciones.md`)
-`workboard_tasks`, `workboard_task_attachments`, `workboard_task_documents`, `sprints`, `sops`, `sop_versions`, `sop_attachments`, `sop_generation_jobs`, `weekly_inputs`, `weekly_reports`, `intelligence_snapshots`, `executive_reports`, `launches`, `launch_metrics`.
+`workboard_tasks`, `workboard_task_attachments`, `workboard_task_documents`, `sprints` (a lo sumo uno `active` por organización: índice único parcial `sprints_un_activo_por_org`, `20261008120000`), `sops`, `sop_versions`, `sop_attachments`, `sop_generation_jobs`, `weekly_inputs`, `weekly_reports`, `intelligence_snapshots`, `executive_reports`, `launches`, `launch_metrics`.
 
 ### Discord (`docs/areas/discord.md`)
 `discord_integrations`, `discord_client_links`, `discord_messages`, `discord_pending_links` (vacía), `discord_channel_clients`, `discord_team_members`.

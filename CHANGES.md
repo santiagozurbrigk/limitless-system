@@ -28,11 +28,263 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-09 — Backup automático de la base y los archivos de producción (SCRUM-11, parcial)
+
+**Rama:** `claude/scrum-11-backups`
+**Commit(s):** este
+**Módulo(s) afectado(s):** infraestructura — `.github/workflows/backup-produccion.yml`, `.github/scripts/backup-base.sh`, `.github/scripts/backup-archivos.sh`, `.github/scripts/avisar-discord.sh`, `docs/operacion/backups-y-restauracion.md` (nuevo)
+
+**Qué se hizo:** avanza `[DR-BACKUPS-SUPABASE]` (sigue abierto). Workflow nuevo: (1) base diaria 06:23 UTC con `supabase db dump` roles + schema + data (exclusiones de la guía oficial), valida que no salga vacío y que tenga `organizations`, cifra con gpg AES256 y sube como artifact con 3 días de retención; (2) lunes y jueves 06:47 UTC baja los 6 buckets no reconstruibles (lista desde `storage.objects`, descarga con service role), cifra y sube con 4 días; (3) si falla, rojo en Actions y aviso por `DISCORD_WEBHOOK_ALERTAS`. Doc nueva con cómo activarlo, abrir un backup y el procedimiento de restauración con checklist de lo que no está en el dump. La regla de dump previo a migraciones destructivas ya estaba en `base-de-datos.md` (paso 5); se le sumó la alternativa del workflow.
+
+**Por qué / finalidad:** producción está en plan Free (Supabase no hace backups) y el único respaldo era uno manual del 2026-09-28.
+
+**Decisiones de diseño relevantes:** artifacts de GitHub en vez de otro proveedor: no suma cuentas ni credenciales y queda fuera de Supabase. Cifrado obligatorio porque cualquiera con acceso de lectura al repo puede bajar artifacts. Retenciones cortas (3 y 4 días) para no pasar la cuota de almacenamiento de Actions (~500–600 MB en total) y aun así cumplir "base < 24 h, archivos < 7 días". `trial-reels`, `content-thumbnails` y `avatars` quedan afuera (reconstruibles).
+
+**Riesgos / deuda técnica pendiente:** no corre hasta cargar `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `BACKUP_PASSPHRASE` en GitHub; los scripts no se pudieron probar contra producción desde acá (sin esas credenciales). Falta la decisión del plan de Supabase y el ensayo de restauración con tiempos. Si la cuota de Actions del plan de GitHub es menor, la subida falla: hay que bajar retenciones o mover los archivos a R2/S3.
+
+### 2026-10-09 — Trial Reels: el secreto del worker ya no viaja en la URL (SCRUM-51)
+
+**Rama:** `claude/scrum-51-secreto-worker`
+**Commit(s):** este
+**Módulo(s) afectado(s):** marketing / Trial Reels y colas — `app/marketing/content/reel-variation-actions.ts`, `lib/queue/verify-queue-request.ts`, `apps/reel-worker/src/index.ts`
+
+**Qué se hizo:** cierra `[TRIAL-SECRET-EN-URL]`. (1) `createTrialReelsJobAction`, `publishVariationsAction` y `retryVariationAction` publican en QStash con la URL limpia; el secreto va sólo en los headers `X-Worker-Secret`/`Authorization`. El log `"[TrialReels] QStash published OK"` ya no imprime la URL con secreto. (2) `verifyQueueRequest` (web) y `verifySignature` (worker de Fly) dejan de aceptar `?workerSecret=`. (3) El worker compara en tiempo constante (`safeEqual` con sha256 + `timingSafeEqual`, igual que la web) y, si falla, ya no loguea los 4 primeros caracteres del secreto esperado ni 20 del header recibido: sólo si cada header vino. 4 tests nuevos en `lib/queue/__tests__/verify-queue-request.test.ts`.
+
+**Por qué / finalidad:** QStash guarda la URL destino en su consola y los logs de Vercel/Fly la imprimían entera; con el secreto cualquiera podía encolar trabajos en el worker, que usa service role.
+
+**Decisiones de diseño relevantes:** los mensajes que ya estaban encolados (publicaciones con delay de horas) llevan el secreto también en headers, así que siguen pasando. El orden de deploy web/worker no importa.
+
+**Riesgos / deuda técnica pendiente:** falta **rotar `WORKER_AUTH_SECRET`** (el valor viejo quedó en la consola de QStash y en logs): mismo valor nuevo en Vercel y en Fly, y `fly deploy` del worker. Al rotar, las publicaciones de Trial Reels ya programadas con el secreto viejo fallan (se reintentan a mano). Paso a paso en `docs/operacion/verificacion-manual.md`. El worker sigue sin validar `organizationId` contra `reel_variation_jobs` (eso es SCRUM-92).
+
+### 2026-10-09 — Discord: el aviso de "mensajes sin texto" ya no da falsa alarma
+
+**Rama:** `claude/discord-intent-falsa-alarma`
+**Commit(s):** este
+**Módulo(s) afectado(s):** integraciones / Discord — `lib/discord/intent-contenido.ts` (nuevo), `app/integrations/actions.ts` (`discordIssues`)
+
+**Qué se hizo:** la tarjeta de Discord en `/integrations` marcaba "Con error — falta activar MESSAGE CONTENT INTENT" si había **un solo** mensaje vacío en toda la historia. Ahora mira los últimos 50 mensajes de la org y avisa sólo si al menos el 80% llegó sin texto **y** sin adjuntos (mínimo 5 mensajes). 5 tests nuevos.
+
+**Por qué / finalidad:** en producción Limitless tenía 17 de 257 mensajes vacíos (5 con foto, 12 sin nada: stickers, reenvíos, embeds) y 240 con texto, así que el intent sí está activado; el aviso quedaba en rojo para siempre. De los últimos 50, sólo 5 están vacíos sin adjunto (10%).
+
+**Decisiones de diseño relevantes:** se mira la tendencia reciente y no el total histórico: con el intent apagado *todos* los mensajes nuevos llegan vacíos, así que el 80% sobre 50 lo detecta en cuanto entran 5 mensajes, y los vacíos viejos dejan de pesar.
+
+**Riesgos / deuda técnica pendiente:** los stickers, reenvíos y embeds se siguen guardando con `content` vacío (no se clasifican); no afecta métricas de actividad.
+
 ---
 
 ## Historial
 
 ---
+
+### 2026-10-08 · Cuarta revisión de SCRUM-503: tests que ven el cierre del modal, las deps del provider y el número de la confirmación
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `ad7fbce7` (tests, `duracion.ts` y `mapper.ts`), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero. Tests de `providers/` y `components/workboard/`; `lib/workboard/duracion.ts`, `lib/workboard/mapper.ts`
+
+**Qué se hizo** (4 MENOR de la revisión adversarial de SCRUM-503, pasada 4):
+- **MENOR-1:** test sin DOM del modal de tiempo (`modal-de-tiempo-cierre.test.ts`): hooks que guardan el estado y un Dialog y botones mockeados que guardan sus handlers. Mientras guarda ("Registrando…" o "Completando…"), `onOpenChange(false)` (Escape, overlay, X) no llama a `onCancel` y Cancelar está deshabilitado; después, sí cancela.
+- **MENOR-2:** en el test del provider con estado, `useCallback` y `useMemo` memorizan por deps (`Object.is`) y el `push` del toast es estable, como en la app: un callback con deps incompletas queda con su closure viejo y el test lo ve. Caso nuevo desde el detalle: `updateTask` con `status: "done"`, el update rechaza, el reintento completa y el tiempo queda registrado una sola vez.
+- **MENOR-3:** el test de cancelar y volver a completar verifica que el completado de la segunda apertura cierra la confirmación, y `intentarCompletar` se prueba con una tercera apertura.
+- **MENOR-4:** `formatearDuracion` dice "1 minuto" (antes "1 minutos"); test de 0, 1, 45, 60, 90 y 120.
+- Se sacaron dos imports de tipos sin usar de `lib/workboard/mapper.ts`, los únicos avisos de lint que quedaban en el Tablero.
+- Control negativo con los mutantes del informe (`control-negativo-ar-pasada-4.txt`): cada uno hace fallar al menos un test. Docs: `docs/operacion/testing.md` (211 archivos, ~2.175 casos, 2.576 ejecutados).
+
+**Por qué / finalidad:** la revisión aprobó con 4 MENOR, todos de tests salvo una línea; no queda deuda dentro del alcance.
+
+**Decisiones de diseño relevantes:** los tests sin DOM reemplazan los hooks por unos que se comportan como los de React en lo que importa (estado entre renders, memorizar por deps); no se agregó jsdom ni testing-library al proyecto.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Sigue pendiente aplicar la migración `20261008120000` en producción antes del merge.
+
+---
+
+### 2026-10-08 · Tercera revisión de SCRUM-503: confirmaciones que no se cruzan y textos del modal de tiempo
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `483b7e3d` (provider, modal de tiempo y tests), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero. `providers/workboard-provider.tsx`, `components/workboard/log-time-modal.tsx`, `lib/workboard/duracion.ts` (nuevo)
+
+**Qué se hizo** (3 MENOR y 2 observaciones de la revisión adversarial de SCRUM-503, pasada 3):
+- **MENOR-1:** cada apertura de la confirmación de "completar con tiempo" lleva un número, y los eventos `tiempoRegistrado` y `completada` traen el número y la tarea de la suya; el reducer ignora los que no son de la abierta. Antes la respuesta tardía de la tarea A (cerrando el modal a mitad de pedido y abriendo B) marcaba el tiempo de A en la confirmación de B, que se completaba sin registrar el suyo; y si A se completaba, cerraba la confirmación de B. Además el modal no se puede cerrar (Escape, overlay, X, Cancelar) mientras guarda (`sePuedeCerrar`).
+- **MENOR-2:** el aviso del modal dice "Tiempo ya registrado: 1 hora. Confirmá para completar la tarea; no se vuelve a cargar.", que no depende de la unidad (antes "Ya quedaron registrados 1 hora"), y con el tiempo ya registrado el botón dice "Completar tarea" / "Completando…".
+- **MENOR-3:** `finalizeComplete` usa `intentarCompletar`, una función pura exportada que corre el intento con lo que sabe la confirmación y devuelve el evento a despachar. Un test nuevo prueba el provider con estado de verdad (hooks mínimos que guardan el estado, sin DOM): el reintento no registra dos veces, cancelar avisa y olvida el tiempo, y el completado siguiente registra sus minutos. Otro prueba que el shell le pasa los minutos al modal. Los cuatro mutantes del informe que antes pasaban la suite ahora hacen fallar al menos un test cada uno (`control-negativo-ar-pasada-3.txt`).
+- **Observaciones:** el JSDoc de `completarConTiempo` vuelve a su lugar; cancelar con el tiempo ya registrado avisa con un toast "La tarea no se completó, pero el tiempo quedó registrado" para que no se vuelva a cargar (`avisoAlCancelar`). La duración se formatea en `lib/workboard/duracion.ts`, que comparten el modal y el aviso.
+- Docs: `docs/operacion/testing.md` (209 archivos, ~2.171 casos, 2.566 ejecutados).
+
+**Por qué / finalidad:** la revisión aprobó con 3 MENOR y no queda deuda dentro del alcance.
+
+**Decisiones de diseño relevantes:**
+- Un número por apertura y no sólo el id de la tarea: también distingue una apertura anterior de la misma tarea (cancelar y volver a abrir).
+- Se hicieron las dos protecciones del MENOR-1: el modal que no se cierra a mitad de pedido evita además que la tarjeta vuelva a su columna cuando la base ya la tiene hecha.
+- Los textos de la interfaz siguen en voseo.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Sigue pendiente aplicar la migración `20261008120000` en producción antes del merge.
+
+---
+
+### 2026-10-08 · Segunda revisión de SCRUM-503: el tiempo registrado no sobrevive a la confirmación
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `ea2a2c5a` (provider, modal de tiempo y tests), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero. `providers/workboard-provider.tsx`, `components/workboard/{log-time-modal,workboard-shell}.tsx`
+
+**Qué se hizo** (MAYOR-1 de la revisión adversarial de SCRUM-503, pasada 2):
+- El recuerdo del tiempo ya registrado (fix-pack de M3) vivía en un `useRef` por tarea toda la sesión: después de cancelar, un completado posterior de la misma tarea se salteaba el registro y el modal decía "listo" sin guardar los minutos nuevos; y si se cambiaban los minutos y se reintentaba, se ignoraban sin aviso. Ahora la confirmación de "completar con tiempo" es un reducer (`confirmacionDeCompletado`) con la tarea, el patch, el estado anterior y los minutos registrados: abrir una confirmación nueva (aunque sea de la misma tarea), cancelar o completar olvidan el tiempo.
+- Mientras el tiempo ya quedó registrado en la confirmación abierta, el modal dice "Ya quedaron registrados N. Confirmá para completar la tarea; el tiempo no se vuelve a cargar." y deshabilita los minutos y la nota; confirmar sólo completa (`minutosAConfirmar`).
+- Tests: el reducer (cancelar olvida, una confirmación nueva empieza sin tiempo, el escenario de cancelar y volver a completar con otros minutos que ahora sí se registran) y el modal dibujado con y sin tiempo registrado. Control negativo por mutante en `control-negativo-ar-pasada-2.txt`.
+- `verificacion-manual.md` suma § Tablero: errores como valor y crear sprint atómico, con la prueba de humo de crear un sprint en producción (la primera vez que `.rpc("crear_sprint").single()` corre contra PostgREST real).
+- Docs: `docs/operacion/testing.md` (207 archivos, ~2.155 casos, 2.548 ejecutados).
+
+**Por qué / finalidad:** el arreglo de M3 cambiaba el riesgo de duplicar tiempo por el de perderlo sin aviso.
+
+**Decisiones de diseño relevantes:**
+- El tiempo registrado queda atado a la confirmación y no a la tarea: es lo único que garantiza que un intento nuevo registre sus minutos. Para que ningún camino se olvide de limpiarlo, abrir y cerrar la confirmación son eventos del mismo reducer que guarda el tiempo.
+- El texto del modal va en voseo, como el resto de la interfaz.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Sigue pendiente aplicar la migración `20261008120000` en producción antes del merge.
+
+---
+
+### 2026-10-08 · Fix-pack de la AR de SCRUM-503: crear sprint atómico, sin doble registro de tiempo y lint de todo web
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `b55515e0` (pantallas, provider y lint), `91c3e1ad` (migración `crear_sprint` y acción), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero; base de datos. `supabase/migrations/20261008120000_crear_sprint_atomico.sql`, `supabase/ci/tests/95_crear_sprint.sql`, `app/workboard/actions.ts`, `providers/workboard-provider.tsx`, `components/workboard/{workboard-task-detail-dialog,log-time-modal,workboard-shell}.tsx`, `next.config.ts`
+
+**Qué se hizo** (los 5 MENOR de la revisión adversarial de SCRUM-503, pasada 1):
+- **M1:** las tres protecciones de pantalla pasan a funciones puras con tests y control negativo: `cambiarConReversion` (el selector de sprint o lanzamiento del detalle vuelve a lo que había si la acción rechaza), `confirmarTiempo` (el modal de tiempo no muestra "listo" si no se guardó) y `altaDeTarea` (si la acción rechaza, el formulario queda abierto y no se aplican recursos).
+- **M2:** el test del provider pasa los hijos como tercer argumento de `createElement` (`react/no-children-prop`). `next lint` revisa además `providers`, `hooks`, `layouts`, `constants`, `mocks`, `routes`, `types`, `scripts`, `workspaces` y `e2e` (`eslint.dirs`); se arreglaron los dos avisos del provider del Tablero. Quedan 13 avisos de `react-hooks/exhaustive-deps` en `providers/finance-data-provider.tsx`, que ya estaban y no son del Tablero.
+- **M3:** completar una tarea con tiempo (`completarConTiempo`) recuerda que el tiempo ya se registró si el completado rechazó: el reintento sólo completa y el aviso dice "Se registró el tiempo, pero no se pudo completar la tarea". `performMove` y `moveTask` devuelven si salió, así el modal no se cierra cuando falla el movimiento del Kanban.
+- **M4:** migración `20261008120000_crear_sprint_atomico`: normaliza las organizaciones con más de un sprint activo (deja activo el que la app mostraba, el de `start_date` más reciente), índice único parcial `sprints_un_activo_por_org` y la función `crear_sprint` (SECURITY INVOKER: la RLS de `sprints` sigue decidiendo; lock por organización para dos altas a la vez), que completa el activo e inserta el nuevo en una transacción. `createSprintAction` la llama por RPC; si no existe (`PGRST202`) es una falla de despliegue que va a Sentry. `updateSprintAction` devuelve "Ya hay un sprint activo. Completalo antes de activar otro." si choca con el índice. Test de CI `95_crear_sprint.sql`. SQL de producción en `limitless-auditoria/sql-produccion/scrum-503/` (precheck, migración en transacción idéntica al repo, verificación con `todo_ok` y prueba local con dos altas a la vez).
+- **M5:** el comentario del mock de la relectura apunta al test que existe, y hay un caso para la relectura de una tarea sin la columna `sop_id`.
+- Docs: `docs/arquitectura/base-de-datos.md`, `docs/areas/operaciones.md`, `docs/operacion/testing.md` (206 archivos, ~2.146 casos, 2.539 ejecutados; 11 archivos de tests de RLS; carpetas del lint), `PENDIENTES.md`.
+
+**Por qué / finalidad:** la revisión aprobó con 5 MENOR y no queda deuda dentro del alcance. M3 y M4 venían de antes: un reintento sumaba el tiempo dos veces, y un alta de sprint que fallaba a la mitad dejaba la organización sin sprint activo (o dos activos con dos pestañas).
+
+**Decisiones de diseño relevantes:**
+- `crear_sprint` es SECURITY INVOKER y recibe la organización: la acción ya la resuelve con `requireOrganizationId` (incluido el negocio activo de un holding) y la RLS impide escribir en otra. Un DEFINER habría tenido que repetir esa lógica.
+- La migración normaliza los duplicados en vez de fallar: deja activo el mismo sprint que la app ya mostraba, sin borrar nada. El precheck dice cuántos hay y trae la consulta para revisarlos antes.
+- Para M3 se eligió recordar el registro en vez de completar primero: completar antes de registrar dejaba una tarea cerrada sin su tiempo si el registro fallaba, y el modal quedaba con la tarea ya hecha.
+
+**Riesgos / deuda técnica pendiente:** la migración **va antes del merge y del deploy**: con el código nuevo sin la función, "Nuevo sprint" muestra el texto fijo y la falla va a Sentry; el código viejo funciona igual con la migración aplicada. Los 13 avisos de `finance-data-provider.tsx` quedan visibles en `next lint` (decisión de la coordinación si entran en Finanzas).
+
+---
+
+### 2026-10-08 · Los errores esperables del Tablero vuelven como valor (SCRUM-503)
+
+**Rama:** `fix/SCRUM-503-tablero-errores`
+**Commit(s):** `261d1120` (acciones, llamadores y tests), `d2c65573` y su reversión `2fa73f71` (`force-dynamic` en `/workboard`, ya no hace falta), `7e9ed651` (`unstable_rethrow` en el módulo común), `96db6e69` (vínculos de tareas, cierre del sprint activo y alta sin fallas calladas), este (docs)
+**Módulo(s) afectado(s):** Operaciones, Tablero, y el módulo común de errores de las server actions. `app/workboard/{actions,task-link-actions}.ts`, `lib/workboard/tarea-con-vinculos.ts` (nuevo), `lib/server/action-result.ts`, `app/(platform)/workboard/page.tsx`, `providers/workboard-provider.tsx`, `components/workboard/{create-sprint-modal,log-time-modal,workboard-shell,workboard-task-detail-dialog,workboard-task-resources,workboard-time-report}.tsx`
+
+**Qué se hizo** (parte de `[ACTIONS-ERRORES-EN-PRODUCCION]`, historia SCRUM-496):
+- Las 16 funciones de `app/workboard/actions.ts` que lanzaban (33 throws) y `loadWorkboardPageDataAction`, que las junta, devuelven `MutationResult` y corren dentro de `mutacionConErroresEsperables`. Vuelven con su motivo: validación (zod), "Sesión no válida", "Sin permisos para configurar sueldos", tarea inexistente o de otra organización (`PGRST116` de `.single()` y la lectura de `logTaskTimeAction`: "No se encontró la tarea. Puede que la hayan eliminado."), responsable, sprint, lanzamiento o SOP que ya no existe (`23503`) y la tabla que falta. Lo demás es una `FallaDeLaBase` o una excepción: consola, Sentry con el tag `server_action` y el texto fijo.
+- Las 9 acciones de `app/workboard/task-link-actions.ts` (preparar y finalizar un adjunto, borrarlo, su URL, SOP, vincular y desvincular documentos, opciones de vínculos y la tarea por id) pasan de `runMutation` al mismo contrato. No estaban en el conteo de throws, pero devolvían crudo el mensaje de la base o de Storage. `getWorkboardTaskByIdAction` lanzaba sin sesión y devolvía `null` ante cualquier otro error; `listWorkboardLinkOptionsAction` lanzaba sin sesión e ignoraba los errores de la base. Una ruta de Storage de otra organización en `finalizeTaskAttachmentAction` es inesperada (manipulación): va a Sentry.
+- `loadTaskLinksBundle`, la relectura de una tarea con sus vínculos (`leerTareaConVinculos`, antes `fetchTaskRow`) y `deleteTaskAttachmentsForTask` pasan a `lib/workboard/tarea-con-vinculos.ts`: exportadas desde un archivo `"use server"` eran server actions que aceptaban cualquier `organizationId` (la RLS cortaba las filas ajenas).
+- Las lecturas internas de `actions.ts` (miembros, tareas, sprints, sprint activo) pasan a funciones privadas que lanzan `FallaDeLaBase`; las acciones exportadas las envuelven.
+- `createSprintAction` no crea el sprint si no pudo cerrar el activo anterior (antes la falla se ignoraba y quedaban dos activos). `updateSprintCompletionAction` ya no devuelve éxito si la base falla; el recálculo como efecto de mover, editar o asignar sigue ignorando la falla, como antes.
+- Módulo común: `mutacionConErroresEsperables` y `runMutation` empiezan su `catch` con `unstable_rethrow`. Un redirect, un notFound o el error con que el prerender de `next build` marca una ruta como dinámica siguen su camino y no se registran ni van a Sentry. Antes ese error se registraba en cada build (`[getTeamMembers]` desde `/sales/closing`, y `[loadWorkboardPageData]` con esta rama) y un redirect dentro de `runMutation` volvía como `{ success: false, error: "NEXT_REDIRECT" }`. El chequeo estático de `app/__tests__/errores-de-next-se-relanzan.test.ts` suma `lib/server/action-result.ts`.
+- `/workboard` muestra "No se pudo cargar el tablero" con el motivo si la carga falla. El `force-dynamic` que se había agregado (`d2c65573`) se revirtió: con `unstable_rethrow` la ruta se marca dinámica sola y el build no registra nada.
+- `WorkboardProvider` corre todas las acciones con `correrEnElTablero` (sobre `correrMutacion`): el motivo sale en un toast, si la acción lanza el texto fijo y la consola, y la función le dice a la pantalla si salió. El alta deja el formulario abierto, el detalle no se cierra, el modal de tiempo no muestra "listo" (`onConfirm` puede devolver `false`), el Kanban deshace el movimiento y los selectores de sprint y lanzamiento vuelven a lo que había. El cambio de lanzamiento del detalle pasa al provider (`assignTaskToLaunch`). Crear sprint (`crearSprint`) avisa con un toast y el reporte de tiempo (`leerReporteDeTiempo`) muestra el motivo en su estado de error. Los recursos de una tarea (`workboard-task-resources.tsx`) usan `correrMutacion`; `uploadTaskAttachmentFile` y `applyDraftTaskResources` devuelven el texto fijo si algo lanza (también la subida a Storage), y la recarga después del alta avisa si falla.
+- Tests: 55 casos declarados de las acciones del Tablero y 30 de los vínculos, con un Supabase simulado que aplica los filtros (rechazo esperable con el mensaje exacto, éxito, filtro por organización, falla de la red lanzada y devuelta por supabase-js para cada acción), 15 del provider, 11 de los componentes, 3 de la página, 3 más del módulo común y uno más del chequeo estático.
+- Docs: `docs/areas/operaciones.md`, `docs/arquitectura/jobs-webhooks-y-colas.md`, `docs/operacion/alertas.md`, `docs/operacion/testing.md` (205 archivos, ~2.131 casos, 2.524 ejecutados), `PENDIENTES.md` (avance y reconteo: quedan 78 funciones, 139 throws, 25 archivos).
+
+**Por qué / finalidad:** en producción Next no le manda al cliente el mensaje de un error lanzado por una server action. Quien movía una tarea que ya no existía o creaba un sprint sin nombre veía un párrafo técnico en inglés (y en el Kanban, nada: la promesa rechazada no se atendía), una lectura que fallaba dejaba `/workboard` en la pantalla de error de Next y un error de Storage al adjuntar llegaba crudo.
+
+**Decisiones de diseño relevantes:**
+- El provider es el único lugar que avisa: los componentes sólo reaccionan al resultado (dejar abierto, deshacer). Así no hay toasts dobles y ningún `void` deja una promesa sin atender.
+- Las lecturas devuelven valor y la página muestra el motivo, en vez de lanzar hacia un boundary: la plataforma no tiene `error.tsx` (lo suma SCRUM-108).
+- `createSprintAction` aborta en vez de avisar y seguir: crear el nuevo con el anterior todavía activo deja dos sprints activos, y el tablero toma el primero.
+- `unstable_rethrow` va en el servidor (`lib/server/action-result.ts`). `correrAccion` y `datoDeLaMutacion` (`lib/client/correr-accion.ts`) corren en el navegador, donde el error de ruta dinámica no existe; ya tratan el redirect y el notFound con `isNextRouterError`, así que no cambian.
+- "Tarea no encontrada" de `logTaskTimeAction` y de los vínculos pasa al mismo texto que el resto de las acciones del tablero; en producción nunca había llegado a la pantalla.
+- Un `update` sin `.single()` sobre una tarea de otra organización sigue tocando 0 filas y devolviendo éxito, como antes: el filtro por organización no cambia y sumar una lectura para distinguirlo es otra lógica.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo dentro del alcance. `runMutation` ahora relanza un redirect en vez de devolverlo como error: ningún llamador actual redirige dentro de `runMutation` (revisado `app/onboarding/actions.ts` y `app/(platform)/holding/actions.ts`, que redirigen fuera) y la suite completa pasa.
+
+---
+
+### 2026-10-07 · Fix-pack de la AR de SCRUM-85: fila fantasma, saneado, fan-out y aviso de producción
+
+**Rama:** `fix/SCRUM-85-salud-y-monitoreo`
+**Commit(s):** `a106e2cf` (registro de corridas y migración), `3e35679e` (página de Infraestructura), `3b1d2dd5` (script del aviso), este (docs)
+**Módulo(s) afectado(s):** Infraestructura y Plataforma (super admin). `lib/observability/{registro-de-corridas,corrida-en-curso}.ts`, `lib/queue/qstash-client.ts`, `lib/super-admin/{queries,estado-de-corridas}.ts`, `components/super-admin/infrastructure-page.tsx`, `types/super-admin.ts`, `supabase/migrations/20261007120000_corridas_de_procesos.sql`, `supabase/ci/tests/90_corridas_de_procesos.sql`, `.github/scripts/verificar-produccion.sh`
+
+**Qué se hizo** (los 5 MENOR de la revisión adversarial de SCRUM-85):
+- **MNR-1, fila fantasma:** si la apertura de una corrida vencía a los 2 s pero la base la guardaba igual, el cierre insertaba otra fila y quedaba una `en_curso` para siempre (la página la marcaba "Sin cierre"). Ahora el `id` se genera con `randomUUID` antes de abrir; la apertura es un upsert con `ignoreDuplicates` (no pisa un cierre que llegó antes) y el cierre, un upsert completo por ese `id`. La lectura de la última corrida desempata con `fin desc nulls last`. Dos tests reproducen la apertura lenta contra el almacén real con un Supabase simulado (apertura que llega después y antes del cierre).
+- **MNR-2:** test con estrella de que `loadUltimasCorridas` rechaza a quien no es super admin antes de consultar la base.
+- **MNR-3:** el saneado del error oculta los valores de claves compuestas (`client_secret`, `webhook_secret`, `id_token`, `x-api-key`, `access_token`, `clientSecret`, `signature`...) en query suelta, JSON y encabezados; corta el mensaje a 2.000 caracteres antes de buscar. Un caso de test por forma.
+- **MNR-4:** el script del aviso valida los plazos (hasta 6 dígitos) y los lee en base 10 (`0080` daba "value too great for base" y salía sin mensaje). Toda salida con error, también los inputs inválidos y un error inesperado (`trap` en `EXIT`), deja un `::error` y avisa en Discord si está el secreto. La prueba con el servidor falso pasó de 10 a 14 casos.
+- **MNR-5:** en los 6 crons con fan-out, "orgs procesadas" contaba jobs publicados y la corrida quedaba `ok` aunque todos los workers fallaran. Ahora `publishCronFanout` anota jobs encolados (`anotarJobDeOrganizacion`), la corrida cierra como `encolado` con `jobs_encolados` (o `parcial` si algún job no se pudo publicar) y la página dice "Encolado: N jobs encolados" con la aclaración de que encolado no es terminado; nunca "OK" ni "orgs procesadas". La migración suma el estado `encolado`, la columna `jobs_encolados` y su check (todavía no estaba aplicada en producción); el SQL de producción se actualizó (01 idéntico entre marcas, 02 con 10 columnas y 11 checks, prueba local).
+- Docs: `alertas.md` (qué significa `encolado`, upsert por id, claves compuestas, catorce casos y aviso ante cualquier error), `jobs-webhooks-y-colas.md`, `base-de-datos.md`, `plataforma.md`, `testing.md` (200 archivos, ~2.013 casos, 2.330 ejecutados), `verificacion-manual.md`, `PENDIENTES.md` (`[AUD-SALUD-3]`: registrar el resultado de cada worker).
+
+**Por qué / finalidad:** la revisión aprobó con 5 MENOR y no queda deuda dentro del alcance.
+
+**Decisiones de diseño relevantes:**
+- Para el fan-out se eligió un estado propio (`encolado`) de punta a punta (base, código y página) en vez de sólo cambiar el texto: así una consulta SQL tampoco confunde "jobs publicados" con "orgs procesadas bien". El resultado real de cada worker queda para `correrPorOrganizacion()` (`[AUD-SALUD-3]`).
+- El `id` del cliente hace innecesario el default de la columna, pero se deja `gen_random_uuid()` para inserciones a mano.
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo. Siguen abiertos en `[MONITOREO-Y-ALERTAS]` los pasos sin código (migración en producción, monitor externo, secreto de Discord opcional).
+
+---
+
+### 2026-10-07 · Chequeo de salud, registro de corridas de los crons y aviso de producción desactualizada (SCRUM-85)
+
+**Rama:** `fix/SCRUM-85-salud-y-monitoreo`
+**Commit(s):** `0139503e` (`/api/health`), `afeb7a38` (registro de corridas y migración), `c994bb96` (página de Infraestructura), `f7a66740` (workflow "Producción al día"), este (docs)
+**Módulo(s) afectado(s):** Infraestructura y Plataforma (super admin). `lib/observability/{salud,con-plazo,corrida-en-curso,registro-de-corridas,cron-monitor,reportar-falla}.ts`, `app/api/health/route.ts`, `lib/supabase/public-paths.ts`, `lib/queue/qstash-client.ts`, `lib/{ghl,calendly}/sync-pipeline.ts`, `lib/fathom/sync.ts`, `lib/marketing/sync-content-metrics.ts`, `lib/super-admin/{queries,estado-de-corridas}.ts`, `components/super-admin/infrastructure-page.tsx`, `supabase/migrations/20261007120000_corridas_de_procesos.sql`, `supabase/ci/tests/90_corridas_de_procesos.sql`, `.github/workflows/produccion-al-dia.yml`, `.github/scripts/verificar-produccion.sh`
+
+**Qué se hizo** (parte de código de `[MONITOREO-Y-ALERTAS]`):
+- **`GET /api/health`**, pública (ruta exacta en `isPublicPath`): lee una fila de `organizations` con la clave de servicio, lista `content-thumbnails` con límite 1 y comprueba las variables críticas (Supabase, `CRON_SECRET`, `ENCRYPTION_MASTER_KEY`). Responde `status` (`ok` | `degradado` | `caido`), los tres chequeos como booleanos, `version.commit` (7 caracteres de `VERCEL_GIT_COMMIT_SHA`), `version.entorno` (`VERCEL_ENV`) y la hora. 200 si la base responde, 503 si no. Cada chequeo con 3 s de plazo (`conPlazo`, aborta la consulta), en paralelo; `Cache-Control: no-store` (también CDN). Barata: cada instancia reusa el resultado 10 s y comparte la medición en curso (50 pedidos seguidos contra `next start`: una sola consulta a la base).
+- **Registro de corridas:** tabla `corridas_de_procesos` (proceso, inicio, fin, estado `en_curso`/`ok`/`fallo`/`parcial`, orgs procesadas y fallidas, `organizaciones_fallidas uuid[]`, error saneado de hasta 500 caracteres, checks de coherencia, índice `(proceso, inicio desc)`, RLS sin políticas: sólo el service role). `conMonitorDeCron` envuelve el handler con `conRegistroDeCorrida`: abre la fila al empezar, corre el cron dentro de un `AsyncLocalStorage` y la cierra con `fallo` (lanzó o 5xx, el mismo criterio que el monitor de Sentry), `parcial` (alguna org falló) u `ok`. Las orgs se anotan sin tocar las 19 rutas: `reportarFalla` con `organizationId` (fallida), `publishCronFanout` (publicada o no) y las syncs de GHL, Calendly, Fathom y métricas de contenido (la que terminó bien). El mensaje de error se guarda sin query de URLs, emails, tokens, JWT ni claves, cortado a 300 caracteres; un 5xx guarda sólo "El proceso respondió con estado N", sin leer el cuerpo. Cada escritura con 2 s de plazo; una falla o una base colgada sólo deja un `console.error` y el cron sigue igual. Cada cierre borra las corridas de ese proceso con más de 30 días.
+- **Calendly:** la falla inesperada de una org (`syncCalendlyOrganizationSafe`, catch final) no iba a Sentry; ahora pasa por `reportarFalla` y queda como fallida en la corrida. Métricas de contenido en serie: la org que falla completa queda anotada.
+- **Super-admin → Infraestructura:** "Estado de la plataforma" con el mismo chequeo que `/api/health` (commit y entorno, base, Storage, variables, Resend) y "Procesos programados" con la última corrida de cada cron (estado, hora en Argentina, horario de `vercel.json`, orgs procesadas, nombres de las orgs fallidas, `Sin cierre` si sigue en curso pasados 15 min). Se sacaron los estados escritos a mano (Calendly, ManyChat, Instagram, YouTube y Storage siempre "Configurado ✓" o fijos) y el bloque de hosting con `otc-plaform.vercel.app`. Si la tabla no se puede leer, la página lo dice.
+- **Workflow `produccion-al-dia.yml`** (archivo propio; `ci.yml` no se tocó): en cada push a `main`, todos los días a las 12:17 UTC y a mano, espera hasta 20 min a que `/api/health` de producción devuelva el commit de `main` (o uno posterior, con la historia de git). Si no, falla con "Producción no está al día: …" y qué revisar; GitHub manda el mail. Con el secreto opcional `DISCORD_WEBHOOK_ALERTAS` también avisa en Discord. Sin tokens de Vercel. A mano acepta `sha_esperado` y `plazo_segundos` (validados, pasados por variables de entorno) para probar el aviso sin tocar producción.
+- **Sentry en bot y worker** (punto 6 de la historia): verificado que `apps/discord-bot` y `apps/reel-worker` ya tienen `@sentry/node` desde SCRUM-84/501; no se agregó nada. Se corrigió la frase desactualizada de `[MONITOREO-Y-ALERTAS]` ("no tienen Sentry") y la fila de Sentry de `incidentes.md`; falta cargar su `SENTRY_DSN` (`[OBS-SIN-ALERTAS]`).
+- Tests: `/api/health` (8: ok, degradado por Storage y por variable, 503 con base caída y colgada, sin caché, nada sensible en la respuesta, una medición para muchos pedidos), salud (16), registro de corridas (21, incluido `conMonitorDeCron` contra un cliente de Supabase simulado: fila en `en_curso` durante el cron, cierre `parcial`, retención, tabla inexistente, base colgada), fan-out (2), vista y carga de corridas (7), página de Infraestructura (5), rutas públicas (+3). Test de RLS `90_corridas_de_procesos.sql`. Control negativo: 13 mutaciones del código, 2 de la migración y 1 del script del workflow; todas hacen fallar su test.
+- Docs: `alertas.md` (salud, monitor externo paso a paso, producción desactualizada, registro de corridas), `incidentes.md` (dónde mirar, cómo se detecta, §C con la página, §J nuevo "Producción no tiene el último merge"), `jobs-webhooks-y-colas.md`, `base-de-datos.md` (tabla nueva; 191 migraciones, decía 175), `testing.md` (200 archivos, ~2.001 casos, 2.314 ejecutados; 10 tests de RLS; 191 migraciones), `entorno-y-deploy.md`, `plataforma.md`, `FUNCIONAL.md` (F-PLA-27), `verificacion-manual.md` (§ Salud y producción al día).
+
+**Por qué / finalidad:** del 3 al 5 de octubre Vercel estuvo desconectado del repo y producción no se actualizó 36 horas sin que nadie se enterara; el CI daba verde. No había endpoint de salud, ni registro de qué cron corrió y qué orgs fallaron, y la página de Infraestructura decía "ok" siempre.
+
+**Decisiones de diseño relevantes:**
+- Registro en el punto común (`conMonitorDeCron`) en vez de tocar las 19 rutas; las orgs se juntan con `AsyncLocalStorage`, así `reportarFalla` y `publishCronFanout`, que ya están en el camino de cada org, alimentan el registro. La tabla queda lista para `correrPorOrganizacion()` (ADR-015): `id` para la futura tabla por org con `corrida_id`, y el lock por proceso se suma en esa fase.
+- Fila abierta al empezar (no sólo al terminar): una corrida que Vercel corta a los 60 s queda en `en_curso` y la página la marca "Sin cierre". Si la apertura falla, el cierre inserta la fila entera.
+- RLS sólo service role, sin lectura para el super admin por la API: la página lee con el cliente admin después de `requireSuperAdmin()`, como el resto del panel.
+- Salud barata con caché en memoria por instancia y medición compartida, en vez de un rate limit en la base (que también consultaría la base en cada pedido). El chequeo de la base usa la clave de servicio para detectar también una clave rotada o borrada.
+- Columnas de orgs en null cuando el cron no informa orgs (no 0): distingue "no se sabe" de "ninguna".
+- El workflow da por bueno un commit posterior al esperado y cancela la espera de un merge anterior (`concurrency`), para no avisar de más con merges seguidos.
+
+**Riesgos / deuda técnica pendiente:**
+- `[MONITOREO-Y-ALERTAS]` sigue abierto sólo por lo que no es código: aplicar la migración en producción (`limitless-auditoria/sql-produccion/scrum-85/`), crear la cuenta del monitor externo y, opcional, el secreto de Discord; prueba en `verificacion-manual.md` § Salud y producción al día. Sin la migración los crons corren igual y la página avisa que no puede leer el registro.
+- Crons que todavía no informan orgs (Typeform, Google Forms, Instagram, anuncios, Mercado Pago, `daily-signals`, limpieza de reels, closers de Calendly, procesamiento de Fathom y los modos en serie de los crons de IA): registran estado pero no orgs hasta pasar a `correrPorOrganizacion()` (`[AUD-SALUD-3]`, actualizado).
+- El workflow avisaría de más si Vercel empezara a saltear builds a propósito (Ignored Build Step); hoy no hay ninguno en el repo.
+- Las pruebas de SQL corrieron en Postgres 16.2 local; el CI y producción usan 17.
+
+### 2026-10-07 · El CI compila la app y revisa el reel-worker, el bot y el backlog (SCRUM-261)
+
+**Rama:** `fix/SCRUM-261-ci-build-y-worker`
+**Commit(s):** `91026fc9` (typecheck y lint del reel-worker y del bot), `b31e417f` (setup de Playwright), `4430a2a9` (workflow), `267b5b1f` (spec del holding) y este (docs).
+**Módulo(s) afectado(s):** CI e infraestructura. `.github/workflows/ci.yml`, `apps/reel-worker/{package.json,eslint.config.mjs,src/processor.ts}`, `apps/discord-bot/{package.json,eslint.config.mjs}`, `pnpm-lock.yaml`, `apps/web/e2e/{auth.setup.ts,holding.spec.ts}`, `docs/operacion/{testing.md,entorno-y-deploy.md}`, ADR-006.
+
+**Qué se hizo** (cierra `[AUD-SALUD-5 / CI-COBERTURA]`):
+- Job `web-build`: `next build` de `apps/web` en paralelo con los demás, con caché de pnpm y de `apps/web/.next/cache` (clave por lockfile y por el código de web y de `packages/*/src`), y sólo variables públicas ficticias (`NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL` con dominio `.invalid`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`). No usa ni pide secretos; sin `SENTRY_AUTH_TOKEN` no sube source maps.
+- `apps/reel-worker` suma `typecheck` y `lint`; `apps/discord-bot` ya tenía `typecheck` (y ya corría en CI) y suma `lint`. Los dos usan la base de ESLint de `packages/config` con `--max-warnings=0`. Turbo los orquesta, así que el job `checks` los corre sin pasos nuevos. Se sacó el único aviso que había (`Writable` sin uso en `processor.ts`).
+- Job `backlog`: Python 3.12 y `pendientes_a_jira.py --check` e `historias_a_jira.py --check`.
+- El workflow pasa a permisos de sólo lectura (`contents: read`) y cada job tiene `timeout-minutes`.
+- `e2e/auth.setup.ts` entra por `/login` (`paths.auth.login`) y verifica el pathname exacto. Iba a `/auth/login`, que no existe: llegaba al login sólo porque el middleware redirige a `/login` a quien no tiene sesión. El `beforeEach` de `holding.spec.ts` tenía la misma ruta y también pasa a `paths.auth.login`; se sacó un locator sin uso que buscaba un `data-testid` inexistente.
+- Docs: `testing.md` (qué corre cada job, cómo correr lo mismo en local, tiempos y por qué los e2e esperan a staging) y `entorno-y-deploy.md` (checks que conviene exigir en la branch protection de `main`); ADR-006 ya no dice que el CI no revisa el worker.
+
+**Por qué / finalidad:** un cambio que rompía `next build` (por ejemplo un import de servidor en un componente cliente) pasaba `tsc` y lint y recién fallaba en Vercel, y un cambio del reel-worker que no compilaba no lo veía nadie hasta el deploy manual en Fly.
+
+**Verificación:** suite completa (194 archivos, 2251 tests), typecheck de todo el monorepo (web, ui, types, reel-worker y bot), lint, checks del backlog y `next build` local con las mismas variables que el CI. En GitHub, con ramas temporales (`tmp/ci-prueba-scrum-261-*`, ya borradas junto con sus cachés): la rama de la tarea pasa los cuatro jobs; un import de `next/headers` en un componente cliente pasa `checks` y falla `web-build` ("You're importing a component that needs next/headers"); un error de tipos en `apps/reel-worker/src/processor.ts` falla `checks` en `@ai-coo/reel-worker#typecheck` y deja pasar `web-build`. Un error en `org-path.ts` del worker falla los dos, porque web lo importa en un test y `next build` revisa esos tipos. Con el setup de Playwright contra `next start` y un Supabase falso, el login se encuentra por `/login`, se completa el formulario y corta recién al esperar la redirección (no hay cuenta real).
+
+**Tiempos de CI:** antes, 1 min 48 s en total (`checks` 1 min 47 s). Ahora, con los cuatro jobs en paralelo, el total es el de `web-build`: 4 min 8 s con la caché de `.next` vacía y 2 min 56 s con caché; `checks` tarda 1 min 55 s a 2 min 1 s, `migrations` alrededor de 30 s y `backlog` menos de 10 s.
+
+**Decisiones de diseño relevantes:**
+- La config de ESLint del worker y del bot importa la base por ruta relativa y no como dependencia `workspace:*`: las dos imágenes de Docker se arman con `npm` fuera del monorepo y `npm` no entiende ese protocolo. `eslint` sí va como dependencia de desarrollo de cada app (el `npm install` del Dockerfile del bot lo instala en la etapa de build, no en la imagen final).
+- `next build` corre el mismo comando que Vercel (con su lint y su chequeo de tipos) para que lo que pasa en CI pase en Vercel, aunque repita trabajo de `checks`. En paralelo no suma al total.
+- Los e2e no corren en CI todavía: necesitan staging con cuentas sembradas (propuesta de arquitectura, ADR-016). Siguen en `[T-INFRA-E2E-CI]`.
+- La branch protection no se puede configurar desde el repo: queda escrita en `entorno-y-deploy.md` para que la configure un admin.
+
+**Riesgos / deuda técnica pendiente:** si un admin no configura los checks obligatorios, un PR en rojo se puede mergear igual. Los e2e siguen sin correr (`[T-INFRA-E2E-CI]`).
 
 ### 2026-10-07 — "¿Olvidaste tu contraseña?" manda el mail de recuperación (SCRUM-16)
 

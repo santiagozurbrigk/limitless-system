@@ -1234,6 +1234,64 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 5. Bot de Discord y reel-worker: forzar un error (por ejemplo, un job de reel con un archivo inexistente). Aparece en Sentry con `app=reel-worker` / `app=discord-bot`.
 6. Anotar fecha, quién recibió el mail y cuánto tardó.
 
+## Salud y producción al día (SCRUM-85)
+
+**Prerrequisitos:** el PR de SCRUM-85 mergeado y desplegado; la migración `20261007120000_corridas_de_procesos`
+aplicada en producción (`limitless-auditoria/sql-produccion/scrum-85/`, con `02_verificacion.sql` en `todo_ok`).
+
+1. ⭐ `curl -i https://www.optimizatucontrol.com/api/health` sin sesión: 200, `"status":"ok"`, los tres chequeos en
+   `true`, `version.commit` igual a los 7 primeros caracteres del último commit de `main`, `version.entorno` =
+   `production` y `Cache-Control: no-store`. Nada de mensajes, tablas ni variables.
+2. ⭐ Monitor externo: crear la cuenta y el monitor con los pasos de [`alertas.md`](./alertas.md) § Monitor externo
+   (UptimeRobot o Better Stack, aviso por mail o Discord). Forzar una alerta como dice el paso 5 y anotar quién la
+   recibió y cuánto tardó. Anotar en este bloque qué servicio y qué cuenta quedaron.
+3. ⭐ Workflow "Producción al día": la corrida del push del merge termina en verde (Actions). Para ver la falla sin
+   tocar producción: Run workflow con `sha_esperado` = un commit que no esté desplegado y `plazo_segundos` = `60`;
+   tiene que fallar con "Producción no está al día" y tiene que llegar el mail de GitHub.
+4. Discord (opcional): crear el webhook del canal del equipo, guardarlo como secreto `DISCORD_WEBHOOK_ALERTAS` en
+   GitHub y repetir el paso 3: el aviso llega al canal.
+5. 🔒 Super-admin → Infraestructura: "Estado de la plataforma" con el commit desplegado y los chequeos en verde;
+   "Procesos programados" con los 19 crons, y después de la primera hora, `OK` o `Parcial` con hora y orgs en los
+   horarios (los 6 crons con fan-out figuran como `Encolado: N jobs encolados`, nunca como `OK`). Ninguno tiene que quedar `Sin cierre` de forma repetida (si pasa, es el corte de 60 s, `[CRONS-CORTE-60S]`).
+6. En Supabase → SQL Editor, la consulta de [`alertas.md`](./alertas.md) § Registro de corridas: las filas coinciden
+   con lo que muestra la página; a los 31 días, ninguna fila tiene más de 30 días.
+
+
+## Tablero: errores como valor y crear sprint atómico (SCRUM-503)
+
+**Prerrequisitos:** la migración `20261008120000_crear_sprint_atomico` aplicada en producción **antes** del merge
+(`limitless-auditoria/sql-produccion/scrum-503/`: `00_precheck.sql`, `01_migracion.sql` y `02_verificacion.sql` en
+`todo_ok`); el PR de SCRUM-503 mergeado y desplegado. Usar una org de prueba o una donde se pueda crear un sprint.
+
+1. ⭐ Prueba de humo de `crear_sprint`: Tablero → "Nuevo sprint" con nombre y fechas. → Toast "Sprint creado ✓", el
+   sprint nuevo aparece activo y el anterior pasa a completado. Es la primera vez que la llamada
+   `.rpc("crear_sprint").single()` corre contra PostgREST real: si aparece "Ocurrió un error inesperado", revisar en
+   Sentry el evento con `server_action = [createSprint]` (un `PGRST202` es la migración sin aplicar).
+2. En Supabase → SQL Editor: `select organization_id, count(*) from public.sprints where status = 'active' group by 1
+   having count(*) > 1;` no devuelve filas.
+3. Mover una tarea a "Hecho", cargar 30 minutos y confirmar. → La tarea queda hecha con 30 minutos.
+4. Con la red cortada (DevTools → Offline), mover una tarea entre columnas. → Toast "No se pudo mover la tarea" con
+   "Ocurrió un error inesperado. Intentá de nuevo." y la tarjeta vuelve a su columna; nada del párrafo técnico de Next.
+
+## Rotar el secreto del worker de Trial Reels (SCRUM-51)
+
+Desde SCRUM-51 el secreto `WORKER_AUTH_SECRET` ya no viaja en la URL, pero el valor viejo quedó guardado en la consola de QStash y en logs viejos de Vercel y Fly. Hay que cambiarlo una vez.
+
+1. Generar un valor nuevo: `openssl rand -hex 32` (no pegarlo en chats ni tickets).
+2. Vercel → proyecto `otc-plaform` → Settings → Environment Variables → `WORKER_AUTH_SECRET` → reemplazar en Production (y Preview si está).
+3. Fly: `fly secrets set WORKER_AUTH_SECRET=<nuevo> --app otc-reel-worker` (reinicia el worker con el valor nuevo) y `fly deploy --config apps/reel-worker/fly.toml` para subir el código que ya no acepta `?workerSecret=`.
+4. Vercel → Deployments → el último de producción → **Redeploy** (para que tome la variable).
+5. Probar: generar Trial Reels de una pieza. Esperado: el trabajo pasa de "pendiente" a "listo"; en la consola de QStash la URL destino **no** tiene `?workerSecret=`; en `fly logs` aparece `auth via X-Worker-Secret header OK`.
+6. Las publicaciones de Trial Reels que ya estaban programadas con el valor viejo fallan con 401: se reintentan desde la pantalla.
+## Backup automático de producción (SCRUM-11)
+
+1. Cargar en GitHub (Settings → Secrets and variables → Actions) `SUPABASE_DB_URL` (Session pooler), `SUPABASE_SERVICE_ROLE_KEY` y `BACKUP_PASSPHRASE` (guardar también esta última en el gestor de claves).
+2. Actions → **Backup de producción** → Run workflow → `todo`.
+3. Esperado: los jobs `base` y `archivos` en verde; artifacts `base-…` (~20–30 MB) y `archivos-…` (~420 MB).
+4. Bajar `base-…`, descifrar con la clave y abrir `data.sql`: tiene que tener `COPY` de `public.organizations` y `auth.users`.
+5. Al día siguiente, ver que la corrida programada de las 06:23 UTC quedó en verde sola.
+6. Ensayo de restauración en un proyecto descartable: `docs/operacion/backups-y-restauracion.md` § Restaurar; anotar tiempos en § Ensayos.
+
 ## Recuperar la contraseña (SCRUM-16)
 
 **Prerrequisitos:** Resend configurado como SMTP de Supabase Auth (`entorno-y-deploy.md` § Mails de autenticación, pasos 1-6).
