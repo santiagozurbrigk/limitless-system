@@ -1294,7 +1294,9 @@ Desde SCRUM-51 el secreto `WORKER_AUTH_SECRET` ya no viaja en la URL, pero el va
 
 ## Recuperar la contraseña (SCRUM-16)
 
-**Prerrequisitos:** Resend configurado como SMTP de Supabase Auth (`entorno-y-deploy.md` § Mails de autenticación, pasos 1-6).
+**Prerrequisitos:** Resend configurado como SMTP de Supabase Auth (`entorno-y-deploy.md` § Mails de autenticación, pasos 1-6). Hecho el 2026-10-09.
+
+**Verificado el 2026-10-09 (Santiago, cuenta real):** pasos 1 a 3: el mail llegó desde `noreply@send.limit-less.llc` y la contraseña nueva quedó guardada. Quedan los pasos 4 a 7.
 
 1. `/login` → "¿Olvidaste tu contraseña?" → poner el mail de una cuenta real → aparece el mensaje neutro.
 2. Llega el mail desde `noreply@send.limit-less.llc` (revisar spam) con asunto "Recuperá tu contraseña de Limitless".
