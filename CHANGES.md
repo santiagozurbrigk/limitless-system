@@ -28,6 +28,20 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-09 — Trial Reels: el secreto del worker ya no viaja en la URL (SCRUM-51)
+
+**Rama:** `claude/scrum-51-secreto-worker`
+**Commit(s):** este
+**Módulo(s) afectado(s):** marketing / Trial Reels y colas — `app/marketing/content/reel-variation-actions.ts`, `lib/queue/verify-queue-request.ts`, `apps/reel-worker/src/index.ts`
+
+**Qué se hizo:** cierra `[TRIAL-SECRET-EN-URL]`. (1) `createTrialReelsJobAction`, `publishVariationsAction` y `retryVariationAction` publican en QStash con la URL limpia; el secreto va sólo en los headers `X-Worker-Secret`/`Authorization`. El log `"[TrialReels] QStash published OK"` ya no imprime la URL con secreto. (2) `verifyQueueRequest` (web) y `verifySignature` (worker de Fly) dejan de aceptar `?workerSecret=`. (3) El worker compara en tiempo constante (`safeEqual` con sha256 + `timingSafeEqual`, igual que la web) y, si falla, ya no loguea los 4 primeros caracteres del secreto esperado ni 20 del header recibido: sólo si cada header vino. 4 tests nuevos en `lib/queue/__tests__/verify-queue-request.test.ts`.
+
+**Por qué / finalidad:** QStash guarda la URL destino en su consola y los logs de Vercel/Fly la imprimían entera; con el secreto cualquiera podía encolar trabajos en el worker, que usa service role.
+
+**Decisiones de diseño relevantes:** los mensajes que ya estaban encolados (publicaciones con delay de horas) llevan el secreto también en headers, así que siguen pasando. El orden de deploy web/worker no importa.
+
+**Riesgos / deuda técnica pendiente:** falta **rotar `WORKER_AUTH_SECRET`** (el valor viejo quedó en la consola de QStash y en logs): mismo valor nuevo en Vercel y en Fly, y `fly deploy` del worker. Al rotar, las publicaciones de Trial Reels ya programadas con el secreto viejo fallan (se reintentan a mano). Paso a paso en `docs/operacion/verificacion-manual.md`. El worker sigue sin validar `organizationId` contra `reel_variation_jobs` (eso es SCRUM-92).
+
 ### 2026-10-09 — Discord: el aviso de "mensajes sin texto" ya no da falsa alarma
 
 **Rama:** `claude/discord-intent-falsa-alarma`

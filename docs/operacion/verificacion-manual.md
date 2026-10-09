@@ -1272,3 +1272,14 @@ aplicada en producción (`limitless-auditoria/sql-produccion/scrum-85/`, con `02
 3. Mover una tarea a "Hecho", cargar 30 minutos y confirmar. → La tarea queda hecha con 30 minutos.
 4. Con la red cortada (DevTools → Offline), mover una tarea entre columnas. → Toast "No se pudo mover la tarea" con
    "Ocurrió un error inesperado. Intentá de nuevo." y la tarjeta vuelve a su columna; nada del párrafo técnico de Next.
+
+## Rotar el secreto del worker de Trial Reels (SCRUM-51)
+
+Desde SCRUM-51 el secreto `WORKER_AUTH_SECRET` ya no viaja en la URL, pero el valor viejo quedó guardado en la consola de QStash y en logs viejos de Vercel y Fly. Hay que cambiarlo una vez.
+
+1. Generar un valor nuevo: `openssl rand -hex 32` (no pegarlo en chats ni tickets).
+2. Vercel → proyecto `otc-plaform` → Settings → Environment Variables → `WORKER_AUTH_SECRET` → reemplazar en Production (y Preview si está).
+3. Fly: `fly secrets set WORKER_AUTH_SECRET=<nuevo> --app otc-reel-worker` (reinicia el worker con el valor nuevo) y `fly deploy --config apps/reel-worker/fly.toml` para subir el código que ya no acepta `?workerSecret=`.
+4. Vercel → Deployments → el último de producción → **Redeploy** (para que tome la variable).
+5. Probar: generar Trial Reels de una pieza. Esperado: el trabajo pasa de "pendiente" a "listo"; en la consola de QStash la URL destino **no** tiene `?workerSecret=`; en `fly logs` aparece `auth via X-Worker-Secret header OK`.
+6. Las publicaciones de Trial Reels que ya estaban programadas con el valor viejo fallan con 401: se reintentan desde la pantalla.

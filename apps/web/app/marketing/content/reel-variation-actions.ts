@@ -146,15 +146,13 @@ export async function createTrialReelsJobAction(
       const workerBaseUrl = getReelWorkerUrl();
       const workerAuthSecret = process.env.WORKER_AUTH_SECRET?.trim();
 
-      // Incluir el secret en la URL como query param — QStash nunca stripea query params,
-      // a diferencia del header Authorization que algunos proxies pueden bloquear.
-      const workerUrl = workerAuthSecret
-        ? `${workerBaseUrl}?workerSecret=${encodeURIComponent(workerAuthSecret)}`
-        : workerBaseUrl;
+      // ⭐ El secreto viaja sólo en headers, nunca en la URL: QStash guarda la
+      // URL destino en su consola y los logs la imprimen entera (SCRUM-51).
+      const workerUrl = workerBaseUrl;
 
       console.log("[TrialReels] publishing to QStash", {
         jobId,
-        workerUrl: workerBaseUrl, // No loggear el secret completo en la URL
+        workerUrl,
         hasWorkerAuthSecret: Boolean(workerAuthSecret),
       });
       try {
@@ -388,10 +386,6 @@ export async function publishVariationsAction(
     const publishUrl = getReelVariationPublishUrl();
     const workerAuthSecret = process.env.WORKER_AUTH_SECRET?.trim();
 
-    // URL con secret en query param (QStash nunca stripea query params)
-    const urlWithSecret = workerAuthSecret
-      ? `${publishUrl}?workerSecret=${encodeURIComponent(workerAuthSecret)}`
-      : publishUrl;
 
     let scheduled = 0;
     let position = 0; // posición entre las variantes incluidas (para el delay)
@@ -406,7 +400,7 @@ export async function publishVariationsAction(
       if (qstashClient) {
         try {
           const publishResult = await qstashClient.publishJSON({
-            url: urlWithSecret,
+            url: publishUrl,
             body: { jobId, variationIndex: i, organizationId },
             headers: workerAuthSecret
               ? {
@@ -590,13 +584,10 @@ export async function retryVariationAction(
     const qstashClient = getQStashClient();
     const publishUrl = getReelVariationPublishUrl();
     const workerAuthSecret = process.env.WORKER_AUTH_SECRET?.trim();
-    const urlWithSecret = workerAuthSecret
-      ? `${publishUrl}?workerSecret=${encodeURIComponent(workerAuthSecret)}`
-      : publishUrl;
 
     if (qstashClient) {
       await qstashClient.publishJSON({
-        url: urlWithSecret,
+        url: publishUrl,
         body: { jobId, variationIndex, organizationId },
         headers: workerAuthSecret
           ? {
