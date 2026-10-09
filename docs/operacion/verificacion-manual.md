@@ -1272,3 +1272,12 @@ aplicada en producción (`limitless-auditoria/sql-produccion/scrum-85/`, con `02
 3. Mover una tarea a "Hecho", cargar 30 minutos y confirmar. → La tarea queda hecha con 30 minutos.
 4. Con la red cortada (DevTools → Offline), mover una tarea entre columnas. → Toast "No se pudo mover la tarea" con
    "Ocurrió un error inesperado. Intentá de nuevo." y la tarjeta vuelve a su columna; nada del párrafo técnico de Next.
+
+## Backup automático de producción (SCRUM-11)
+
+1. Cargar en GitHub (Settings → Secrets and variables → Actions) `SUPABASE_DB_URL` (Session pooler), `SUPABASE_SERVICE_ROLE_KEY` y `BACKUP_PASSPHRASE` (guardar también esta última en el gestor de claves).
+2. Actions → **Backup de producción** → Run workflow → `todo`.
+3. Esperado: los jobs `base` y `archivos` en verde; artifacts `base-…` (~20–30 MB) y `archivos-…` (~420 MB).
+4. Bajar `base-…`, descifrar con la clave y abrir `data.sql`: tiene que tener `COPY` de `public.organizations` y `auth.users`.
+5. Al día siguiente, ver que la corrida programada de las 06:23 UTC quedó en verde sola.
+6. Ensayo de restauración en un proyecto descartable: `docs/operacion/backups-y-restauracion.md` § Restaurar; anotar tiempos en § Ensayos.

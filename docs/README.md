@@ -74,6 +74,7 @@ integraciones, reglas de negocio no obvias, limitaciones, tests y archivos clave
 | [`operacion/discord-bot-deploy.md`](./operacion/discord-bot-deploy.md) | Runbook del bot de Discord en Railway |
 | [`operacion/incidentes.md`](./operacion/incidentes.md) | Qué hacer cuando algo se rompe en producción (runbook de incidentes) |
 | [`operacion/rotacion-master-key.md`](./operacion/rotacion-master-key.md) | Cambiar la clave maestra de cifrado de las integraciones sin cortar el servicio |
+| [`operacion/backups-y-restauracion.md`](./operacion/backups-y-restauracion.md) | Backups automáticos de la base y los archivos de producción, y cómo restaurarlos |
 | [`operacion/alta-super-admin.md`](./operacion/alta-super-admin.md) | Dar de alta y de baja a un super admin sin abrir el panel interno a un tercero |
 
 ## Diseño
