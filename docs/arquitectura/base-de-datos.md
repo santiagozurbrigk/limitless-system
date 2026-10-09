@@ -34,7 +34,7 @@ Matices que un dev tiene que saber:
    - SQL Editor: no registra nada; insertar la fila a mano.
 3. En la misma migración: RLS, policies y grants. En Supabase las tablas y funciones nuevas nacen con GRANT explícito a `anon`/`authenticated`; `revoke ... from public` no alcanza, hay que revocar a cada rol (comentario en `20260922110000_rpcs_y_policies_entre_organizaciones.sql`).
 4. Una migración ya aplicada **no se edita**: cualquier corrección es un archivo nuevo.
-5. Si la migración borra o transforma datos (`drop`, `delete`, `update` masivo, cambio de tipo), antes de aplicarla hacer un dump de las tablas afectadas (`supabase db dump --data-only -t <tabla>`), guardarlo fuera del repo y escribir en el comentario del archivo cómo se revierte. Preferir expand/contract: primero agregar, después (en otro deploy) borrar, para que un rollback de Vercel siga funcionando.
+5. Si la migración borra o transforma datos (`drop`, `delete`, `update` masivo, cambio de tipo), antes de aplicarla hacer un dump de las tablas afectadas (`supabase db dump --data-only -t <tabla>`), guardarlo fuera del repo y escribir en el comentario del archivo cómo se revierte. Alternativa: correr a mano el workflow **Backup de producción** (`base`) y esperar el verde (`docs/operacion/backups-y-restauracion.md`). Preferir expand/contract: primero agregar, después (en otro deploy) borrar, para que un rollback de Vercel siga funcionando.
 
 ### Chequeo en CI
 

@@ -125,6 +125,13 @@ Opcional: `SENTRY_DSN` (el mismo de Vercel): con ella cada `logError` va a Sentr
 4. La rama queda consumida; la próxima tarea arranca de `main` otra vez.
 5. El CI corre en push a `main`, `claude/**`, `feat/**`, `fix/**`, `chore/**`, `Claude-*` y en todo PR (ver `docs/operacion/testing.md`).
 
+## Secretos de GitHub Actions
+
+| Secreto | Lo usa |
+|---|---|
+| `DISCORD_WEBHOOK_ALERTAS` | `produccion-al-dia.yml` y `backup-produccion.yml` (opcional: avisos en Discord) |
+| `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BACKUP_PASSPHRASE` | `backup-produccion.yml` (SCRUM-11). Cómo cargarlos: [`backups-y-restauracion.md`](./backups-y-restauracion.md) |
+
 ## Branch protection de `main`
 
 No se puede configurar desde el repo y no es verificable desde el código: la configura un admin del repo en GitHub (Settings → Branches, o un ruleset para `main`). Lo que conviene exigir:
