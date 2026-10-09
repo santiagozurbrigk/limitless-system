@@ -96,4 +96,4 @@ Candidatas evaluadas y **no** escritas como ADR propio (y por qué) están al fi
 | Cifrado de secretos en la app (AES-256-GCM) | Mencionado en ADR-004 | Sólo se aplicó a algunos proveedores; hoy es deuda (`[TOKENS-TEXTO-PLANO]`), no una regla general sostenida por el código |
 | Eliminar el wizard de onboarding del founder (2026-08-11) | Contexto de ADR-012 | Duró 20 días y no quedó escrito el motivo; se registra como antecedente de la decisión vigente |
 | Plantillas de embudo en código y no en la base | Dentro de ADR-009 | Es parte de la misma decisión de diseño |
-| Signup público de founders | No es ADR | No hay registro de que se haya decidido; está abierto como decisión de negocio en `[SIGNUP-PUBLICO]` |
+| Signup público de founders | No es ADR | Cerrado el 2026-10-09 (SCRUM-23): alta sólo por invitación; ver `auth-organizaciones-y-permisos.md` § Alta de cuentas |

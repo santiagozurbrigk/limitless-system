@@ -80,7 +80,7 @@ Además, el buscador ⌘K ya no lista las pantallas que el menú esconde (Admini
 Overview de Marketing): se arma desde el mismo config filtrando `hidden`.
 
 No se escondió (decisión del 2026-10-02): Fathom por miembro (se arregló, SCRUM-37), "Crear cuenta" en el login
-(SCRUM-23), Métricas de Ventas, Llamadas, formularios, Discord.
+(SCRUM-23; después se cerró el alta pública, 2026-10-09), Métricas de Ventas, Llamadas, formularios, Discord.
 
 ## Plataforma
 
@@ -91,7 +91,7 @@ Doc técnico: [`docs/areas/plataforma.md`](./areas/plataforma.md) · permisos y 
 | ID | Funcionalidad | Estado | Pendientes que la afectan | Evidencia | Octubre |
 |---|---|---|---|---|---|
 | F-PLA-01 | El usuario puede entrar con email y contraseña; tras 5 intentos fallidos ese email queda bloqueado 15 minutos | Con fallas | `LOGIN-RATE-LIMIT`, `TESTS-AUTH` | [`arquitectura/auth-organizaciones-y-permisos.md` § Cómo fluye una request](./arquitectura/auth-organizaciones-y-permisos.md#cómo-fluye-una-request) · `app/login/page.tsx` | |
-| F-PLA-02 | Cualquiera puede crearse una cuenta founder (con su propia organización) desde "Crear cuenta" en el login | Con fallas | `SIGNUP-PUBLICO` | [`arquitectura/auth-organizaciones-y-permisos.md` § Alta de cuentas](./arquitectura/auth-organizaciones-y-permisos.md#alta-de-cuentas) · `components/auth/supabase-login-form.tsx` | |
+| F-PLA-02 | Las cuentas de founder sólo se crean por invitación (super admin, holding o equipo): el login no tiene "Crear cuenta" y Supabase rechaza altas por fuera (decisión del 2026-10-09, SCRUM-23) | Funciona | — | [`arquitectura/auth-organizaciones-y-permisos.md` § Alta de cuentas](./arquitectura/auth-organizaciones-y-permisos.md#alta-de-cuentas) · `components/auth/supabase-login-form.tsx` | |
 | F-PLA-03 | El usuario puede recuperar una contraseña olvidada: pide el mail en `/auth/forgot-password` (mensaje neutro) y elige una nueva desde el link | Funciona | — | [`areas/plataforma.md` § Fuera de plataforma](./areas/plataforma.md#fuera-de-plataforma) · `app/auth/forgot-password/page.tsx` | |
 | F-PLA-04 | Una cuenta creada por Limitless, por un holding o por el founder al sumar a alguien de su equipo entra con contraseña temporal, que vence a las 24 h, y está obligada a cambiarla en el primer ingreso | Funciona | — | [`arquitectura/auth-organizaciones-y-permisos.md` § Alta de cuentas](./arquitectura/auth-organizaciones-y-permisos.md#alta-de-cuentas) · `app/auth/force-password-change/page.tsx` | |
 | F-PLA-05 | El founder puede sumar a una persona a su equipo con un rol: el sistema crea la cuenta con contraseña temporal y le muestra las credenciales para que se las pase (no se manda mail; el flujo `/invite?token=` no tiene productor y, desde SCRUM-495, aceptar una invitación no crea cuentas: pide iniciar sesión con la cuenta de ese email) | Funciona | `INVITE-ROL-SIN-VALIDAR`, `ROL-MEMBER-SIN-CATALOGO` | [`arquitectura/auth-organizaciones-y-permisos.md` § Alta de cuentas](./arquitectura/auth-organizaciones-y-permisos.md#alta-de-cuentas) · `app/invite/page.tsx` | |

@@ -61,16 +61,6 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Tareas técnicas:** `[LOGIN-RATE-LIMIT]`, EQUIPO-DESACTIVAR-NO-BLOQUEA (resuelta en SCRUM-8), AUTH-CALLBACK-NEXT (resuelta en SCRUM-2), `[TESTS-AUTH]`
 - **Para confirmar:** —
 
-### [H-PLA-02] Decidir quién puede crear una cuenta de founder
-- **Funcionalidad:** F-PLA-02 · Con fallas
-- **Historia:** Como super admin de Limitless, quiero que sólo se creen cuentas de founder por el camino que decidamos, para no pagar uso de IA de cuentas que nadie dio de alta ni cobra.
-- **Criterios de aceptación:**
-  - La decisión de si el alta de founders es pública o sólo por Limitless (o por la prueba gratis) quedó tomada y escrita en la documentación.
-  - Si el alta es cerrada: la pantalla de ingreso ya no muestra "Crear cuenta" y cualquier intento de crear una cuenta por fuera de Limitless es rechazado.
-  - Si el alta sigue abierta: el intento repetido desde un mismo lugar queda frenado y el mensaje al registrarse no revela si el email ya tiene cuenta.
-- **Tareas técnicas:** `[SIGNUP-PUBLICO]`
-- **Para confirmar:** Agustín: ¿el alta de founders es pública o sólo por Limitless / prueba gratis?
-
 ### [H-PLA-06] Que los roles del equipo realmente limiten lo que cada uno puede cambiar
 - **Funcionalidad:** F-PLA-06 · Con fallas
 - **Historia:** Como founder, quiero que los roles que armo por módulo ("sin acceso", "ver", "completo") limiten también lo que cada persona puede modificar, para confiarle la cuenta a mi equipo sin que nadie se dé más permisos de los que le di.

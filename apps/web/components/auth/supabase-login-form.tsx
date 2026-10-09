@@ -5,11 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button, GlassPanel, Input, Label, Text } from "@ai-coo/ui";
 import { AppLogo } from "@/components/brand";
-import {
-  signInAction,
-  signUpAction,
-  type AuthActionState,
-} from "@/app/auth/actions";
+import { signInAction, type AuthActionState } from "@/app/auth/actions";
 import {
   TEMP_PASSWORD_EXPIRED_MESSAGE,
   TEMP_PASSWORD_EXPIRED_QUERY,
@@ -29,10 +25,8 @@ const initialState: AuthActionState = {};
 
 export function SupabaseLoginForm() {
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [callbackError, setCallbackError] = useState<string | null>(null);
-  const action = mode === "login" ? signInAction : signUpAction;
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const [state, formAction, pending] = useActionState(signInAction, initialState);
 
   useEffect(() => {
     if (searchParams.get("error") === LINK_RECUPERACION_VENCIDO_QUERY) {
@@ -59,32 +53,19 @@ export function SupabaseLoginForm() {
         <AppLogo display="login" href={undefined} className="pointer-events-none" />
         <div className="space-y-1">
           <h1 className="text-xl font-semibold tracking-tight">
-            {mode === "login" ? "Bienvenido de nuevo" : "Crea tu cuenta"}
+            Bienvenido de nuevo
           </h1>
           <Text muted className="text-sm">
-            {mode === "login"
-              ? "Inicia sesión en tu espacio de trabajo"
-              : "Registra tu organización en AI COO"}
+            Inicia sesión en tu espacio de trabajo
           </Text>
         </div>
       </div>
 
       <form action={formAction} className="space-y-4">
         {/* Volver a la invitación de equipo después de entrar (lo valida signInAction). */}
-        {mode === "login" && searchParams.get("next") ? (
+        {searchParams.get("next") ? (
           <input type="hidden" name="next" value={searchParams.get("next") ?? ""} />
         ) : null}
-        {mode === "signup" && (
-          <div className="space-y-2">
-            <Label htmlFor="fullName">Nombre</Label>
-            <Input
-              id="fullName"
-              name="fullName"
-              autoComplete="name"
-              placeholder="Tu nombre"
-            />
-          </div>
-        )}
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input
@@ -102,9 +83,7 @@ export function SupabaseLoginForm() {
             id="password"
             name="password"
             type="password"
-            autoComplete={
-              mode === "login" ? "current-password" : "new-password"
-            }
+            autoComplete="current-password"
             placeholder="Mínimo 6 caracteres"
             minLength={6}
             required
@@ -123,38 +102,13 @@ export function SupabaseLoginForm() {
         )}
 
         <Button type="submit" className="w-full" disabled={pending}>
-          {pending
-            ? "Procesando…"
-            : mode === "login"
-              ? "Iniciar sesión"
-              : "Crear cuenta"}
+          {pending ? "Procesando…" : "Iniciar sesión"}
         </Button>
       </form>
 
+      {/* SCRUM-23: no hay alta pública; las cuentas se crean por invitación. */}
       <p className="mt-6 text-center text-xs text-muted-foreground">
-        {mode === "login" ? (
-          <>
-            ¿Primera vez?{" "}
-            <button
-              type="button"
-              className="text-primary hover:underline"
-              onClick={() => setMode("signup")}
-            >
-              Crear cuenta
-            </button>
-          </>
-        ) : (
-          <>
-            ¿Ya tienes cuenta?{" "}
-            <button
-              type="button"
-              className="text-primary hover:underline"
-              onClick={() => setMode("login")}
-            >
-              Iniciar sesión
-            </button>
-          </>
-        )}
+        ¿No tenés cuenta? El acceso es por invitación: pedíselo a quien administra tu equipo.
       </p>
 
       {!ESCONDIDO.olvideContrasena && (

@@ -64,7 +64,7 @@
   elegidas, lo que debilita el motivo de bloquear (`[ONBOARDING-GATE-DEFAULTS-PRESELECCIONADOS]`).
 - `loadOnboardingProgress` no validaba super admin por sí misma (`[SUPERADMIN-ONBOARDING-SIN-GUARD]`); resuelto el 2026-10-04 (SCRUM-111).
 - Nada probado con sesión real de navegador (`[ONBOARDING-VERIFICAR]`).
-- Cualquiera puede crearse una cuenta founder y pasar por el gate (`[SIGNUP-PUBLICO]`).
+- Hasta el 2026-10-09 cualquiera podía crearse una cuenta founder y pasar por el gate (`[SIGNUP-PUBLICO]`, cerrado en SCRUM-23).
 
 ## Evidencia
 

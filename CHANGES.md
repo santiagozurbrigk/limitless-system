@@ -28,6 +28,20 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-09 — El alta de cuentas es sólo por invitación (SCRUM-23)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** plataforma / auth — `components/auth/supabase-login-form.tsx`, `app/auth/actions.ts`; docs de auth, FUNCIONAL, historias, verificación manual, ADR README
+
+**Qué se hizo:** cierra `[SIGNUP-PUBLICO]` (decisión de Santiago del 2026-10-09). Se borró `signUpAction` y el toggle "Crear cuenta" del login, que ahora sólo inicia sesión y dice que el acceso es por invitación. "Allow new users to sign up" se apagó en Supabase Auth (`disable_signup: true`, verificado con `/auth/v1/settings`). Test nuevo `app/auth/__tests__/sin-alta-publica.test.ts`. F-PLA-02 pasa a "Funciona" y se borra su historia H-PLA-02.
+
+**Por qué / finalidad:** cualquiera podía crearse una org founder y usar la `ANTHROPIC_API_KEY` global sin tope ni cobro.
+
+**Decisiones de diseño relevantes:** las altas que siguen (super admin, holding, invitación de equipo) usan `auth.admin.createUser`, que funciona con el signup apagado. No hay login con OAuth en la app.
+
+**Riesgos / deuda técnica pendiente:** las invitaciones todavía entregan contraseña temporal (`[AUTH-ALTA-EMAIL-AJENO]`, parte B en SCRUM-499).
+
 ### 2026-10-09 — El sync de Calendly ya no se corta por tiempo; alertas de Sentry andando (SCRUM-84)
 
 **Rama:** `claude/great-thompson-n7ts63`

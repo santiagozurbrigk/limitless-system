@@ -127,7 +127,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 ### 7. Auth — callback, signup y rate limit 🔒
 
 1. ⚠️🔒 Abrir `/auth/callback?code=<válido>&next=.example.com` (o `next=@example.com`) tras un login OAuth/magic link. Resultado esperado: queda en la app. **Probable falla**: redirige a otro host (`[AUTH-CALLBACK-NEXT]`).
-2. 🔒 En `/login`, "Crear cuenta" con un email nuevo. Anotar si crea org founder y entra (`[SIGNUP-PUBLICO]`) y si Supabase exige confirmación por mail.
+2. `/login` no muestra "Crear cuenta" (SCRUM-23, 2026-10-09) y `GET https://nrzlylzbmsuowzhpdnjl.supabase.co/auth/v1/settings` (con la anon key) devuelve `disable_signup: true`.
 3. 🔒 Seis intentos fallidos con el email de otra persona. Resultado hoy: esa persona queda bloqueada 15 min (`[LOGIN-RATE-LIMIT]`).
 4. Contraseña temporal vencida (> 24 h). Resultado: login rechazado con `?error=temp_password_expired`.
 
@@ -1214,7 +1214,7 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 
 **Prerrequisitos:** una sesión de founder en producción.
 
-1. `/login` y `/superadmin/login`: no aparece "¿Olvidaste tu contraseña?"; "Crear cuenta" sigue.
+1. `/login` y `/superadmin/login`: "¿Olvidaste tu contraseña?" aparece desde SCRUM-16; "Crear cuenta" ya no (SCRUM-23).
 2. Ajustes: no hay pestaña Notificaciones; `/settings?tab=notificaciones` abre General.
 3. Ventas → Closing: no hay pestaña Equipo; `/sales/closing#equipo` muestra el calendario. En un turno con grabación, sólo el botón "Abrir en Fathom".
 4. Marketing: el menú entra por Contenido; `/marketing` y `/marketing/sales-connection` llevan a Contenido; el detalle de una pieza no tiene "Atribución de ventas"; Administrar no tiene "Nueva carpeta".
