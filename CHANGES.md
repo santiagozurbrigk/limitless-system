@@ -28,6 +28,20 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-09 — Recuperar la contraseña verificado en producción (SCRUM-16)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** docs — `docs/FUNCIONAL.md`, `docs/backlog/historias.md`, `docs/operacion/verificacion-manual.md`
+
+**Qué se hizo:** Resend quedó configurado como SMTP de Supabase Auth (remitente `noreply@send.limit-less.llc`, plantilla de Reset Password con `token_hash`) y en Vercel (`RESEND_API_KEY`, `RESEND_FROM_EMAIL`). Con el código de #123 en producción, Santiago pidió la recuperación con su cuenta: el mail llegó y la contraseña nueva quedó guardada. F-PLA-03 pasa a "Funciona".
+
+**Por qué / finalidad:** cierra SCRUM-16.
+
+**Decisiones de diseño relevantes:** ninguna nueva.
+
+**Riesgos / deuda técnica pendiente:** quedan por probar a mano el link ya usado, el mail sin cuenta y el límite de intentos (`verificacion-manual.md` § Recuperar la contraseña), y prender "Confirm email" en Supabase (paso 9 de `entorno-y-deploy.md`).
+
 ### 2026-10-09 — Backup automático de la base y los archivos de producción (SCRUM-11, parcial)
 
 **Rama:** `claude/scrum-11-backups`

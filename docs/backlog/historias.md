@@ -72,13 +72,13 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Para confirmar:** Agustín: ¿el alta de founders es pública o sólo por Limitless / prueba gratis?
 
 ### [H-PLA-03] Recuperar una contraseña olvidada
-- **Funcionalidad:** F-PLA-03 · Sin verificar
+- **Funcionalidad:** F-PLA-03 · Funciona
 - **Historia:** Como miembro del equipo, quiero recuperar mi contraseña por mail cuando me la olvido, para no quedar afuera esperando que alguien me resetee el acceso a mano.
 - **Criterios de aceptación:**
   - Dado que estoy en la pantalla de ingreso, cuando toco "¿Olvidaste tu contraseña?", entonces me pide el mail y muestra el mismo mensaje exista o no una cuenta con ese mail.
   - Dado que mi cuenta existe, cuando abro el link del mail que me llega, entonces caigo en la pantalla para poner una contraseña nueva dentro de la aplicación, la guardo y puedo entrar con ella.
   - Un mail que no tiene cuenta no recibe nada y la pantalla no deja adivinar que no existe.
-- **Tareas técnicas:** código hecho en SCRUM-16 (2026-10-07); falta conectar Resend como SMTP de Supabase Auth y probar con una cuenta real (`docs/operacion/entorno-y-deploy.md` § Mails de autenticación)
+- **Tareas técnicas:** SCRUM-16: código del 2026-10-07; Resend conectado como SMTP de Supabase Auth y probado con una cuenta real el 2026-10-09 (`docs/operacion/entorno-y-deploy.md` § Mails de autenticación)
 - **Para confirmar:** Martín: el login interno del staff de Limitless tiene el mismo link que no hace nada; ¿entra en esta historia o se saca de esa pantalla?
 
 ### [H-PLA-06] Que los roles del equipo realmente limiten lo que cada uno puede cambiar
