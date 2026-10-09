@@ -16,7 +16,7 @@ preguntas ni modera: su única escritura en el servidor es el saludo de canal nu
 
 | Ruta | Archivo | Qué muestra |
 |---|---|---|
-| `/integrations` (tarjeta Discord) | tablero genérico (`lib/integrations/registry.ts` + `discordIssues()` en `app/integrations/actions.ts`) | Estado, conectar; avisa si no hay canales monitoreados o hay mensajes sin texto. `components/integrations/discord-channel-card.tsx` es la tarjeta de **cada canal** dentro de `/integrations/discord` |
+| `/integrations` (tarjeta Discord) | tablero genérico (`lib/integrations/registry.ts` + `discordIssues()` en `app/integrations/actions.ts`) | Estado, conectar; avisa si no hay canales monitoreados o si al menos el 80% de los últimos 50 mensajes llegaron sin texto ni adjuntos (señal de que falta el intent MESSAGE CONTENT; regla en `lib/discord/intent-contenido.ts`). Una foto sin epígrafe o un sticker suelto no disparan el aviso. `components/integrations/discord-channel-card.tsx` es la tarjeta de **cada canal** dentro de `/integrations/discord` |
 | `/integrations/discord` | `app/(platform)/integrations/discord/page.tsx` → `components/integrations/discord-settings.tsx` | Canales monitoreados (propósito, logros, dueños), personas sin asociar con sugerencias, buzón de vinculaciones pendientes, nombre y foto del bot, modo silencioso, patrón de auto-monitoreo |
 | Ficha del cliente | `components/clients/client-discord-activity.tsx` | Mensajes, última actividad, silencio |
 | Lista de clientes | `components/clients/clients-list.tsx` | Actividad por cliente |
