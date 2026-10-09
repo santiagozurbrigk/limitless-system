@@ -22,6 +22,7 @@ process.on("unhandledRejection", (reason) => {
   void vaciarSentry().finally(() => process.exit(1));
 });
 
+import { createHash, timingSafeEqual } from "node:crypto";
 import express, { type Express } from "express";
 import { z } from "zod";
 import { Receiver } from "@upstash/qstash";
@@ -67,48 +68,38 @@ function buildReceiver(): Receiver | null {
 
 const receiver = buildReceiver();
 
+/** Compara en tiempo constante (hashea para igualar largos). Igual a `lib/security/safe-equal.ts` de la web. */
+function safeEqual(received: unknown, expected: string): boolean {
+  if (typeof received !== "string" || !expected) return false;
+  const a = createHash("sha256").update(received).digest();
+  const b = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(a, b);
+}
+
 async function verifySignature(req: express.Request, rawBody: string): Promise<boolean> {
-  // 1. Bearer token auth (WORKER_AUTH_SECRET) — método primario.
-  //    Se verifica en tres formas para mayor robustez:
-  //    a) Header X-Worker-Secret (custom, nunca stripped por proxies)
-  //    b) Header Authorization: Bearer <secret>
-  //    c) Query param ?workerSecret=<secret> (fallback absoluto)
+  // 1. WORKER_AUTH_SECRET — método primario, sólo por header:
+  //    a) X-Worker-Secret (custom, nunca stripped por proxies)
+  //    b) Authorization: Bearer <secret>
+  //    ⭐ Nunca por query param: QStash guarda la URL destino en su consola y
+  //    los logs la imprimen entera (SCRUM-51). Comparación en tiempo constante
+  //    y, si falla, no se loguea ningún fragmento del secreto.
   const workerSecret = process.env.WORKER_AUTH_SECRET?.trim();
   if (workerSecret) {
-    // a) Custom header (más confiable — los proxies no lo tocan)
     const xWorkerSecret = req.headers["x-worker-secret"];
-    if (typeof xWorkerSecret === "string" && xWorkerSecret === workerSecret) {
+    if (safeEqual(xWorkerSecret, workerSecret)) {
       console.log("[Worker] auth via X-Worker-Secret header OK");
       return true;
     }
 
-    // b) Authorization: Bearer <secret>
     const authHeader = req.headers["authorization"];
-    if (typeof authHeader === "string" && authHeader === `Bearer ${workerSecret}`) {
+    if (safeEqual(authHeader, `Bearer ${workerSecret}`)) {
       console.log("[Worker] auth via Authorization header OK");
       return true;
     }
 
-    // c) Query parameter (fallback si QStash stripea headers)
-    const querySecret = (req.query.workerSecret as string | undefined)?.trim();
-    if (querySecret && querySecret === workerSecret) {
-      console.log("[Worker] auth via query param OK");
-      return true;
-    }
-
-    // Log de diagnóstico — muestra qué llegó (parcialmente) para detectar mismatches
-    const receivedSecret = workerSecret.substring(0, 4) + "..."; // primeros 4 chars del esperado
     console.warn("[Worker] WORKER_AUTH_SECRET configurado pero ningún método coincidió", {
       xWorkerSecretPresent: typeof xWorkerSecret === "string",
-      xWorkerSecretMatch: typeof xWorkerSecret === "string"
-        ? `(got ${xWorkerSecret.length} chars, expected ${workerSecret.length})`
-        : "not present",
       authHeaderPresent: typeof authHeader === "string",
-      authHeaderSnippet: typeof authHeader === "string"
-        ? authHeader.substring(0, Math.min(20, authHeader.length)) + "..."
-        : "not present",
-      querySecretPresent: Boolean(querySecret),
-      secretExpectedPrefix: receivedSecret,
     });
     return false;
   }
