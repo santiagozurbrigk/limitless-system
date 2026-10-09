@@ -70,10 +70,10 @@ export default function UpdatePasswordPage() {
     <GlassPanel className="p-8 shadow-xl" glow>
       <div className="mb-6 space-y-1 text-center">
         <h1 className="text-xl font-semibold tracking-tight">
-          Crear contraseña
+          Elegí tu contraseña nueva
         </h1>
         <p className="text-sm text-muted-foreground">
-          Elegí una contraseña segura para tu cuenta
+          Mínimo 8 caracteres. Después entrás directo a tu cuenta.
         </p>
       </div>
 

@@ -1,9 +1,16 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { authRateLimit, rateLimitErrorMessage } from "@/lib/rate-limit";
-import { limiteDeLogin } from "@/lib/auth/limite-login";
+import { authRateLimit, rateLimit, rateLimitErrorMessage } from "@/lib/rate-limit";
+import { ipDesdeHeaders, limiteDeLogin } from "@/lib/auth/limite-login";
+import {
+  clavesDeRecuperacion,
+  LIMITE_RECUPERACION_POR_EMAIL,
+  LIMITE_RECUPERACION_POR_IP,
+  MENSAJE_RECUPERACION_ENVIADA,
+  urlDeVueltaDeRecuperacion,
+} from "@/lib/auth/recuperar-contrasena";
 import {
   ACTIVE_ORG_COOKIE,
   LEGACY_ACTIVE_ORG_COOKIE,
@@ -21,6 +28,9 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { paths } from "@/routes";
 import { CUENTA_DESACTIVADA_MESSAGE } from "@/lib/auth/cuenta-desactivada";
 import { destinoDeInvitacion } from "@/lib/team/invitacion";
+
+const limiteRecuperacionPorEmail = rateLimit(LIMITE_RECUPERACION_POR_EMAIL);
+const limiteRecuperacionPorIp = rateLimit(LIMITE_RECUPERACION_POR_IP);
 
 export type AuthActionState = {
   error?: string;
@@ -334,4 +344,50 @@ export async function signOutAction() {
   }
 
   redirect(paths.auth.login);
+}
+
+/**
+ * "¿Olvidaste tu contraseña?" (SCRUM-16): manda el mail de recuperación.
+ *
+ * ⭐ Responde lo mismo exista o no la cuenta, y aunque Supabase falle: el
+ * resultado nunca dice si el email está registrado. El error real queda en los
+ * logs (sin el email).
+ */
+export async function requestPasswordResetAction(
+  _prev: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
+  const emailRaw = String(formData.get("email") ?? "").trim();
+  const emailParsed = emailSchema.safeParse(emailRaw);
+  if (!emailParsed.success) {
+    return { error: "Ingresá un email válido." };
+  }
+
+  const ip = ipDesdeHeaders(await headers());
+  const claves = clavesDeRecuperacion(ip, emailParsed.data);
+  const [porEmail, porIp] = await Promise.all([
+    limiteRecuperacionPorEmail(claves.porEmail),
+    limiteRecuperacionPorIp(claves.porIp),
+  ]);
+  if (!porEmail.allowed || !porIp.allowed) {
+    return {
+      error: rateLimitErrorMessage(Math.max(porEmail.resetAt, porIp.resetAt)),
+    };
+  }
+
+  if (!isSupabaseConfigured()) {
+    return { error: "Supabase no configurado." };
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(emailParsed.data, {
+    redirectTo: urlDeVueltaDeRecuperacion(appUrl),
+  });
+
+  if (error) {
+    console.error("[requestPasswordReset] Supabase no mandó el mail:", error.message);
+  }
+
+  return { success: MENSAJE_RECUPERACION_ENVIADA };
 }

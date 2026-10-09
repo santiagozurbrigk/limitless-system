@@ -10,8 +10,8 @@
  * en `docs/FUNCIONAL.md` § "Escondido para el release de octubre".
  */
 export const ESCONDIDO = {
-  /** Login: el link no hace nada; el arreglo es de la versión B. */
-  olvideContrasena: true,
+  /** Login: "¿Olvidaste tu contraseña?". Funciona desde SCRUM-16 (mail por el SMTP de Resend). */
+  olvideContrasena: false,
   /** Ajustes → Notificaciones: 9 interruptores que no mandan nada. */
   ajustesNotificaciones: true,
   /** Closing → Equipo: el ranking de closers sale siempre vacío ([CLOSER-AMOUNT-CLOSED]). */

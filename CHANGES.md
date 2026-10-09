@@ -13,20 +13,6 @@ al terminar cada bloque de trabajo, aunque sea chico.
 ## Formato de entrada
 
 ```
-### 2026-10-09 — Backup automático de la base y los archivos de producción (SCRUM-11, parcial)
-
-**Rama:** `claude/scrum-11-backups`
-**Commit(s):** este
-**Módulo(s) afectado(s):** infraestructura — `.github/workflows/backup-produccion.yml`, `.github/scripts/backup-base.sh`, `.github/scripts/backup-archivos.sh`, `.github/scripts/avisar-discord.sh`, `docs/operacion/backups-y-restauracion.md` (nuevo)
-
-**Qué se hizo:** avanza `[DR-BACKUPS-SUPABASE]` (sigue abierto). Workflow nuevo: (1) base diaria 06:23 UTC con `supabase db dump` roles + schema + data (exclusiones de la guía oficial), valida que no salga vacío y que tenga `organizations`, cifra con gpg AES256 y sube como artifact con 3 días de retención; (2) lunes y jueves 06:47 UTC baja los 6 buckets no reconstruibles (lista desde `storage.objects`, descarga con service role), cifra y sube con 4 días; (3) si falla, rojo en Actions y aviso por `DISCORD_WEBHOOK_ALERTAS`. Doc nueva con cómo activarlo, abrir un backup y el procedimiento de restauración con checklist de lo que no está en el dump. La regla de dump previo a migraciones destructivas ya estaba en `base-de-datos.md` (paso 5); se le sumó la alternativa del workflow.
-
-**Por qué / finalidad:** producción está en plan Free (Supabase no hace backups) y el único respaldo era uno manual del 2026-09-28.
-
-**Decisiones de diseño relevantes:** artifacts de GitHub en vez de otro proveedor: no suma cuentas ni credenciales y queda fuera de Supabase. Cifrado obligatorio porque cualquiera con acceso de lectura al repo puede bajar artifacts. Retenciones cortas (3 y 4 días) para no pasar la cuota de almacenamiento de Actions (~500–600 MB en total) y aun así cumplir "base < 24 h, archivos < 7 días". `trial-reels`, `content-thumbnails` y `avatars` quedan afuera (reconstruibles).
-
-**Riesgos / deuda técnica pendiente:** no corre hasta cargar `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `BACKUP_PASSPHRASE` en GitHub; los scripts no se pudieron probar contra producción desde acá (sin esas credenciales). Falta la decisión del plan de Supabase y el ensayo de restauración con tiempos. Si la cuota de Actions del plan de GitHub es menor, la subida falla: hay que bajar retenciones o mover los archivos a R2/S3.
-
 ### AAAA-MM-DD — Título corto del cambio
 
 **Rama:** `nombre-de-la-rama`
@@ -41,6 +27,20 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
+
+### 2026-10-09 — Backup automático de la base y los archivos de producción (SCRUM-11, parcial)
+
+**Rama:** `claude/scrum-11-backups`
+**Commit(s):** este
+**Módulo(s) afectado(s):** infraestructura — `.github/workflows/backup-produccion.yml`, `.github/scripts/backup-base.sh`, `.github/scripts/backup-archivos.sh`, `.github/scripts/avisar-discord.sh`, `docs/operacion/backups-y-restauracion.md` (nuevo)
+
+**Qué se hizo:** avanza `[DR-BACKUPS-SUPABASE]` (sigue abierto). Workflow nuevo: (1) base diaria 06:23 UTC con `supabase db dump` roles + schema + data (exclusiones de la guía oficial), valida que no salga vacío y que tenga `organizations`, cifra con gpg AES256 y sube como artifact con 3 días de retención; (2) lunes y jueves 06:47 UTC baja los 6 buckets no reconstruibles (lista desde `storage.objects`, descarga con service role), cifra y sube con 4 días; (3) si falla, rojo en Actions y aviso por `DISCORD_WEBHOOK_ALERTAS`. Doc nueva con cómo activarlo, abrir un backup y el procedimiento de restauración con checklist de lo que no está en el dump. La regla de dump previo a migraciones destructivas ya estaba en `base-de-datos.md` (paso 5); se le sumó la alternativa del workflow.
+
+**Por qué / finalidad:** producción está en plan Free (Supabase no hace backups) y el único respaldo era uno manual del 2026-09-28.
+
+**Decisiones de diseño relevantes:** artifacts de GitHub en vez de otro proveedor: no suma cuentas ni credenciales y queda fuera de Supabase. Cifrado obligatorio porque cualquiera con acceso de lectura al repo puede bajar artifacts. Retenciones cortas (3 y 4 días) para no pasar la cuota de almacenamiento de Actions (~500–600 MB en total) y aun así cumplir "base < 24 h, archivos < 7 días". `trial-reels`, `content-thumbnails` y `avatars` quedan afuera (reconstruibles).
+
+**Riesgos / deuda técnica pendiente:** no corre hasta cargar `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `BACKUP_PASSPHRASE` en GitHub; los scripts no se pudieron probar contra producción desde acá (sin esas credenciales). Falta la decisión del plan de Supabase y el ensayo de restauración con tiempos. Si la cuota de Actions del plan de GitHub es menor, la subida falla: hay que bajar retenciones o mover los archivos a R2/S3.
 
 ### 2026-10-09 — Trial Reels: el secreto del worker ya no viaja en la URL (SCRUM-51)
 
@@ -285,6 +285,38 @@ al terminar cada bloque de trabajo, aunque sea chico.
 - La branch protection no se puede configurar desde el repo: queda escrita en `entorno-y-deploy.md` para que la configure un admin.
 
 **Riesgos / deuda técnica pendiente:** si un admin no configura los checks obligatorios, un PR en rojo se puede mergear igual. Los e2e siguen sin correr (`[T-INFRA-E2E-CI]`).
+
+### 2026-10-07 — "¿Olvidaste tu contraseña?" manda el mail de recuperación (SCRUM-16)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma / auth.
+- Archivos nuevos: `app/auth/forgot-password/` y `lib/auth/recuperar-contrasena.ts`.
+- Archivos tocados: `app/auth/actions.ts`, `app/auth/callback/route.ts`, `app/auth/update-password/page.tsx`,
+  `components/auth/supabase-login-form.tsx`, `components/auth/login-screen.tsx`, `routes/paths.ts`,
+  `lib/supabase/public-paths.ts` y `lib/release/escondido.ts`.
+
+**Qué se hizo:**
+- Pantalla pública `/auth/forgot-password`. Pide el mail y llama a `requestPasswordResetAction`, que:
+  - valida el email;
+  - aplica dos límites: 3/h por email y 10/h por IP;
+  - llama a `resetPasswordForEmail` con vuelta a `/auth/callback?type=recovery`;
+  - responde siempre el mismo mensaje neutro.
+- El callback avisa `?error=link_vencido` cuando un link de recuperación venció o ya se usó.
+- El link del login vuelve a mostrarse (bandera `olvideContrasena` en `false`) y lleva a la pantalla nueva.
+- Tests: `app/auth/__tests__/recuperar-contrasena.test.ts` (4) y `lib/auth/__tests__/recuperar-contrasena.test.ts` (3).
+- Doc del paso a paso para conectar Resend como SMTP de Supabase Auth, con la plantilla del mail con `token_hash`
+  para que el link funcione desde otro dispositivo, y el orden para prender "Confirm email" después
+  (`docs/operacion/entorno-y-deploy.md`). Cierra `[AUTH-RECUPERAR-PASSWORD]`.
+
+**Por qué / finalidad:** quien olvidaba la contraseña quedaba afuera hasta que alguien se la reseteara a mano.
+
+**Decisiones de diseño relevantes:** el mensaje neutro no deja averiguar qué emails tienen cuenta, tampoco cuando
+Supabase falla. El PR se mergea después de configurar el SMTP, porque sin eso el mail no sale.
+
+**Riesgos / deuda técnica pendiente:**
+- Hasta probarlo con una cuenta real queda "Sin verificar" (`verificacion-manual.md` § Recuperar la contraseña).
+- "Confirm email" sigue apagado (`mailer_autoconfirm: true`, verificado el 2026-10-07): se prende después de la prueba.
 
 ---
 

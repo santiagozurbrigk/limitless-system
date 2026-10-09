@@ -9,6 +9,7 @@ const PUBLIC_PATHS = [
   paths.auth.login,
   paths.auth.callback,
   paths.auth.recover,
+  paths.auth.forgotPassword,
   paths.auth.updatePassword,
   paths.demo,
   paths.designSystem,

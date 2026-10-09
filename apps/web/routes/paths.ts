@@ -11,6 +11,8 @@ export const paths = {
     login: "/login",
     callback: "/auth/callback",
     recover: "/auth/recover",
+    /** Pedir el mail para recuperar la contraseña (SCRUM-16). */
+    forgotPassword: "/auth/forgot-password",
     forcePasswordChange: "/auth/force-password-change",
     updatePassword: "/auth/update-password",
   },

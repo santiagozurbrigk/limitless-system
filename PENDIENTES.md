@@ -81,7 +81,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 13 | 31 | 17 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 12 | 31 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 17 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 19 | 5 |
@@ -133,16 +133,6 @@ Prioridad sugerida P1: el super admin con contraseña sola es la llave de todas 
 - **Dónde:** `apps/web/lib/auth/require-super-admin.ts`, `apps/web/app/team/actions.ts`, `apps/web/app/(platform)/holding/actions.ts`, `apps/web/app/super-admin/actions.ts`, `super_admin_users` (migración).
 
 Prioridad sugerida P1: la severidad es Crítica, pero la toma del super admin exige una condición que hoy no se da; la suplantación entre equipos sí se puede hoy.
-
-#### [AUTH-RECUPERAR-PASSWORD] (nuevo) "¿Olvidaste tu contraseña?" no hace nada
-- **Tipo:** bug
-- **Severidad:** Media
-- **Estado verificado:** el link de `components/auth/supabase-login-form.tsx` (y `login-screen.tsx`) es `href="#"` con `preventDefault`. `resetPasswordForEmail` no aparece en el código: existen `/auth/recover` y `/auth/update-password`, pero nada manda el mail de recuperación. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
-- **Riesgo:** Si un usuario olvida su contraseña, entonces no tiene forma de recuperarla solo y queda afuera hasta que alguien le resetee el acceso a mano. Pasa seguro cada vez que alguien la olvida.
-- **Impacto:** Cualquier usuario de cualquier org; hay workaround (el founder o el super admin le asignan una contraseña temporal) pero genera soporte manual y bloquea al founder si es él quien la olvida.
-- **Qué hay que hacer:** pantalla o modal que pida el mail y llame a `supabase.auth.resetPasswordForEmail` con `redirectTo` a `/auth/callback?next=/auth/update-password`; mensaje neutro (no revelar si el mail existe).
-- **Criterio de aceptación:** Desde /login, "¿Olvidaste tu contraseña?" pide un mail y muestra un mensaje neutro exista o no la cuenta; el mail llega y su link lleva a /auth/update-password, donde la nueva contraseña queda guardada y permite entrar; un mail inexistente no revela que no existe.
-- **Dónde:** `apps/web/components/auth/supabase-login-form.tsx`, `apps/web/app/auth/`.
 
 #### [PERMISOS-LAYOUT-NAV-SUAVE] El bloqueo por módulo vive en un layout que no se re-renderiza al navegar (nuevo)
 - **Tipo:** seguridad / verificación manual

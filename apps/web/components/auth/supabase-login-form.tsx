@@ -19,6 +19,11 @@ import {
   CUENTA_DESACTIVADA_QUERY,
 } from "@/lib/auth/cuenta-desactivada";
 import { ESCONDIDO } from "@/lib/release/escondido";
+import {
+  LINK_RECUPERACION_VENCIDO_MESSAGE,
+  LINK_RECUPERACION_VENCIDO_QUERY,
+} from "@/lib/auth/recuperar-contrasena";
+import { paths } from "@/routes";
 
 const initialState: AuthActionState = {};
 
@@ -30,6 +35,10 @@ export function SupabaseLoginForm() {
   const [state, formAction, pending] = useActionState(action, initialState);
 
   useEffect(() => {
+    if (searchParams.get("error") === LINK_RECUPERACION_VENCIDO_QUERY) {
+      setCallbackError(LINK_RECUPERACION_VENCIDO_MESSAGE);
+      return;
+    }
     if (searchParams.get("error") === "auth_callback") {
       setCallbackError(
         "No se pudo completar el inicio de sesión. Intenta de nuevo."
@@ -151,9 +160,8 @@ export function SupabaseLoginForm() {
       {!ESCONDIDO.olvideContrasena && (
         <p className="mt-4 text-center">
           <Link
-            href="#"
+            href={paths.auth.forgotPassword}
             className="text-xs text-muted-foreground hover:text-foreground"
-            onClick={(e) => e.preventDefault()}
           >
             ¿Olvidaste tu contraseña?
           </Link>
