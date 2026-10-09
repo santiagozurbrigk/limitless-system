@@ -600,23 +600,6 @@ Fuente: PENDIENTES.md [CLIENTES-DE-CLIENTES-PROBAR] · Doc del área: docs/areas
 *Dónde:* ficha → Sesiones 1-1; {{apps/web/lib/fathom/share-link.ts}}.
 
 Fuente: PENDIENTES.md [1A1-MANUALES-SIN-PROBAR] · Doc del área: docs/areas/clientes.md",1A1-MANUALES-SIN-PROBAR,Clientes,P1,Media,verificación manual
-[TRIAL-SECRET-EN-URL] WORKER_AUTH_SECRET en la URL de QStash y en logs,Bug,High,marketing,p1,sev-critica,seguridad,,,"*Tipo:* seguridad
-
-*Severidad:* Crítica
-
-*Estado verificado:* {{createTrialReelsJobAction}} arma {{workerUrl = …?workerSecret=<secret>}} y loguea {{workerUrl}} completo en {{""[TrialReels] QStash published OK""}} ({{reel-variation-actions.ts}}). Lo mismo en {{publishVariationsAction}}/{{retryVariationAction}} ({{urlWithSecret}}). QStash guarda la URL en su consola. El worker ({{apps/reel-worker/src/index.ts}}) compara con {{===}} (no tiempo constante), acepta el query param, y al fallar loguea los 4 primeros caracteres del secret esperado y 20 del header recibido. El payload lleva además el {{driveAccessToken}} de Google. Con el secreto, cualquiera puede encolar trabajos: el worker usa service role ({{processor.ts:26-30}}) y toma {{organizationId}} y {{sourceStoragePath}} del payload sin validarlos contra {{reel_variation_jobs}} ({{index.ts:42-54}}, {{processor.ts:40-54}}), así que puede leer archivos de otra org del bucket y escribir en su carpeta.
-
-*Riesgo:* Si alguien con acceso a los logs de Vercel/Fly o a la consola de QStash copia el secreto, entonces puede mandarle al worker trabajos arbitrarios: el worker usa service role y acepta cualquier organizationId y sourceStoragePath. Requiere acceso de lectura a logs o a QStash (personas del equipo o una integración de logs comprometida).
-
-*Impacto:* Con el secreto se leen videos de cualquier org del bucket de Trial Reels y se escriben archivos y filas de reel_variation_jobs a nombre de otra org; el driveAccessToken de Google del usuario también viaja en el payload. Afecta a todas las orgs que usan Trial Reels.
-
-*Qué hay que hacer:* sacar el secret del query (dejar sólo header o firma QStash con {{url}}), no loguear URLs con secret, rotar {{WORKER_AUTH_SECRET}}, usar comparación en tiempo constante en el worker y borrar el log del prefijo.
-
-*Criterio de aceptación:* Al generar y publicar Trial Reels, ni la URL destino en la consola de QStash ni los logs de Vercel o Fly contienen WORKER_AUTH_SECRET (el worker ya no acepta ?workerSecret=); el worker compara el secreto en tiempo constante y un pedido con secreto inválido responde 401 sin loguear ningún fragmento del secreto; WORKER_AUTH_SECRET fue rotado en Vercel y Fly
-
-*Dónde:* {{apps/web/app/marketing/content/reel-variation-actions.ts}}, {{apps/reel-worker/src/index.ts}}, {{apps/web/lib/queue/verify-queue-request.ts}}
-
-Fuente: PENDIENTES.md [TRIAL-SECRET-EN-URL] · Doc del área: docs/areas/marketing.md",TRIAL-SECRET-EN-URL,Marketing,P1,Crítica,seguridad
 "[MKT-HOLDING-ORG] Contenido, Drive y Trial Reels ignoran el negocio activo del holding",Bug,High,marketing,p1,sev-media,bug,,,"*Tipo:* bug
 
 *Severidad:* Media

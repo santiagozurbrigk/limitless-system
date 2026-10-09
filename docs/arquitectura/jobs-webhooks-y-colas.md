@@ -93,7 +93,7 @@ Cliente: `apps/web/lib/queue/qstash-client.ts`. Verificación: `lib/queue/qstash
 | Fly.io `POST /` (`apps/reel-worker`) | reel-variation-actions con `REEL_WORKER_URL` | `WORKER_AUTH_SECRET` o firma QStash | — |
 | `/api/queue/failure` | QStash, como `failureCallback` de todos los jobs, cuando agotan sus reintentos | firma QStash (`verifyQStashRequest`) | — |
 
-`verifyQueueRequest`: si `WORKER_AUTH_SECRET` está configurado **acepta sólo ese secreto** (header `x-worker-secret`, `Authorization: Bearer` o `?workerSecret=`) y no mira la firma; si no, exige la firma QStash (`QSTASH_CURRENT_SIGNING_KEY` + `QSTASH_NEXT_SIGNING_KEY`; 503 sin las dos). En producción `WORKER_AUTH_SECRET` está seteado, así que los workers de cron se autentican por secreto compartido.
+`verifyQueueRequest`: si `WORKER_AUTH_SECRET` está configurado **acepta sólo ese secreto** (header `x-worker-secret` o `Authorization: Bearer`; desde SCRUM-51 nunca por `?workerSecret=`, porque QStash guarda la URL destino en su consola) y no mira la firma; si no, exige la firma QStash (`QSTASH_CURRENT_SIGNING_KEY` + `QSTASH_NEXT_SIGNING_KEY`; 503 sin las dos). En producción `WORKER_AUTH_SECRET` está seteado, así que los workers de cron se autentican por secreto compartido.
 
 Riesgos abiertos: `verifyQStashRequest` no pasa `url` al `Receiver`, así que un cuerpo firmado para una ruta `/api/queue/*` sirve para otra (`[AUD-SEG-4]`); el secreto viaja en query string en la URL publicada a QStash y queda en sus logs (`[SEG-WORKER-SECRET-QUERY]`).
 

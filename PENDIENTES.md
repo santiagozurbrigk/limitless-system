@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 13 | 31 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 17 | 8 |
-| [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 7 | 19 | 5 |
+| [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 19 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
@@ -1065,16 +1065,6 @@ Doc del área: [`docs/areas/ventas.md`](./docs/areas/ventas.md)
 Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
 
 ### Marketing · P1
-
-#### [TRIAL-SECRET-EN-URL] `WORKER_AUTH_SECRET` en la URL de QStash y en logs
-- **Tipo:** seguridad
-- **Severidad:** Crítica
-- **Estado verificado:** `createTrialReelsJobAction` arma `workerUrl = …?workerSecret=<secret>` y loguea `workerUrl` completo en `"[TrialReels] QStash published OK"` (`reel-variation-actions.ts`). Lo mismo en `publishVariationsAction`/`retryVariationAction` (`urlWithSecret`). QStash guarda la URL en su consola. El worker (`apps/reel-worker/src/index.ts`) compara con `===` (no tiempo constante), acepta el query param, y al fallar loguea los 4 primeros caracteres del secret esperado y 20 del header recibido. El payload lleva además el `driveAccessToken` de Google. Con el secreto, cualquiera puede encolar trabajos: el worker usa service role (`processor.ts:26-30`) y toma `organizationId` y `sourceStoragePath` del payload sin validarlos contra `reel_variation_jobs` (`index.ts:42-54`, `processor.ts:40-54`), así que puede leer archivos de otra org del bucket y escribir en su carpeta.
-- **Riesgo:** Si alguien con acceso a los logs de Vercel/Fly o a la consola de QStash copia el secreto, entonces puede mandarle al worker trabajos arbitrarios: el worker usa service role y acepta cualquier organizationId y sourceStoragePath. Requiere acceso de lectura a logs o a QStash (personas del equipo o una integración de logs comprometida).
-- **Impacto:** Con el secreto se leen videos de cualquier org del bucket de Trial Reels y se escriben archivos y filas de reel_variation_jobs a nombre de otra org; el driveAccessToken de Google del usuario también viaja en el payload. Afecta a todas las orgs que usan Trial Reels.
-- **Qué hay que hacer:** sacar el secret del query (dejar sólo header o firma QStash con `url`), no loguear URLs con secret, rotar `WORKER_AUTH_SECRET`, usar comparación en tiempo constante en el worker y borrar el log del prefijo.
-- **Criterio de aceptación:** Al generar y publicar Trial Reels, ni la URL destino en la consola de QStash ni los logs de Vercel o Fly contienen WORKER_AUTH_SECRET (el worker ya no acepta ?workerSecret=); el worker compara el secreto en tiempo constante y un pedido con secreto inválido responde 401 sin loguear ningún fragmento del secreto; WORKER_AUTH_SECRET fue rotado en Vercel y Fly
-- **Dónde:** `apps/web/app/marketing/content/reel-variation-actions.ts`, `apps/reel-worker/src/index.ts`, `apps/web/lib/queue/verify-queue-request.ts`
 
 #### [MKT-HOLDING-ORG] Contenido, Drive y Trial Reels ignoran el negocio activo del holding
 - **Tipo:** bug
