@@ -327,7 +327,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 
 **Prerrequisitos:** Fathom conectado.
 
-1. Entrar a `/clients/pending-calls` **por URL** (no hay link: `[CLIENTES-PENDING-CALLS-HUERFANA]`).
+1. Entrar a `/clients/pending-calls` desde el botón «Llamadas sin asociar» de la barra de `/clients` (muestra la cantidad pendiente).
 2. «Cargar identidades desde el CRM» → dice cuántas cargó y cuántas quedaron afuera por repetidas. Repetirlo → no duplica ni pisa `manual_confirmation`.
 3. Esperar el cron de procesamiento; `select purpose, count(*) from fathom_calls group by purpose` → aparecen `delivery`.
 4. ⭐ Confirmar una llamada → nueva fila en `client_identities` con `source='manual_confirmation'`; la próxima grabación con ese alias se resuelve sola.
