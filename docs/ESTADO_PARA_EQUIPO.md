@@ -44,8 +44,8 @@ hace), riesgo, impacto y criterio de aceptación en el backlog.
 
 **Críticos (7):**
 
-1. **No hay backups.** Producción está en el plan gratuito de Supabase: si se borra algo, no hay de dónde
-   recuperarlo (`DR-BACKUPS-SUPABASE`).
+1. ~~**No hay backups.**~~ Resuelto el 2026-10-09 (SCRUM-11): plan Pro de Supabase con backup diario y dump
+   cifrado propio en GitHub Actions (`DR-BACKUPS-SUPABASE`).
 2. ~~**Cualquier miembro, aunque sea de sólo lectura, puede borrar su organización entera** con una llamada
    (`DB-VISTA-CLAUDE-STATUS-ESCRIBIBLE`).~~ Resuelto el 2026-09-29.
 3. ~~**Se puede conectar una integración a otra organización** conociendo su identificador (`OAUTH-ESTADO-SIN-FIRMA`).~~ Resuelto el 2026-09-30.

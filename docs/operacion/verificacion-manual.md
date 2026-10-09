@@ -1306,5 +1306,5 @@ Desde SCRUM-51 el secreto `WORKER_AUTH_SECRET` ya no viaja en la URL, pero el va
 4. Volver a abrir el mismo link: el login avisa que venció o ya se usó.
 5. Pedirlo con un mail sin cuenta: el mismo mensaje neutro y no llega nada.
 6. Pedirlo 4 veces seguidas con el mismo mail: la cuarta dice que hay demasiados intentos.
-7. Con todo bien, prender "Confirm email" (paso 9) y anotar acá la fecha.
+7. Con todo bien, prender "Confirm email" (paso 9) y anotar acá la fecha. **Hecho el 2026-10-09** (`mailer_autoconfirm: false`).
 

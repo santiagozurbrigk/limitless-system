@@ -28,6 +28,20 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-09 — Supabase en plan Pro: cierre de backups y de los cupos del plan Free (SCRUM-11)
+
+**Rama:** `claude/great-thompson-n7ts63`
+**Commit(s):** este
+**Módulo(s) afectado(s):** docs — `PENDIENTES.md`, `operacion/backups-y-restauracion.md`, `operacion/incidentes.md`, `operacion/entorno-y-deploy.md`, `operacion/verificacion-manual.md`, `ESTADO_PARA_EQUIPO.md`
+
+**Qué se hizo:** cierra `[DR-BACKUPS-SUPABASE]` y `[SUPABASE-PLAN-FREE-LIMITES]`. La organización de Supabase pasó al plan Pro (verificado con `get_organization`: `plan: pro`): backup diario con 7 días, 100 GB de Storage y sin modo sólo lectura a los 500 MB. Los secretos del workflow de backup están cargados en GitHub. El ensayo de restauración lo dio por hecho Santiago; el procedimiento con "Restore to new project" queda escrito. Auth verificado: `disable_signup: true` y `mailer_autoconfirm: false` (Confirm email activo, último paso de SCRUM-16).
+
+**Por qué / finalidad:** el sistema no tenía backups y estaba al ~80 % del cupo de Storage del plan Free.
+
+**Decisiones de diseño relevantes:** sin PITR (USD ~100/mes más y exige compute Small): alcanza con el backup diario de Pro más el dump propio.
+
+**Riesgos / deuda técnica pendiente:** al cerrar, la API de GitHub no mostraba ninguna corrida del workflow "Backup de producción"; la primera programada es el 2026-10-10 06:23 UTC y hay que confirmar que salga en verde. El ensayo con tiempos medidos no quedó registrado.
+
 ### 2026-10-09 — El alta de cuentas es sólo por invitación (SCRUM-23)
 
 **Rama:** `claude/great-thompson-n7ts63`

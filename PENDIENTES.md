@@ -74,7 +74,6 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | `[LLAMADAS-VERIFICAR-FATHOM]` | Ventas | Media | Cruce grabación ↔ turno con datos reales |
 | `[COBROS-PROBAR]` | Ventas | Media | Cobros nunca se dibujó con una sesión real |
 | `[COBROS-AVISAR-PERMISOS]` | Ventas | Baja | Quien no tiene Ventas deja de ver montos en Clientes |
-| `[DR-BACKUPS-SUPABASE]` | Infraestructura, seguridad y tests (transversal) | Crítica | La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración |
 | `[PERMISOS-SERVER-ACTIONS/infra]` | Infraestructura, seguridad y tests (transversal) | Alta | Los roles no se hacen cumplir en la base ni en las actions (incluye AUD-SEG-1) |
 
 ## Índice por área
@@ -88,7 +87,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 2 | 19 | 43 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 18 | 43 | 13 |
 
 ---
 
@@ -267,7 +266,7 @@ Prioridad sugerida P2: no pierde datos; mejora mucho la experiencia en un incide
 #### [BAJA-ORG-SIN-RESPALDO] La baja de una organización borra todo sin exportación previa ni período de gracia
 - **Tipo:** feature
 - **Severidad:** Alta
-- **Estado verificado:** `lib/super-admin/execute-deletion.ts` borra la fila de `organizations` (cascade sobre ~130 tablas), los archivos de 10 buckets y las cuentas de login; `super_admin_deletions` guarda quién, cuándo y el resultado, no los datos. No hay exportación ni papelera. Con el plan Free no hay backup (`[DR-BACKUPS-SUPABASE]`). Existe la alternativa reversible de pausar (`app/super-admin/actions.ts:294`).
+- **Estado verificado:** `lib/super-admin/execute-deletion.ts` borra la fila de `organizations` (cascade sobre ~130 tablas), los archivos de 10 buckets y las cuentas de login; `super_admin_deletions` guarda quién, cuándo y el resultado, no los datos. No hay exportación ni papelera. Desde el 2026-10-09 hay backup diario (plan Pro, 7 días, sin Storage) y dump propio; restaurar una sola org desde ahí es manual. Existe la alternativa reversible de pausar (`app/super-admin/actions.ts:294`).
 - **Riesgo:** Si un super admin da de baja la org equivocada, o un cliente dado de baja pide volver, entonces sus datos y archivos no se pueden recuperar. La confirmación por nombre exacto reduce, pero no elimina, el error humano.
 - **Impacto:** La org dada de baja: todo su historial.
 - **Qué hay que hacer:** antes de borrar, exportar la org (JSON de sus filas por tabla + copia de sus archivos) a un bucket privado de respaldo con retención definida; o bien baja en dos pasos: "pausada para baja" durante N días y borrado real después.
@@ -1977,18 +1976,6 @@ Doc del área: [`docs/arquitectura/vision-general.md`](./docs/arquitectura/visio
 
 ### Infraestructura, seguridad y tests (transversal) · P0
 
-#### [DR-BACKUPS-SUPABASE] La base y los archivos de producción no tienen backups ni se ensayó nunca una restauración
-- **Tipo:** decisión de negocio
-- **Severidad:** Crítica
-- **Estado verificado:** la organización de Supabase dueña del proyecto `OTC` (`nrzlylzbmsuowzhpdnjl`) está en plan `free` (`get_organization`, 2026-09-23). Según la doc oficial de Supabase (`guides/platform/backups`), sólo Pro/Team/Enterprise tienen backup diario y PITR es un add-on pago; los backups nunca incluyen los archivos de Storage. Hay un backup manual del 2026-09-28 en un Google Drive del equipo. Desde el 2026-10-09 existe el workflow `.github/workflows/backup-produccion.yml` (base diaria con 3 días de retención, buckets no reconstruibles lunes y jueves con 4 días, todo cifrado con gpg, como artifacts de GitHub; doc en `docs/operacion/backups-y-restauracion.md`), pero **no corre hasta cargar los secretos** `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `BACKUP_PASSPHRASE` en GitHub. La regla de dump previo a migraciones destructivas ya está en `base-de-datos.md`. Falta: decidir el plan, cargar los secretos y ver la primera corrida en verde, y el ensayo de restauración con tiempos. Storage: 13 buckets, ~797 MB, varios no reconstruibles (`client-payment-receipts`, `business-context-documents`, `sop-videos`, `ai-brain-documents`, `client-wins`). Migraciones destructivas aplicadas sin dump previo (`20260922140000_borrar_metric_snapshots`, `20260922130000_limpiar_restos_legacy_de_produccion`).
-- **Riesgo:** Si una migración, un script con service role, una baja de organización o un bug borra o pisa datos, entonces no hay de dónde recuperarlos; si Supabase pierde el proyecto, se pierde todo. La probabilidad por evento es baja, pero el sistema se modifica a diario (175 migraciones en 4 meses) y sin red.
-- **Impacto:** Todas las organizaciones: clientes, pagos cargados a mano, notas, wins, tareas, SOPs, documentos y comprobantes desde mayo 2026. Lo de proveedores se re-sincroniza sólo en parte (ver tabla §1.4 de la auditoría).
-- **Qué hay que hacer:** (1) decidir el plan: Pro (backup diario 7 días) o Pro + PITR según el RPO que defina el equipo (preguntas en §7 de la auditoría); (2) mientras tanto, reemplazar el backup manual del 2026-09-28 por un dump diario automatizado (`supabase db dump` roles + schema + data) a un almacenamiento fuera de Supabase; (3) copia periódica de los buckets no reconstruibles; (4) regla: dump de las tablas afectadas antes de toda migración destructiva; (5) ensayar una restauración completa en un proyecto descartable con checklist de lo que no está en migraciones (Auth Hook `custom_access_token_hook`, redirect URLs y SMTP de Auth, 5 buckets de `[AUD-SEG-9]`, publicaciones de realtime, extensiones) y escribir el procedimiento en `docs/operacion/`.
-- **Criterio de aceptación:** Existe un backup de la base de producción de menos de 24 h que se puede listar (panel de Supabase en plan pago, o archivo de dump fechado fuera de Supabase generado por un proceso automático); existe una copia de los buckets no reconstruibles de menos de 7 días; se restauró ese backup en un proyecto descartable, la app apuntada a él permite entrar con una cuenta de prueba y ver sus clientes, y el procedimiento con tiempos medidos quedó escrito en `docs/operacion/`; la regla de dump previo a migraciones destructivas figura en `docs/arquitectura/base-de-datos.md`.
-- **Dónde:** Supabase (plan, backups), `docs/operacion/`, `docs/arquitectura/base-de-datos.md`, script o workflow de dump nuevo.
-
-Prioridad sugerida P0: es pérdida irreversible de datos de todos los clientes y la mitigación mínima (dump diario) es barata.
-
 #### [PERMISOS-SERVER-ACTIONS/infra] Los roles no se hacen cumplir en la base ni en las actions (incluye AUD-SEG-1)
 - **Parte de:** `[PERMISOS-SERVER-ACTIONS]` (ítem transversal en Plataforma). Acá, lo específico del área.
 - **Tipo:** seguridad
@@ -2052,18 +2039,6 @@ Prioridad sugerida P1: la falla es silenciosa y ya está ocurriendo en producci�
 - **Dónde:** cuenta del monitor externo (UptimeRobot o Better Stack), GitHub → Settings → Secrets (`DISCORD_WEBHOOK_ALERTAS`), Supabase de producción (migración `20261007120000_corridas_de_procesos`).
 
 Prioridad sugerida P1: es la base del runbook; sin detección, todas las demás fallas silenciosas se alargan.
-
-#### [SUPABASE-PLAN-FREE-LIMITES] Storage al ~80 % del cupo del plan Free y la base pasa a sólo lectura a los 500 MB
-- **Tipo:** verificación manual
-- **Severidad:** Alta
-- **Estado verificado:** tamaño de la base 87 MB (`pg_database_size`); Storage ≈ 797 MB sumando `metadata->>'size'` de `storage.objects` por bucket (`ai-brain-documents` 354 MB, `trial-reels` 351 MB, `business-context-documents` 40 MB, resto < 25 MB). El plan Free incluye 1 GB de Storage y pone la base en sólo lectura al superar 500 MB (doc `guides/platform/database-size`); pausa proyectos con poca actividad durante 7 días; no tiene SLA. Los buckets `sop-videos` (1 GB por archivo) y `trial-reels` (500 MB) declaran límites mayores que el máximo de subida del Free (50 MB según la página de precios, sin confirmar en el panel).
-- **Riesgo:** Si Storage pasa el cupo, fallan las subidas (comprobantes, documentos, reels, videos de SOP). Si la base llega a sólo lectura, los webhooks de pagos leen bien pero no pueden insertar y responden 200, así que los cobros se pierden (`[EMBUDOS-WEBHOOK-PERDIDA]`). Storage crece con cada documento del cerebro de IA y cada reel.
-- **Impacto:** Todas las orgs que suben archivos; cobros de todas las orgs con pagos conectados durante un eventual modo sólo lectura.
-- **Qué hay que hacer:** confirmar en el panel de Supabase el uso y los cupos reales; decidir el plan junto con `[DR-BACKUPS-SUPABASE]`; mientras siga en Free, revisar `ai-brain-documents` y los originales de `trial-reels`, y bajar el `file_size_limit` de los buckets al máximo real.
-- **Criterio de aceptación:** Se ejecutó V-INFRA-11 (paso 1 y 2) con cuenta real y quedó anotado el uso real de base y Storage contra el cupo del plan; el proyecto está en un plan con margen de al menos 50 % en Storage o se liberó espacio hasta ese margen; los `file_size_limit` de los buckets no superan el máximo de subida del plan; si algo falló, se abrió un ítem nuevo.
-- **Dónde:** Supabase (Billing, Storage), `storage.buckets`.
-
-Prioridad sugerida P1: el margen de Storage es ~200 MB y cruzar el cupo rompe subidas; el modo sólo lectura toca cobros.
 
 #### [ENV-ZERNIO-WEBHOOK-SECRET] El webhook de Zernio responde 503 en producción
 - **Tipo:** bug
@@ -2252,7 +2227,7 @@ Prioridad sugerida P2: no hay fuga activa aparte de la que ya es P0; es prevenci
 - **Tipo:** deuda técnica
 - **Severidad:** Alta
 - **Estado verificado:** todas las variables del proyecto `otc-plaform` en Vercel tienen target Preview y Production con el mismo valor, incluidas `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `ENCRYPTION_MASTER_KEY` (listado de tipo/target, sin valores, 2026-09-23). Supabase no tiene branches (`list_branches` vacío). `CHANGES.md` registra pruebas "contra el preview con datos reales". Los previews están protegidos por Vercel SSO (`ssoProtection: all_except_custom_domains`).
-- **Riesgo:** Si una rama con un bug escribe o borra algo, entonces lo hace sobre datos reales de clientes (sin backup, `[DR-BACKUPS-SUPABASE]`). Tampoco hay dónde ensayar una migración con datos ni una restauración.
+- **Riesgo:** Si una rama con un bug escribe o borra algo, entonces lo hace sobre datos reales de clientes (el backup diario de Pro permite volver atrás hasta 24 h, para todo el proyecto). Tampoco hay dónde ensayar una migración con datos ni una restauración.
 - **Impacto:** Todas las orgs; frena el ensayo de recuperación.
 - **Qué hay que hacer:** proyecto de Supabase aparte (o Supabase Branching en plan pago) para Preview, con variables de Preview propias en Vercel y una `ENCRYPTION_MASTER_KEY` distinta; datos de prueba sembrados; documentarlo en `docs/operacion/entorno-y-deploy.md`. Con el entorno armado, hacer ahí el ensayo de rotación de la clave maestra y la prueba del webhook con secreto indescifrable (V-INFRA-12), que quedaron pendientes al cerrar SCRUM-86.
 - **Dónde:** Vercel (variables de Preview), Supabase, `docs/operacion/entorno-y-deploy.md`.

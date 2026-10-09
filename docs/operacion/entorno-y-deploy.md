@@ -179,8 +179,9 @@ entrega a miembros del proyecto, así que en producción usa el SMTP de **Resend
 `noreply@send.limit-less.llc`** (decisión del 2026-10-09: los mails dejan de salir de `optimizatucontrol.com`).
 El DNS de `limit-less.llc` está en Google Cloud DNS; `send.limit-less.llc` ya tiene registros de Resend publicados
 (`resend._domainkey.send` y `send.send`), así que el dominio está dado de alta en alguna cuenta de Resend: la API
-key tiene que salir de esa cuenta. Estado verificado el 2026-10-07 con el
-endpoint de arriba: `mailer_autoconfirm: true` y `disable_signup: false`.
+key tiene que salir de esa cuenta. Estado verificado el 2026-10-09 con el
+endpoint de arriba: `mailer_autoconfirm: false` (Confirm email activo) y `disable_signup: true` (alta sólo por
+invitación, SCRUM-23). Los pasos de abajo quedaron hechos ese día.
 
 1. **Resend → Domains:** `send.limit-less.llc` tiene que figurar *Verified* en la cuenta (o el equipo) de Resend que lo dio de alta.
 2. **Resend → API Keys** (en esa misma cuenta): crear una key aparte para Supabase (permiso *Sending access*, limitada a `send.limit-less.llc`).
