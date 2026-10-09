@@ -29,7 +29,7 @@ Vercel invoca los crons con **GET** y el header `Authorization: Bearer <CRON_SEC
 | `/api/integrations/fathom/sync` | `0 * * * *` | Lista reuniones nuevas de Fathom por API key: la de cada org (`syncAllFathomIntegrations`) y la de cada miembro conectado desde la sección por miembro (`sincronizarTodosLosMiembrosFathom`, SCRUM-448). Plazo común de 45 s y orden rotativo (`lib/fathom/plazo-del-cron.ts`, SCRUM-36): lo que no entra queda para la próxima corrida | 60 | no |
 | `/api/integrations/typeform/sync` | `0 * * * *` | Formularios y respuestas de Typeform → `forms`, `form_responses` | 60 | no |
 | `/api/integrations/google-forms/sync` | `0 * * * *` | Formularios y respuestas de Google Forms | 60 | no |
-| `/api/cron/calendly-sync` | `0 * * * *` | Respaldo de turnos de Calendly (org) → `closing_calls`; 500 si falla | 60 | no |
+| `/api/cron/calendly-sync` | `0 * * * *` | Respaldo de turnos de Calendly (org) → `closing_calls`; 500 si falla | 300 (tarda ~50 s; con 60 se cortaba 1 de cada 3 corridas) | no |
 | `/api/cron/calendly-sync-closers` | `0 * * * *` | Mismo sync con la integración propia de cada closer (`lib/calendly/closer-sync.ts`) | 60 | no |
 | `/api/cron/ghl-sync` | `0 * * * *` | Turnos del calendario de GHL → `closing_calls`; acepta `?organizationId=` | 60 | no |
 | `/api/integrations/instagram/sync` | `0 * * * *` | **Legacy** Instagram Graph → `content_assets` | 60 | no |

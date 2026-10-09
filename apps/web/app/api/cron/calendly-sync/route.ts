@@ -9,7 +9,12 @@ import type { CalendlyEventSyncPayload } from "@/types/calendly";
 import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+/**
+ * ⭐ 300, no 60: el sync de todas las orgs tarda 43–59 s y el 2026-10-08/09 se cortó
+ * en 10 de 30 corridas por pasarse de 60 s (quedaban "en_curso" en corridas_de_procesos
+ * sin terminar de guardar los turnos).
+ */
+export const maxDuration = 300;
 
 type SyncBody = {
   events?: CalendlyEventSyncPayload[];
