@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot`, `apps/reel-worker` | sí (`pnpm typecheck`, job `checks`) |
 | Lint | ESLint 9 (`next lint` en web; `eslint src/` con la base de `packages/config` en ui, reel-worker y bot) | `apps/web`, `packages/ui`, `apps/reel-worker`, `apps/discord-bot` | sí (`pnpm lint`, job `checks`) |
-| Unitarios | Vitest 3, entorno `node` | `apps/web` (225 archivos) | sí (`pnpm test`) |
+| Unitarios | Vitest 3, entorno `node` | `apps/web` (227 archivos) | sí (`pnpm test`) |
 | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** (se activa con staging, ver E2E) |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
@@ -81,7 +81,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **225 archivos, ~2.399 casos** (recontado el 2026-10-08 con SCRUM-504 rebasada sobre SCRUM-503; el runner ejecuta 2.878 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **227 archivos, ~2.408 casos** (recontado el 2026-10-09 con SCRUM-504 rebasada sobre `origin/main` `48bfcf2a`, con SCRUM-503 y los PRs de Discord, Trial Reels y backup; el runner ejecuta 2.887 por los `it.each`; la tabla lista todas las carpetas con tests y suma ese total). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
@@ -93,7 +93,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/clients` | 10 | 106 | próxima tarea (vencida con el hoy de la org, también para un miembro en otra zona), facturación, satisfacción, señales, sub-clientes, revisión semanal, fecha de alta por defecto del import de Excel, día de la 1-1 en el prompt de tareas, días que le quedan al programa; montos en centavos (lo pagado al cerrar una venta se redondea como la columna: 1.005 → 1.01, SCRUM-504) |
 | `lib/fechas` | 2 | 39 | fechas calendario: hoy en una zona, suma de días (fin de mes, año y horario de verano), días entre dos fechas, vencida (sólo `YYYY-MM-DD`), valor guardado leído en la zona de la org (ida y vuelta), formato de fecha guardada, mediodía e inicio de una fecha en una zona, día de un instante real, zona de la organización con fallback |
 | `lib/onboarding` | 4 | 61 | derivación, gate de routing, ítems, tours |
-| `lib/discord` | 5 | 60 | actividad, canales, clasificador, perfil, identidades |
+| `lib/discord` | 6 | 65 | actividad, canales, clasificador, perfil, identidades, diagnóstico del intent MESSAGE CONTENT |
 | `lib/ghl` | 5 | 45 | estados de turno, eventos de oportunidad, transiciones, verificación de webhook, fecha de alta de un contacto en la zona de la org |
 | `lib/sales` | 4 | 63 | opciones de seguimiento (incluida la fecha propuesta del próximo paso), hilo del lead (el próximo paso vence por día en la zona de la org), rango de métricas de ventas en días de la org (miembro en Madrid); el recorrido del lead: la conversación es obligatoria y cada fuente opcional que falla se registra una vez y se nombra en `faltan` (SCRUM-504) |
 | `lib/wins` | 2 | 34 | consentimiento, caso derivado |
@@ -120,7 +120,7 @@ Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los
 | `lib/observability` | 5 | 67 | aviso a Sentry de los crons; registro de corridas en `corridas_de_procesos` (ok, encolado, fallo, parcial con las orgs fallidas, una falla o una base colgada del registro no rompe el cron, apertura lenta sin fila fantasma, retención de 30 días, mensaje de error saneado también con claves compuestas, corridas en paralelo sin mezclarse) y chequeo de salud (estados, plazo de 3 s, versión, variables, una sola medición para muchos pedidos) (SCRUM-85); etiquetas de una falla de proceso de fondo o de server action (SCRUM-497); lo que se saca de un evento o transacción antes de mandarlo (cuerpo, cookies, query también en nombres de transacciones y spans, headers fuera de la lista blanca, breadcrumbs de consola), las configs de Sentry con el SDK simulado y las copias del reel-worker y del bot; un objeto plano reportado con su `message` y su `code` (SCRUM-501) |
 | `lib/storage` | 1 | 6 | validación de rutas por org |
 | `lib/server` | 1 | 16 | errores de las server actions: sólo un `ErrorEsperable` vuelve con su mensaje en los módulos arreglados y lo demás se registra, va a Sentry y vuelve con el texto fijo; `runMutation` no cambia el mensaje pero reporta las fallas de infraestructura (clasificación por clase, `code` y texto); los errores internos de Next (redirect, notFound y el de ruta dinámica del prerender) se relanzan sin registrarse ni ir a Sentry (SCRUM-503) |
-| `lib/queue` | 2 | 5 | aviso cuando falla un trabajo de QStash; las orgs de un fan-out quedan en el registro de corridas |
+| `lib/queue` | 3 | 9 | aviso cuando falla un trabajo de QStash; las orgs de un fan-out quedan en el registro de corridas; el secreto del worker va en un header y no en la URL |
 | `lib/unipile` | 2 | 5 | secreto del webhook |
 | `lib/intelligence` | 2 | 15 | organizaciones sobre las que corren los crons de IA y el chequeo de la org al procesarla (generadores, workers, modo en serie) |
 | `lib/youtube` | 1 | 2 | métricas de video que se guardan |
