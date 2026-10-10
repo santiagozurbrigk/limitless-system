@@ -16,7 +16,9 @@ import { describe, expect, it } from "vitest";
  *   - una página de la plataforma o del super admin queda sin un `error.tsx`
  *     arriba;
  *   - una página de la plataforma llama a `notFound()` y no hay `not-found`
- *     dentro de la cáscara.
+ *     dentro de la cáscara;
+ *   - un client component de la plataforma llama a `notFound()` (en el
+ *     navegador rompe con el error #310 de React).
  */
 
 const WEB = join(__dirname, "..", "..");
@@ -119,5 +121,21 @@ describe("notFound dentro de la plataforma", () => {
     );
     expect(conNotFound.length).toBeGreaterThan(0);
     expect(existsSync(join(raiz, "not-found.tsx"))).toBe(true);
+  });
+
+  it("⭐ ningún client component de (platform) llama a notFound(): se resuelve en el servidor", () => {
+    // Desde el navegador, `notFound()` rompía la app con el error #310 de
+    // React en vez de mostrar el not-found (la ficha de cliente, SCRUM-108).
+    const raiz = join(APP, "(platform)");
+    const enElNavegador = readdirSync(raiz, { recursive: true, withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith(".tsx"))
+      .map((e) => join(e.parentPath, e.name))
+      .filter((archivo) => !archivo.includes("__tests__"))
+      .filter((archivo) => {
+        const codigo = codigoSinComentarios(archivo);
+        return /^\s*["']use client["'];/.test(codigo) && /\bnotFound\(\)/.test(codigo);
+      })
+      .map((archivo) => relative(APP, archivo));
+    expect(enElNavegador).toEqual([]);
   });
 });
