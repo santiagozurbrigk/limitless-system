@@ -27,17 +27,23 @@ import { lecturaDegradable } from "@/lib/server/lectura-degradable";
 /**
  * Lo que se usa si una lectura secundaria del layout falla (SCRUM-108).
  *
- * - Holding: como una cuenta sin holding. Se esconde el selector de negocios y
- *   el aviso de "estás viendo X", pero los datos de cada pantalla los sigue
- *   resolviendo `requireOrganizationId` con la cookie del negocio activo: no
- *   cambia qué org se lee ni qué puede ver nadie.
+ * - Holding: como una cuenta holding sin negocio activo, la vista más
+ *   restrictiva de la barra: sin los módulos (sólo "Mi Holding"), sin selector
+ *   de negocios ni el aviso de "estás viendo X". En la práctica sólo falla la
+ *   lectura de una cuenta holding: para el resto `getHoldingSessionState`
+ *   termina antes de leer los negocios (y la lectura del perfil no lanza). Si
+ *   alguna vez fallara para otra cuenta, perdería los módulos de la barra
+ *   (las pantallas siguen por URL con los permisos de siempre, y `/holding` la
+ *   devuelve al panel): esconder de más es seguro, mostrar de más no. Qué org
+ *   se lee no cambia: lo sigue resolviendo `requireOrganizationId` con la
+ *   cookie del negocio activo.
  * - Onboarding: sin checklist y con todos los tours vistos, para que no se
  *   lance un tour (que además intentaría guardar en la base caída).
  * - Zona: `null`, la zona por defecto (`ZONA_HORARIA_POR_DEFECTO`), lo mismo
  *   que una org que todavía no la eligió.
  */
 const HOLDING_SI_FALLA: HoldingSessionState = {
-  isHolding: false,
+  isHolding: true,
   viewingBusiness: false,
   businesses: [],
 };
@@ -55,9 +61,13 @@ export default async function PlatformRouteLayout({
    * ⭐ Imprescindibles y degradables (SCRUM-108).
    *
    * Los permisos y los headers son imprescindibles: sin ellos no se puede
-   * decidir qué pantalla ve cada uno, así que si fallan la plataforma cae en
-   * su pantalla de error. Nunca se reemplazan por un valor por defecto, que
-   * abriría el acceso.
+   * decidir qué pantalla ve cada uno. Nunca se reemplazan por un valor por
+   * defecto, que abriría el acceso: `getCurrentUserPermissions` lanza
+   * `FallaDeLaBase` si una de sus lecturas (Auth caído, `profiles`,
+   * `enabled_add_ons`, `team_roles`) devuelve error, y el layout cae en
+   * `global-error`. Antes se tragaba ese error y quedaba "sin rol", sin
+   * bloqueo por módulo (riesgo R1); lo prueba
+   * `layout-plataforma-permisos-caidos.test.ts` con la función real.
    *
    * Holding, onboarding y zona son degradables: si fallan se registran en
    * Sentry (`lectura_degradada`) y la plataforma sigue con el valor de arriba.

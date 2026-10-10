@@ -20,8 +20,9 @@ export type PropsDeBoundary = {
  * - La captura va por el SDK del navegador, así que pasa por el mismo
  *   `beforeSend` que limpia los datos sensibles (`sentry.client.config.ts`).
  *   Lleva el tag `boundary` y, si lo hay, `error_digest`: el mismo código que
- *   ve el usuario y que trae el evento del servidor (`onRequestError`), para
- *   encontrarlo cuando alguien lo pase a soporte.
+ *   ve el usuario y que `instrumentation.ts` le pone al evento del servidor
+ *   (`onRequestError`), que es el que trae el mensaje real y el stack. Con
+ *   ese código soporte encuentra los dos.
  * - Los errores internos de Next (redirect, notFound) nunca llegan acá: el
  *   boundary de Next los relanza antes de dibujar el `error.tsx`.
  * - `reset` sólo vuelve a dibujar el segmento con lo que ya tiene el

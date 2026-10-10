@@ -24,6 +24,7 @@ import type { HoldingSessionState } from "@/lib/holding/session";
 import type { OnboardingContext } from "@/lib/onboarding/current";
 import { TOUR_IDS } from "@/lib/onboarding/tours";
 import { ErrorEsperable } from "@/lib/server/error-esperable";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 
 const sim = vi.hoisted(() => ({
   pathname: "/dashboard",
@@ -131,10 +132,10 @@ describe("sin fallas", () => {
 });
 
 describe("⭐ lecturas degradables: si fallan, la plataforma sigue y queda registrado", () => {
-  it("holding caído → cuenta sin holding (sin selector de negocios)", async () => {
+  it("holding caído → holding sin negocio activo: la barra sin módulos, sin selector de negocios", async () => {
     sim.fallas.holding = new Error("fetch failed");
     expect(await render()).toContain(PANTALLA);
-    expect(sim.recibido.holding).toEqual({ isHolding: false, viewingBusiness: false, businesses: [] });
+    expect(sim.recibido.holding).toEqual({ isHolding: true, viewingBusiness: false, businesses: [] });
     expect(sim.reportes).toEqual([
       { error: sim.fallas.holding, contexto: { lectura: "layout-plataforma:holding" } },
     ]);
@@ -175,7 +176,9 @@ describe("⭐ lecturas degradables: si fallan, la plataforma sigue y queda regis
 
 describe("⭐ lo que no se degrada", () => {
   it("permisos caídos → el layout lanza (pantalla de error), nunca abre el acceso", async () => {
-    const error = new Error("fetch failed");
+    // Lo que lanza la función real ante un error de la base (ver
+    // `layout-plataforma-permisos-caidos.test.ts`, con la función sin simular).
+    const error = new FallaDeLaBase({ message: "canceling statement due to statement timeout", code: "57014" });
     sim.fallas.permisos = error;
     await expect(render()).rejects.toBe(error);
     expect(sim.reportes).toEqual([]);
