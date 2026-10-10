@@ -1,13 +1,20 @@
 import { AppProviders } from "@/providers";
 import { WelcomeGate } from "@/components/platform/welcome-gate";
 import { HoldingPlatformProvider } from "@/components/holding/holding-platform-provider";
-import { getHoldingSessionState } from "@/lib/holding/session";
+import {
+  getHoldingSessionState,
+  type HoldingSessionState,
+} from "@/lib/holding/session";
 import { PlatformLayout } from "@/layouts";
 import { getCurrentUserPermissions } from "@/lib/auth/get-current-permissions";
 import { PermissionsProvider } from "@/providers/permissions-provider";
 import { OnboardingProvider } from "@/providers/onboarding-provider";
 import { TourRunner } from "@/components/onboarding/tour-runner";
-import { getCurrentOnboardingContext } from "@/lib/onboarding/current";
+import {
+  getCurrentOnboardingContext,
+  type OnboardingContext,
+} from "@/lib/onboarding/current";
+import { TOUR_IDS } from "@/lib/onboarding/tours";
 import { headers } from "next/headers";
 import { moduloBloqueadoParaRuta } from "@/lib/auth/acceso-a-modulo";
 import { getPermissionModuleLabel } from "@/constants/permission-modules";
@@ -15,22 +22,69 @@ import { SinAcceso } from "@/components/platform/sin-acceso";
 import { AvisoClaveIa } from "@/components/platform/aviso-clave-ia";
 import { zonaDeLaOrganizacionActiva } from "@/lib/fechas/organizacion-activa";
 import { ZonaDeLaOrganizacionProvider } from "@/providers/zona-de-la-organizacion-provider";
+import { lecturaDegradable } from "@/lib/server/lectura-degradable";
+
+/**
+ * Lo que se usa si una lectura secundaria del layout falla (SCRUM-108).
+ *
+ * - Holding: como una cuenta sin holding. Se esconde el selector de negocios y
+ *   el aviso de "estás viendo X", pero los datos de cada pantalla los sigue
+ *   resolviendo `requireOrganizationId` con la cookie del negocio activo: no
+ *   cambia qué org se lee ni qué puede ver nadie.
+ * - Onboarding: sin checklist y con todos los tours vistos, para que no se
+ *   lance un tour (que además intentaría guardar en la base caída).
+ * - Zona: `null`, la zona por defecto (`ZONA_HORARIA_POR_DEFECTO`), lo mismo
+ *   que una org que todavía no la eligió.
+ */
+const HOLDING_SI_FALLA: HoldingSessionState = {
+  isHolding: false,
+  viewingBusiness: false,
+  businesses: [],
+};
+const ONBOARDING_SI_FALLA: OnboardingContext = {
+  state: null,
+  toursSeen: [...TOUR_IDS],
+};
 
 export default async function PlatformRouteLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  /**
+   * ⭐ Imprescindibles y degradables (SCRUM-108).
+   *
+   * Los permisos y los headers son imprescindibles: sin ellos no se puede
+   * decidir qué pantalla ve cada uno, así que si fallan la plataforma cae en
+   * su pantalla de error. Nunca se reemplazan por un valor por defecto, que
+   * abriría el acceso.
+   *
+   * Holding, onboarding y zona son degradables: si fallan se registran en
+   * Sentry (`lectura_degradada`) y la plataforma sigue con el valor de arriba.
+   * Una sesión no válida o una cuenta desactivada no se degradan: se relanzan.
+   */
   const [holdingSession, permissions, onboarding, headerList, zona] =
     await Promise.all([
-      getHoldingSessionState(),
+      lecturaDegradable(
+        "layout-plataforma:holding",
+        getHoldingSessionState,
+        HOLDING_SI_FALLA
+      ),
       getCurrentUserPermissions(),
       // El checklist viene en null para cuentas invitadas; los tours, no.
-      getCurrentOnboardingContext(),
+      lecturaDegradable(
+        "layout-plataforma:onboarding",
+        getCurrentOnboardingContext,
+        ONBOARDING_SI_FALLA
+      ),
       headers(),
       // La zona de la org, una vez para toda la plataforma: el "hoy" y las
       // fechas de los datos de la org se cuentan en ella (SCRUM-493).
-      zonaDeLaOrganizacionActiva(),
+      lecturaDegradable(
+        "layout-plataforma:zona",
+        zonaDeLaOrganizacionActiva,
+        null
+      ),
     ]);
 
   /**

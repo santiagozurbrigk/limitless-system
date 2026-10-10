@@ -3,6 +3,7 @@ import { KeyRound } from "lucide-react";
 import { tryRequireOrganizationId } from "@/lib/auth/bootstrap";
 import { loadOrgCredentialState } from "@/lib/ai/credential-resolver";
 import { avisoClaveIa } from "@/lib/ai/aviso-clave-ia";
+import { lecturaDegradable } from "@/lib/server/lectura-degradable";
 import { paths } from "@/routes";
 
 /**
@@ -30,13 +31,14 @@ export async function AvisoClaveIa({ esFounder }: { esFounder: boolean }) {
   const organizationId = await tryRequireOrganizationId();
   if (!organizationId) return null;
 
-  let estado: Awaited<ReturnType<typeof loadOrgCredentialState>>;
-  try {
-    estado = await loadOrgCredentialState(organizationId);
-  } catch {
-    // Un aviso no puede tirar abajo la plataforma entera.
-    return null;
-  }
+  // Un aviso no puede tirar abajo la plataforma entera: si la lectura falla,
+  // no se muestra y la falla queda en Sentry (SCRUM-108).
+  const estado = await lecturaDegradable(
+    "layout-plataforma:aviso-clave-ia",
+    () => loadOrgCredentialState(organizationId),
+    null
+  );
+  if (!estado) return null;
 
   const aviso = avisoClaveIa(estado);
   if (!aviso) return null;
