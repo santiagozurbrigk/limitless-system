@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 31 | 17 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 30 | 17 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 19 | 5 |
@@ -251,15 +251,6 @@ Prioridad sugerida P2: daño Crítico pero la condición es rara (degradar a un 
 - **Impacto:** Wins, señales de `daily-signals` y atribución de mensajes a clientes con huecos, en todas las orgs con Discord conectado.
 - **Qué hay que hacer:** al arrancar (y periódicamente), pedir a la API de Discord los mensajes posteriores al último `discord_message_id` guardado por canal monitoreado (el upsert por `discord_message_id` ya deduplica); alerta si un servidor conectado pasa N horas sin eventos (ver `[OBS-SIN-ALERTAS]`).
 - **Dónde:** `apps/discord-bot/src/events/ready.ts`, `apps/discord-bot/src/lib/supabase.ts`.
-
-#### [CLIENTE-INEXISTENTE-ERROR-REACT] Abrir la ficha de un cliente que no existe rompe la app con un error de React
-- **Tipo:** bug
-- **Severidad:** Media
-- **Estado verificado:** `app/(platform)/clients/[id]/page.tsx` es un client component que llama a `notFound()` cuando el id no está en la lista de `usePlatformData`. Con un build de producción (Supabase falso, evidencia de SCRUM-108), abrir `/clients/00000000-0000-4000-8000-000000000000` muestra "Application error: a client-side exception has occurred" y Sentry recibe `Minified React error #310` ("Rendered more hooks than during the previous render") desde el router de Next, sin pasar por `error.tsx` ni por `not-found.tsx`. Pasa igual en `main` `4b42102c`, sin `app/(platform)/not-found.tsx`; un `notFound()` desde una página del servidor (`/sops/<id>`) sí muestra la pantalla de "No encontramos lo que buscás".
-- **Qué hay que hacer:** reproducir en desarrollo (mensaje completo de React) y resolver la ficha inexistente sin `notFound()` en el render del cliente: leer el cliente en el servidor y llamar a `notFound()` ahí, o mostrar un estado vacío con link a Clientes.
-- **Dónde:** `apps/web/app/(platform)/clients/[id]/page.tsx`.
-
-Prioridad sugerida P2: sólo con un link viejo o mal copiado; la app se recupera al navegar.
 
 #### [BAJA-ORG-SIN-RESPALDO] La baja de una organización borra todo sin exportación previa ni período de gracia
 - **Tipo:** feature

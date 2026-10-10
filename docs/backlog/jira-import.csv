@@ -1263,17 +1263,6 @@ Fuente: PENDIENTES.md [DB-CLAIM-HOLDING-SIN-REVALIDAR] · Doc del área: docs/ar
 *Dónde:* {{apps/discord-bot/src/events/ready.ts}}, {{apps/discord-bot/src/lib/supabase.ts}}.
 
 Fuente: PENDIENTES.md [DISCORD-BOT-SIN-RECUPERACION] · Doc del área: docs/areas/plataforma.md",DISCORD-BOT-SIN-RECUPERACION,Plataforma,P2,Media,bug
-[CLIENTE-INEXISTENTE-ERROR-REACT] Abrir la ficha de un cliente que no existe rompe la app con un error de React,Bug,Medium,plataforma,p2,sev-media,bug,,,"*Tipo:* bug
-
-*Severidad:* Media
-
-*Estado verificado:* {{app/(platform)/clients/[id]/page.tsx}} es un client component que llama a {{notFound()}} cuando el id no está en la lista de {{usePlatformData}}. Con un build de producción (Supabase falso, evidencia de SCRUM-108), abrir {{/clients/00000000-0000-4000-8000-000000000000}} muestra ""Application error: a client-side exception has occurred"" y Sentry recibe {{Minified React error #310}} (""Rendered more hooks than during the previous render"") desde el router de Next, sin pasar por {{error.tsx}} ni por {{not-found.tsx}}. Pasa igual en {{main}} {{4b42102c}}, sin {{app/(platform)/not-found.tsx}}; un {{notFound()}} desde una página del servidor ({{/sops/<id>}}) sí muestra la pantalla de ""No encontramos lo que buscás"".
-
-*Qué hay que hacer:* reproducir en desarrollo (mensaje completo de React) y resolver la ficha inexistente sin {{notFound()}} en el render del cliente: leer el cliente en el servidor y llamar a {{notFound()}} ahí, o mostrar un estado vacío con link a Clientes.
-
-*Dónde:* {{apps/web/app/(platform)/clients/[id]/page.tsx}}.
-
-Fuente: PENDIENTES.md [CLIENTE-INEXISTENTE-ERROR-REACT] · Doc del área: docs/areas/plataforma.md",CLIENTE-INEXISTENTE-ERROR-REACT,Plataforma,P2,Media,bug
 [BAJA-ORG-SIN-RESPALDO] La baja de una organización borra todo sin exportación previa ni período de gracia,Story,Medium,plataforma,p2,sev-alta,feature,,,"*Tipo:* feature
 
 *Severidad:* Alta

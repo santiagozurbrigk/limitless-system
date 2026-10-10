@@ -266,7 +266,7 @@ Cuando algo falla al dibujar una pantalla, la app muestra una pantalla propia en
 | `app/(platform)/error.tsx` | Falla cualquier otra pantalla de la plataforma | La navegación (notch nav) y el marco ("No pudimos cargar esta sección") |
 | `app/(super-admin)/error.tsx` | Falla una pantalla del super admin | Su marco, con link a Organizaciones |
 | `app/global-error.tsx` | Falla el layout raíz o un layout sin `error.tsx` arriba, como el de la plataforma cuando no se pueden leer los permisos | Nada de la app: trae su propio `<html>` con estilos en línea ("No pudimos cargar la plataforma") |
-| `app/(platform)/not-found.tsx` | Una página del servidor de la plataforma llama a `notFound()` (SOP, reporte, embudo, oferta inexistente o de otra org). La ficha de cliente lo llama desde el navegador y hoy rompe con un error de React (`[CLIENTE-INEXISTENTE-ERROR-REACT]`) | La navegación; "No encontramos lo que buscás" con link al panel. Una URL que no existe sigue en `app/not-found.tsx` |
+| `app/(platform)/not-found.tsx` | Una página de la plataforma llama a `notFound()` en el servidor (cliente, SOP, reporte, embudo, oferta inexistente o de otra org). Ninguna lo llama desde un client component: en el navegador rompía con el error #310 de React (lo vigila `boundaries.test.ts`). La ficha de cliente decide con `clienteVisibleExiste` (`lib/clients/cliente-visible.ts`), la misma consulta y RLS que la lista | La navegación; "No encontramos lo que buscás" con link al panel. Una URL que no existe sigue en `app/not-found.tsx` |
 
 Todas usan `components/platform/pantalla-de-error.tsx` (`PantallaDeError` y, en `global-error`, el hook
 `useBoundaryDeError`): botón **Reintentar** (`router.refresh()` + `reset()`, porque sin refrescar un error del
@@ -293,5 +293,5 @@ no llegan a estas pantallas: el boundary de Next los relanza antes.
 
 Tests: `app/__tests__/boundaries.test.ts` (qué boundaries existen, que sean client components, que capturen en
 Sentry y no usen el mensaje ni el stack, que toda página de `(platform)` y `(super-admin)` tenga un `error.tsx`
-arriba), `components/platform/__tests__/pantalla-de-error.test.ts`, `app/__tests__/layout-plataforma-lecturas.test.ts`
-y `lib/server/__tests__/lectura-degradable.test.ts`.
+arriba), `components/platform/__tests__/pantalla-de-error.test.ts`, `app/__tests__/layout-plataforma-lecturas.test.ts`,
+`lib/server/__tests__/lectura-degradable.test.ts`, `app/__tests__/ficha-de-cliente.test.ts` y `lib/clients/__tests__/cliente-visible.test.ts`.
