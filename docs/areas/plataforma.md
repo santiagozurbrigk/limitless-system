@@ -282,17 +282,18 @@ pantallas: el boundary de Next los relanza antes.
 
 - **Imprescindibles:** los permisos (`getCurrentUserPermissions`) y los headers. Sin ellos no se puede decidir qué
   pantalla ve cada uno: si fallan, la plataforma cae en `global-error`. Nunca se reemplazan por un valor por
-  defecto (abriría el acceso). `getCurrentUserPermissions` lanza `FallaDeLaBase` si Auth no responde (status 0 o
-  5xx) o si la lectura de `profiles`, `organizations.enabled_add_ons` o `team_roles` devuelve error. Antes ese
+  defecto (abriría el acceso). `getCurrentUserPermissions` lanza `FallaDeLaBase` si Auth devuelve un error que no
+  es de sesión (sin respuesta, un 5xx, un 429 o cualquier otro) o si la lectura de `profiles`, `organizations.enabled_add_ons` o `team_roles` devuelve error. Antes ese
   error se tomaba como "no hay fila": el miembro quedaba sin rol (`hasRoleConfigured: false`) y el bloqueo por
-  módulo no corría. Sin sesión (Auth 400/401) o sin perfil, sin error, sigue siendo "sin usuario" o "sin rol",
-  como siempre. Por la misma razón `rechazoPorModulo` lanza en vez de dejar pasar, y la pantalla que lo usa cae
+  módulo no corría. Sin sesión válida (Auth responde `AuthSessionMissingError`, 401 o un código de sesión: `bad_jwt`,
+  `session_not_found`, `user_not_found`, refresh token vencido...) o sin perfil, sin error, sigue siendo "sin
+  usuario" o "sin rol", como siempre. Por la misma razón `rechazoPorModulo` lanza en vez de dejar pasar, y la pantalla que lo usa cae
   en su boundary.
 - **Degradables** (`lecturaDegradable`, `lib/server/lectura-degradable.ts`): si fallan, la plataforma sigue con un
   valor seguro y la falla va a Sentry con el tag `lectura_degradada`:
-  - holding (`getHoldingSessionState`) → como una cuenta holding sin negocio activo: la barra sin los módulos,
-    sin selector de negocios ni el aviso de "estás viendo X". En la práctica esa lectura sólo lanza para una
-    cuenta holding (al leer sus negocios); si fallara para otra cuenta, perdería los módulos de la barra, que es
+  - holding (`getHoldingSessionState`) → como una cuenta holding sin negocio activo: la barra sin ningún ítem
+    (ni los módulos ni "Mi Holding"), sin selector de negocios ni el aviso de "estás viendo X". En la práctica esa lectura sólo lanza para una
+    cuenta holding (al leer sus negocios); si fallara para otra cuenta, perdería los ítems de la barra, que es
     lo más restrictivo (las pantallas siguen por URL con los permisos de siempre). El contenido de la pantalla no
     depende del holding: "Nuevo cliente" en `/clients` se ve igual que para un holding sin negocio activo sin
     fallas. Qué org se lee no cambia: lo sigue resolviendo `requireOrganizationId` con la cookie;

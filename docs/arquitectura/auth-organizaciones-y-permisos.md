@@ -180,7 +180,7 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
   el nivel **más alto** (`LEGACY_PERMISSION_MODULES`, `highestPermissionLevel`).
 - `hasRoleConfigured = false` (member sin rol o rol vacío) → **el layout no bloquea nada**. Decisión: sin
   rol, "sin acceso a todo" dejaría la cuenta inutilizable.
-- Una lectura de permisos que **falla** no es "sin rol" (SCRUM-108): si Auth no responde (status 0 o 5xx) o la
+- Una lectura de permisos que **falla** no es "sin rol" (SCRUM-108): si Auth devuelve un error que no es de sesión (sin respuesta, 5xx, 429...) o la
   lectura de `profiles`, `organizations.enabled_add_ons` o `team_roles` devuelve error,
   `getCurrentUserPermissions` lanza `FallaDeLaBase`. El layout cae en `global-error` y `rechazoPorModulo` lanza:
   nada abre el acceso. Antes el error se descartaba y un miembro con rol limitado quedaba sin bloqueo durante
