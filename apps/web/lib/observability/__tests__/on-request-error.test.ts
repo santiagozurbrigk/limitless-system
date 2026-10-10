@@ -28,7 +28,8 @@ vi.mock("@sentry/nextjs", () => ({
     sim.capturas.push({ args, tags: { ...(sim.pila.at(-1) ?? {}) } }),
 }));
 
-import { digestDelError, onRequestError } from "@/instrumentation";
+import { onRequestError } from "@/instrumentation";
+import { digestDeNext } from "@/lib/observability/digest-de-next";
 
 type Args = Parameters<typeof onRequestError>;
 const REQUEST = { path: "/workboard", method: "GET", headers: {} } as unknown as Args[1];
@@ -48,25 +49,21 @@ describe("onRequestError", () => {
     ]);
   });
 
-  it("sin digest, el error va igual y sin el tag", () => {
+  it("sin digest (Next siempre lo pone; por las dudas) se calcula como Next", () => {
     const error = new Error("sin digest");
     onRequestError(error, REQUEST, CONTEXTO);
-    expect(sim.capturas).toEqual([{ args: [error, REQUEST, CONTEXTO], tags: {} }]);
+    expect(sim.capturas).toEqual([
+      { args: [error, REQUEST, CONTEXTO], tags: { error_digest: digestDeNext(error) } },
+    ]);
+  });
+
+  it("algo que no es un error va sin el tag", () => {
+    onRequestError("texto" as unknown as Error, REQUEST, CONTEXTO);
+    expect(sim.capturas[0].tags).toEqual({});
   });
 
   it("el tag no queda pegado para el próximo evento", () => {
     onRequestError(Object.assign(new Error("a"), { digest: "1" }), REQUEST, CONTEXTO);
     expect(sim.pila).toEqual([]);
-  });
-});
-
-describe("digestDelError", () => {
-  it("sólo un texto no vacío, recortado", () => {
-    expect(digestDelError({ digest: "123" })).toBe("123");
-    expect(digestDelError({ digest: "" })).toBeNull();
-    expect(digestDelError({ digest: 42 })).toBeNull();
-    expect(digestDelError(null)).toBeNull();
-    expect(digestDelError("texto")).toBeNull();
-    expect(digestDelError({ digest: "x".repeat(100) })).toHaveLength(64);
   });
 });

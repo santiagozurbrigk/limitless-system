@@ -4,6 +4,7 @@
  */
 import * as Sentry from "@sentry/nextjs";
 import { limpiarEventoDeSentry } from "@/lib/observability/limpiar-evento-sentry";
+import { etiquetarDigest } from "@/lib/observability/digest-de-next";
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -39,10 +40,13 @@ Sentry.init({
     }),
   ],
 
-  beforeSend(event) {
+  beforeSend(event, hint) {
     // No enviar errores de rate limit conocidos (ruido).
     const msg = event.exception?.values?.[0]?.value ?? "";
     if (msg.includes("Rate limit exceeded")) return null;
+    // El código de referencia que ve el usuario en la pantalla de error
+    // (SCRUM-108, `lib/observability/digest-de-next.ts`).
+    etiquetarDigest(event, hint?.originalException);
     // Cuerpo, cookies, query, headers no permitidos, breadcrumbs de consola.
     return limpiarEventoDeSentry(event);
   },
