@@ -20,6 +20,8 @@ Team y crear las reglas de esta página. Decisión del 2026-10-02: las alertas v
 | Un worker de QStash que falla | `reportarFalla` en el catch del worker | `proceso_de_fondo`, `cron`, `org_id` |
 | Un job de QStash que agotó sus reintentos | `/api/queue/failure` | `proceso_de_fondo`, `cron` (ruta del worker), `org_id`, `provider=qstash` |
 | Una server action que falla por algo inesperado (la red, la base, un bug) en los módulos que separan sus errores (SCRUM-497: Auth, Clientes, Equipo, Closing; SCRUM-503: Tablero; SCRUM-504: Ventas) o una falla de infraestructura dentro de `runMutation` en el resto | `registrarFallaDeAccion` → `reportarFalla` (`lib/server/action-result.ts`) | `server_action` (etiqueta de la acción; sin `proceso_de_fondo`) |
+| Una pantalla que no se pudo dibujar (la ve el usuario como "No pudimos cargar…"; SCRUM-108) | El boundary (`error.tsx` o `global-error.tsx`) la captura desde el navegador con `Sentry.captureException`. Si vino del servidor, además llega el evento de `onRequestError` con el mismo código | `boundary` (`global`, `plataforma`, `super-admin`, `marketing`, `tablero`, `agente`, `ventas`), `error_digest` (el código de referencia que ve el usuario) |
+| Una lectura secundaria del layout de la plataforma que falló y se reemplazó por un valor por defecto (holding, onboarding, zona, aviso de la clave de IA; SCRUM-108) | `lecturaDegradable` → `reportarFalla` | `lectura_degradada` (`layout-plataforma:holding`…; sin `proceso_de_fondo`) |
 | Errores del bot de Discord y del reel-worker | `@sentry/node` (si tienen `SENTRY_DSN`) | `app=discord-bot` / `app=reel-worker`, `proceso_de_fondo` |
 
 Detalle técnico en [`arquitectura/jobs-webhooks-y-colas.md`](../arquitectura/jobs-webhooks-y-colas.md) § Instrumentación y Sentry.
@@ -33,6 +35,11 @@ Además mandaba el header `cookie` (con la sesión de Supabase) y `authorization
 van sin el cuerpo del request (`maxIncomingRequestBodySize: "none"` y `requestDataIntegration` sin `data`, `cookies` ni `query_string`) y con `beforeSend`/`beforeSendTransaction` que pasan todo evento por `limpiarEventoDeSentry` (`lib/observability/limpiar-evento-sentry.ts`): sin cuerpo, cookies ni query; URL y referer sin query; headers por lista blanca (también los que OpenTelemetry copia a la traza y a los spans); `extra` y `contexts` sin claves de cuerpo o de secreto; sin breadcrumbs de consola; la query del nombre de la transacción, de la traza y de los spans (`next.span_name`) y de los demás contextos (`contexts.nextjs.request_path`). El reel-worker y el bot llevan una copia exacta del módulo (se despliegan solos); un test falla si se
 separan. El mensaje y el stack del error sí viajan: una acción no tiene que meter datos del usuario en el texto de un
 error.
+
+Los eventos que mandan las pantallas de error desde el navegador (SCRUM-108, tag `boundary`) pasan por el mismo
+`beforeSend` de `sentry.client.config.ts`. Verificado con un build de producción y un Sentry falso: llegan con la URL
+sin query, sólo el header `User-Agent` y sin cookies; en producción el navegador sólo recibe el mensaje genérico de
+Next y el código de referencia, nunca el mensaje real del servidor (ese va en el evento de `onRequestError`).
 
 **Antes de SCRUM-501** (verificado con un build de `origin/main` `e8dcb4a7` y un Sentry falso, evidencia del
 incidente). Pasa desde que `instrumentation.ts` empezó a cargar Sentry en el servidor (2026-09-22, `d1a35ccb`):

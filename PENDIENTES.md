@@ -252,16 +252,14 @@ Prioridad sugerida P2: daño Crítico pero la condición es rara (degradar a un 
 - **Qué hay que hacer:** al arrancar (y periódicamente), pedir a la API de Discord los mensajes posteriores al último `discord_message_id` guardado por canal monitoreado (el upsert por `discord_message_id` ya deduplica); alerta si un servidor conectado pasa N horas sin eventos (ver `[OBS-SIN-ALERTAS]`).
 - **Dónde:** `apps/discord-bot/src/events/ready.ts`, `apps/discord-bot/src/lib/supabase.ts`.
 
-#### [UI-PAGINAS-DE-ERROR] No hay páginas de error propias: ante una falla se ve la pantalla genérica de Next
+#### [CLIENTE-INEXISTENTE-ERROR-REACT] Abrir la ficha de un cliente que no existe rompe la app con un error de React
 - **Tipo:** bug
 - **Severidad:** Media
-- **Estado verificado:** en `apps/web/app` no existe ningún `error.tsx` ni `global-error.tsx` (sólo `not-found.tsx`). `instrumentation.ts` captura errores del servidor con `onRequestError`, pero los errores de render del navegador no pasan por `global-error.tsx`, que es la vía que recomienda `@sentry/nextjs`.
-- **Riesgo:** Si Supabase o una API cae, o un Server Component tira, entonces el usuario ve "Application error: a server-side exception has occurred" en inglés, sin forma de reintentar ni saber si perdió lo que estaba cargando; algunos errores del navegador no llegan a Sentry.
-- **Impacto:** Todos los usuarios durante cualquier incidente.
-- **Qué hay que hacer:** `app/global-error.tsx` (con `Sentry.captureException`) y `error.tsx` en el layout de plataforma, copy en español, botón de reintentar y sin mostrar el error interno.
-- **Dónde:** `apps/web/app/global-error.tsx`, `apps/web/app/(platform)/error.tsx`.
+- **Estado verificado:** `app/(platform)/clients/[id]/page.tsx` es un client component que llama a `notFound()` cuando el id no está en la lista de `usePlatformData`. Con un build de producción (Supabase falso, evidencia de SCRUM-108), abrir `/clients/00000000-0000-4000-8000-000000000000` muestra "Application error: a client-side exception has occurred" y Sentry recibe `Minified React error #310` ("Rendered more hooks than during the previous render") desde el router de Next, sin pasar por `error.tsx` ni por `not-found.tsx`. Pasa igual en `main` `4b42102c`, sin `app/(platform)/not-found.tsx`; un `notFound()` desde una página del servidor (`/sops/<id>`) sí muestra la pantalla de "No encontramos lo que buscás".
+- **Qué hay que hacer:** reproducir en desarrollo (mensaje completo de React) y resolver la ficha inexistente sin `notFound()` en el render del cliente: leer el cliente en el servidor y llamar a `notFound()` ahí, o mostrar un estado vacío con link a Clientes.
+- **Dónde:** `apps/web/app/(platform)/clients/[id]/page.tsx`.
 
-Prioridad sugerida P2: no pierde datos; mejora mucho la experiencia en un incidente y es chico.
+Prioridad sugerida P2: sólo con un link viejo o mal copiado; la app se recupera al navegar.
 
 #### [BAJA-ORG-SIN-RESPALDO] La baja de una organización borra todo sin exportación previa ni período de gracia
 - **Tipo:** feature

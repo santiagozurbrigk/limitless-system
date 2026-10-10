@@ -12,7 +12,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 
 | Área | Bloques |
 |---|---|
-| [Plataforma](#plataforma) | 11 |
+| [Plataforma](#plataforma) | 12 |
 | [Clientes](#clientes) | 14 |
 | [Ventas](#ventas) | 11 |
 | [Marketing](#marketing) | 14 |
@@ -177,6 +177,21 @@ sumá su bloque en la sección de su área con el mismo formato.
 1. ~~Vercel → Settings → Git muestra `santiagozurbrigk/limitless-system`~~ — ya verificado el 2026-09-23 (los deploys de producción salen de ese repo). Queda Railway; mismo chequeo que V-INFRA-9 (§ Infraestructura).
 2. Railway → servicio del bot → Source: mismo repo, Root Directory `apps/discord-bot`.
 3. Vercel y Railway tienen `LIMITLESS_WEBHOOK_SECRET` / `LIMITLESS_API_URL` (para poder borrar los `OTC_*`).
+
+### 12. Pantallas de error propias ⭐ (SCRUM-108)
+
+Lo que se probó con un build de producción y Supabase y Sentry falsos (evidencia de SCRUM-108): la pantalla de cada
+módulo con la navegación visible, la plataforma andando con una lectura del layout caída, `global-error` y los
+eventos en Sentry sin datos sensibles. Queda verlo en producción, sin romper nada: el único error que se puede
+provocar a mano sin tocar la base es un `notFound()`.
+
+**Prerrequisitos:** una cuenta de la org de prueba; acceso al proyecto de Sentry.
+
+1. ⭐ Abrir un SOP que no existe, por ejemplo `/sops/00000000-0000-4000-8000-000000000000`. Resultado: "No encontramos lo que buscás" con la notch nav arriba y el botón "Ir al panel" (no la pantalla 404 a pantalla completa). La ficha de un cliente que no existe todavía rompe con un error de React (`[CLIENTE-INEXISTENTE-ERROR-REACT]`).
+2. Abrir una URL que no existe, por ejemplo `/no-existe`. Resultado: la 404 general de siempre.
+3. ⭐ La próxima vez que una pantalla falle en producción (o en un preview con una variable de Supabase rota a propósito): se ve "No pudimos cargar…" en español, con "Reintentar", el código de referencia y la navegación; nunca un texto en inglés ni un nombre de tabla.
+4. En Sentry, buscar el código de referencia que mostró la pantalla (tag `error_digest`). Resultado: un evento del navegador con el tag `boundary` y, si vino del servidor, el evento de `onRequestError` con el mismo código; ninguno con cookies, query ni cuerpo del pedido.
+5. Si alguna vez aparece un evento con el tag `lectura_degradada`, la plataforma siguió andando con un valor por defecto (sin selector de holding, sin checklist, con la zona por defecto): revisar qué lectura falló.
 
 ---
 

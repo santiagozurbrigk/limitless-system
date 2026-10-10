@@ -28,6 +28,31 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-10 — Pantallas de error propias y una plataforma que no se cae entera (SCRUM-108)
+
+**Rama:** `fix/SCRUM-108-paginas-de-error`
+**Commit(s):** `86610817`: feat(plataforma): pantallas de error propias y lecturas degradables en el layout; este (docs)
+**Módulo(s) afectado(s):** plataforma: `app/global-error.tsx`, `app/(platform)/error.tsx`, `app/(super-admin)/error.tsx`, `app/(platform)/{marketing,workboard,agent,sales}/error.tsx`, `app/(platform)/not-found.tsx`, `components/platform/pantalla-de-error.tsx`, `app/(platform)/layout.tsx`, `lib/server/lectura-degradable.ts`, `lib/observability/reportar-falla.ts`, `components/platform/aviso-clave-ia.tsx`; docs `areas/plataforma.md`, `operacion/alertas.md`, `operacion/testing.md`, `operacion/verificacion-manual.md`
+
+**Qué se hizo:** cierra `[UI-PAGINAS-DE-ERROR]` (riesgo R2 del informe de errores y observabilidad, sección 5.4).
+- `global-error.tsx` con su propio `<html>`, estilos en línea, "No pudimos cargar la plataforma", Reintentar, link al inicio y código de referencia (`error.digest`).
+- `error.tsx` en `(platform)` y `(super-admin)`, dentro de la cáscara, y en Marketing, Tablero, Agente y Ventas, todos con el componente compartido `PantallaDeError`. El hook `useBoundaryDeError` captura en Sentry desde el navegador (tags `boundary` y `error_digest`) y arma el Reintentar como `router.refresh()` + `reset()`. Ninguno usa `error.message` ni el stack.
+- `(platform)/not-found.tsx`: un `notFound()` de una página de la plataforma ya no saca al usuario de la cáscara.
+- Layout de la plataforma: los permisos y los headers siguen siendo imprescindibles; holding, onboarding y zona pasan por `lecturaDegradable` (valor por defecto + `reportarFalla` con el tag nuevo `lectura_degradada`). El aviso de la clave de IA usa lo mismo en lugar de un `catch` mudo.
+- Tests: `app/__tests__/boundaries.test.ts` (arquitectura), `components/platform/__tests__/pantalla-de-error.test.ts`, `app/__tests__/layout-plataforma-lecturas.test.ts`, `lib/server/__tests__/lectura-degradable.test.ts` y la etiqueta nueva en `cron-monitor.test.ts`. 235 archivos y 2.986 tests ejecutados (también con `TZ=UTC`); control negativo de cada uno en la evidencia de SCRUM-108.
+- Probado con `next build` + `next start`, Supabase y Sentry falsos y Chromium headless: el Tablero roto muestra "No pudimos cargar el Tablero" con la navegación; una pantalla sin boundary propio (SOPs) cae en el de la plataforma; con la lectura de negocios del holding caída `/clients` carga igual (en `main` daba "Application error"); un error forzado del layout raíz y de los permisos muestra `global-error`; un SOP inexistente muestra el `not-found` de la plataforma sin evento en Sentry. Los eventos del navegador llegan sin cookies, query ni headers fuera de la lista blanca.
+
+**Por qué / finalidad:** ante cualquier falla el usuario veía "Application error" en inglés, sin reintentar; una lectura secundaria del layout (por ejemplo, los negocios del holding) dejaba sin app a toda la org; los errores de render del navegador no pasaban por Sentry con contexto.
+
+**Decisiones de diseño relevantes:**
+- Qué degrada: sólo lo que tiene un valor por defecto que no cambia qué se ve ni quién entra. Holding → cuenta sin holding (la org que se lee la sigue resolviendo `requireOrganizationId` con la cookie); onboarding → sin checklist y con todos los tours vistos (para no lanzar uno que además intentaría escribir en la base caída); zona → la zona por defecto. Los permisos no degradan nunca (R1, el fallo abierto de `getCurrentUserPermissions`, queda fuera de alcance y sin cambios).
+- `lecturaDegradable` relanza los `ErrorEsperable` (sesión no válida, cuenta desactivada: tragarlos dejaría pasar a quien no debe) y los errores internos de Next (`unstable_rethrow`).
+- La captura del boundary se hace siempre, aunque el servidor ya haya mandado el error por `onRequestError`: el evento del navegador lleva el tag `boundary` y el mismo `error_digest`, que es lo que el usuario le pasa a soporte.
+- Un solo `not-found` para la plataforma (el texto no depende del módulo). Sin `Suspense`/`loading.tsx` para lo degradable: no hacía falta para que la app siga andando.
+- Reintentar refresca además de `reset()`: sin `router.refresh()` un error del servidor se repetía igual.
+
+**Riesgos / deuda técnica pendiente:** nuevo `[CLIENTE-INEXISTENTE-ERROR-REACT]`: la ficha de un cliente que no existe llama a `notFound()` desde el navegador y rompe con React #310 ("Application error"), igual en `main`. Verificar las pantallas en producción: `verificacion-manual.md` § Plataforma 12.
+
 ### 2026-10-09 — Supabase en plan Pro: cierre de backups y de los cupos del plan Free (SCRUM-11)
 
 **Rama:** `claude/great-thompson-n7ts63`

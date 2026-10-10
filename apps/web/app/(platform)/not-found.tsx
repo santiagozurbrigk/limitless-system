@@ -5,7 +5,7 @@ import { paths } from "@/routes";
 
 /**
  * Lo que se ve cuando una pantalla de la plataforma llama a `notFound()`: un
- * cliente, un SOP o un reporte que no existe o es de otra organización
+ * SOP, un reporte o un embudo que no existe o es de otra organización
  * (SCRUM-108). Sin esto Next usaba `app/not-found.tsx`, fuera de la cáscara:
  * desaparecía la navegación. Uno solo para toda la plataforma alcanza: el
  * texto no depende del módulo y la navegación sigue a mano para volver.
