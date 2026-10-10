@@ -81,7 +81,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **242 archivos, ~2.486 casos** (recontado el 2026-10-10 con SCRUM-108 sobre `main` `4b42102c`; el runner ejecuta 3.035 por los `it.each`; la tabla lista todas las carpetas con tests y sus filas suman ese total; las carpetas anidadas, como `app/api/integrations/fathom`, cuentan en la fila de su carpeta padre). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **242 archivos, ~2.486 casos** (recontado el 2026-10-10 con SCRUM-108 sobre `main` `4b42102c`; el runner ejecuta 3.039 por los `it.each`; la tabla lista todas las carpetas con tests y sus filas suman ese total; las carpetas anidadas, como `app/api/integrations/fathom`, cuentan en la fila de su carpeta padre). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|

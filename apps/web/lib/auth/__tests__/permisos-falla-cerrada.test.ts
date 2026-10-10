@@ -96,6 +96,10 @@ describe("lo que no cambia cuando las lecturas salen bien", () => {
     ["sesión cerrada", { name: "AuthApiError", status: 403, code: "session_not_found" }],
     ["usuario borrado", { name: "AuthApiError", status: 403, code: "user_not_found" }],
     ["refresh token vencido", { name: "AuthApiError", status: 400, code: "refresh_token_not_found" }],
+    ["sesión vencida", { name: "AuthApiError", status: 400, code: "session_expired" }],
+    ["refresh token ya usado", { name: "AuthApiError", status: 400, code: "refresh_token_already_used" }],
+    ["usuario bloqueado", { name: "AuthApiError", status: 400, code: "user_banned" }],
+    ["sin autorización", { name: "AuthApiError", status: 400, code: "no_authorization" }],
   ])("Auth responde %s → sigue siendo 'sin usuario', sin lanzar", async (_caso, error) => {
     sim.usuario = null;
     sim.errorDeAuth = { message: "sesión", ...error };

@@ -2841,6 +2841,15 @@ Fuente: PENDIENTES.md [CAMPO-FECHA-MIGRAR] · Doc del área: docs/arquitectura/v
 *Dónde:* los archivos citados.
 
 Fuente: PENDIENTES.md [FECHAS-UTC-RESTO] · Doc del área: docs/arquitectura/vision-general.md",FECHAS-UTC-RESTO,"Infraestructura, seguridad y tests (transversal)",P2,,bug
+[MIDDLEWARE-COOKIE-REFRESCADA] El middleware le pasa a la página la cookie de sesión vieja después de refrescarla (nuevo),Bug,Low,plataforma,p3,bug,,,,"*Tipo:* bug
+
+*Estado verificado:* en {{apps/web/lib/supabase/middleware.ts}}, {{updateSession}} copia los headers del request ({{:63}}, {{new Headers(request.headers)}}, que incluye el header {{cookie}}) antes de llamar a {{supabase.auth.getUser()}}. Cuando ese {{getUser()}} refresca la sesión, {{setAll}} actualiza {{request.cookies}}, pero arma la respuesta con la copia vieja ({{NextResponse.next({ request: forwardedRequest })}}, {{:72}} y {{:83}}). El layout y las páginas reciben el token anterior y vuelven a refrescar con un refresh token que ya se rotó. Hoy anda: GoTrue lo acepta dentro del intervalo de reuso y, si no, devuelve {{refresh_token_already_used}}, que {{getCurrentUserPermissions}} trata como ""sin usuario"" (SCRUM-108). Viene de {{main}}; lo encontró el AR de SCRUM-108 (pasada 3, {{evidencia-sprint2/scrum-108/ar-pasada-3.md}} § Middleware y layout) leyendo el código; no se reprodujo en el navegador.
+
+*Qué hay que hacer:* armar {{forwardedRequest}} con los headers del request después del refresh (o copiar en {{setAll}} la cookie nueva al header {{cookie}} de la copia), como el patrón de {{@supabase/ssr}}, y probar un refresh real: una sola rotación por request y la página con la sesión nueva.
+
+*Dónde:* {{apps/web/lib/supabase/middleware.ts}}.
+
+Fuente: PENDIENTES.md [MIDDLEWARE-COOKIE-REFRESCADA] · Doc del área: docs/areas/plataforma.md",MIDDLEWARE-COOKIE-REFRESCADA,Plataforma,P3,,bug
 [DISCORD-BACKFILL] Los mensajes enviados mientras el bot está caído no se recuperan,Story,Low,plataforma,p3,sev-media,feature,,,"*Tipo:* feature
 
 *Severidad:* Media

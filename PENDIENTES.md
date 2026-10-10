@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 30 | 17 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 30 | 18 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 19 | 5 |
@@ -426,6 +426,14 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Dónde:** workboard, SOPs, UTMs, ficha de cliente.
 
 ### Plataforma · P3
+
+#### [MIDDLEWARE-COOKIE-REFRESCADA] El middleware le pasa a la página la cookie de sesión vieja después de refrescarla (nuevo)
+- **Tipo:** bug
+- **Estado verificado:** en `apps/web/lib/supabase/middleware.ts`, `updateSession` copia los headers del request (`:63`, `new Headers(request.headers)`, que incluye el header `cookie`) antes de llamar a `supabase.auth.getUser()`. Cuando ese `getUser()` refresca la sesión, `setAll` actualiza `request.cookies`, pero arma la respuesta con la copia vieja (`NextResponse.next({ request: forwardedRequest })`, `:72` y `:83`). El layout y las páginas reciben el token anterior y vuelven a refrescar con un refresh token que ya se rotó. Hoy anda: GoTrue lo acepta dentro del intervalo de reuso y, si no, devuelve `refresh_token_already_used`, que `getCurrentUserPermissions` trata como "sin usuario" (SCRUM-108). Viene de `main`; lo encontró el AR de SCRUM-108 (pasada 3, `evidencia-sprint2/scrum-108/ar-pasada-3.md` § Middleware y layout) leyendo el código; no se reprodujo en el navegador.
+- **Qué hay que hacer:** armar `forwardedRequest` con los headers del request después del refresh (o copiar en `setAll` la cookie nueva al header `cookie` de la copia), como el patrón de `@supabase/ssr`, y probar un refresh real: una sola rotación por request y la página con la sesión nueva.
+- **Dónde:** `apps/web/lib/supabase/middleware.ts`.
+
+Prioridad sugerida P3: sin efecto visible hoy; evita un segundo refresh por request y un "sin usuario" si el reuso vence.
 
 #### [DISCORD-BACKFILL] Los mensajes enviados mientras el bot está caído no se recuperan
 - **Tipo:** feature
