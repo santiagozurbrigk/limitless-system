@@ -31,22 +31,39 @@ export type UserPermissions = {
  * no se puede tomar como "no hay fila": un perfil o un rol que no se leyó
  * daría `hasRoleConfigured: false`, y sin rol el bloqueo por módulo no corre,
  * así que un miembro con rol limitado entraría a todo (SCRUM-108, riesgo R1).
- * Se lanza: el layout cae en su pantalla de error, `rechazoPorModulo` rechaza
- * y nada abre el acceso.
+ * Se lanza: el layout cae en su pantalla de error, `rechazoPorModulo` lanza y
+ * la pantalla que lo usa cae en su boundary; nada abre el acceso.
  */
 function fallaSiHayError(error: { message: string; code?: string | null } | null): void {
   if (error) throw new FallaDeLaBase(error);
 }
 
 /**
- * `auth.getUser()` devuelve `error` también cuando simplemente no hay sesión
- * (400) o el token venció (401/403): eso es "sin usuario", como siempre. Lo
- * que lanza es la caída de Auth: sin respuesta (status 0) o un 5xx.
+ * Los errores de `auth.getUser()` que significan "no hay sesión válida": sin
+ * sesión (`AuthSessionMissingError`), token vencido o inválido, sesión
+ * cerrada, usuario borrado o bloqueado. Ésos son "sin usuario", como siempre.
  */
-function esCaidaDeAuth(error: { status?: number } | null): boolean {
-  if (!error) return false;
-  const status = error.status ?? 0;
-  return status === 0 || status >= 500;
+const CODIGOS_DE_SESION_INVALIDA = new Set([
+  "bad_jwt",
+  "invalid_jwt",
+  "no_authorization",
+  "session_not_found",
+  "session_expired",
+  "refresh_token_not_found",
+  "refresh_token_already_used",
+  "user_not_found",
+  "user_banned",
+]);
+
+/**
+ * Todo lo demás lanza (SCRUM-108): Auth caído (sin respuesta, status 0, o un
+ * 5xx), un límite de pedidos (429) o cualquier otro error. Tomarlos como "sin
+ * usuario" dejaría la cuenta sin rol y sin bloqueo por módulo.
+ */
+function esSesionInvalida(error: { name?: string; status?: number; code?: string }): boolean {
+  if (error.name === "AuthSessionMissingError") return true;
+  if (error.code && CODIGOS_DE_SESION_INVALIDA.has(error.code)) return true;
+  return error.status === 401;
 }
 
 export async function getCurrentUserPermissions(): Promise<UserPermissions> {
@@ -56,7 +73,7 @@ export async function getCurrentUserPermissions(): Promise<UserPermissions> {
     error: authError,
   } = await supabase.auth.getUser();
 
-  if (authError && esCaidaDeAuth(authError)) {
+  if (authError && !esSesionInvalida(authError)) {
     throw new FallaDeLaBase({ message: authError.message, code: authError.code ?? null });
   }
 

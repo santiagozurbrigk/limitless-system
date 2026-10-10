@@ -28,11 +28,11 @@ import { lecturaDegradable } from "@/lib/server/lectura-degradable";
  * Lo que se usa si una lectura secundaria del layout falla (SCRUM-108).
  *
  * - Holding: como una cuenta holding sin negocio activo, la vista más
- *   restrictiva de la barra: sin los módulos (sólo "Mi Holding"), sin selector
- *   de negocios ni el aviso de "estás viendo X". En la práctica sólo falla la
+ *   restrictiva de la barra: sin ningún ítem (ni los módulos ni "Mi Holding"),
+ *   sin selector de negocios ni el aviso de "estás viendo X". En la práctica sólo falla la
  *   lectura de una cuenta holding: para el resto `getHoldingSessionState`
  *   termina antes de leer los negocios (y la lectura del perfil no lanza). Si
- *   alguna vez fallara para otra cuenta, perdería los módulos de la barra
+ *   alguna vez fallara para otra cuenta, perdería los ítems de la barra
  *   (las pantallas siguen por URL con los permisos de siempre, y `/holding` la
  *   devuelve al panel): esconder de más es seguro, mostrar de más no. Qué org
  *   se lee no cambia: lo sigue resolviendo `requireOrganizationId` con la
@@ -63,7 +63,8 @@ export default async function PlatformRouteLayout({
    * Los permisos y los headers son imprescindibles: sin ellos no se puede
    * decidir qué pantalla ve cada uno. Nunca se reemplazan por un valor por
    * defecto, que abriría el acceso: `getCurrentUserPermissions` lanza
-   * `FallaDeLaBase` si una de sus lecturas (Auth caído, `profiles`,
+   * `FallaDeLaBase` si una de sus lecturas (Auth con un error que no es de
+   * sesión, `profiles`,
    * `enabled_add_ons`, `team_roles`) devuelve error, y el layout cae en
    * `global-error`. Antes se tragaba ese error y quedaba "sin rol", sin
    * bloqueo por módulo (riesgo R1); lo prueba

@@ -18,7 +18,7 @@ const TIMEOUT = { message: "canceling statement due to statement timeout", code:
 
 const sim = vi.hoisted(() => ({
   usuario: { id: "user-1" } as { id: string } | null,
-  errorDeAuth: null as { message: string; status?: number; code?: string } | null,
+  errorDeAuth: null as { message: string; name?: string; status?: number; code?: string } | null,
   filas: {} as Record<string, Record<string, unknown> | null>,
   errores: {} as Record<string, { message: string; code: string } | null>,
 }));
@@ -68,11 +68,14 @@ describe("⭐ una lectura de permisos que falla lanza, nunca abre el acceso", ()
   );
 
   it.each([
-    ["sin respuesta (status 0)", 0],
-    ["un 5xx", 503],
-  ])("Auth caído, %s → lanza", async (_caso, status) => {
+    ["sin respuesta (status 0)", { name: "AuthRetryableFetchError", status: 0 }],
+    ["un 5xx", { name: "AuthApiError", status: 503 }],
+    ["⭐ un límite de pedidos (429)", { name: "AuthApiError", status: 429, code: "over_request_rate_limit" }],
+    ["un 4xx que no es de sesión", { name: "AuthApiError", status: 422, code: "validation_failed" }],
+    ["un 404 sin código", { name: "AuthApiError", status: 404 }],
+  ])("Auth con %s → lanza", async (_caso, error) => {
     sim.usuario = null;
-    sim.errorDeAuth = { message: "fetch failed", status };
+    sim.errorDeAuth = { message: "falla de Auth", ...error };
     await expect(getCurrentUserPermissions()).rejects.toBeInstanceOf(FallaDeLaBase);
   });
 });
@@ -85,15 +88,21 @@ describe("lo que no cambia cuando las lecturas salen bien", () => {
     expect(permisos.modules.dashboard).toBe("full");
   });
 
-  it("sin sesión (Auth responde 400/401) sigue siendo 'sin usuario', sin lanzar", async () => {
+  it.each([
+    ["sin sesión", { name: "AuthSessionMissingError", status: 400 }],
+    ["token inválido (401)", { name: "AuthApiError", status: 401 }],
+    ["JWT mal formado", { name: "AuthInvalidJwtError", status: 400, code: "invalid_jwt" }],
+    ["JWT rechazado", { name: "AuthApiError", status: 403, code: "bad_jwt" }],
+    ["sesión cerrada", { name: "AuthApiError", status: 403, code: "session_not_found" }],
+    ["usuario borrado", { name: "AuthApiError", status: 403, code: "user_not_found" }],
+    ["refresh token vencido", { name: "AuthApiError", status: 400, code: "refresh_token_not_found" }],
+  ])("Auth responde %s → sigue siendo 'sin usuario', sin lanzar", async (_caso, error) => {
     sim.usuario = null;
-    sim.errorDeAuth = { message: "Auth session missing!", status: 400 };
+    sim.errorDeAuth = { message: "sesión", ...error };
     await expect(getCurrentUserPermissions()).resolves.toMatchObject({
       role: "viewer",
       hasRoleConfigured: false,
     });
-    sim.errorDeAuth = { message: "invalid JWT", status: 401 };
-    await expect(getCurrentUserPermissions()).resolves.toMatchObject({ hasRoleConfigured: false });
   });
 
   it("un perfil que no existe (sin error) sigue siendo 'sin rol', como antes", async () => {
