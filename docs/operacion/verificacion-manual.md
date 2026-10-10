@@ -12,7 +12,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 
 | Área | Bloques |
 |---|---|
-| [Plataforma](#plataforma) | 11 |
+| [Plataforma](#plataforma) | 12 |
 | [Clientes](#clientes) | 14 |
 | [Ventas](#ventas) | 11 |
 | [Marketing](#marketing) | 14 |
@@ -177,6 +177,23 @@ sumá su bloque en la sección de su área con el mismo formato.
 1. ~~Vercel → Settings → Git muestra `santiagozurbrigk/limitless-system`~~ — ya verificado el 2026-09-23 (los deploys de producción salen de ese repo). Queda Railway; mismo chequeo que V-INFRA-9 (§ Infraestructura).
 2. Railway → servicio del bot → Source: mismo repo, Root Directory `apps/discord-bot`.
 3. Vercel y Railway tienen `LIMITLESS_WEBHOOK_SECRET` / `LIMITLESS_API_URL` (para poder borrar los `OTC_*`).
+
+### 12. Pantallas de error propias ⭐ (SCRUM-108)
+
+Lo que se probó con un build de producción y Supabase y Sentry falsos (evidencia de SCRUM-108): la pantalla de cada
+módulo con la navegación visible, la plataforma andando con una lectura del layout caída, `global-error` y los
+eventos en Sentry sin datos sensibles. Queda verlo en producción, sin romper nada: lo único que se puede
+provocar a mano sin tocar la base es un `notFound()`.
+
+**Prerrequisitos:** una cuenta de la org de prueba; acceso al proyecto de Sentry.
+
+1. ⭐ Abrir la ficha de un cliente que no existe, por ejemplo `/clients/00000000-0000-4000-8000-000000000000`, y un SOP que no existe (`/sops/00000000-0000-4000-8000-000000000000`). Resultado: "No encontramos lo que buscás" con la notch nav arriba y el botón "Ir al panel"; nunca "Application error".
+2. 🔒 Con una cuenta de otra org, abrir la URL de la ficha de un cliente de la org de prueba. Resultado: el mismo "No encontramos lo que buscás". Con un cliente propio, la ficha se ve como siempre.
+3. Abrir una URL que no existe, por ejemplo `/no-existe`. Resultado: la 404 general de siempre.
+4. ⭐ La próxima vez que una pantalla falle en producción (o en un preview con una variable de Supabase rota a propósito): se ve "No pudimos cargar…" en español, con "Reintentar", el código de referencia y la navegación; nunca un texto en inglés ni un nombre de tabla.
+5. En Sentry, buscar el código de referencia que mostró la pantalla (tag `error_digest`). Resultado: un evento del navegador con el tag `boundary` y, si vino del servidor, el evento del servidor con el mismo código y el mensaje real (el stack del error); ninguno con cookies, query ni cuerpo del pedido.
+6. Si alguna vez aparece un evento con el tag `lectura_degradada`, la plataforma siguió andando con un valor por defecto (barra de holding sin negocio activo, sin checklist, con la zona por defecto): revisar qué lectura falló.
+7. 🔒⭐ Si hay un incidente de la base (timeouts de PostgREST), un miembro con rol limitado que abre un módulo que no tiene ve "No pudimos cargar la plataforma", nunca la pantalla del módulo. En Sentry, el evento `FallaDeLaBase` del servidor.
 
 ---
 

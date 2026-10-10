@@ -91,7 +91,8 @@ Browser ──► middleware (updateSession)
    │   └─ user en /dashboard, holding sin negocio → /holding u /onboarding/holding
    ▼
 (platform)/layout.tsx  [Server Component]
-   getHoldingSessionState · getCurrentUserPermissions · getCurrentOnboardingContext
+   getCurrentUserPermissions (imprescindible: si falla, global-error)
+   getHoldingSessionState · getCurrentOnboardingContext · zona (degradables, SCRUM-108)
    módulo = permissionModuleForPath(x-pathname)
    no founder + rol cargado + módulo en "none" → <SinAcceso/>
    ▼
@@ -179,6 +180,11 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
   el nivel **más alto** (`LEGACY_PERMISSION_MODULES`, `highestPermissionLevel`).
 - `hasRoleConfigured = false` (member sin rol o rol vacío) → **el layout no bloquea nada**. Decisión: sin
   rol, "sin acceso a todo" dejaría la cuenta inutilizable.
+- Una lectura de permisos que **falla** no es "sin rol" (SCRUM-108): si Auth devuelve un error que no es de sesión (sin respuesta, 5xx, 429...) o la
+  lectura de `profiles`, `organizations.enabled_add_ons` o `team_roles` devuelve error,
+  `getCurrentUserPermissions` lanza `FallaDeLaBase`. El layout cae en `global-error` y `rechazoPorModulo` lanza:
+  nada abre el acceso. Antes el error se descartaba y un miembro con rol limitado quedaba sin bloqueo durante
+  una degradación de la base.
 - La regla (founder pasa siempre, sin rol no se bloquea, con rol entra si el módulo no está en `none`) vive
   en `lib/auth/acceso-a-modulo.ts`: `moduloBloqueadoParaRuta` la usa el layout de `(platform)` y
   `rechazoPorModulo` la aplica en una Server Action (hoy, `getIntelligenceSnapshotAction`, que exige

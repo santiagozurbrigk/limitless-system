@@ -1,22 +1,20 @@
-"use client";
+import { notFound } from "next/navigation";
+import { clienteVisibleExiste } from "@/lib/clients/cliente-visible";
+import { FichaDelCliente } from "./ficha-del-cliente";
 
-import { notFound, useParams } from "next/navigation";
-import { ClientDetail } from "@/components/clients";
-import { usePlatformData } from "@/providers";
-
-export default function ClientDetailPage() {
-  const params = useParams();
-  const id = typeof params.id === "string" ? params.id : "";
-  const { clients, clientsLoading } = usePlatformData();
-  const client = clients.find((c) => c.id === id);
-
-  if (clientsLoading) {
-    return (
-      <p className="text-sm text-muted-foreground">Cargando cliente…</p>
-    );
-  }
-
-  if (!client) notFound();
-
-  return <ClientDetail client={client} />;
+/**
+ * Ficha de un cliente. La existencia se resuelve acá, en el servidor
+ * (SCRUM-108): un id inexistente o de otra organización llama a `notFound()`
+ * y se ve el `not-found` de la plataforma, dentro de la cáscara. Antes la
+ * página era un client component que llamaba a `notFound()` en el navegador y
+ * la app rompía con el error #310 de React.
+ */
+export default async function ClientDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  if (!(await clienteVisibleExiste(id))) notFound();
+  return <FichaDelCliente id={id} />;
 }

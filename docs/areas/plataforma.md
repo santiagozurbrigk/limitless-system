@@ -254,3 +254,60 @@ El link del mail pasa por `/auth/callback`, que acepta `token_hash` o `code`, y 
 Si el link venció o ya se usó, el login muestra `?error=link_vencido`. El mail sale por el SMTP de Resend
 configurado en Supabase Auth (`docs/operacion/entorno-y-deploy.md` § Mails de autenticación).
 
+
+## Pantallas de error y lecturas del layout (SCRUM-108, 2026-10-10)
+
+Cuando algo falla al dibujar una pantalla, la app muestra una pantalla propia en español en lugar de la de Next
+("Application error", en inglés y sin reintentar):
+
+| Archivo | Cuándo se ve | Qué queda visible |
+|---|---|---|
+| `app/(platform)/marketing/error.tsx`, `workboard/error.tsx`, `agent/error.tsx`, `sales/error.tsx` | Falla una pantalla de Marketing, Tablero, Agente o Ventas | La plataforma entera; el error queda en el módulo ("No pudimos cargar Marketing") |
+| `app/(platform)/error.tsx` | Falla cualquier otra pantalla de la plataforma | La navegación (notch nav) y el marco ("No pudimos cargar esta sección") |
+| `app/(super-admin)/error.tsx` | Falla una pantalla del super admin | Su marco, con link a Organizaciones |
+| `app/global-error.tsx` | Falla el layout raíz o un layout sin `error.tsx` arriba, como el de la plataforma cuando no se pueden leer los permisos | Nada de la app: trae su propio `<html>` con estilos en línea ("No pudimos cargar la plataforma") |
+| `app/(platform)/not-found.tsx` | Una página de la plataforma llama a `notFound()` en el servidor (cliente, SOP, reporte, embudo, oferta inexistente o de otra org). Ninguna lo llama desde un client component: en el navegador rompía con el error #310 de React (lo vigila `boundaries.test.ts`). La ficha de cliente decide con `clienteVisibleExiste` (`lib/clients/cliente-visible.ts`), la misma consulta y RLS que la lista | La navegación; "No encontramos lo que buscás" con link al panel. Una URL que no existe sigue en `app/not-found.tsx` |
+
+Todas usan `components/platform/pantalla-de-error.tsx` (`PantallaDeError` y, en `global-error`, el hook
+`useBoundaryDeError`): botón **Reintentar** (`router.refresh()` + `reset()`, porque sin refrescar un error del
+servidor se repite), link para salir, y el **código de referencia** (`error.digest`) si el error vino del servidor.
+Nunca muestran `error.message` ni el stack. Cada una manda el error a Sentry desde el navegador con los tags
+`boundary` y `error_digest` (ver `docs/operacion/alertas.md`). El evento del servidor del mismo error lleva el mismo
+`error_digest` (`etiquetarDigest` en el `beforeSend` de `sentry.server.config.ts` y `onRequestError` en
+`instrumentation.ts`, `lib/observability/digest-de-next.ts`): con el código que pasa el usuario, soporte encuentra
+el evento con el mensaje real y el stack. Los errores internos de Next (redirect, notFound) no llegan a estas
+pantallas: el boundary de Next los relanza antes.
+
+**Lecturas del layout de la plataforma** (`app/(platform)/layout.tsx`). Se esperan en paralelo y se separan en:
+
+- **Imprescindibles:** los permisos (`getCurrentUserPermissions`) y los headers. Sin ellos no se puede decidir qué
+  pantalla ve cada uno: si fallan, la plataforma cae en `global-error`. Nunca se reemplazan por un valor por
+  defecto (abriría el acceso). `getCurrentUserPermissions` lanza `FallaDeLaBase` si Auth devuelve un error que no
+  es de sesión (sin respuesta, un 5xx, un 429 o cualquier otro) o si la lectura de `profiles`, `organizations.enabled_add_ons` o `team_roles` devuelve error. Antes ese
+  error se tomaba como "no hay fila": el miembro quedaba sin rol (`hasRoleConfigured: false`) y el bloqueo por
+  módulo no corría. Sin sesión válida (Auth responde `AuthSessionMissingError`, 401 o un código de sesión: `bad_jwt`,
+  `session_not_found`, `user_not_found`, refresh token vencido...) o sin perfil, sin error, sigue siendo "sin
+  usuario" o "sin rol", como siempre. Por la misma razón `rechazoPorModulo` lanza en vez de dejar pasar, y la pantalla que lo usa cae
+  en su boundary.
+- **Degradables** (`lecturaDegradable`, `lib/server/lectura-degradable.ts`): si fallan, la plataforma sigue con un
+  valor seguro y la falla va a Sentry con el tag `lectura_degradada`:
+  - holding (`getHoldingSessionState`) → como una cuenta holding sin negocio activo: la barra sin ningún ítem
+    (ni los módulos ni "Mi Holding"), sin selector de negocios ni el aviso de "estás viendo X". En la práctica esa lectura sólo lanza para una
+    cuenta holding (al leer sus negocios); si fallara para otra cuenta, perdería los ítems de la barra, que es
+    lo más restrictivo (las pantallas siguen por URL con los permisos de siempre). El contenido de la pantalla no
+    depende del holding: "Nuevo cliente" en `/clients` se ve igual que para un holding sin negocio activo sin
+    fallas. Qué org se lee no cambia: lo sigue resolviendo `requireOrganizationId` con la cookie;
+  - onboarding (`getCurrentOnboardingContext`) → sin checklist y con todos los tours vistos (no se lanza uno);
+  - zona horaria (`zonaDeLaOrganizacionActiva`) → la zona por defecto, como una org que no la eligió;
+  - el aviso de la clave de IA (`AvisoClaveIa`) → no se muestra.
+
+  Una sesión no válida o una cuenta desactivada (`ErrorEsperable`) no se degrada: se relanza, igual que los errores
+  internos de Next (`unstable_rethrow`).
+
+Tests: `app/__tests__/boundaries.test.ts` (qué boundaries existen, que sean client components, que capturen en
+Sentry y no usen el mensaje ni el stack, que toda página de `(platform)` y `(super-admin)` tenga un `error.tsx`
+arriba), `components/platform/__tests__/pantalla-de-error.test.ts`, `app/__tests__/layout-plataforma-lecturas.test.ts`,
+`lib/server/__tests__/lectura-degradable.test.ts`, `app/__tests__/ficha-de-cliente.test.ts`, `lib/clients/__tests__/cliente-visible.test.ts`,
+`lib/auth/__tests__/permisos-falla-cerrada.test.ts`, `app/__tests__/layout-plataforma-permisos-caidos.test.ts` (los permisos reales con la base en
+`57014`: `/finance` nunca se dibuja), `components/layout/__tests__/platform-shell-holding-degradado.test.ts`,
+`lib/observability/__tests__/digest-de-next.test.ts` y `lib/observability/__tests__/on-request-error.test.ts`.
