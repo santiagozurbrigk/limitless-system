@@ -272,18 +272,30 @@ Todas usan `components/platform/pantalla-de-error.tsx` (`PantallaDeError` y, en 
 `useBoundaryDeError`): botón **Reintentar** (`router.refresh()` + `reset()`, porque sin refrescar un error del
 servidor se repite), link para salir, y el **código de referencia** (`error.digest`) si el error vino del servidor.
 Nunca muestran `error.message` ni el stack. Cada una manda el error a Sentry desde el navegador con los tags
-`boundary` y `error_digest` (ver `docs/operacion/alertas.md`). Los errores internos de Next (redirect, notFound)
-no llegan a estas pantallas: el boundary de Next los relanza antes.
+`boundary` y `error_digest` (ver `docs/operacion/alertas.md`). El evento del servidor del mismo error lleva el mismo
+`error_digest` (`etiquetarDigest` en el `beforeSend` de `sentry.server.config.ts` y `onRequestError` en
+`instrumentation.ts`, `lib/observability/digest-de-next.ts`): con el código que pasa el usuario, soporte encuentra
+el evento con el mensaje real y el stack. Los errores internos de Next (redirect, notFound) no llegan a estas
+pantallas: el boundary de Next los relanza antes.
 
 **Lecturas del layout de la plataforma** (`app/(platform)/layout.tsx`). Se esperan en paralelo y se separan en:
 
 - **Imprescindibles:** los permisos (`getCurrentUserPermissions`) y los headers. Sin ellos no se puede decidir qué
   pantalla ve cada uno: si fallan, la plataforma cae en `global-error`. Nunca se reemplazan por un valor por
-  defecto (abriría el acceso).
+  defecto (abriría el acceso). `getCurrentUserPermissions` lanza `FallaDeLaBase` si Auth no responde (status 0 o
+  5xx) o si la lectura de `profiles`, `organizations.enabled_add_ons` o `team_roles` devuelve error. Antes ese
+  error se tomaba como "no hay fila": el miembro quedaba sin rol (`hasRoleConfigured: false`) y el bloqueo por
+  módulo no corría. Sin sesión (Auth 400/401) o sin perfil, sin error, sigue siendo "sin usuario" o "sin rol",
+  como siempre. Por la misma razón `rechazoPorModulo` lanza en vez de dejar pasar, y la pantalla que lo usa cae
+  en su boundary.
 - **Degradables** (`lecturaDegradable`, `lib/server/lectura-degradable.ts`): si fallan, la plataforma sigue con un
   valor seguro y la falla va a Sentry con el tag `lectura_degradada`:
-  - holding (`getHoldingSessionState`) → como una cuenta sin holding: sin selector de negocios ni el aviso de
-    "estás viendo X". Qué org se lee no cambia: lo sigue resolviendo `requireOrganizationId` con la cookie;
+  - holding (`getHoldingSessionState`) → como una cuenta holding sin negocio activo: la barra sin los módulos,
+    sin selector de negocios ni el aviso de "estás viendo X". En la práctica esa lectura sólo lanza para una
+    cuenta holding (al leer sus negocios); si fallara para otra cuenta, perdería los módulos de la barra, que es
+    lo más restrictivo (las pantallas siguen por URL con los permisos de siempre). El contenido de la pantalla no
+    depende del holding: "Nuevo cliente" en `/clients` se ve igual que para un holding sin negocio activo sin
+    fallas. Qué org se lee no cambia: lo sigue resolviendo `requireOrganizationId` con la cookie;
   - onboarding (`getCurrentOnboardingContext`) → sin checklist y con todos los tours vistos (no se lanza uno);
   - zona horaria (`zonaDeLaOrganizacionActiva`) → la zona por defecto, como una org que no la eligió;
   - el aviso de la clave de IA (`AvisoClaveIa`) → no se muestra.
@@ -294,4 +306,7 @@ no llegan a estas pantallas: el boundary de Next los relanza antes.
 Tests: `app/__tests__/boundaries.test.ts` (qué boundaries existen, que sean client components, que capturen en
 Sentry y no usen el mensaje ni el stack, que toda página de `(platform)` y `(super-admin)` tenga un `error.tsx`
 arriba), `components/platform/__tests__/pantalla-de-error.test.ts`, `app/__tests__/layout-plataforma-lecturas.test.ts`,
-`lib/server/__tests__/lectura-degradable.test.ts`, `app/__tests__/ficha-de-cliente.test.ts` y `lib/clients/__tests__/cliente-visible.test.ts`.
+`lib/server/__tests__/lectura-degradable.test.ts`, `app/__tests__/ficha-de-cliente.test.ts`, `lib/clients/__tests__/cliente-visible.test.ts`,
+`lib/auth/__tests__/permisos-falla-cerrada.test.ts`, `app/__tests__/layout-plataforma-permisos-caidos.test.ts` (los permisos reales con la base en
+`57014`: `/finance` nunca se dibuja), `components/layout/__tests__/platform-shell-holding-degradado.test.ts`,
+`lib/observability/__tests__/digest-de-next.test.ts` y `lib/observability/__tests__/on-request-error.test.ts`.

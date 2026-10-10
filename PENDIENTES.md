@@ -283,7 +283,7 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 
 #### [DEMO-LAYOUT-500] El layout de plataforma rompe sin Supabase
 - **Tipo:** bug
-- **Estado verificado:** `getHoldingSessionState()` (`lib/holding/session.ts:26`) llama `createClient()` sin chequear `isSupabaseConfigured()`; `createClient` tira por `getSupabaseUrl()`.
+- **Estado verificado:** `getCurrentUserPermissions()` y `getHoldingSessionState()` (`lib/holding/session.ts:26`) llaman `createClient()` sin chequear `isSupabaseConfigured()`; `createClient` tira por `getSupabaseUrl()`. Desde SCRUM-108 el holding es una lectura degradable del layout (sin Supabase queda como holding sin negocio activo y se registra), pero los permisos son imprescindibles: el layout sigue cayendo, ahora en `global-error`.
 - **Qué hay que hacer:** devolver valores neutros en `getHoldingSessionState`, `getCurrentUserPermissions`, `getCurrentOnboardingContext` sin Supabase.
 - **Dónde:** `apps/web/lib/holding/session.ts`, `apps/web/lib/auth/get-current-permissions.ts`.
 

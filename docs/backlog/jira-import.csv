@@ -1307,7 +1307,7 @@ Fuente: PENDIENTES.md [NOTIFICACIONES-EMAIL-SIN-ENVIO] · Doc del área: docs/ar
 Fuente: PENDIENTES.md [DISCORD-DESCONECTAR-SIN-UI] · Doc del área: docs/areas/plataforma.md",DISCORD-DESCONECTAR-SIN-UI,Plataforma,P2,,bug
 [DEMO-LAYOUT-500] El layout de plataforma rompe sin Supabase,Bug,Medium,plataforma,p2,bug,,,,"*Tipo:* bug
 
-*Estado verificado:* {{getHoldingSessionState()}} ({{lib/holding/session.ts:26}}) llama {{createClient()}} sin chequear {{isSupabaseConfigured()}}; {{createClient}} tira por {{getSupabaseUrl()}}.
+*Estado verificado:* {{getCurrentUserPermissions()}} y {{getHoldingSessionState()}} ({{lib/holding/session.ts:26}}) llaman {{createClient()}} sin chequear {{isSupabaseConfigured()}}; {{createClient}} tira por {{getSupabaseUrl()}}. Desde SCRUM-108 el holding es una lectura degradable del layout (sin Supabase queda como holding sin negocio activo y se registra), pero los permisos son imprescindibles: el layout sigue cayendo, ahora en {{global-error}}.
 
 *Qué hay que hacer:* devolver valores neutros en {{getHoldingSessionState}}, {{getCurrentUserPermissions}}, {{getCurrentOnboardingContext}} sin Supabase.
 

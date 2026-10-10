@@ -191,8 +191,9 @@ provocar a mano sin tocar la base es un `notFound()`.
 2. 🔒 Con una cuenta de otra org, abrir la URL de la ficha de un cliente de la org de prueba. Resultado: el mismo "No encontramos lo que buscás". Con un cliente propio, la ficha se ve como siempre.
 3. Abrir una URL que no existe, por ejemplo `/no-existe`. Resultado: la 404 general de siempre.
 4. ⭐ La próxima vez que una pantalla falle en producción (o en un preview con una variable de Supabase rota a propósito): se ve "No pudimos cargar…" en español, con "Reintentar", el código de referencia y la navegación; nunca un texto en inglés ni un nombre de tabla.
-5. En Sentry, buscar el código de referencia que mostró la pantalla (tag `error_digest`). Resultado: un evento del navegador con el tag `boundary` y, si vino del servidor, el evento de `onRequestError` con el mismo código; ninguno con cookies, query ni cuerpo del pedido.
-6. Si alguna vez aparece un evento con el tag `lectura_degradada`, la plataforma siguió andando con un valor por defecto (sin selector de holding, sin checklist, con la zona por defecto): revisar qué lectura falló.
+5. En Sentry, buscar el código de referencia que mostró la pantalla (tag `error_digest`). Resultado: un evento del navegador con el tag `boundary` y, si vino del servidor, el evento del servidor con el mismo código y el mensaje real (el stack del error); ninguno con cookies, query ni cuerpo del pedido.
+6. Si alguna vez aparece un evento con el tag `lectura_degradada`, la plataforma siguió andando con un valor por defecto (barra de holding sin negocio activo, sin checklist, con la zona por defecto): revisar qué lectura falló.
+7. 🔒⭐ Si hay un incidente de la base (timeouts de PostgREST), un miembro con rol limitado que abre un módulo que no tiene ve "No pudimos cargar la plataforma", nunca la pantalla del módulo. En Sentry, el evento `FallaDeLaBase` del servidor.
 
 ---
 
