@@ -50,4 +50,10 @@ describe("etiquetas de una falla", () => {
       org_id: "org-1",
     });
   });
+
+  it("una lectura degradada lleva su etiqueta y no cuenta como proceso de fondo (SCRUM-108)", () => {
+    expect(etiquetasDeFalla({ lectura: "layout-plataforma:zona" })).toEqual({
+      lectura_degradada: "layout-plataforma:zona",
+    });
+  });
 });

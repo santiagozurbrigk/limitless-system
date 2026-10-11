@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHTMLReactServerErrorHandler } from "next/dist/server/app-render/create-error-handler";
 import { limpiarEventoDeSentry, nombreSinQuery, sinQuery } from "../limpiar-evento-sentry";
 
 /**
@@ -257,7 +258,7 @@ vi.mock("@sentry/nextjs", () => ({
 
 type Opciones = {
   integrations: Array<{ name: string; opciones: unknown }>;
-  beforeSend: (evento: ReturnType<typeof eventoSucio>) => unknown;
+  beforeSend: (evento: ReturnType<typeof eventoSucio>, hint?: { originalException?: unknown }) => unknown;
   beforeSendTransaction?: (evento: ReturnType<typeof eventoSucio>) => unknown;
 };
 
@@ -288,6 +289,36 @@ describe("configs de Sentry de la app", () => {
       expect(salida).not.toContain("ClaveSuperSecreta");
       expect(salida).not.toContain("sk-ant-123");
     }
+  });
+
+  it("⭐ servidor: un error de render capturado por el SDK sale con el código de referencia y limpio (SCRUM-108)", async () => {
+    // El evento del servidor que de verdad llega es el que captura el SDK al
+    // envolver el Server Component, antes de que Next le ponga el digest: el
+    // código lo pone `beforeSend`. Tiene que salir con el tag y, a la vez, sin
+    // nada de lo que limpia SCRUM-501.
+    const o = await opcionesDe("sentry.server.config.ts");
+    const error = new Error("boom en la tabla");
+    const esperado = createHTMLReactServerErrorHandler(false, false, new Map(), true, undefined)(
+      Object.assign(new Error(error.message), { stack: error.stack })
+    );
+    const evento = {
+      ...eventoSucio(),
+      tags: { runtime: "server" },
+      exception: {
+        values: [
+          { type: "Error", value: "boom en la tabla", mechanism: { type: "auto.function.nextjs.server_component", handled: false } },
+        ],
+      },
+    };
+    const salida = o.beforeSend(evento, { originalException: error }) as {
+      tags: Record<string, string>;
+    };
+    expect(salida.tags).toEqual({ runtime: "server", error_digest: esperado });
+    const texto = JSON.stringify(salida);
+    expect(texto).not.toContain("ClaveSuperSecreta");
+    expect(texto).not.toContain("sk-ant-123");
+    expect(texto).not.toContain("secreto-de-invitacion");
+    expect(texto).not.toContain("sb-access-token");
   });
 
   it("servidor: sigue descartando el rate limit conocido", async () => {

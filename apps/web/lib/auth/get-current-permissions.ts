@@ -4,6 +4,7 @@ import { emptyPermissions } from "@/constants/permission-modules";
 import type { PermissionModuleId } from "@/constants/permission-modules";
 import type { PermissionLevel } from "@/types/team";
 import { ADD_ON_IDS, type AddOnId } from "@/lib/auth/add-on-ids";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 export { ADD_ON_IDS } from "@/lib/auth/add-on-ids";
 export type { AddOnId } from "@/lib/auth/add-on-ids";
 
@@ -25,11 +26,56 @@ export type UserPermissions = {
   enabledAddOns: AddOnId[];
 };
 
+/**
+ * Una lectura de permisos que falló (la red, un timeout, una RLS que rechaza)
+ * no se puede tomar como "no hay fila": un perfil o un rol que no se leyó
+ * daría `hasRoleConfigured: false`, y sin rol el bloqueo por módulo no corre,
+ * así que un miembro con rol limitado entraría a todo (SCRUM-108, riesgo R1).
+ * Se lanza: el layout cae en su pantalla de error, `rechazoPorModulo` lanza y
+ * la pantalla que lo usa cae en su boundary; nada abre el acceso.
+ */
+function fallaSiHayError(error: { message: string; code?: string | null } | null): void {
+  if (error) throw new FallaDeLaBase(error);
+}
+
+/**
+ * Los errores de `auth.getUser()` que significan "no hay sesión válida": sin
+ * sesión (`AuthSessionMissingError`), token vencido o inválido, sesión
+ * cerrada, usuario borrado o bloqueado. Ésos son "sin usuario", como siempre.
+ */
+const CODIGOS_DE_SESION_INVALIDA = new Set([
+  "bad_jwt",
+  "invalid_jwt",
+  "no_authorization",
+  "session_not_found",
+  "session_expired",
+  "refresh_token_not_found",
+  "refresh_token_already_used",
+  "user_not_found",
+  "user_banned",
+]);
+
+/**
+ * Todo lo demás lanza (SCRUM-108): Auth caído (sin respuesta, status 0, o un
+ * 5xx), un límite de pedidos (429) o cualquier otro error. Tomarlos como "sin
+ * usuario" dejaría la cuenta sin rol y sin bloqueo por módulo.
+ */
+function esSesionInvalida(error: { name?: string; status?: number; code?: string }): boolean {
+  if (error.name === "AuthSessionMissingError") return true;
+  if (error.code && CODIGOS_DE_SESION_INVALIDA.has(error.code)) return true;
+  return error.status === 401;
+}
+
 export async function getCurrentUserPermissions(): Promise<UserPermissions> {
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+
+  if (authError && !esSesionInvalida(authError)) {
+    throw new FallaDeLaBase({ message: authError.message, code: authError.code ?? null });
+  }
 
   if (!user) {
     return {
@@ -41,11 +87,12 @@ export async function getCurrentUserPermissions(): Promise<UserPermissions> {
     };
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role, custom_role_id, organization_id")
     .eq("id", user.id)
     .maybeSingle();
+  fallaSiHayError(profileError);
 
   if (!profile) {
     return {
@@ -60,11 +107,12 @@ export async function getCurrentUserPermissions(): Promise<UserPermissions> {
   // Leer add-ons habilitados para la org
   let enabledAddOns: AddOnId[] = [];
   if (profile.organization_id) {
-    const { data: orgRow } = await supabase
+    const { data: orgRow, error: orgError } = await supabase
       .from("organizations")
       .select("enabled_add_ons")
       .eq("id", profile.organization_id as string)
       .maybeSingle();
+    fallaSiHayError(orgError);
     const raw = (orgRow?.enabled_add_ons as string[] | null) ?? [];
     enabledAddOns = raw.filter((id): id is AddOnId =>
       ADD_ON_IDS.includes(id as AddOnId)
@@ -89,11 +137,12 @@ export async function getCurrentUserPermissions(): Promise<UserPermissions> {
 
   let teamRolePermissions: Record<string, string> | null = null;
   if (profile.custom_role_id) {
-    const { data: roleRow } = await supabase
+    const { data: roleRow, error: roleError } = await supabase
       .from("team_roles")
       .select("permissions")
       .eq("id", profile.custom_role_id)
       .maybeSingle();
+    fallaSiHayError(roleError);
     teamRolePermissions =
       (roleRow?.permissions as Record<string, string> | null) ?? null;
   }

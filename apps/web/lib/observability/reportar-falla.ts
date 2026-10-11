@@ -29,6 +29,13 @@ export type ContextoDeFalla = {
    * (SCRUM-497), así las reglas de alerta de los crons no lo mezclan.
    */
   accion?: string;
+  /**
+   * Lectura de una pantalla que falló y se reemplazó por un valor por defecto
+   * (`lecturaDegradable`, SCRUM-108): `layout-plataforma:zona`... Lleva el tag
+   * `lectura_degradada` en vez de `proceso_de_fondo`, así tampoco se mezcla con
+   * las alertas de los crons.
+   */
+  lectura?: string;
   /** Datos sueltos para el detalle del evento. Nunca secretos ni transcripts. */
   extra?: Record<string, unknown>;
 };
@@ -36,7 +43,9 @@ export type ContextoDeFalla = {
 export function etiquetasDeFalla(contexto: ContextoDeFalla): Record<string, string> {
   const etiquetas: Record<string, string> = contexto.accion
     ? { server_action: contexto.accion }
-    : { proceso_de_fondo: "true" };
+    : contexto.lectura
+      ? { lectura_degradada: contexto.lectura }
+      : { proceso_de_fondo: "true" };
   if (contexto.cron) etiquetas.cron = contexto.cron;
   if (contexto.organizationId) etiquetas.org_id = contexto.organizationId;
   if (contexto.provider) etiquetas.provider = contexto.provider;
@@ -69,7 +78,7 @@ export function errorParaReportar(error: unknown): { error: Error; codigo: strin
 }
 
 export function reportarFalla(error: unknown, contexto: ContextoDeFalla): void {
-  if (!contexto.accion) anotarOrganizacion(contexto.organizationId, "fallo");
+  if (!contexto.accion && !contexto.lectura) anotarOrganizacion(contexto.organizationId, "fallo");
   try {
     const { error: aReportar, codigo } = errorParaReportar(error);
     Sentry.withScope((scope) => {

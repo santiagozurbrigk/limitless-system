@@ -1263,26 +1263,11 @@ Fuente: PENDIENTES.md [DB-CLAIM-HOLDING-SIN-REVALIDAR] · Doc del área: docs/ar
 *Dónde:* {{apps/discord-bot/src/events/ready.ts}}, {{apps/discord-bot/src/lib/supabase.ts}}.
 
 Fuente: PENDIENTES.md [DISCORD-BOT-SIN-RECUPERACION] · Doc del área: docs/areas/plataforma.md",DISCORD-BOT-SIN-RECUPERACION,Plataforma,P2,Media,bug
-[UI-PAGINAS-DE-ERROR] No hay páginas de error propias: ante una falla se ve la pantalla genérica de Next,Bug,Medium,plataforma,p2,sev-media,bug,,,"*Tipo:* bug
-
-*Severidad:* Media
-
-*Estado verificado:* en {{apps/web/app}} no existe ningún {{error.tsx}} ni {{global-error.tsx}} (sólo {{not-found.tsx}}). {{instrumentation.ts}} captura errores del servidor con {{onRequestError}}, pero los errores de render del navegador no pasan por {{global-error.tsx}}, que es la vía que recomienda {{@sentry/nextjs}}.
-
-*Riesgo:* Si Supabase o una API cae, o un Server Component tira, entonces el usuario ve ""Application error: a server-side exception has occurred"" en inglés, sin forma de reintentar ni saber si perdió lo que estaba cargando; algunos errores del navegador no llegan a Sentry.
-
-*Impacto:* Todos los usuarios durante cualquier incidente.
-
-*Qué hay que hacer:* {{app/global-error.tsx}} (con {{Sentry.captureException}}) y {{error.tsx}} en el layout de plataforma, copy en español, botón de reintentar y sin mostrar el error interno.
-
-*Dónde:* {{apps/web/app/global-error.tsx}}, {{apps/web/app/(platform)/error.tsx}}.
-
-Fuente: PENDIENTES.md [UI-PAGINAS-DE-ERROR] · Doc del área: docs/areas/plataforma.md",UI-PAGINAS-DE-ERROR,Plataforma,P2,Media,bug
 [BAJA-ORG-SIN-RESPALDO] La baja de una organización borra todo sin exportación previa ni período de gracia,Story,Medium,plataforma,p2,sev-alta,feature,,,"*Tipo:* feature
 
 *Severidad:* Alta
 
-*Estado verificado:* {{lib/super-admin/execute-deletion.ts}} borra la fila de {{organizations}} (cascade sobre ~130 tablas), los archivos de 10 buckets y las cuentas de login; {{super_admin_deletions}} guarda quién, cuándo y el resultado, no los datos. No hay exportación ni papelera. Con el plan Free no hay backup ({{[DR-BACKUPS-SUPABASE]}}). Existe la alternativa reversible de pausar ({{app/super-admin/actions.ts:294}}).
+*Estado verificado:* {{lib/super-admin/execute-deletion.ts}} borra la fila de {{organizations}} (cascade sobre ~130 tablas), los archivos de 10 buckets y las cuentas de login; {{super_admin_deletions}} guarda quién, cuándo y el resultado, no los datos. No hay exportación ni papelera. Desde el 2026-10-09 hay backup diario (plan Pro, 7 días, sin Storage) y dump propio; restaurar una sola org desde ahí es manual. Existe la alternativa reversible de pausar ({{app/super-admin/actions.ts:294}}).
 
 *Riesgo:* Si un super admin da de baja la org equivocada, o un cliente dado de baja pide volver, entonces sus datos y archivos no se pueden recuperar. La confirmación por nombre exacto reduce, pero no elimina, el error humano.
 
@@ -1322,7 +1307,7 @@ Fuente: PENDIENTES.md [NOTIFICACIONES-EMAIL-SIN-ENVIO] · Doc del área: docs/ar
 Fuente: PENDIENTES.md [DISCORD-DESCONECTAR-SIN-UI] · Doc del área: docs/areas/plataforma.md",DISCORD-DESCONECTAR-SIN-UI,Plataforma,P2,,bug
 [DEMO-LAYOUT-500] El layout de plataforma rompe sin Supabase,Bug,Medium,plataforma,p2,bug,,,,"*Tipo:* bug
 
-*Estado verificado:* {{getHoldingSessionState()}} ({{lib/holding/session.ts:26}}) llama {{createClient()}} sin chequear {{isSupabaseConfigured()}}; {{createClient}} tira por {{getSupabaseUrl()}}.
+*Estado verificado:* {{getCurrentUserPermissions()}} y {{getHoldingSessionState()}} ({{lib/holding/session.ts:26}}) llaman {{createClient()}} sin chequear {{isSupabaseConfigured()}}; {{createClient}} tira por {{getSupabaseUrl()}}. Desde SCRUM-108 el holding es una lectura degradable del layout (sin Supabase queda como holding sin negocio activo y se registra), pero los permisos son imprescindibles: el layout sigue cayendo, ahora en {{global-error}}.
 
 *Qué hay que hacer:* devolver valores neutros en {{getHoldingSessionState}}, {{getCurrentUserPermissions}}, {{getCurrentOnboardingContext}} sin Supabase.
 
@@ -2497,7 +2482,7 @@ Fuente: PENDIENTES.md [CRONS-CORTE-60S] · Doc del área: docs/arquitectura/visi
 
 *Estado verificado:* todas las variables del proyecto {{otc-plaform}} en Vercel tienen target Preview y Production con el mismo valor, incluidas {{NEXT_PUBLIC_SUPABASE_URL}}, {{SUPABASE_SERVICE_ROLE_KEY}} y {{ENCRYPTION_MASTER_KEY}} (listado de tipo/target, sin valores, 2026-09-23). Supabase no tiene branches ({{list_branches}} vacío). {{CHANGES.md}} registra pruebas ""contra el preview con datos reales"". Los previews están protegidos por Vercel SSO ({{ssoProtection: all_except_custom_domains}}).
 
-*Riesgo:* Si una rama con un bug escribe o borra algo, entonces lo hace sobre datos reales de clientes (sin backup, {{[DR-BACKUPS-SUPABASE]}}). Tampoco hay dónde ensayar una migración con datos ni una restauración.
+*Riesgo:* Si una rama con un bug escribe o borra algo, entonces lo hace sobre datos reales de clientes (el backup diario de Pro permite volver atrás hasta 24 h, para todo el proyecto). Tampoco hay dónde ensayar una migración con datos ni una restauración.
 
 *Impacto:* Todas las orgs; frena el ensayo de recuperación.
 
@@ -2856,6 +2841,15 @@ Fuente: PENDIENTES.md [CAMPO-FECHA-MIGRAR] · Doc del área: docs/arquitectura/v
 *Dónde:* los archivos citados.
 
 Fuente: PENDIENTES.md [FECHAS-UTC-RESTO] · Doc del área: docs/arquitectura/vision-general.md",FECHAS-UTC-RESTO,"Infraestructura, seguridad y tests (transversal)",P2,,bug
+[MIDDLEWARE-COOKIE-REFRESCADA] El middleware le pasa a la página la cookie de sesión vieja después de refrescarla (nuevo),Bug,Low,plataforma,p3,bug,,,,"*Tipo:* bug
+
+*Estado verificado:* en {{apps/web/lib/supabase/middleware.ts}}, {{updateSession}} copia los headers del request ({{:63}}, {{new Headers(request.headers)}}, que incluye el header {{cookie}}) antes de llamar a {{supabase.auth.getUser()}}. Cuando ese {{getUser()}} refresca la sesión, {{setAll}} actualiza {{request.cookies}}, pero arma la respuesta con la copia vieja ({{NextResponse.next({ request: forwardedRequest })}}, {{:72}} y {{:83}}). El layout y las páginas reciben el token anterior y vuelven a refrescar con un refresh token que ya se rotó. Hoy anda: GoTrue lo acepta dentro del intervalo de reuso y, si no, devuelve {{refresh_token_already_used}}, que {{getCurrentUserPermissions}} trata como ""sin usuario"" (SCRUM-108). Viene de {{main}}; lo encontró el AR de SCRUM-108 (pasada 3, {{evidencia-sprint2/scrum-108/ar-pasada-3.md}} § Middleware y layout) leyendo el código; no se reprodujo en el navegador.
+
+*Qué hay que hacer:* armar {{forwardedRequest}} con los headers del request después del refresh (o copiar en {{setAll}} la cookie nueva al header {{cookie}} de la copia), como el patrón de {{@supabase/ssr}}, y probar un refresh real: una sola rotación por request y la página con la sesión nueva.
+
+*Dónde:* {{apps/web/lib/supabase/middleware.ts}}.
+
+Fuente: PENDIENTES.md [MIDDLEWARE-COOKIE-REFRESCADA] · Doc del área: docs/areas/plataforma.md",MIDDLEWARE-COOKIE-REFRESCADA,Plataforma,P3,,bug
 [DISCORD-BACKFILL] Los mensajes enviados mientras el bot está caído no se recuperan,Story,Low,plataforma,p3,sev-media,feature,,,"*Tipo:* feature
 
 *Severidad:* Media
