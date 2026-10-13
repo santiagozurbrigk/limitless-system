@@ -20,7 +20,7 @@ import {
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { orgHasAddOn } from "@/lib/auth/add-ons";
-import { listFieldDefinitionsAction } from "@/app/clients/custom-field-actions";
+import { leerColumnas } from "@/lib/custom-fields/leer-columnas";
 import { activeFields, mergeCustomFieldValues, validateFieldValues } from "@/lib/custom-fields";
 import {
   SUB_CLIENT_COLUMNS,
@@ -108,9 +108,20 @@ function linkOError(raw: string | null | undefined): string | null {
   return link.url;
 }
 
-/** Los campos de Marketing, Ventas y Sistemas: todos, archivados incluidos. */
-async function sectionFields() {
-  const all = await listFieldDefinitionsAction("client");
+/**
+ * Los campos de Marketing, Ventas y Sistemas: todos, archivados incluidos.
+ *
+ * Lee con `leerColumnas` (SCRUM-517), que lanza si la base falla. Antes usaba
+ * `listFieldDefinitionsAction`, que ante una falla devuelve `[]`: guardar los
+ * campos de un sub-cliente decía "guardados" y descartaba lo editado, y pasar
+ * los datos viejos respondía "No se pasó ningún dato". Ahora la falla corta
+ * antes de escribir y el usuario ve el texto fijo (SCRUM-516).
+ */
+async function sectionFields(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string
+) {
+  const all = await leerColumnas(supabase, organizationId, "client");
   return all.filter((field) => field.section !== null);
 }
 
@@ -245,7 +256,7 @@ export async function updateSubClientFieldsAction(
     if (readError) throw new FallaDeLaBase(readError);
     if (!current) throw new ErrorEsperable(SUB_CLIENTE_INEXISTENTE);
 
-    const all = await sectionFields();
+    const all = await sectionFields(supabase, organizationId);
     const validation = validateFieldValues(activeFields(all), values);
     if (!validation.ok) {
       const mensajes = Object.values(validation.errors);
@@ -330,7 +341,7 @@ export async function moveLegacySectionValuesAction(
     if (!sub) throw new ErrorEsperable(SUB_CLIENTE_INEXISTENTE);
 
     const plan = planLegacyMove(
-      await sectionFields(),
+      await sectionFields(supabase, organizationId),
       (client.custom ?? {}) as CustomFieldValues,
       (sub.custom ?? {}) as CustomFieldValues
     );

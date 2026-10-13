@@ -43,7 +43,7 @@ import {
   sanitizeFilename,
 } from "@/lib/wins";
 import { activeFields, validateFieldValues } from "@/lib/custom-fields";
-import { listFieldDefinitionsAction } from "@/app/clients/custom-field-actions";
+import { leerColumnas } from "@/lib/custom-fields/leer-columnas";
 import {
   ErrorEsperable,
   FallaDeLaBase,
@@ -306,9 +306,9 @@ export async function createWinAction(
     const values = parsed.data;
 
     assertConsentIsComplete(values);
-    const custom = await validateCustom(values.custom);
-
     const supabase = await createClient();
+    const custom = await validateCustom(supabase, organizationId, values.custom);
+
     const { data, error } = await supabase
       .from("client_wins")
       .insert({
@@ -378,8 +378,9 @@ export async function updateWinAction(
       patch.metric_value = values.metric?.value ?? null;
       patch.metric_unit = values.metric?.unit ?? null;
     }
+    const supabase = await createClient();
     if (values.custom !== undefined) {
-      patch.custom = await validateCustom(values.custom);
+      patch.custom = await validateCustom(supabase, organizationId, values.custom);
     }
     if (values.usageState !== undefined) patch.usage_state = values.usageState;
     if (values.needsScreenshot !== undefined) {
@@ -397,7 +398,6 @@ export async function updateWinAction(
         patch.consent_status === "not_asked" ? null : new Date().toISOString();
     }
 
-    const supabase = await createClient();
     const { data, error } = await supabase
       .from("client_wins")
       .update(patch)
@@ -733,9 +733,21 @@ export async function updateClientBaselineAction(
 
 // ─── Ayudas ─────────────────────────────────────────────────────────────────
 
-/** Valida las columnas configurables con las reglas de C0. */
-async function validateCustom(raw: Record<string, unknown>) {
-  const fields = activeFields(await listFieldDefinitionsAction("win"));
+/**
+ * Valida las columnas configurables con las reglas de C0.
+ *
+ * Lee las columnas con `leerColumnas` (SCRUM-517), que lanza si la base falla.
+ * Antes usaba `listFieldDefinitionsAction`, que ante una falla devuelve `[]`:
+ * con la lectura caída, el win se guardaba sin sus columnas (editar uno borraba
+ * las que tenía) y la pantalla decía que se guardó. Ahora la falla corta la
+ * escritura antes de tocar nada y el usuario ve el texto fijo (SCRUM-516).
+ */
+async function validateCustom(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  raw: Record<string, unknown>
+) {
+  const fields = activeFields(await leerColumnas(supabase, organizationId, "win"));
   const validation = validateFieldValues(fields, raw);
   if (!validation.ok) {
     throw new ErrorEsperable(Object.values(validation.errors)[0] ?? "Datos inválidos");

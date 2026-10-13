@@ -35,9 +35,7 @@ vi.mock("@/lib/auth/bootstrap", async () => {
     isMissingTableError: esTablaFaltante,
   };
 });
-vi.mock("@/app/clients/custom-field-actions", () => ({
-  listFieldDefinitionsAction: async () => [],
-}));
+vi.mock("server-only", () => ({}));
 
 import {
   addWinUsageAction,
@@ -62,6 +60,31 @@ const DRAFT = "66666666-6666-4666-8666-666666666666";
 const CAPTURA = "77777777-7777-4777-8777-777777777777";
 const FETCH_FAILED = { message: "TypeError: fetch failed" };
 const RUTA = `${ORG}/wins/${WIN}/foto.png`;
+
+/** Una columna configurable de wins, como la guarda la base. */
+function columna(id: string, org: string, key: string) {
+  return {
+    id,
+    organization_id: org,
+    entity: "win",
+    key,
+    label: "Resultado",
+    description: null,
+    field_type: "text",
+    options: [],
+    options_source: "inline",
+    unit: null,
+    currency: null,
+    alert_days_before: null,
+    is_required: false,
+    section: null,
+    show_in_table: true,
+    sort_order: 1,
+    archived_at: null,
+    created_at: "2026-10-01",
+    updated_at: "2026-10-01",
+  };
+}
 
 function win(id: string, org: string) {
   return {
@@ -98,6 +121,7 @@ beforeEach(() => {
   base.tablas.win_usages = [
     { id: "uso-1", organization_id: ORG, win_id: WIN, channel: "landing", location_label: null, url: null, used_at: null, notes: null, created_at: "2026-10-01" },
   ];
+  base.tablas.field_definitions = [columna("col-1", ORG, "resultado"), columna("col-ajena", OTRA_ORG, "ajena")];
   base.tablas.clients = [
     { id: CLIENTE, organization_id: ORG, niche: "Fitness", baseline_metric_key: "ventas", baseline_metric_value: "10", baseline_metric_unit: null, baseline_captured_at: null },
   ];
@@ -258,6 +282,65 @@ describe("updateWinAction", () => {
       error: "No se encontró el win. Puede que lo hayan borrado.",
     });
     expect(base.tablas.client_wins.find((w) => w.id === WIN_AJENO)?.achievement).toBe("Primera venta");
+  });
+});
+
+describe("columnas de un win con la lectura de columnas caída (MAYOR-1 de la AR de SCRUM-516)", () => {
+  // Antes se validaba con `listFieldDefinitionsAction`, que ante una falla
+  // devuelve `[]`: el win se guardaba sin sus columnas y editar uno borraba
+  // las que tenía, con "guardado" en la pantalla.
+  const CAIDA = { message: "TypeError: fetch failed" };
+
+  beforeEach(() => {
+    const propio = base.tablas.client_wins.find((w) => w.id === WIN)!;
+    propio.custom = { resultado: "10 ventas" };
+  });
+
+  it("con la lectura sana, valida contra las columnas de la org y guarda el valor", async () => {
+    const r = await updateWinAction(WIN, { custom: { resultado: "12 ventas" } });
+    expect(r).toMatchObject({ success: true });
+    expect(base.tablas.client_wins.find((w) => w.id === WIN)?.custom).toEqual({ resultado: "12 ventas" });
+    const lectura = base.operaciones.find((o) => o.tabla === "field_definitions");
+    expect(lectura?.filtros).toEqual([
+      ["organization_id", ORG],
+      ["entity", "win"],
+    ]);
+  });
+
+  it("⭐ editar: texto fijo, la fila queda como estaba, sin escribir y la falla registrada", async () => {
+    base.errores.field_definitions = CAIDA;
+    const r = await updateWinAction(WIN, { custom: { resultado: "12 ventas" } });
+    expect(r).toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.tablas.client_wins.find((w) => w.id === WIN)?.custom).toEqual({ resultado: "10 ventas" });
+    expect(base.escrituras()).toEqual([]);
+    expect(consola).toHaveBeenCalledWith("[updateWin]", expect.objectContaining({ name: "FallaDeLaBase" }));
+    expect(base.reportes).toEqual([
+      {
+        error: expect.objectContaining({ name: "FallaDeLaBase", message: "TypeError: fetch failed" }),
+        contexto: { accion: "[updateWin]" },
+      },
+    ]);
+    // Lo que escribió el usuario no viaja a Sentry (SCRUM-501).
+    expect(JSON.stringify(base.reportes)).not.toContain("12 ventas");
+  });
+
+  it("⭐ crear: texto fijo, sin crear el win y la falla registrada", async () => {
+    base.errores.field_definitions = CAIDA;
+    const r = await createWinAction({ ...NUEVO, custom: { resultado: "3 ventas" } });
+    expect(r).toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.tablas.client_wins.map((w) => w.id)).toEqual([WIN, WIN_AJENO]);
+    expect(base.escrituras()).toEqual([]);
+    expect(base.reportes).toEqual([
+      { error: expect.objectContaining({ name: "FallaDeLaBase" }), contexto: { accion: "[createWin]" } },
+    ]);
+    expect(JSON.stringify(base.reportes)).not.toContain("3 ventas");
+  });
+
+  it("sin la tabla de columnas (antes de su migración) sigue contando como sin columnas", async () => {
+    base.errores.field_definitions = { message: 'relation "field_definitions" does not exist' };
+    const r = await createWinAction(NUEVO);
+    expect(r).toMatchObject({ success: true, data: { custom: {} } });
+    expect(base.reportes).toEqual([]);
   });
 });
 

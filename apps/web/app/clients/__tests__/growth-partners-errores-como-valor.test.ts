@@ -50,32 +50,7 @@ vi.mock("@/lib/auth/add-ons", async () => {
 vi.mock("@/lib/fechas/organizacion", () => ({
   fechaDeHoyDeLaOrganizacion: async () => "2026-10-12",
 }));
-vi.mock("@/app/clients/custom-field-actions", () => ({
-  listFieldDefinitionsAction: async () => [
-    {
-      id: "f1",
-      organizationId: "org",
-      entity: "client",
-      key: "seguidores",
-      label: "Seguidores",
-      description: null,
-      fieldType: "number",
-      options: [],
-      optionsSource: "static",
-      unit: null,
-      currency: null,
-      alertDaysBefore: null,
-      isRequired: false,
-      section: "marketing",
-      onboarding: null,
-      showInTable: false,
-      sortOrder: 1,
-      archivedAt: null,
-      createdAt: "2026-10-01T00:00:00Z",
-      updatedAt: "2026-10-01T00:00:00Z",
-    },
-  ],
-}));
+vi.mock("server-only", () => ({}));
 
 import {
   createSubClientAction,
@@ -113,7 +88,36 @@ const MES = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const FETCH_FAILED = { message: "TypeError: fetch failed" };
 const SIN_ADD_ON = "Esta función no está habilitada para tu organización.";
 
+/** Una columna configurable del cliente con sección, como la guarda la base. */
+function columna(id: string, org: string, key: string, label: string) {
+  return {
+    id,
+    organization_id: org,
+    entity: "client",
+    key,
+    label,
+    description: null,
+    field_type: "number",
+    options: [],
+    options_source: "inline",
+    unit: null,
+    currency: null,
+    alert_days_before: null,
+    is_required: false,
+    section: "marketing",
+    show_in_table: false,
+    sort_order: 1,
+    archived_at: null,
+    created_at: "2026-10-01T00:00:00Z",
+    updated_at: "2026-10-01T00:00:00Z",
+  };
+}
+
 function sembrar() {
+  base.tablas.field_definitions = [
+    columna("f1", ORG, "seguidores", "Seguidores"),
+    columna("f-ajena", OTRA_ORG, "ajena", "Ajena"),
+  ];
   base.tablas.clients = [
     { id: CLIENTE, organization_id: ORG, name: "Growth SA", custom: { seguidores: 1200 } },
     { id: CLIENTE_AJENO, organization_id: OTRA_ORG, name: "Ajeno", custom: {} },
@@ -267,6 +271,53 @@ describe("updateSubClientFieldsAction", () => {
       success: false,
       error: "Ese cliente ya no existe.",
     });
+  });
+});
+
+describe("columnas de los sub-clientes con la lectura de columnas caída (MAYOR-1 de la AR de SCRUM-516)", () => {
+  // Antes se leían con `listFieldDefinitionsAction`, que ante una falla
+  // devuelve `[]`: guardar decía "guardados" y descartaba lo editado, y pasar
+  // los datos viejos respondía que no había nada para pasar.
+  const CAIDA = { message: "TypeError: fetch failed" };
+
+  it("con la lectura sana, lee las columnas del cliente de la org", async () => {
+    await updateSubClientFieldsAction({ id: SUB, values: { seguidores: "2000" } });
+    const lectura = base.operaciones.find((o) => o.tabla === "field_definitions");
+    expect(lectura?.filtros).toEqual([
+      ["organization_id", ORG],
+      ["entity", "client"],
+    ]);
+  });
+
+  it("⭐ guardar los campos: texto fijo, el sub-cliente queda como estaba y la falla registrada", async () => {
+    base.tablas.client_sub_clients.find((s) => s.id === SUB)!.custom = { seguidores: 900 };
+    base.errores.field_definitions = CAIDA;
+    const r = await updateSubClientFieldsAction({ id: SUB, values: { seguidores: "2000" } });
+    expect(r).toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.tablas.client_sub_clients.find((s) => s.id === SUB)?.custom).toEqual({ seguidores: 900 });
+    expect(base.escrituras()).toEqual([]);
+    expect(consola).toHaveBeenCalledWith(
+      "[updateSubClientFields]",
+      expect.objectContaining({ name: "FallaDeLaBase" })
+    );
+    expect(base.reportes).toEqual([
+      {
+        error: expect.objectContaining({ name: "FallaDeLaBase", message: "TypeError: fetch failed" }),
+        contexto: { accion: "[updateSubClientFields]" },
+      },
+    ]);
+    expect(JSON.stringify(base.reportes)).not.toContain("2000");
+  });
+
+  it("⭐ pasar los datos viejos: texto fijo, nada se mueve y la falla registrada", async () => {
+    base.errores.field_definitions = CAIDA;
+    const r = await moveLegacySectionValuesAction({ clientId: CLIENTE, subClientId: SUB });
+    expect(r).toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.escrituras()).toEqual([]);
+    expect(base.tablas.clients.find((c) => c.id === CLIENTE)?.custom).toEqual({ seguidores: 1200 });
+    expect(base.reportes).toEqual([
+      { error: expect.objectContaining({ name: "FallaDeLaBase" }), contexto: { accion: "[moveLegacySectionValues]" } },
+    ]);
   });
 });
 
