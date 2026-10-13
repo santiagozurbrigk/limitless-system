@@ -28,6 +28,24 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-13 — El build de producción en Vercel no repite lint ni tipos (SCRUM-518)
+
+**Rama:** `fix/SCRUM-518-build-vercel-memoria`
+**Commit(s):** `c90b65ec`: fix(web): el build en Vercel no repite lint ni tipos; este (docs)
+**Módulo(s) afectado(s):** infraestructura: `apps/web/next.config.ts`; docs `operacion/entorno-y-deploy.md`, `operacion/testing.md`, `PENDIENTES.md`
+
+**Qué se hizo:**
+- `next.config.ts` activa `typescript.ignoreBuildErrors` y `eslint.ignoreDuringBuilds` sólo cuando `VERCEL=1`. Vercel la define en el build (`vercel build` hace `process.env.VERCEL = "1"`) y turbo, con el que Vercel construye este repo, la deja pasar (reproducido con el turbo 2.9.14 del lockfile). `eslint.dirs` queda igual. Local y en el CI la variable no existe y el build revisa todo como antes.
+- Memoria medida con `/usr/bin/time -v` y la suma de RSS del árbol de procesos, simulando la máquina de Vercel (cgroup de 8 GB sin swap, 4 núcleos con `taskset`, 3 workers de Next), dos corridas por caso: sin VERCEL, pico de 5.365 y 5.261 MB (cgroup 7.013 y 6.936 MB), en el paso "Linting and checking validity of types" (el proceso principal de Next con lo que retiene de webpack, más los workers de tipos y de ESLint, de entre 0,8 y 1,5 GB cada uno); con `VERCEL=1`, 4.181 y 4.119 MB (cgroup 5.584 y 5.518 MB), en la generación de páginas. Maximum resident set size (el proceso más grande): 3,7 GB en todos los casos. La compilación tarda entre 103 s y 2,6 min (en Vercel, 109 s).
+- Controles negativos con un error de tipos y uno de lint en un commit temporal, después revertido: `pnpm typecheck` falla (exit 2, TS2322 en el archivo del control), `pnpm lint` falla (exit 1, `prefer-const`), el `next build` del CI sin VERCEL falla por el lint con los dos errores y por el tipo con sólo el error de tipos; con `VERCEL=1` el build pasa (exit 0) y muestra "Skipping validation of types" y "Skipping linting".
+- Pendiente nuevo `[TURBO-ENV-BUILD-VERCEL]` (Infraestructura, P1): el aviso de turbo del log de Vercel es real; en modo estricto `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` y `SENTRY_PROJECT` no llegan a `next build` y producción no sube source maps a Sentry. El runtime no se ve afectado.
+
+**Por qué / finalidad:** el 2026-10-13 el deploy de producción de `629fa6b` murió por falta de memoria (exit 137, 8 GB, 4 núcleos) en "Linting and checking validity of types"; el preview del mismo commit y un redeploy sin cambios pasaron: el build estaba al límite. Ese paso repetía lo que el CI ya hace en `checks` y `web-build`, que son obligatorios para mergear.
+
+**Decisiones de diseño relevantes:** la condición es `VERCEL === "1"` y no `CI` ni `NODE_ENV`, para que el job `web-build` siga revisando tipos y lint dentro de `next build`. No se sube `max-old-space-size`: con `VERCEL=1` el build entra con el heap por defecto, y subirlo sólo deja crecer al proceso principal. No se agregó `VERCEL` a `turbo.json`: no cambia el resultado del build, sólo qué se revisa. Con la subida de source maps activada (lo que pide `[TURBO-ENV-BUILD-VERCEL]`) el build no entra en 8 GB: muere por heap con el valor por defecto y con 4 GB de heap llega a 6,6 GB de RSS; quedó anotado en el pendiente.
+
+**Riesgos / deuda técnica pendiente:** Vercel ya no frena un error de tipos o de lint: si se mergea a `main` sin el CI verde (branch protection sin los checks obligatorios), llega a producción. `[TURBO-ENV-BUILD-VERCEL]` y `[ENV-LIMPIEZA]` siguen abiertos.
+
 ### 2026-10-12 — Clientes, seguimiento: errores esperables como valor (SCRUM-517)
 
 **Rama:** `fix/SCRUM-517-clientes-seguimiento-errores`

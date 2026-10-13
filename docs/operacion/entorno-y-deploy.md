@@ -86,7 +86,7 @@ Relevadas con grep de `process.env.*` en `apps/` y `packages/` (89 nombres, incl
 
 - **En `.env.example` y nadie las lee:** `NEXT_PUBLIC_VSL_URL` (el `vsl-player` se borró con la landing).
 - **En Vercel y nadie las lee:** `NEXT_PUBLIC_VSL_URL`, `NEXT_PUBLIC_NAV_STYLE` (sólo Preview), `REDIS_URL`, `QSTASH_URL` (el SDK usa su default), `GOOGLE_REDIRECT_URI`, `FATHOM_REDIRECT_URI`.
-- **En `turbo.json` (`build.env`) y ya no:** falta declarar la mayoría de las variables nuevas (GHL, pagos, Zernio, Sentry, `WORKER_AUTH_SECRET`…). Afecta la clave de caché de turbo (y el modo estricto de env de turbo si se activara); no rompe el build de Next. `OTC_WEBHOOK_SECRET` sigue listada.
+- **En `turbo.json` (`build.env`) y ya no:** falta declarar la mayoría de las variables nuevas (GHL, pagos, Zernio, Sentry, `WORKER_AUTH_SECRET`…). `OTC_WEBHOOK_SECRET` sigue listada. Vercel construye con `turbo run build` y turbo 2 usa el modo estricto por defecto: `next build` sólo recibe las variables de `build.env`, las `NEXT_PUBLIC_*`, las `VERCEL*` y las del sistema. Hoy eso apaga la subida de source maps a Sentry (`SENTRY_AUTH_TOKEN` no llega al build): `[TURBO-ENV-BUILD-VERCEL]`. No afecta el runtime: las funciones reciben las variables del proyecto de Vercel.
 - Limpieza en `[ENV-LIMPIEZA]`.
 
 ### `apps/discord-bot` (Railway)
@@ -112,7 +112,8 @@ Opcional: `SENTRY_DSN` (el mismo de Vercel): con ella cada `logError` va a Sentr
 - **Auto-deploy desde `main`**: cada merge a `main` genera un deploy de producción. Verificado el 2026-09-23: los últimos tres deploys de producción salen de `santiagozurbrigk/limitless-system` (el renombre del repo no cortó la integración).
 - **Que el deploy ocurrió lo comprueba** `.github/workflows/produccion-al-dia.yml` (SCRUM-85): después de cada push a `main` y una vez por día espera hasta 20 min a que `/api/health` devuelva el commit de `main` y, si no, falla y avisa por mail (y en Discord si existe el secreto de GitHub Actions `DISCORD_WEBHOOK_ALERTAS`, opcional). Del 3 al 5 de octubre Vercel perdió el acceso al repo y no desplegó 7 PRs. Detalle en [`alertas.md`](./alertas.md) § Producción desactualizada.
 - Cada push a otra rama genera un preview. Los previews **no sirven para probar OAuth** (las redirect URIs son fijas a producción).
-- Build: `next build` (con `withSentryConfig`); `outputFileTracingRoot` en la raíz del monorepo; `serverExternalPackages` para ffmpeg; `serverActions.bodySizeLimit = 16mb` (adjuntos del inbox).
+- Build: el proyecto no tiene Build Command propio y, como el repo tiene `turbo.json` con tarea `build`, Vercel corre `turbo run build`, que corre `next build` de `apps/web` (con `withSentryConfig`); `outputFileTracingRoot` en la raíz del monorepo; `serverExternalPackages` para ffmpeg; `serverActions.bodySizeLimit = 16mb` (adjuntos del inbox).
+- **En Vercel el build no corre lint ni revisión de tipos** (SCRUM-518). `next.config.ts` activa `eslint.ignoreDuringBuilds` y `typescript.ignoreBuildErrors` sólo cuando `VERCEL=1`, que Vercel define en el build (turbo la deja pasar). En el log aparecen "Skipping validation of types" y "Skipping linting" en lugar de "Linting and checking validity of types". Local y en el CI el build sigue revisando todo. Motivo: el 2026-10-13 el deploy de producción de `629fa6b` murió por falta de memoria (exit 137, máquina de 8 GB y 4 núcleos) justo en ese paso, que suma al proceso principal de Next un worker de tipos y otro de ESLint. Medido con 8 GB y 4 núcleos simulados, el pico de memoria de los procesos del build baja de unos 5,3 GB a unos 4,1 GB (y el del cgroup, con caché de archivos incluida, de 7,0 a 5,5 GB); el resto es la compilación de webpack y los workers que generan las páginas, y entra sin subir el heap de Node. **La barrera son los checks obligatorios del CI** (`checks` y `web-build`): un PR mergeado sin CI verde puede llevar un error de tipos o de lint a producción sin que Vercel lo frene. Para reproducir el build de Vercel en local: `VERCEL=1 pnpm --filter @ai-coo/web build`, sin `SENTRY_AUTH_TOKEN`.
 - Límites de duración: la mayoría de las rutas declara `maxDuration` 60; agente y RAG 300; `daily-signals` 600; `process-sop-video` 800.
 - Redirects en `next.config.ts`: `/` → `/login` (temporal), los de `lib/navigation/redirects.ts` y el callback viejo de Google Forms.
 - Rollback: desde el dashboard de Vercel (promover un deploy anterior). No revierte migraciones: sólo es seguro si la migración del deploy era compatible hacia atrás. Después de un rollback, re-promover el último deploy cuando esté arreglado. Qué hacer ante un incidente: [`incidentes.md`](./incidentes.md).
@@ -142,7 +143,7 @@ No se puede configurar desde el repo y no es verificable desde el código: la co
 | Check | Qué frena |
 |---|---|
 | `checks` | typecheck, lint y tests de web; typecheck de ui, types, reel-worker y bot; lint de ui, reel-worker y bot |
-| `web-build` | un cambio que rompe `next build` aunque pase `tsc` y lint (por ejemplo un import de servidor en un componente cliente) |
+| `web-build` | un cambio que rompe `next build` aunque pase `tsc` y lint (por ejemplo un import de servidor en un componente cliente). Corre sin `VERCEL`, así que su build sí revisa tipos y lint; el de Vercel no (SCRUM-518) |
 | `migrations` | una migración que no corre desde cero, una versión repetida o un test de RLS que falla |
 | `backlog` | `PENDIENTES.md` o `docs/backlog/historias.md` inválidos (IDs repetidos, P0/P1 sin criterio, índice desactualizado) |
 
