@@ -1,22 +1,30 @@
 "use server";
 
-import { getCurrentProfile } from "@/lib/auth/bootstrap";
-import { GoogleIntegrationPermissionError } from "@/lib/google/errors";
-import { getGoogleAccessTokenForOrganization } from "@/lib/google/get-access-token";
+import {
+  descargarArchivoDeDrive,
+  errorDeRespuestaDeDrive,
+  exigirTokenDeDrive,
+  type ArchivoDeDrive,
+} from "@/lib/google/drive-archivos";
+import {
+  codigoDelMotivoDeDrive,
+  type CodigoDeRechazoDeDrive,
+} from "@/lib/google/motivos-de-drive";
+import {
+  ErrorEsperable,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import { updateContentPieceAction } from "./actions";
 
-const GOOGLE_DOC_MIME = "application/vnd.google-apps.document";
-const GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet";
-const GOOGLE_SLIDE_MIME = "application/vnd.google-apps.presentation";
-
-const GOOGLE_EXPORT_MIME: Record<string, string> = {
-  [GOOGLE_DOC_MIME]: "application/pdf",
-  [GOOGLE_SHEET_MIME]:
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  [GOOGLE_SLIDE_MIME]: "application/pdf",
-};
-
-const MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024;
+/**
+ * Drive de Marketing (SCRUM-519): cada acción devuelve sus errores esperables
+ * como valor (`MutationResult`). Sin sesión, sin Google conectado, con el token
+ * rechazado o sin permiso sobre el archivo, el motivo; una falla de la base o
+ * de Google va a la consola y a Sentry y vuelve con el texto fijo. Lo común
+ * (token, traducción de las respuestas de Drive y descarga) está en
+ * `lib/google/drive-archivos.ts`.
+ */
 
 export type DriveFileListItem = {
   id: string;
@@ -29,66 +37,39 @@ export type DriveFileListItem = {
   parents?: string[];
 };
 
-async function requireGoogleAccessToken(): Promise<string> {
-  const profile = await getCurrentProfile();
-  if (!profile?.organization_id) {
-    throw new Error("Sesión no válida");
-  }
-
-  const token = await getGoogleAccessTokenForOrganization(profile.organization_id);
-  if (!token) {
-    throw new Error("GOOGLE_NOT_CONNECTED");
-  }
-
-  return token;
-}
-
-function handleDriveApiError(res: Response): never {
-  if (res.status === 401 || res.status === 403) {
-    throw new Error("GOOGLE_INSUFFICIENT_PERMISSIONS");
-  }
-  throw new Error(`Error de Google Drive (${res.status})`);
-}
-
 function escapeDriveQueryValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 export type DriveListResult =
   | { ok: true; files: DriveFileListItem[] }
-  | { ok: false; errorCode: "GOOGLE_NOT_CONNECTED" | "GOOGLE_INSUFFICIENT_PERMISSIONS" | "OTHER"; message: string };
+  | { ok: false; errorCode: CodigoDeRechazoDeDrive; message: string };
+
+type ParametrosDeListado = {
+  folderId?: string;
+  mimeTypeFilter?: string;
+  query?: string;
+};
 
 /**
- * Versión safe que devuelve un Result en lugar de hacer throw.
- * Usar esta en client components para que el error code llegue correctamente
- * en producción (Next.js sanitiza los throw de Server Actions).
+ * La lista con el código que usa `DriveFilePicker` para elegir el botón
+ * (conectar o reconectar Google). El código sale del motivo; con `OTHER`,
+ * `message` es el motivo o el texto fijo, nunca el texto de Google.
  */
-export async function listDriveFilesSafeAction(params?: {
-  folderId?: string;
-  mimeTypeFilter?: string;
-  query?: string;
-}): Promise<DriveListResult> {
-  try {
-    const files = await listDriveFilesAction(params);
-    return { ok: true, files };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Error desconocido";
-    if (msg === "GOOGLE_NOT_CONNECTED") {
-      return { ok: false, errorCode: "GOOGLE_NOT_CONNECTED", message: msg };
-    }
-    if (msg === "GOOGLE_INSUFFICIENT_PERMISSIONS") {
-      return { ok: false, errorCode: "GOOGLE_INSUFFICIENT_PERMISSIONS", message: msg };
-    }
-    return { ok: false, errorCode: "OTHER", message: msg };
-  }
+export async function listDriveFilesSafeAction(
+  params?: ParametrosDeListado
+): Promise<DriveListResult> {
+  const resultado = await listDriveFilesAction(params);
+  if (resultado.success) return { ok: true, files: resultado.data };
+  return {
+    ok: false,
+    errorCode: codigoDelMotivoDeDrive(resultado.error),
+    message: resultado.error,
+  };
 }
 
-export async function listDriveFilesAction(params?: {
-  folderId?: string;
-  mimeTypeFilter?: string;
-  query?: string;
-}): Promise<DriveFileListItem[]> {
-  const token = await requireGoogleAccessToken();
+async function listarArchivos(params?: ParametrosDeListado): Promise<DriveFileListItem[]> {
+  const token = await exigirTokenDeDrive();
 
   let q = "trashed = false";
 
@@ -122,85 +103,93 @@ export async function listDriveFilesAction(params?: {
   });
 
   if (!res.ok) {
-    try {
-      const err = (await res.json()) as { error?: { message?: string } };
-      if (res.status === 401 || res.status === 403) {
-        throw new Error("GOOGLE_INSUFFICIENT_PERMISSIONS");
-      }
-      throw new Error(err.error?.message ?? "Error al listar archivos de Drive");
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith("GOOGLE_")) {
-        throw error;
-      }
-      handleDriveApiError(res);
-    }
+    throw await errorDeRespuestaDeDrive(res, "listar archivos");
   }
 
   const data = (await res.json()) as { files?: DriveFileListItem[] };
   return data.files ?? [];
 }
 
-export async function getDriveFileAction(
-  fileId: string
-): Promise<DriveFileListItem> {
-  const token = await requireGoogleAccessToken();
-
-  const url = new URL(
-    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`
-  );
-  url.searchParams.set(
-    "fields",
-    "id,name,mimeType,thumbnailLink,webViewLink,size,modifiedTime"
-  );
-  url.searchParams.set("supportsAllDrives", "true");
-
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) {
-    handleDriveApiError(res);
-  }
-
-  return res.json() as Promise<DriveFileListItem>;
+export async function listDriveFilesAction(
+  params?: ParametrosDeListado
+): Promise<MutationResult<DriveFileListItem[]>> {
+  return mutacionConErroresEsperables("[listDriveFiles]", () => listarArchivos(params));
 }
 
-export async function getDriveFolderPathAction(
-  folderId: string
-): Promise<Array<{ id: string; name: string }>> {
-  const token = await requireGoogleAccessToken();
-
-  const path: Array<{ id: string; name: string }> = [];
-  let currentId = folderId;
-
-  for (let i = 0; i < 10; i++) {
-    if (currentId === "root") break;
+export async function getDriveFileAction(
+  fileId: string
+): Promise<MutationResult<DriveFileListItem>> {
+  return mutacionConErroresEsperables("[getDriveFile]", async () => {
+    const token = await exigirTokenDeDrive();
 
     const url = new URL(
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(currentId)}`
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`
     );
-    url.searchParams.set("fields", "id,name,parents");
+    url.searchParams.set(
+      "fields",
+      "id,name,mimeType,thumbnailLink,webViewLink,size,modifiedTime"
+    );
     url.searchParams.set("supportsAllDrives", "true");
 
     const res = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (!res.ok) break;
+    if (!res.ok) {
+      throw await errorDeRespuestaDeDrive(res, "leer archivo");
+    }
 
-    const file = (await res.json()) as {
-      id: string;
-      name: string;
-      parents?: string[];
-    };
+    return (await res.json()) as DriveFileListItem;
+  });
+}
 
-    path.unshift({ id: file.id, name: file.name });
+/**
+ * La ruta de carpetas hasta `folderId`. Una carpeta de arriba que Drive no
+ * deja ver (404: no existe o la cuenta no tiene acceso) corta la ruta ahí, como
+ * antes; un token rechazado es un motivo y cualquier otra respuesta, una falla
+ * (antes cortaba la ruta sin avisar).
+ */
+export async function getDriveFolderPathAction(
+  folderId: string
+): Promise<MutationResult<Array<{ id: string; name: string }>>> {
+  return mutacionConErroresEsperables("[getDriveFolderPath]", async () => {
+    const token = await exigirTokenDeDrive();
 
-    if (!file.parents?.length) break;
-    currentId = file.parents[0];
-  }
+    const path: Array<{ id: string; name: string }> = [];
+    let currentId = folderId;
 
-  return path;
+    for (let i = 0; i < 10; i++) {
+      if (currentId === "root") break;
+
+      const url = new URL(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(currentId)}`
+      );
+      url.searchParams.set("fields", "id,name,parents");
+      url.searchParams.set("supportsAllDrives", "true");
+
+      const res = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.status === 404) break;
+      if (!res.ok) {
+        throw await errorDeRespuestaDeDrive(res, "ruta de carpetas");
+      }
+
+      const file = (await res.json()) as {
+        id: string;
+        name: string;
+        parents?: string[];
+      };
+
+      path.unshift({ id: file.id, name: file.name });
+
+      if (!file.parents?.length) break;
+      currentId = file.parents[0];
+    }
+
+    return path;
+  });
 }
 
 export async function linkDriveFileToContentAction(
@@ -222,118 +211,63 @@ export async function unlinkDriveFileAction(contentPieceId: string): Promise<voi
   });
 }
 
+/**
+ * La descarga como server action. El análisis de una pieza no pasa por acá:
+ * usa `descargarArchivoDeDrive` (`lib/google/drive-archivos.ts`) directamente.
+ */
 export async function downloadDriveFileAction(
   fileId: string
-): Promise<{ buffer: Buffer; mimeType: string; name: string }> {
-  const token = await requireGoogleAccessToken();
-
-  const metaUrl = new URL(
-    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`
+): Promise<MutationResult<ArchivoDeDrive>> {
+  return mutacionConErroresEsperables("[downloadDriveFile]", () =>
+    descargarArchivoDeDrive(fileId)
   );
-  metaUrl.searchParams.set("fields", "id,name,mimeType,size");
-  metaUrl.searchParams.set("supportsAllDrives", "true");
-
-  const metaRes = await fetch(metaUrl.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!metaRes.ok) {
-    handleDriveApiError(metaRes);
-  }
-
-  const meta = (await metaRes.json()) as {
-    id: string;
-    name: string;
-    mimeType: string;
-    size?: string;
-  };
-
-  const fileSize = meta.size ? Number.parseInt(meta.size, 10) : 0;
-  if (fileSize > MAX_DOWNLOAD_BYTES) {
-    throw new Error("El archivo supera el límite de 500 MB");
-  }
-
-  const exportMime = GOOGLE_EXPORT_MIME[meta.mimeType];
-  let downloadUrl: URL;
-  let resultMimeType = meta.mimeType;
-
-  if (exportMime) {
-    downloadUrl = new URL(
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export`
-    );
-    downloadUrl.searchParams.set("mimeType", exportMime);
-    resultMimeType = exportMime;
-  } else {
-    downloadUrl = new URL(
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`
-    );
-    downloadUrl.searchParams.set("alt", "media");
-  }
-
-  downloadUrl.searchParams.set("supportsAllDrives", "true");
-
-  const res = await fetch(downloadUrl.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (res.status === 401 || res.status === 403) {
-    throw new GoogleIntegrationPermissionError(res.status);
-  }
-
-  if (!res.ok) {
-    throw new Error("Error al descargar archivo de Drive");
-  }
-
-  const arrayBuffer = await res.arrayBuffer();
-  return {
-    buffer: Buffer.from(arrayBuffer),
-    mimeType: resultMimeType,
-    name: meta.name,
-  };
 }
 
+const CREAR_CARPETA_NO_DISPONIBLE =
+  "La creación de carpetas no está disponible temporalmente. Seleccioná una carpeta existente de tu Drive.";
+
+/** Siempre rechaza: el scope de Drive es de sólo lectura (`[MKT-DRIVE-CARPETA]`). */
 export async function createDriveFolderAction(_params: {
   name: string;
   parentFolderId?: string;
-}): Promise<{ id: string; name: string; mimeType: string }> {
-  throw new Error(
-    "La creación de carpetas no está disponible temporalmente. Seleccioná una carpeta existente de tu Drive."
-  );
+}): Promise<MutationResult<{ id: string; name: string; mimeType: string }>> {
+  return mutacionConErroresEsperables("[createDriveFolder]", async () => {
+    throw new ErrorEsperable(CREAR_CARPETA_NO_DISPONIBLE);
+  });
 }
 
 export async function searchDriveFilesAction(
   query: string
-): Promise<DriveFileListItem[]> {
-  const token = await requireGoogleAccessToken();
-  const trimmedQuery = query.trim();
+): Promise<MutationResult<DriveFileListItem[]>> {
+  return mutacionConErroresEsperables("[searchDriveFiles]", async () => {
+    const token = await exigirTokenDeDrive();
+    const trimmedQuery = query.trim();
 
-  if (!trimmedQuery) {
-    return [];
-  }
-
-  const q = `name contains '${escapeDriveQueryValue(trimmedQuery)}' and trashed = false`;
-  const url = new URL("https://www.googleapis.com/drive/v3/files");
-  url.searchParams.set("q", q);
-  url.searchParams.set(
-    "fields",
-    "files(id,name,mimeType,thumbnailLink,webViewLink,size,modifiedTime,parents)"
-  );
-  url.searchParams.set("pageSize", "30");
-  url.searchParams.set("orderBy", "modifiedByMeTime desc");
-  url.searchParams.set("includeItemsFromAllDrives", "true");
-  url.searchParams.set("supportsAllDrives", "true");
-
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      throw new Error("GOOGLE_INSUFFICIENT_PERMISSIONS");
+    if (!trimmedQuery) {
+      return [];
     }
-    throw new Error("Error al buscar en Drive");
-  }
 
-  const data = (await res.json()) as { files?: DriveFileListItem[] };
-  return data.files ?? [];
+    const q = `name contains '${escapeDriveQueryValue(trimmedQuery)}' and trashed = false`;
+    const url = new URL("https://www.googleapis.com/drive/v3/files");
+    url.searchParams.set("q", q);
+    url.searchParams.set(
+      "fields",
+      "files(id,name,mimeType,thumbnailLink,webViewLink,size,modifiedTime,parents)"
+    );
+    url.searchParams.set("pageSize", "30");
+    url.searchParams.set("orderBy", "modifiedByMeTime desc");
+    url.searchParams.set("includeItemsFromAllDrives", "true");
+    url.searchParams.set("supportsAllDrives", "true");
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      throw await errorDeRespuestaDeDrive(res, "buscar archivos");
+    }
+
+    const data = (await res.json()) as { files?: DriveFileListItem[] };
+    return data.files ?? [];
+  });
 }

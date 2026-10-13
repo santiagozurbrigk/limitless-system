@@ -124,6 +124,35 @@ export function buildHealth(input: {
   };
 }
 
+/**
+ * Una integración cuyo estado no se pudo leer (la lectura falló). No es "Sin
+ * conectar": eso le ofrecería conectar algo que quizás ya está conectado y
+ * escondería la falla (lección de Calendly, SCRUM-504). Se pinta como `error`
+ * con el motivo, sin cuenta, fecha ni registros, que no se conocen
+ * (SCRUM-519).
+ */
+export function estadoSinLeer(input: {
+  provider: IntegrationProvider;
+  recordsLabel?: string | null;
+  motivo: string;
+}): IntegrationHealth {
+  return {
+    provider: input.provider,
+    state: "error",
+    accountLabel: null,
+    lastSyncAt: null,
+    records: null,
+    recordsLabel: input.recordsLabel ?? null,
+    issues: [
+      {
+        level: "error",
+        message: `No se pudo leer el estado de esta integración: ${input.motivo}`,
+        action: "Recargá la página. Si se repite, avisá a soporte.",
+      },
+    ],
+  };
+}
+
 // ─── Avisos reutilizables ─────────────────────────────────────────────────────
 
 /**

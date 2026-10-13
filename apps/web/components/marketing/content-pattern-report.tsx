@@ -16,6 +16,7 @@ import {
   type GeneratePatternReportParams,
   type PatternRankedItem,
 } from "@/app/marketing/content/pattern-report-actions";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 
 // ─── Selector de rango ──────────────────────────────────────────────────────────
 
@@ -35,8 +36,15 @@ const RANGE_OPTIONS: RangeOption[] = [
 
 export function ContentPatternReport({
   initialReport,
+  errorInicial = null,
 }: {
   initialReport: ContentPatternReport | null;
+  /**
+   * Por qué no se pudo leer el último reporte (SCRUM-519). Se muestra en el
+   * mismo lugar que el error de generar: sin esto, la falla se veía como "todavía
+   * no hay reporte".
+   */
+  errorInicial?: string | null;
 }) {
   const [report, setReport] = useState<ContentPatternReport | null>(
     initialReport
@@ -46,21 +54,19 @@ export function ContentPatternReport({
   );
   const [rangeOpen, setRangeOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(errorInicial);
   const [minCount, setMinCount] = useState(2);
 
   async function handleGenerate() {
     setLoading(true);
     setError(null);
     try {
-      const result = await generateContentPatternReportAction(
-        selectedRange.params
+      const result = await leerConMotivo(
+        () => generateContentPatternReportAction(selectedRange.params),
+        "[ContentPatternReport] generar"
       );
-      setReport(result);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Error al generar el reporte"
-      );
+      if (result.ok) setReport(result.data);
+      else setError(result.motivo);
     } finally {
       setLoading(false);
     }

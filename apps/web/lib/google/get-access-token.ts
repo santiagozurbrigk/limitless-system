@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { refreshGoogleAccessToken } from "@/lib/google/refresh-token";
 import { GOOGLE_FORMS_DRIVE_SCOPES } from "@/lib/google/scopes";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 
 type GoogleIntegrationRow = {
   organization_id: string;
@@ -51,20 +52,41 @@ async function resolveAccessToken(
   return integration.access_token;
 }
 
-/** Token OAuth de Google (Forms/YouTube/Drive) para la org, con refresh automático.
- *  Retorna null si el token no existe o si le faltan scopes (el usuario debe reconectar). */
-export async function getGoogleAccessTokenForOrganization(
-  organizationId: string
-): Promise<string | null> {
+function leerIntegracionDeGoogle(organizationId: string) {
   const admin = createAdminClient();
-  const { data } = await admin
+  return admin
     .from("google_forms_integrations")
     .select("organization_id, access_token, refresh_token, token_expires_at, granted_scopes")
     .eq("organization_id", organizationId)
     .eq("status", "connected")
     .maybeSingle();
+}
 
+async function tokenDeLaIntegracion(data: GoogleIntegrationRow | null): Promise<string | null> {
   if (!data?.access_token) return null;
   if (!hasRequiredScopes(data.granted_scopes)) return null;
-  return resolveAccessToken(data as GoogleIntegrationRow);
+  return resolveAccessToken(data);
+}
+
+/** Token OAuth de Google (Forms/YouTube/Drive) para la org, con refresh automático.
+ *  Retorna null si el token no existe o si le faltan scopes (el usuario debe reconectar).
+ *  Una falla al leer la integración también da null: para distinguirla, usá
+ *  `leerTokenDeGoogle`. */
+export async function getGoogleAccessTokenForOrganization(
+  organizationId: string
+): Promise<string | null> {
+  const { data } = await leerIntegracionDeGoogle(organizationId);
+  return tokenDeLaIntegracion(data as GoogleIntegrationRow | null);
+}
+
+/**
+ * Lo mismo que `getGoogleAccessTokenForOrganization`, pero si la lectura de la
+ * integración falla lanza `FallaDeLaBase` (SCRUM-519): una caída de la base no
+ * se puede mostrar como "Google no está conectado". `null` sigue siendo "no hay
+ * conexión usable" (sin token o sin los permisos de Drive y Forms).
+ */
+export async function leerTokenDeGoogle(organizationId: string): Promise<string | null> {
+  const { data, error } = await leerIntegracionDeGoogle(organizationId);
+  if (error) throw new FallaDeLaBase(error);
+  return tokenDeLaIntegracion(data as GoogleIntegrationRow | null);
 }

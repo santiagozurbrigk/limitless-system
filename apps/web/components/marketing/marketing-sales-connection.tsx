@@ -9,6 +9,7 @@ import {
   getSalesContentRankAction,
 } from "@/app/marketing/actions";
 import { getLatestContentPatternReportAction } from "@/app/marketing/content/pattern-report-actions";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import type { SalesContentRankView } from "@/lib/marketing/content-sales-rank";
 import { paths } from "@/routes";
 import { ContentThumbnail } from "@/components/marketing-insights/content-thumbnail";
@@ -24,6 +25,7 @@ export function MarketingSalesConnection() {
   const [journeys, setJourneys] = useState<ClosedBuyerJourney[]>([]);
   const [latestReport, setLatestReport] =
     useState<ContentPatternReportType | null>(null);
+  const [motivoDelReporte, setMotivoDelReporte] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -31,13 +33,16 @@ export function MarketingSalesConnection() {
     Promise.all([
       getSalesContentRankAction(),
       getClosedBuyerJourneysAction(),
-      getLatestContentPatternReportAction(),
+      // El último reporte devuelve su error como valor (SCRUM-519): si no se
+      // pudo leer, la sección lo dice en vez de ofrecer generar el primero.
+      leerConMotivo(getLatestContentPatternReportAction, "[MarketingSalesConnection] último reporte"),
     ])
-      .then(([rankData, journeyData, reportData]) => {
+      .then(([rankData, journeyData, reporte]) => {
         if (!active) return;
         setRank(rankData);
         setJourneys(journeyData);
-        setLatestReport(reportData);
+        setLatestReport(reporte.ok ? reporte.data : null);
+        setMotivoDelReporte(reporte.ok ? null : reporte.motivo);
       })
       .catch(() => {
         if (!active) return;
@@ -149,7 +154,7 @@ export function MarketingSalesConnection() {
             <SectionLoading />
           </div>
         ) : (
-          <ContentPatternReport initialReport={latestReport} />
+          <ContentPatternReport initialReport={latestReport} errorInicial={motivoDelReporte} />
         )}
       </section>
     </div>

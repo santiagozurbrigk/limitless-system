@@ -1,4 +1,3 @@
-import { unstable_rethrow } from "next/navigation";
 import { getContentPiecesAction, getContentDraftsAction } from "@/app/marketing/content/actions";
 import { maybeSyncZernioContentAction } from "@/app/marketing/content/sync-actions";
 import { ContentPieceGrid } from "@/components/marketing/content-piece-grid";
@@ -14,14 +13,12 @@ export default async function MarketingContentPage({
   const { tab } = await searchParams;
   const activeTab = tab === "borradores" ? "borradores" : "biblioteca";
 
-  let syncedAt: Date | null = null;
-  try {
-    await maybeSyncZernioContentAction();
-    syncedAt = new Date();
-  } catch (error) {
-    unstable_rethrow(error);
-    // No bloquear la página si Zernio falla
-  }
+  // La sincronización con Zernio devuelve su error como valor (SCRUM-519): si
+  // falla, la página se dibuja igual y dice por qué no se sincronizó (antes no
+  // decía nada, y una caída de Zernio no se registraba).
+  const sincronizacion = await maybeSyncZernioContentAction();
+  const syncedAt = sincronizacion.success ? new Date() : null;
+  const motivoSinSincronizar = sincronizacion.success ? null : sincronizacion.error;
 
   const [pieces, drafts] = await Promise.all([
     getContentPiecesAction({ limit: 50 }),
@@ -56,6 +53,11 @@ export default async function MarketingContentPage({
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
+                  </span>
+                ) : null}
+                {motivoSinSincronizar ? (
+                  <span className="inline-flex items-center gap-1 text-[11px]">
+                    Sin sincronizar: {motivoSinSincronizar}
                   </span>
                 ) : null}
               </>
