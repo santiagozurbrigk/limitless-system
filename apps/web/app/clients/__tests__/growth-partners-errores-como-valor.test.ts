@@ -89,6 +89,7 @@ const LINK = "66666666-6666-4666-8666-666666666666";
 const ENVIO = "77777777-7777-4777-8777-777777777777";
 const ENVIO_AJENO = "88888888-8888-4888-8888-888888888888";
 const MES = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const MES_AJENO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const FETCH_FAILED = { message: "TypeError: fetch failed" };
 const SIN_ADD_ON = "Esta función no está habilitada para tu organización.";
 
@@ -139,7 +140,7 @@ function sembrar() {
   ];
   base.tablas.client_revenue_entries = [
     { id: MES, organization_id: ORG, client_id: CLIENTE, amount: "1000", currency: "USD", period: "2026-09-01", note: null, created_at: "2026-10-01" },
-    { id: "mes-ajeno", organization_id: OTRA_ORG, client_id: CLIENTE_AJENO, amount: "9", currency: "USD", period: "2026-09-01", note: null, created_at: "2026-10-01" },
+    { id: MES_AJENO, organization_id: OTRA_ORG, client_id: CLIENTE_AJENO, amount: "9", currency: "USD", period: "2026-09-01", note: null, created_at: "2026-10-01" },
   ];
 }
 
@@ -681,12 +682,12 @@ describe("saveClientRevenueAction", () => {
 describe("deleteClientRevenueAction", () => {
   it("borra filtrando por id y organización", async () => {
     await expect(deleteClientRevenueAction(MES)).resolves.toEqual({ success: true, data: undefined });
-    expect(base.tablas.client_revenue_entries.map((e) => e.id)).toEqual(["mes-ajeno"]);
+    expect(base.tablas.client_revenue_entries.map((e) => e.id)).toEqual([MES_AJENO]);
   });
 
   it("⭐ un mes de otra organización no se borra", async () => {
-    await deleteClientRevenueAction("mes-ajeno");
-    expect(base.tablas.client_revenue_entries.map((e) => e.id)).toContain("mes-ajeno");
+    await deleteClientRevenueAction(MES_AJENO);
+    expect(base.tablas.client_revenue_entries.map((e) => e.id)).toContain(MES_AJENO);
   });
 });
 
