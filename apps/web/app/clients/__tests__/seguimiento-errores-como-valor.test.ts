@@ -1213,6 +1213,24 @@ describe("⭐ una fila de otra organización queda intacta o no se lee", () => {
     expect(sim.tablas.clients?.[1]).not.toHaveProperty("satisfaction");
   });
 
+  it("las fechas con aviso son sólo de los creadores de la org", async () => {
+    const pronto = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+    sim.tablas.field_definitions!.push({
+      ...columna("col-fecha", ORG, "client", "lanzamiento", "Lanzamiento"),
+      field_type: "date",
+      alert_days_before: 30,
+      section: "marketing",
+    });
+    // El select arma `lanzamiento:custom->>lanzamiento`: el falso devuelve la
+    // fila con la columna ya resuelta.
+    sim.tablas.client_sub_clients = [
+      { organization_id: ORG, client_id: CLIENTE, name: "Creador", lanzamiento: pronto },
+      { organization_id: OTRA_ORG, client_id: CLIENTE_AJENO, name: "Ajeno", lanzamiento: pronto },
+    ];
+    const r = await getClientSignalsAction();
+    expect(r.success && Object.keys(r.data.dateAlerts)).toEqual([CLIENTE]);
+  });
+
   it("el umbral es el de la org (no el de la primera fila)", async () => {
     await expect(getClientSilenceDaysAction()).resolves.toEqual({ success: true, data: 20 });
   });
