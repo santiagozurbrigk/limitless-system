@@ -236,11 +236,13 @@ como JSON.
   Vuelven con su motivo: sesión, ID inválido (`uuidSchema`; las que aceptan el ID de la plataforma sólo exigen
   texto), pieza, variante o job inexistente o de otra org, pieza sin Drive o sin post, demora fuera de 0 a 72 horas
   (el CHECK de la tabla), y los rechazos con motivo de los servicios (`lib/marketing/rechazos-de-contenido.ts`):
-  Zernio sin conectar o con un 401/403, Google sin conectar, sin permisos o un archivo de más de 500 MB, y la
-  clave de Claude rechazada o sin créditos. Cualquier otra respuesta de Zernio (404, 429, 5xx, tiempo agotado),
-  de Drive o de Claude, y toda falla de la base (`FallaDeLaBase`) se registra (consola y Sentry, tag
-  `server_action`) y el usuario ve el texto fijo. Una falla de `createPost` de Zernio se registra sin el cuerpo de
-  la respuesta, que puede repetir el caption. Lo que antes se escondía y ahora no: el detalle de una pieza
+  Zernio sin conectar o con un 401/403 (también al publicar un borrador: `createPost` lanza `ZernioHttpError` con
+  el status), Google sin conectar, sin permisos o un archivo de más de 500 MB, un audio de más de 25 MB para
+  transcribir (`transcribeAudioBuffer` lanza `ErrorEsperable`) y la clave de Claude rechazada o sin créditos.
+  Cualquier otra respuesta de Zernio (404, 429, 5xx, tiempo agotado), de Drive, de OpenAI o de Claude, y toda
+  falla de la base (`FallaDeLaBase`) se registra (consola y Sentry, tag `server_action`) y el usuario ve el texto
+  fijo. Las fallas de Zernio se registran con el status y sin el cuerpo de la respuesta (`createPost` no lo pone
+  en el mensaje porque puede repetir el caption; `sinCuerpoDeZernio` lo corta en anuncios y comentarios). Lo que antes se escondía y ahora no: el detalle de una pieza
   respondía 404 ante cualquier falla (ahora sólo si la pieza no existe en la org; `getContentPieceAction` devuelve
   `null`), el promedio de la org y los Trial Reels del detalle quedaban vacíos sin aviso, las piezas padre de los
   borradores, la pieza fuente de un caption, la firma y el guardado de las vistas previas y la ruta de la música
@@ -359,7 +361,8 @@ Detalle y prioridades: `PENDIENTES.md` (entregado al integrador del backlog).
 | Lectores sin ceros inventados: promedios, ranking y prompt de patrones | `apps/web/lib/marketing/__tests__/metricas-medidas.test.ts`, `ranking-de-contenido.test.ts`, `patrones-de-contenido.test.ts`, `orden-de-piezas.test.ts`, `apps/web/app/marketing/content/__tests__/top-performing-content.test.ts` |
 | Tools del agente con piezas sin métricas, y el motivo cuando la acción de contenido vuelve con error | `apps/web/lib/agent/__tests__/contenido-sin-metricas.test.ts`, `top-contenido-tool.test.ts` |
 | Errores como valor de las acciones de Contenido, Trial Reels, música, anuncios y comentarios (motivo exacto, falla registrada con su etiqueta, cada filtro por organización) | `apps/web/app/marketing/content/__tests__/contenido-errores-como-valor.test.ts`, `trial-reels-errores-como-valor.test.ts`, `zernio-en-vivo-errores-como-valor.test.ts` (base falsa en `supabase-falso.ts`) |
-| Qué falla de Zernio, Drive y Claude es un rechazo con motivo | `apps/web/lib/marketing/__tests__/rechazos-de-contenido.test.ts` |
+| Qué falla de Zernio, Drive y Claude es un rechazo con motivo, y las fallas de Zernio sin el cuerpo | `apps/web/lib/marketing/__tests__/rechazos-de-contenido.test.ts` |
+| `/api/content/analyze` pasa el motivo o el texto fijo con 500 (el botón "Analizar") | `apps/web/app/api/content/analyze/__tests__/ruta-de-analisis.test.ts` |
 | Pantallas de contenido, detalle y anuncios con el motivo; avisos de Trial Reels, Drive, anuncios y comentarios | `apps/web/app/(platform)/marketing/__tests__/pantallas-de-contenido.test.ts`, `apps/web/components/marketing/__tests__/contenido-pantallas-errores-como-valor.test.ts` |
 | Triggers de comentarios Zernio (Embudos) | `apps/web/lib/zernio/__tests__/triggers.test.ts` |
 | `/api/cron/sync-content-metrics` pasa sin sesión y `/api/content/analyze` exige sesión (`isPublicPath`; `/api/utm/*` no tiene caso de test) | `apps/web/lib/supabase/__tests__/public-paths.test.ts` |
