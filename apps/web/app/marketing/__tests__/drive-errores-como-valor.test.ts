@@ -30,6 +30,9 @@ vi.mock("@/lib/supabase/admin", async () => {
 vi.mock("@/lib/auth/bootstrap", () => ({
   getCurrentProfile: async () => sim.perfil,
 }));
+vi.mock("@/lib/google/refresh-token", () => ({
+  refreshGoogleAccessToken: async () => ({ access_token: "token-renovado", expires_in: 3600 }),
+}));
 vi.mock("@/app/marketing/content/actions", () => ({
   updateContentPieceAction: vi.fn(),
 }));
@@ -142,6 +145,18 @@ describe("el token de Google", () => {
       error: MOTIVO_DRIVE_NO_CONECTADO,
     });
     expect(sim.pedidos).toEqual([]);
+  });
+
+  it("⭐ un token por vencer se renueva y se guarda sólo en la integración de la organización", async () => {
+    base.tablas.google_forms_integrations = [
+      integracion(OTRA_ORG, TOKEN_AJENO),
+      integracion(ORG, TOKEN, { token_expires_at: "2000-01-01T00:00:00Z" }),
+    ];
+    sim.respuestas = [json({ files: [] })];
+    await listDriveFilesAction();
+    expect(sim.pedidos[0].auth).toBe("Bearer token-renovado");
+    expect(base.tablas.google_forms_integrations[1].access_token).toBe("token-renovado");
+    expect(base.tablas.google_forms_integrations[0].access_token).toBe(TOKEN_AJENO);
   });
 
   it("sin los permisos de Drive, no conectado", async () => {
