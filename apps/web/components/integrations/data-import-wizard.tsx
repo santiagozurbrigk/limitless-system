@@ -661,7 +661,7 @@ export function StepMapper({
 
 // ─── Paso 3 — Confirmación ────────────────────────────────────────────────────
 
-function StepConfirm({
+export function StepConfirm({
   origin,
   what,
   ghlPreview,

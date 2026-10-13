@@ -87,6 +87,7 @@ import {
   EncabezadoDelResumen,
   ResultRow,
   ResumenDeImportacion,
+  StepConfirm,
   StepMapper,
   importarClientesDelArchivo,
   importarMetricasManuales,
@@ -297,6 +298,32 @@ describe("el resumen del asistente de importación", () => {
     expect(html).toContain("Importación incompleta");
     expect(html).not.toContain("Importación completada");
     expect(html).toContain("Se importaron 50 de 60");
+  });
+
+  it("⭐ el paso de confirmación, con el resultado cargado, dibuja ese resumen", () => {
+    const html = renderToStaticMarkup(
+      createElement(StepConfirm, {
+        origin: "excel",
+        what: new Set(["clients" as const]),
+        ghlPreview: null,
+        clientsFile: null,
+        manualSalesRows: [],
+        onManualSalesRowsChange: () => {},
+        importing: false,
+        onImport: () => {},
+        summary: {
+          clientsResult: {
+            source: "excel",
+            inserted: 50,
+            skipped: 0,
+            errors: [],
+            incompleta: "Se importaron 50 de 60: el resto no se pudo guardar.",
+          },
+        },
+      })
+    );
+    expect(html).toContain("Importación incompleta");
+    expect(html).not.toContain("Importación completada");
   });
 
   it("⭐ el paso de resultados con una importación entera: encabezado «Importación completada»", () => {
