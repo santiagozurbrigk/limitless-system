@@ -2451,6 +2451,15 @@ Fuente: PENDIENTES.md [WORKBOARD-CARGA-DUPLICADA] · Doc del área: docs/areas/o
 *Dónde:* carpetas citadas.
 
 Fuente: PENDIENTES.md [TESTS-OPS-FIN-PROD] · Doc del área: docs/areas/operaciones.md",TESTS-OPS-FIN-PROD,"Operaciones, Finanzas y Producto",P2,,tests
+[TABLA-AUSENTE-POR-TEXTO] Un 503 de PostgREST al armar su caché (PGRST002) se toma como tabla ausente *(nuevo)*,Bug,Medium,infra,p2,bug,,,,"*Tipo:* bug
+
+*Estado verificado:* {{isMissingTableError}} ({{apps/web/lib/auth/bootstrap.ts}}) decide ""la tabla no existe"" por el texto del error (""Could not find the table"", ""does not exist"" o ""schema cache""). PostgREST responde {{503 {""code"":""PGRST002"",""message"":""Could not query the database for the schema cache. Retrying.""}}} cuando no puede armar su caché de esquema, y ese texto contiene ""schema cache"": la caída se toma como tabla ausente (vacío, o el motivo ""falta aplicar la migración"") y no se registra. SCRUM-516 (AR pasada 2) lo cerró donde una escritura dependía de esa lectura: {{esTablaAusente}} ({{apps/web/lib/server/tabla-ausente.ts}}, por código: {{PGRST205}} de PostgREST y {{42P01}} de Postgres) en {{leerColumnas}}, {{lib/checkpoints/lecturas-del-recorrido.ts}}, los chequeos de uso antes de borrar una columna o un checkpoint y los 8 archivos de carga y negocio de Clientes. Quedan 63 usos de {{isMissingTableError}} en {{app}}, {{lib}} y {{components}}; en Clientes: {{tracking-actions.ts:96,347}} (seguimiento: con PGRST002 vuelve vacío y sin evento, visto con {{next start}} en {{evidencia-sprint2/scrum-516/produccion-p3/P8-*}}), {{checkpoint-derived-actions.ts:83}}, {{client-custom-fields-actions.ts:93}} (motivo de migración en vez del texto fijo), {{checkpoint-event-actions.ts:265}} y {{actions.ts:92,124}}. Ninguno de esos escribe con datos que no leyó.
+
+*Qué hay que hacer:* pasar los usos que quedan a {{esTablaAusente(error)}} (necesita el error entero, no sólo el {{message}}) módulo por módulo, con un test de PGRST002 en cada uno; después, decidir si {{isMissingTableError}} se borra o queda sólo para mensajes sin código.
+
+*Dónde:* {{apps/web/lib/auth/bootstrap.ts}} y sus llamadores; {{apps/web/lib/server/tabla-ausente.ts}}.
+
+Fuente: PENDIENTES.md [TABLA-AUSENTE-POR-TEXTO] · Doc del área: docs/arquitectura/vision-general.md",TABLA-AUSENTE-POR-TEXTO,"Infraestructura, seguridad y tests (transversal)",P2,,bug
 [LOGS-DATOS-SENSIBLES] Logs con textos de DMs y filas de clientes,Bug,Medium,infra,p2,sev-media,seguridad,,,"*Tipo:* seguridad
 
 *Severidad:* Media

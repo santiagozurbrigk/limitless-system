@@ -87,7 +87,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 19 | 43 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 19 | 44 | 13 |
 
 ---
 
@@ -2202,6 +2202,12 @@ Prioridad sugerida P1: es la base del runbook; sin detección, todas las demás 
 - **Dónde:** `apps/web/lib/utm/`.
 
 ### Infraestructura, seguridad y tests (transversal) · P2
+
+#### [TABLA-AUSENTE-POR-TEXTO] Un 503 de PostgREST al armar su caché (PGRST002) se toma como tabla ausente *(nuevo)*
+- **Tipo:** bug
+- **Estado verificado:** `isMissingTableError` (`apps/web/lib/auth/bootstrap.ts`) decide "la tabla no existe" por el texto del error ("Could not find the table", "does not exist" o "schema cache"). PostgREST responde `503 {"code":"PGRST002","message":"Could not query the database for the schema cache. Retrying."}` cuando no puede armar su caché de esquema, y ese texto contiene "schema cache": la caída se toma como tabla ausente (vacío, o el motivo "falta aplicar la migración") y no se registra. SCRUM-516 (AR pasada 2) lo cerró donde una escritura dependía de esa lectura: `esTablaAusente` (`apps/web/lib/server/tabla-ausente.ts`, por código: `PGRST205` de PostgREST y `42P01` de Postgres) en `leerColumnas`, `lib/checkpoints/lecturas-del-recorrido.ts`, los chequeos de uso antes de borrar una columna o un checkpoint y los 8 archivos de carga y negocio de Clientes. Quedan 63 usos de `isMissingTableError` en `app`, `lib` y `components`; en Clientes: `tracking-actions.ts:96,347` (seguimiento: con PGRST002 vuelve vacío y sin evento, visto con `next start` en `evidencia-sprint2/scrum-516/produccion-p3/P8-*`), `checkpoint-derived-actions.ts:83`, `client-custom-fields-actions.ts:93` (motivo de migración en vez del texto fijo), `checkpoint-event-actions.ts:265` y `actions.ts:92,124`. Ninguno de esos escribe con datos que no leyó.
+- **Qué hay que hacer:** pasar los usos que quedan a `esTablaAusente(error)` (necesita el error entero, no sólo el `message`) módulo por módulo, con un test de PGRST002 en cada uno; después, decidir si `isMissingTableError` se borra o queda sólo para mensajes sin código.
+- **Dónde:** `apps/web/lib/auth/bootstrap.ts` y sus llamadores; `apps/web/lib/server/tabla-ausente.ts`.
 
 #### [LOGS-DATOS-SENSIBLES] Logs con textos de DMs y filas de clientes
 - **Tipo:** seguridad

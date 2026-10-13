@@ -141,7 +141,12 @@ texto fijo.
   validan las columnas con `leerColumnas` (`lib/custom-fields/leer-columnas.ts`), que lanza si la base falla: la
   escritura termina en el texto fijo sin tocar la fila. Antes, con `listFieldDefinitionsAction` (que devuelve `[]`
   ante una falla), el win perdía sus columnas y el sub-cliente la edición, y la pantalla decía que se guardó. Sin
-  la tabla de columnas (antes de su migración) se guarda sin columnas, como antes.
+  la tabla de columnas (antes de su migración) se guarda sin columnas, como antes. La tabla ausente se decide por
+  el código del error (`PGRST205`, `42P01`; `lib/server/tabla-ausente.ts`), no por el texto: un `PGRST002` de
+  PostgREST (503 al armar su caché, "schema cache" en el texto) es una falla y corta la escritura.
+- Los ids que llegan sueltos (borrar o editar un win, una captura, un uso, el baseline, un plan, un mes de
+  facturación, un sub-cliente o una tarea, y las listas de facturación, sub-clientes y tareas) se validan antes de
+  la sesión: uno que no es UUID vuelve con "ID inválido" sin llegar a la base.
 - Lecturas que antes se ignoraban y ahora cortan antes de escribir: el import de Excel no importa si no puede
   leer los clientes existentes (duplicaría) o los planes; crear un link de onboarding no crea otro si no puede
   leer el activo; borrar un win o una captura no borra la fila si Storage no borró el archivo.
