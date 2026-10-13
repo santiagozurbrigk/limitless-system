@@ -86,6 +86,7 @@ import { cargarPlanesDeCobros } from "@/components/sales/cobros-page";
 import {
   EncabezadoDelResumen,
   ResultRow,
+  ResumenDeImportacion,
   StepMapper,
   importarClientesDelArchivo,
   importarMetricasManuales,
@@ -277,6 +278,35 @@ describe("el resumen del asistente de importación", () => {
     expect(html).toContain("Importación incompleta");
     expect(html).not.toContain("Importación completada");
     expect(html).not.toContain("text-green-600");
+  });
+
+  it("⭐ el paso de resultados con una importación incompleta: encabezado «Importación incompleta» y el detalle", () => {
+    const html = renderToStaticMarkup(
+      createElement(ResumenDeImportacion, {
+        summary: {
+          clientsResult: {
+            source: "excel",
+            inserted: 50,
+            skipped: 0,
+            errors: [],
+            incompleta: "Se importaron 50 de 60: el resto no se pudo guardar.",
+          },
+        },
+      })
+    );
+    expect(html).toContain("Importación incompleta");
+    expect(html).not.toContain("Importación completada");
+    expect(html).toContain("Se importaron 50 de 60");
+  });
+
+  it("⭐ el paso de resultados con una importación entera: encabezado «Importación completada»", () => {
+    const html = renderToStaticMarkup(
+      createElement(ResumenDeImportacion, {
+        summary: { clientsResult: { source: "excel", inserted: 60, skipped: 2, errors: [] } },
+      })
+    );
+    expect(html).toContain("Importación completada");
+    expect(html).not.toContain("Importación incompleta");
   });
 
   it("el encabezado de una importación entera dice «completada»", () => {

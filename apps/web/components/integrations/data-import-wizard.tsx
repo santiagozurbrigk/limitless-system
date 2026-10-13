@@ -682,26 +682,7 @@ function StepConfirm({
   summary: ImportSummary | null;
   onImport: () => void;
 }) {
-  if (summary) {
-    return (
-      <div className="space-y-4">
-        <EncabezadoDelResumen incompleta={Boolean(summary.clientsResult?.incompleta)} />
-        {summary.clientsResult && (
-          <ResultRow
-            label="Clientes"
-            inserted={summary.clientsResult.inserted}
-            skipped={summary.clientsResult.skipped}
-            errors={summary.clientsResult.errors.length}
-            planMatchCount={summary.clientsResult.planMatchCount}
-            incompleta={summary.clientsResult.incompleta}
-          />
-        )}
-        {summary.salesMetricsResult && (
-          <ResultRow label="Métricas de ventas" inserted={summary.salesMetricsResult.inserted} skipped={summary.salesMetricsResult.skipped} errors={summary.salesMetricsResult.errors.length} />
-        )}
-      </div>
-    );
-  }
+  if (summary) return <ResumenDeImportacion summary={summary} />;
 
   const salesRowsWithPeriod = manualSalesRows.filter(r => r.period);
   const canImport =
@@ -757,6 +738,31 @@ function StepConfirm({
           "Importar"
         )}
       </Button>
+    </div>
+  );
+}
+
+/**
+ * El paso de resultados: encabezado, clientes y métricas importados. Si la
+ * importación de clientes quedó incompleta, el encabezado lo dice (SCRUM-516).
+ */
+export function ResumenDeImportacion({ summary }: { summary: ImportSummary }) {
+  return (
+    <div className="space-y-4">
+      <EncabezadoDelResumen incompleta={Boolean(summary.clientsResult?.incompleta)} />
+      {summary.clientsResult && (
+        <ResultRow
+          label="Clientes"
+          inserted={summary.clientsResult.inserted}
+          skipped={summary.clientsResult.skipped}
+          errors={summary.clientsResult.errors.length}
+          planMatchCount={summary.clientsResult.planMatchCount}
+          incompleta={summary.clientsResult.incompleta}
+        />
+      )}
+      {summary.salesMetricsResult && (
+        <ResultRow label="Métricas de ventas" inserted={summary.salesMetricsResult.inserted} skipped={summary.salesMetricsResult.skipped} errors={summary.salesMetricsResult.errors.length} />
+      )}
     </div>
   );
 }
