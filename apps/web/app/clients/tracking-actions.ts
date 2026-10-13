@@ -40,7 +40,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { lecturaDegradableQueNoRechaza } from "@/lib/server/lectura-degradable";
+import { lecturaDegradable, valorSiNoEsFalla } from "@/lib/server/lectura-degradable";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -64,18 +64,18 @@ type TrackingRow = {
  *
  * SCRUM-517: la usa la pantalla de Wins junto con otras lecturas que devuelven
  * el dato tal cual, así que conserva su tipo; lo que cambia es que una falla
- * ya no se esconde: `lecturaDegradableQueNoRechaza` la registra (consola y
- * Sentry, tag `lectura_degradada`) y recién ahí devuelve `{}`.
+ * ya no se esconde: `lecturaDegradable` la registra (consola y Sentry, tag
+ * `lectura_degradada`) y recién ahí devuelve `{}`.
  */
 export async function listClientTrackingAction(): Promise<
   Record<string, ClientTracking>
 > {
   // Sin sesión, `{}` sin registrarse: no es una falla.
-  return lecturaDegradableQueNoRechaza(
+  return lecturaDegradable(
     "listClientTracking",
     async () => leerSeguimiento(await createClient(), await requireOrganizationId()),
-    {}
-  );
+    {} as Record<string, ClientTracking>
+  ).catch((error: unknown) => valorSiNoEsFalla(error, {} as Record<string, ClientTracking>));
 }
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;

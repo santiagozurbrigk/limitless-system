@@ -27,7 +27,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { lecturaDegradableQueNoRechaza } from "@/lib/server/lectura-degradable";
+import { lecturaDegradable, valorSiNoEsFalla } from "@/lib/server/lectura-degradable";
 import { firstZodError, uuidSchema } from "@/lib/validations";
 import {
   normalizePeriod,
@@ -200,13 +200,13 @@ export async function deleteClientRevenueAction(
  *
  * La compone el tablero de Clientes (`getClientsBoardAction`), que espera el
  * dato y no un `MutationResult`: si falla, la tabla sigue sin la columna de
- * facturación y la falla queda registrada (`lecturaDegradableQueNoRechaza`, SCRUM-516).
+ * facturación y la falla queda registrada (`lecturaDegradable` y `valorSiNoEsFalla`, SCRUM-516).
  * Antes se perdía sin rastro.
  */
 export async function getRevenueByClientAction(): Promise<
   Record<string, RevenueSummary>
 > {
-  return lecturaDegradableQueNoRechaza(
+  return lecturaDegradable(
     "clientes:facturacion-por-cliente",
     async () => {
       const organizationId = await requireOrganizationId();
@@ -239,5 +239,5 @@ export async function getRevenueByClientAction(): Promise<
       return result;
     },
     {} as Record<string, RevenueSummary>
-  );
+  ).catch((error: unknown) => valorSiNoEsFalla(error, {} as Record<string, RevenueSummary>));
 }

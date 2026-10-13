@@ -51,10 +51,7 @@ import {
   registrarFallaDeAccion,
   type MutationResult,
 } from "@/lib/server/action-result";
-import {
-  lecturaDegradable,
-  lecturaDegradableQueNoRechaza,
-} from "@/lib/server/lectura-degradable";
+import { lecturaDegradable, valorSiNoEsFalla } from "@/lib/server/lectura-degradable";
 import { firstZodError, uuidSchema } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -137,8 +134,8 @@ function revalidate(clientId?: string) {
  *
  * Las lecturas (`listWinsAction`, baselines y nichos) las componen la pantalla
  * de Wins y la revisión semanal, que esperan el dato: siguen devolviendo vacío
- * ante una falla, pero ahora la falla queda registrada
- * (`lecturaDegradableQueNoRechaza`).
+ * ante una falla, pero ahora la falla queda registrada (`lecturaDegradable`;
+ * sin sesión, vacío sin registrarse: `valorSiNoEsFalla`).
  * Antes `catch { return [] }` la escondía.
  */
 
@@ -177,7 +174,7 @@ function errorDeLoDelWin(error: { message: string; code?: string | null }): Erro
  * y la falla queda registrada.
  */
 export async function listWinsAction(clientId?: string): Promise<ClientWin[]> {
-  return lecturaDegradableQueNoRechaza(
+  return lecturaDegradable(
     "clientes:wins",
     async () => {
       const organizationId = await requireOrganizationId();
@@ -244,15 +241,15 @@ export async function listWinsAction(clientId?: string): Promise<ClientWin[]> {
         })
       );
     },
-    []
-  );
+    [] as ClientWin[]
+  ).catch((error: unknown) => valorSiNoEsFalla(error, [] as ClientWin[]));
 }
 
 /** El baseline de cada cliente, para el dashboard. */
 export async function listClientBaselinesAction(): Promise<
   Record<string, ClientBaseline>
 > {
-  return lecturaDegradableQueNoRechaza(
+  return lecturaDegradable(
     "clientes:wins-baselines",
     async () => {
       const organizationId = await requireOrganizationId();
@@ -289,13 +286,13 @@ export async function listClientBaselinesAction(): Promise<
       }
       return result;
     },
-    {}
-  );
+    {} as Record<string, ClientBaseline>
+  ).catch((error: unknown) => valorSiNoEsFalla(error, {} as Record<string, ClientBaseline>));
 }
 
 /** El nicho de cada cliente, para el dashboard. */
 export async function listClientNichesAction(): Promise<Record<string, string>> {
-  return lecturaDegradableQueNoRechaza(
+  return lecturaDegradable(
     "clientes:wins-nichos",
     async () => {
       const organizationId = await requireOrganizationId();
@@ -313,8 +310,8 @@ export async function listClientNichesAction(): Promise<Record<string, string>> 
       }
       return result;
     },
-    {}
-  );
+    {} as Record<string, string>
+  ).catch((error: unknown) => valorSiNoEsFalla(error, {} as Record<string, string>));
 }
 
 // ─── Escritura ──────────────────────────────────────────────────────────────

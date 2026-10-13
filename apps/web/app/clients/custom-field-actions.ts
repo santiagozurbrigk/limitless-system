@@ -44,7 +44,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { lecturaDegradableQueNoRechaza } from "@/lib/server/lectura-degradable";
+import { lecturaDegradable, valorSiNoEsFalla } from "@/lib/server/lectura-degradable";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -154,15 +154,15 @@ export async function listFieldDefinitionsAction(
    * así que conserva su tipo. Lo que cambia es que una falla ya no se esconde:
    * `lecturaDegradable` la registra (consola y Sentry, tag `lectura_degradada`)
    * y recién ahí devuelve la lista vacía; sin sesión, vacía sin registrarse
-   * (`lecturaDegradableQueNoRechaza`). Las escrituras no la usan para validar:
+   * (`valorSiNoEsFalla`). Las escrituras no la usan para validar:
    * leen con `leerColumnas`, que lanza (también las de wins y sub-clientes,
    * SCRUM-516).
    */
-  return lecturaDegradableQueNoRechaza(
+  return lecturaDegradable(
     "listFieldDefinitions",
     async () => leerColumnas(await createClient(), await requireOrganizationId(), entity),
-    []
-  );
+    [] as FieldDefinition[]
+  ).catch((error: unknown) => valorSiNoEsFalla(error, [] as FieldDefinition[]));
 }
 
 export type CustomFieldsPageData = {
