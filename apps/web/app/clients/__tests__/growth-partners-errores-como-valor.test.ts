@@ -552,14 +552,26 @@ describe("assignOnboardingSubmissionAction", () => {
     "⭐ si falla %s, se borra lo creado en esta llamada: un reintento no duplica",
     async (_n, clave) => {
       base.errores[clave] = FETCH_FAILED;
-      const antes = { clientes: base.tablas.clients.length, creadores: base.tablas.client_sub_clients.length };
+      // La base falsa numera las altas «nuevo-1», «nuevo-2»...: en la otra org
+      // hay filas con esos mismos ids. Un borrado con service role sin el filtro
+      // por organización se las llevaría.
+      base.tablas.clients.push({ id: "nuevo-1", organization_id: OTRA_ORG, name: "Ajeno con el mismo id", custom: {} });
+      base.tablas.client_sub_clients.push({ id: "nuevo-2", organization_id: OTRA_ORG, client_id: CLIENTE_AJENO, name: "Ajena con el mismo id", custom: {} });
+      const antes = {
+        clientes: base.tablas.clients.map((c) => c.id),
+        creadores: base.tablas.client_sub_clients.map((c) => c.id),
+      };
       await expect(
         assignOnboardingSubmissionAction({ submissionId: ENVIO, newClientName: "Nuevo SA" })
       ).resolves.toEqual({ success: false, error: TEXTO_FIJO });
-      expect(base.tablas.clients).toHaveLength(antes.clientes);
-      expect(base.tablas.client_sub_clients).toHaveLength(antes.creadores);
+      expect(base.tablas.clients.map((c) => c.id)).toEqual(antes.clientes);
+      expect(base.tablas.client_sub_clients.map((c) => c.id)).toEqual(antes.creadores);
       const borrados = base.escrituras().filter((o) => o.op === "delete");
-      expect(borrados.every((o) => o.filtros.some(([c, v]) => c === "organization_id" && v === ORG))).toBe(true);
+      const esperados = [{ tabla: "clients", op: "delete", filtros: [["id", "nuevo-1"], ["organization_id", ORG]] }];
+      if (clave !== "client_sub_clients:insert") {
+        esperados.unshift({ tabla: "client_sub_clients", op: "delete", filtros: [["id", "nuevo-2"], ["organization_id", ORG]] });
+      }
+      expect(borrados).toEqual(esperados.map((e) => expect.objectContaining(e)));
       expect(base.reportes.map((r) => (r.contexto as { accion: string }).accion)).toEqual([
         "[assignOnboardingSubmission]",
       ]);
@@ -600,6 +612,16 @@ describe("assignOnboardingSubmissionAction", () => {
     expect(r).toEqual({ success: false, error: TEXTO_FIJO });
     expect(base.tablas.client_onboarding_submissions[0].sub_client_id).toBeNull();
     expect(base.reportes).toHaveLength(1);
+  });
+
+  it("⭐ deshacer la asignación (service role) filtra por id y por organización", async () => {
+    base.errores["client_sub_clients:update"] = FETCH_FAILED;
+    await assignOnboardingSubmissionAction({ submissionId: ENVIO, clientId: CLIENTE, subClientId: SUB });
+    const envios = base.escrituras().filter((o) => o.tabla === "client_onboarding_submissions");
+    expect(envios.map((o) => o.filtros)).toEqual([
+      [["id", ENVIO], ["organization_id", ORG], ["is:sub_client_id", null]],
+      [["id", ENVIO], ["organization_id", ORG]],
+    ]);
   });
 });
 

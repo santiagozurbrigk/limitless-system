@@ -520,6 +520,8 @@ export async function assignOnboardingSubmissionAction(
           .eq("id", sub.id)
           .eq("organization_id", organizationId);
         if (error) {
+          // Service role: filtra por id y por organización, como todo lo que
+          // esta acción escribe con él.
           const { error: undoError } = await admin
             .from("client_onboarding_submissions")
             .update({
@@ -529,7 +531,8 @@ export async function assignOnboardingSubmissionAction(
               assigned_at: null,
               assigned_by: null,
             })
-            .eq("id", envio.id);
+            .eq("id", envio.id)
+            .eq("organization_id", organizationId);
           if (undoError) {
             registrarFallaDeAccion(
               "[assignOnboardingSubmission] deshacer",
