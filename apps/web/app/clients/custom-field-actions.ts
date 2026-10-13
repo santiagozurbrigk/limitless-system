@@ -15,7 +15,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   getCurrentProfile,
-  isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import {
@@ -49,6 +48,7 @@ import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import { ONBOARDING_QUESTIONS } from "@/lib/client-onboarding/questions";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 /**
  * Tablas donde puede estar cargado el valor de un campo.
@@ -501,7 +501,7 @@ async function isFieldInUse(supabase: Supabase, field: FieldDefinition): Promise
       .not(`${target.column}->>${field.key}`, "is", null);
 
     if (error) {
-      if (isMissingTableError(error.message)) continue;
+      if (esTablaAusente(error)) continue;
       // Ante la duda, no se borra: es la opción que no pierde datos.
       throw new FallaDeLaBase(error);
     }

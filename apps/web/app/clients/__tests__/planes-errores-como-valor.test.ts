@@ -62,7 +62,7 @@ import {
   resolvePlanDurationsAction,
   updatePlanDurationAction,
 } from "../plan-duration-actions";
-import { base, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
+import { base, CACHE_CAIDA, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
 import { AI_KEY_REJECTED_MESSAGE } from "@/lib/ai/anthropic-auth-errors";
 import { claudeNoCreditsUserMessage } from "@/lib/ai/anthropic-errors";
 
@@ -241,7 +241,7 @@ describe("listPlanDurationsAction", () => {
   });
 
   it("sin la tabla, la lista vacía (la migración no corrió)", async () => {
-    base.errores.plan_durations = { message: 'relation "plan_durations" does not exist' };
+    base.errores.plan_durations = { code: "42P01", message: 'relation "plan_durations" does not exist' };
     await expect(listPlanDurationsAction()).resolves.toEqual({ success: true, data: [] });
     expect(base.reportes).toEqual([]);
   });
@@ -356,7 +356,7 @@ describe("resolvePlanDurationsAction", () => {
   });
 
   it("si falta la tabla al guardar, el motivo con la migración", async () => {
-    base.errores["plan_durations:upsert"] = { message: 'relation "plan_durations" does not exist' };
+    base.errores["plan_durations:upsert"] = { code: "42P01", message: 'relation "plan_durations" does not exist' };
     const r = await resolvePlanDurationsAction(["Mentoría"]);
     expect(r).toEqual({
       success: false,
@@ -443,4 +443,18 @@ describe("lo inesperado (SCRUM-516)", () => {
       ]);
     }
   );
+});
+
+describe("un PGRST002 no es una tabla ausente (SCRUM-516, AR pasada 2)", () => {
+  it("⭐ listPlanDurationsAction: texto fijo y se reporta, no la lista vacía", async () => {
+    base.errores.plan_durations = CACHE_CAIDA;
+    await expect(listPlanDurationsAction()).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.reportes).toHaveLength(1);
+  });
+
+  it("⭐ resolvePlanDurationsAction: texto fijo y se reporta, no el motivo de la migración", async () => {
+    base.errores["plan_durations:upsert"] = CACHE_CAIDA;
+    await expect(resolvePlanDurationsAction(["Mentoría"])).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.reportes).toHaveLength(1);
+  });
 });

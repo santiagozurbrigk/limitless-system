@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isMissingTableError } from "@/lib/auth/bootstrap";
 import { FallaDeLaBase } from "@/lib/server/action-result";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import {
@@ -25,6 +24,7 @@ import type {
   JourneyStageRow,
 } from "@/types/checkpoints";
 import type { FieldDefinition } from "@/types/custom-fields";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 /**
  * Las lecturas del recorrido del cliente (fases, checkpoints y eventos), con
@@ -46,7 +46,7 @@ import type { FieldDefinition } from "@/types/custom-fields";
 type ErrorDeConsulta = { message: string; code?: string | null };
 
 function fallaSalvoTablaAusente(error: ErrorDeConsulta): void {
-  if (isMissingTableError(error.message)) return;
+  if (esTablaAusente(error)) return;
   throw new FallaDeLaBase(error);
 }
 

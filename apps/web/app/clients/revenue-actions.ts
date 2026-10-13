@@ -15,7 +15,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   getCurrentProfile,
-  isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { orgHasAddOn } from "@/lib/auth/add-ons";
@@ -38,6 +37,7 @@ import {
   type RevenueSummary,
 } from "@/lib/clients/revenue";
 import { paths } from "@/routes";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 const ADD_ON = "growth_partners" as const;
 
@@ -91,7 +91,7 @@ export async function listClientRevenueAction(
 
     if (error) {
       // Sin la tabla, la ficha muestra la tarjeta vacía en vez de romperse.
-      if (isMissingTableError(error.message)) return [];
+      if (esTablaAusente(error)) return [];
       throw new FallaDeLaBase(error);
     }
 
@@ -220,7 +220,7 @@ export async function getRevenueByClientAction(): Promise<
         .order("period", { ascending: false });
 
       if (error) {
-        if (isMissingTableError(error.message)) return {};
+        if (esTablaAusente(error)) return {};
         throw new FallaDeLaBase(error);
       }
 

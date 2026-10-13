@@ -651,8 +651,21 @@ describe("recorrido: fases y checkpoints", () => {
     expect(escrituras()).toEqual([]);
   });
 
+  it("⭐ un 503 de PostgREST al armar su caché (PGRST002) no es una tabla ausente: no se borra", async () => {
+    // Su texto dice "schema cache", y el chequeo por texto lo tomaba como tabla
+    // ausente: "sin eventos", y el checkpoint se borraba (SCRUM-516, AR pasada 2).
+    sim.errores.client_checkpoint_events = { code: "PGRST002", message: "Could not query the database for the schema cache. Retrying." };
+    await expect(deleteCheckpointAction(CHECKPOINT)).resolves.toEqual({
+      success: false,
+      error: ERROR_INESPERADO,
+    });
+    expect(escrituras()).toEqual([]);
+    expect(sim.reportes).toHaveLength(1);
+  });
+
   it("antes de su migración, la tabla de eventos ausente cuenta como sin uso", async () => {
     sim.errores.client_checkpoint_events = {
+      code: "42P01",
       message: 'relation "client_checkpoint_events" does not exist',
     };
     await expect(deleteCheckpointAction(CHECKPOINT)).resolves.toEqual({
@@ -734,6 +747,17 @@ describe("columnas configurables", () => {
       error:
         '"Objetivo" ya tiene datos cargados. Archivala en vez de borrarla: los datos viejos la siguen mostrando.',
     });
+  });
+
+  it("⭐ un 503 de PostgREST al armar su caché (PGRST002) no es una tabla ausente: la columna no se borra", async () => {
+    sim.tablas.clients = [{ ...cliente(CLIENTE, ORG), custom: { objetivo: "50k" } }];
+    sim.errores.clients = { code: "PGRST002", message: "Could not query the database for the schema cache. Retrying." };
+    await expect(deleteFieldDefinitionAction(COLUMNA)).resolves.toEqual({
+      success: false,
+      error: ERROR_INESPERADO,
+    });
+    expect(escrituras()).toEqual([]);
+    expect(sim.reportes).toHaveLength(1);
   });
 
   it("⭐ si no se sabe si está en uso, no se borra y es una falla", async () => {
@@ -1288,7 +1312,7 @@ describe("⭐ una fila de otra organización queda intacta o no se lee", () => {
 });
 
 describe("⭐ antes de su migración, una tabla ausente cuenta como vacía", () => {
-  const ausente = (tabla: string) => ({ message: `relation "public.${tabla}" does not exist` });
+  const ausente = (tabla: string) => ({ code: "42P01", message: `relation "public.${tabla}" does not exist` });
   const CASOS: Array<[string, string, () => Promise<unknown>, unknown]> = [
     ["fases", "client_journey_stages", () => listJourneyStagesAction(), { success: true, data: [] }],
     ["checkpoints", "client_checkpoints", () => listCheckpointsAction(), { success: true, data: [] }],
@@ -1305,6 +1329,30 @@ describe("⭐ antes de su migración, una tabla ausente cuenta como vacía", () 
     await expect(correr()).resolves.toEqual(vacio);
     expect(sim.reportes).toEqual([]);
   });
+
+  // Las que deciden por código (`esTablaAusente`): seguimiento y propuestas siguen
+  // con el chequeo por texto de `isMissingTableError` (PENDIENTES [TABLA-AUSENTE-POR-TEXTO]).
+  const POR_CODIGO = CASOS.filter(([n]) => !["seguimiento", "propuestas"].includes(n));
+
+  it.each(POR_CODIGO)("%s: también con el código de PostgREST (PGRST205), vacío sin registrar", async (_n, tabla, correr, vacio) => {
+    sim.errores[tabla] = { code: "PGRST205", message: `Could not find the table 'public.${tabla}' in the schema cache` };
+    await expect(correr()).resolves.toEqual(vacio);
+    expect(sim.reportes).toEqual([]);
+  });
+
+  // Las que leen con `leerColumnas` y `lib/checkpoints/lecturas-del-recorrido.ts`:
+  // un PGRST002 dice "schema cache" pero es una caída (SCRUM-516, AR pasada 2).
+  it.each(POR_CODIGO)(
+    "⭐ %s: un PGRST002 no es una tabla ausente, se registra",
+    async (_n, tabla, correr, vacio) => {
+      sim.errores[tabla] = { code: "PGRST002", message: "Could not query the database for the schema cache. Retrying." };
+      const r = await correr();
+      if (typeof vacio === "object" && vacio !== null && "success" in vacio) {
+        expect(r).toEqual({ success: false, error: ERROR_INESPERADO });
+      }
+      expect(sim.reportes.length).toBeGreaterThan(0);
+    }
+  );
 
   it("las fechas de los hitos de la revisión: vacías, sin registrar", async () => {
     sim.errores["client_checkpoint_events"] = ausente("client_checkpoint_events");

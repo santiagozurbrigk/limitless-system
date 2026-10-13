@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   getCurrentProfile,
-  isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { distinctPlanNames } from "@/lib/clients/plan-utils";
@@ -28,6 +27,7 @@ import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import type { PlanDuration } from "@/types/plan-durations";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 const updatePlanDurationSchema = z.object({
   planName: z.string().trim().min(1, "Falta el nombre del plan.").max(500, "El nombre del plan es demasiado largo."),
@@ -75,7 +75,7 @@ async function requireFounder(supabase: Awaited<ReturnType<typeof createClient>>
 }
 
 function errorDeEscritura(error: { message: string; code?: string | null }): Error {
-  if (isMissingTableError(error.message)) return new ErrorEsperable(FALTA_LA_TABLA);
+  if (esTablaAusente(error)) return new ErrorEsperable(FALTA_LA_TABLA);
   return new FallaDeLaBase(error);
 }
 
@@ -94,7 +94,7 @@ async function leerDuracionesDePlan(
     .order("plan_name", { ascending: true });
 
   if (error) {
-    if (isMissingTableError(error.message)) return [];
+    if (esTablaAusente(error)) return [];
     throw new FallaDeLaBase(error);
   }
 

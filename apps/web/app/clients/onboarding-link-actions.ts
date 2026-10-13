@@ -13,7 +13,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   getCurrentProfile,
-  isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { orgHasAddOn } from "@/lib/auth/add-ons";
@@ -48,6 +47,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { CustomFieldValues } from "@/types/custom-fields";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 const ADD_ON = "growth_partners" as const;
 const idSchema = uuidSchema;
@@ -75,7 +75,7 @@ const CLIENTE_AJENO = "No se encontró ese cliente en tu organización.";
 const SUB_CLIENTE_INEXISTENTE = "Ese cliente ya no existe.";
 
 function errorDeAlta(error: { message: string; code?: string | null }): Error {
-  if (isMissingTableError(error.message)) return new ErrorEsperable(FALTA_LA_MIGRACION);
+  if (esTablaAusente(error)) return new ErrorEsperable(FALTA_LA_MIGRACION);
   return new FallaDeLaBase(error);
 }
 
@@ -88,7 +88,7 @@ function sinTablaOFalla(
 ): "sin-tabla" | null {
   for (const error of errores) {
     if (!error) continue;
-    if (isMissingTableError(error.message)) return "sin-tabla";
+    if (esTablaAusente(error)) return "sin-tabla";
     throw new FallaDeLaBase(error);
   }
   return null;

@@ -16,7 +16,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   getCurrentProfile,
-  isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { orgHasAddOn } from "@/lib/auth/add-ons";
@@ -42,6 +41,7 @@ import { firstZodError, uuidSchema } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import type { CustomFieldValues } from "@/types/custom-fields";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 const ADD_ON = "growth_partners" as const;
 
@@ -131,7 +131,7 @@ export async function listSubClientsAction(
       .order("created_at", { ascending: true });
 
     if (error) {
-      if (isMissingTableError(error.message)) return [];
+      if (esTablaAusente(error)) return [];
       throw new FallaDeLaBase(error);
     }
     return ((data ?? []) as SubClientRow[]).map(rowToSubClient);
@@ -176,7 +176,7 @@ export async function createSubClientAction(
       .single();
 
     if (error) {
-      if (isMissingTableError(error.message)) {
+      if (esTablaAusente(error)) {
         throw new ErrorEsperable(
           "La tabla de clientes todavía no existe en la base. Falta aplicar la migración."
         );

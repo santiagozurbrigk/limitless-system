@@ -24,6 +24,14 @@ export type Operacion = {
 export const ORG = "11111111-1111-4111-8111-111111111111";
 export const OTRA_ORG = "99999999-9999-4999-8999-999999999999";
 export const TEXTO_FIJO = "Ocurrió un error inesperado. Intentá de nuevo.";
+/**
+ * El 503 de PostgREST cuando no puede armar su caché de esquema. Su texto dice
+ * "schema cache" pero es una caída, no una tabla ausente (SCRUM-516, AR pasada 2).
+ */
+export const CACHE_CAIDA = {
+  code: "PGRST002",
+  message: "Could not query the database for the schema cache. Retrying.",
+};
 
 export const base = {
   tablas: {} as Record<string, Fila[]>,

@@ -15,7 +15,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   getCurrentProfile,
-  isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import {
@@ -57,6 +56,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paths } from "@/routes";
 import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 const metricSchema = z
   .object({
@@ -190,7 +190,7 @@ export async function listWinsAction(clientId?: string): Promise<ClientWin[]> {
 
       const { data: winRows, error } = await winsQuery;
       if (error) {
-        if (isMissingTableError(error.message)) return [];
+        if (esTablaAusente(error)) return [];
         throw new FallaDeLaBase(error);
       }
 

@@ -75,7 +75,7 @@ import {
   listClientRevenueAction,
   saveClientRevenueAction,
 } from "../revenue-actions";
-import { base, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
+import { base, CACHE_CAIDA, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
 
 const CLIENTE = "22222222-2222-4222-8222-222222222222";
 const CLIENTE_AJENO = "33333333-3333-4333-8333-333333333333";
@@ -380,7 +380,7 @@ describe("getOnboardingStatusAction", () => {
   });
 
   it("sin la tabla, vacío (la migración no corrió)", async () => {
-    base.errores.client_onboarding_links = { message: 'relation "client_onboarding_links" does not exist' };
+    base.errores.client_onboarding_links = { code: "42P01", message: 'relation "client_onboarding_links" does not exist' };
     await expect(getOnboardingStatusAction(SUB)).resolves.toEqual({
       success: true,
       data: { link: null, submissions: [] },
@@ -424,7 +424,7 @@ describe("createOnboardingLinkAction", () => {
 
   it("sin la tabla, el motivo de la migración", async () => {
     base.tablas.client_onboarding_links = [];
-    base.errores["client_onboarding_links:insert"] = { message: "Could not find the table in the schema cache" };
+    base.errores["client_onboarding_links:insert"] = { code: "PGRST205", message: "Could not find the table 'public.client_onboarding_links' in the schema cache" };
     await expect(createOnboardingLinkAction(SUB)).resolves.toEqual({
       success: false,
       error: "Falta aplicar la migración del onboarding en la base.",
@@ -797,4 +797,62 @@ describe("lo inesperado (SCRUM-516)", () => {
       ]);
     }
   );
+});
+
+describe("tabla ausente por código, y un PGRST002 no lo es (SCRUM-516, AR pasada 2)", () => {
+  const AUSENTE_PG = (t: string) => ({ code: "42P01", message: `relation "public.${t}" does not exist` });
+  const AUSENTE_REST = (t: string) => ({ code: "PGRST205", message: `Could not find the table 'public.${t}' in the schema cache` });
+
+  it("⭐ guardar los campos de un sub-cliente con la lectura de columnas en PGRST002: texto fijo, sin tocar la fila", async () => {
+    base.tablas.client_sub_clients.find((s) => s.id === SUB)!.custom = { seguidores: 900 };
+    base.errores.field_definitions = CACHE_CAIDA;
+    await expect(updateSubClientFieldsAction({ id: SUB, values: { seguidores: "2000" } })).resolves.toEqual({
+      success: false,
+      error: TEXTO_FIJO,
+    });
+    expect(base.tablas.client_sub_clients.find((s) => s.id === SUB)?.custom).toEqual({ seguidores: 900 });
+    expect(base.escrituras()).toEqual([]);
+    expect(base.reportes).toEqual([
+      { error: expect.objectContaining({ name: "FallaDeLaBase" }), contexto: { accion: "[updateSubClientFields]" } },
+    ]);
+  });
+
+  it("⭐ pasar los datos viejos con la lectura de columnas en PGRST002: texto fijo, nada se mueve", async () => {
+    base.errores.field_definitions = CACHE_CAIDA;
+    await expect(moveLegacySectionValuesAction({ clientId: CLIENTE, subClientId: SUB })).resolves.toEqual({
+      success: false,
+      error: TEXTO_FIJO,
+    });
+    expect(base.escrituras()).toEqual([]);
+  });
+
+  it.each([
+    ["listSubClientsAction", "client_sub_clients", () => listSubClientsAction(CLIENTE), { success: true, data: [] }],
+    ["getOnboardingStatusAction", "client_onboarding_links", () => getOnboardingStatusAction(SUB), { success: true, data: { link: null, submissions: [] } }],
+    ["listClientRevenueAction", "client_revenue_entries", () => listClientRevenueAction(CLIENTE), { success: true, data: [] }],
+    ["getRevenueByClientAction", "client_revenue_entries", () => getRevenueByClientAction(), {}],
+  ] as const)("%s: con la tabla ausente (42P01 y PGRST205), vacío sin registrar; con PGRST002, se registra", async (_n, tabla, correr, vacio) => {
+    for (const ausente of [AUSENTE_PG(tabla), AUSENTE_REST(tabla)]) {
+      base.errores[tabla] = ausente;
+      await expect(correr()).resolves.toEqual(vacio);
+    }
+    expect(base.reportes).toEqual([]);
+    base.errores[tabla] = CACHE_CAIDA;
+    const r = await correr();
+    if ("success" in vacio) expect(r).toEqual({ success: false, error: TEXTO_FIJO });
+    else expect(r).toEqual(vacio);
+    expect(base.reportes).toHaveLength(1);
+  });
+
+  it.each([
+    ["createSubClientAction", "client_sub_clients:insert", () => createSubClientAction({ clientId: CLIENTE, name: "Otra" }), "La tabla de clientes todavía no existe en la base. Falta aplicar la migración."],
+    ["createOnboardingLinkAction", "client_onboarding_links:insert", () => createOnboardingLinkAction(SUB), "Falta aplicar la migración del onboarding en la base."],
+  ] as const)("%s: la tabla ausente da el motivo de la migración; un PGRST002, el texto fijo", async (_n, clave, correr, motivo) => {
+    base.tablas.client_onboarding_links = [];
+    base.errores[clave] = AUSENTE_PG(clave.split(":")[0]);
+    await expect(correr()).resolves.toEqual({ success: false, error: motivo });
+    base.errores[clave] = CACHE_CAIDA;
+    await expect(correr()).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.reportes).toHaveLength(1);
+  });
 });

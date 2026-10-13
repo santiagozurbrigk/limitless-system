@@ -51,7 +51,7 @@ import {
   updateClientBaselineAction,
   updateWinAction,
 } from "../win-actions";
-import { base, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
+import { base, CACHE_CAIDA, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
 
 const CLIENTE = "22222222-2222-4222-8222-222222222222";
 const WIN = "44444444-4444-4444-8444-444444444444";
@@ -181,7 +181,7 @@ describe("listWinsAction (la componen la pantalla de Wins y la revisión semanal
   });
 
   it("sin la tabla o sin sesión, vacío y sin reporte (no es una falla)", async () => {
-    base.errores.client_wins = { message: 'relation "client_wins" does not exist' };
+    base.errores.client_wins = { code: "42P01", message: 'relation "client_wins" does not exist' };
     await expect(listWinsAction()).resolves.toEqual([]);
     base.errores = {};
     base.sesion = false;
@@ -348,7 +348,7 @@ describe("columnas de un win con la lectura de columnas caída (MAYOR-1 de la AR
   });
 
   it("sin la tabla de columnas (antes de su migración) sigue contando como sin columnas", async () => {
-    base.errores.field_definitions = { message: 'relation "field_definitions" does not exist' };
+    base.errores.field_definitions = { code: "42P01", message: 'relation "field_definitions" does not exist' };
     const r = await createWinAction(NUEVO);
     expect(r).toMatchObject({ success: true, data: { custom: {} } });
     expect(base.reportes).toEqual([]);
@@ -545,5 +545,55 @@ describe("lo inesperado (SCRUM-516)", () => {
     const r = await prepareWinAttachmentUploadAction({ winId: WIN, fileName: "a.png", fileSize: 1, mimeType: "image/png" });
     expect(r).toEqual({ success: false, error: TEXTO_FIJO });
     expect(base.reportes).toEqual([{ error: falla, contexto: { accion: "[prepareWinAttachmentUpload]" } }]);
+  });
+});
+
+describe("un PGRST002 no es una tabla ausente (SCRUM-516, AR pasada 2)", () => {
+  // Su texto dice "schema cache": el chequeo por texto lo tomaba como tabla
+  // ausente, `validateCustom` armaba `custom: {}` y editar un win le borraba las
+  // columnas, con éxito y sin registro.
+  beforeEach(() => {
+    base.tablas.client_wins.find((w) => w.id === WIN)!.custom = { resultado: "10 ventas" };
+  });
+
+  it("⭐ editar un win con la lectura de columnas en PGRST002: texto fijo, la fila intacta y la falla registrada", async () => {
+    base.errores.field_definitions = CACHE_CAIDA;
+    const r = await updateWinAction(WIN, { achievement: "Editado", custom: { resultado: "12 ventas" } });
+    expect(r).toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.tablas.client_wins.find((w) => w.id === WIN)).toMatchObject({
+      achievement: "Primera venta",
+      custom: { resultado: "10 ventas" },
+    });
+    expect(base.escrituras()).toEqual([]);
+    expect(base.reportes).toEqual([
+      { error: expect.objectContaining({ name: "FallaDeLaBase" }), contexto: { accion: "[updateWin]" } },
+    ]);
+  });
+
+  it("⭐ crear un win con la lectura de columnas en PGRST002: texto fijo y sin crear", async () => {
+    base.errores.field_definitions = CACHE_CAIDA;
+    await expect(createWinAction({ ...NUEVO, custom: { resultado: "3 ventas" } })).resolves.toEqual({
+      success: false,
+      error: TEXTO_FIJO,
+    });
+    expect(base.escrituras()).toEqual([]);
+    expect(base.reportes).toHaveLength(1);
+  });
+
+  it("⭐ listWinsAction: vacío, pero la falla queda registrada", async () => {
+    base.errores.client_wins = CACHE_CAIDA;
+    await expect(listWinsAction()).resolves.toEqual([]);
+    expect(base.reportes).toEqual([
+      { error: expect.objectContaining({ name: "FallaDeLaBase" }), contexto: { lectura: "clientes:wins" } },
+    ]);
+  });
+
+  it("la tabla de columnas ausente con el código de PostgREST (PGRST205) sigue contando como sin columnas", async () => {
+    base.errores.field_definitions = {
+      code: "PGRST205",
+      message: "Could not find the table 'public.field_definitions' in the schema cache",
+    };
+    await expect(createWinAction(NUEVO)).resolves.toMatchObject({ success: true, data: { custom: {} } });
+    expect(base.reportes).toEqual([]);
   });
 });

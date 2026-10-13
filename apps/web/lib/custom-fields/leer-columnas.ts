@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isMissingTableError } from "@/lib/auth/bootstrap";
 import { FallaDeLaBase } from "@/lib/server/action-result";
 import { rowToFieldDefinition } from "@/lib/custom-fields";
 import type {
@@ -9,6 +8,7 @@ import type {
   FieldDefinitionRow,
   FieldEntity,
 } from "@/types/custom-fields";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 /**
  * Las columnas configurables de la organización, archivadas incluidas, con la
@@ -20,7 +20,10 @@ import type {
  * una falla devolvía `[]`: crear una columna podía chocar con una clave que ya
  * existía y guardar los campos de un cliente decía "guardados" sin guardar
  * nada. Acá una tabla ausente (antes de su migración) sigue contando como
- * vacía; cualquier otro error lanza una `FallaDeLaBase`.
+ * vacía; cualquier otro error lanza una `FallaDeLaBase`. La tabla ausente se
+ * decide por código (`esTablaAusente`): un PGRST002 de PostgREST dice "schema
+ * cache" en el texto pero es una caída, y antes se tomaba como tabla ausente
+ * (SCRUM-516, AR pasada 2).
  */
 export async function leerColumnas(
   supabase: SupabaseClient,
@@ -39,7 +42,7 @@ export async function leerColumnas(
   const { data, error } = await query;
 
   if (error) {
-    if (isMissingTableError(error.message)) return [];
+    if (esTablaAusente(error)) return [];
     throw new FallaDeLaBase(error);
   }
 

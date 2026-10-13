@@ -52,7 +52,7 @@ import {
   toggleClientTaskAction,
   updateClientTaskAction,
 } from "../task-actions";
-import { base, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
+import { base, CACHE_CAIDA, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
 
 const CLIENTE = "22222222-2222-4222-8222-222222222222";
 const TAREA = "44444444-4444-4444-8444-444444444444";
@@ -103,7 +103,7 @@ describe("listClientTasksAction", () => {
   });
 
   it("sin la tabla, la lista vacía (la migración no corrió)", async () => {
-    base.errores.client_tasks = { message: "Could not find the table 'public.client_tasks' in the schema cache" };
+    base.errores.client_tasks = { code: "PGRST205", message: "Could not find the table 'public.client_tasks' in the schema cache" };
     await expect(listClientTasksAction(CLIENTE)).resolves.toEqual({ success: true, data: [] });
     expect(base.reportes).toEqual([]);
   });
@@ -319,4 +319,12 @@ describe("lo inesperado (SCRUM-516)", () => {
       ]);
     }
   );
+});
+
+describe("un PGRST002 no es una tabla ausente (SCRUM-516, AR pasada 2)", () => {
+  it("⭐ listClientTasksAction: texto fijo y se reporta, no «Sin tareas»", async () => {
+    base.errores.client_tasks = CACHE_CAIDA;
+    await expect(listClientTasksAction(CLIENTE)).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.reportes).toHaveLength(1);
+  });
 });

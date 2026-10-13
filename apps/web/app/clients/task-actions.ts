@@ -12,7 +12,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   getCurrentProfile,
-  isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
@@ -32,6 +31,7 @@ import {
   type ClientTaskRow,
 } from "@/types/client-tasks";
 import { paths } from "@/routes";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 const SELECT_COLUMNS =
   "id, client_id, title, description, owner, status, due_date, source, source_call_id, workboard_task_id, completed_at, created_at, fathom_calls(title, call_date)";
@@ -102,7 +102,7 @@ export async function listClientTasksAction(
       .order("created_at", { ascending: true });
 
     if (error) {
-      if (isMissingTableError(error.message)) return [];
+      if (esTablaAusente(error)) return [];
       throw new FallaDeLaBase(error);
     }
 
