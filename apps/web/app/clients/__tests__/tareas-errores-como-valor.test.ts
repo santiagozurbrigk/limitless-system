@@ -340,3 +340,14 @@ describe("⭐ cada consulta lleva el filtro de la organización de la sesión (M
     expect(base.filtrosDe("client_tasks", "update")).toContainEqual(["organization_id", ORG]);
   });
 });
+
+describe("ids sueltos (MENOR-5 de la AR pasada 2)", () => {
+  it.each([
+    ["listClientTasksAction", () => listClientTasksAction("no-es-un-id")],
+    ["deleteClientTaskAction", () => deleteClientTaskAction("no-es-un-id")],
+  ] as const)("⭐ %s con un id que no es UUID: «ID inválido» sin tocar la base", async (_n, correr) => {
+    await expect(correr()).resolves.toEqual({ success: false, error: "ID inválido" });
+    expect(base.operaciones).toEqual([]);
+    expect(base.reportes).toEqual([]);
+  });
+});

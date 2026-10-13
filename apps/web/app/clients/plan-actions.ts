@@ -9,6 +9,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
+import { uuidSchema } from "@/lib/validations";
 import type { InstallmentSystem, Plan } from "@/types/plans";
 
 // ── Tipos internos ──────────────────────────────────────────────────────────
@@ -117,6 +118,7 @@ export async function updatePlanAction(
   }
 ): Promise<MutationResult<Plan>> {
   return mutacionConErroresEsperables("[updatePlan]", async () => {
+    if (!uuidSchema.safeParse(id).success) throw new ErrorEsperable("ID inválido");
     exigirSupabase();
 
     const organizationId = await requireOrganizationId();
@@ -147,6 +149,7 @@ export async function updatePlanAction(
 
 export async function deletePlanAction(id: string): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[deletePlan]", async () => {
+    if (!uuidSchema.safeParse(id).success) throw new ErrorEsperable("ID inválido");
     exigirSupabase();
 
     const organizationId = await requireOrganizationId();

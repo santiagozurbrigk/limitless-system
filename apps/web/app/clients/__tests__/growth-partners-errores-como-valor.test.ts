@@ -951,3 +951,16 @@ describe("getRevenueByClientAction, una lectura que no rechaza: lo interno de Ne
     expect(base.reportes).toEqual([]);
   });
 });
+
+describe("ids sueltos (MENOR-5 de la AR pasada 2)", () => {
+  it.each([
+    ["listClientRevenueAction", () => listClientRevenueAction("no-es-un-id")],
+    ["deleteClientRevenueAction", () => deleteClientRevenueAction("no-es-un-id")],
+    ["listSubClientsAction", () => listSubClientsAction("no-es-un-id")],
+    ["deleteSubClientAction", () => deleteSubClientAction("no-es-un-id")],
+  ] as const)("⭐ %s con un id que no es UUID: «ID inválido» sin tocar la base", async (_n, correr) => {
+    await expect(correr()).resolves.toEqual({ success: false, error: "ID inválido" });
+    expect(base.operaciones).toEqual([]);
+    expect(base.reportes).toEqual([]);
+  });
+});

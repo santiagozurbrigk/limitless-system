@@ -88,6 +88,7 @@ export async function listClientTasksAction(
   clientId: string
 ): Promise<MutationResult<ClientTask[]>> {
   return mutacionConErroresEsperables("[listClientTasks]", async () => {
+    if (!uuidSchema.safeParse(clientId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -241,6 +242,7 @@ export async function deleteClientTaskAction(
   taskId: string
 ): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[deleteClientTask]", async () => {
+    if (!uuidSchema.safeParse(taskId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 

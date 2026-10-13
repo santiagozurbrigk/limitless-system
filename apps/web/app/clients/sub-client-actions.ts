@@ -119,6 +119,7 @@ export async function listSubClientsAction(
   clientId: string
 ): Promise<MutationResult<SubClient[]>> {
   return mutacionConErroresEsperables("[listSubClients]", async () => {
+    if (!uuidSchema.safeParse(clientId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
     if (!(await orgHasAddOn(organizationId, ADD_ON))) return [];
 
@@ -270,6 +271,7 @@ export async function updateSubClientFieldsAction(
 
 export async function deleteSubClientAction(id: string): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[deleteSubClient]", async () => {
+    if (!uuidSchema.safeParse(id).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
     await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();

@@ -78,6 +78,7 @@ export async function listClientRevenueAction(
   clientId: string
 ): Promise<MutationResult<ClientRevenueEntry[]>> {
   return mutacionConErroresEsperables("[listClientRevenue]", async () => {
+    if (!uuidSchema.safeParse(clientId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
     if (!(await orgHasAddOn(organizationId, ADD_ON))) return [];
     const supabase = await createClient();
@@ -178,6 +179,7 @@ export async function deleteClientRevenueAction(
   entryId: string
 ): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[deleteClientRevenue]", async () => {
+    if (!uuidSchema.safeParse(entryId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
     await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();

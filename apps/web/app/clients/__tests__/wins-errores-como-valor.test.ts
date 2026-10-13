@@ -62,6 +62,7 @@ const WIN = "44444444-4444-4444-8444-444444444444";
 const WIN_AJENO = "55555555-5555-4555-8555-555555555555";
 const DRAFT = "66666666-6666-4666-8666-666666666666";
 const CAPTURA = "77777777-7777-4777-8777-777777777777";
+const USO = "88888888-8888-4888-8888-888888888888";
 const FETCH_FAILED = { message: "TypeError: fetch failed" };
 const RUTA = `${ORG}/wins/${WIN}/foto.png`;
 
@@ -123,7 +124,7 @@ beforeEach(() => {
     { id: CAPTURA, organization_id: ORG, win_id: WIN, draft_id: null, file_name: "foto.png", storage_path: RUTA, mime_type: "image/png", file_size: 10, created_at: "2026-10-01" },
   ];
   base.tablas.win_usages = [
-    { id: "uso-1", organization_id: ORG, win_id: WIN, channel: "landing", location_label: null, url: null, used_at: null, notes: null, created_at: "2026-10-01" },
+    { id: USO, organization_id: ORG, win_id: WIN, channel: "landing", location_label: null, url: null, used_at: null, notes: null, created_at: "2026-10-01" },
   ];
   base.tablas.field_definitions = [columna("col-1", ORG, "resultado"), columna("col-ajena", OTRA_ORG, "ajena")];
   base.tablas.clients = [
@@ -477,9 +478,9 @@ describe("addWinUsageAction y deleteWinUsageAction", () => {
   });
 
   it("borra el uso filtrando por organización", async () => {
-    await expect(deleteWinUsageAction("uso-1")).resolves.toEqual({ success: true, data: undefined });
+    await expect(deleteWinUsageAction(USO)).resolves.toEqual({ success: true, data: undefined });
     expect(base.escrituras()[0].filtros).toEqual([
-      ["id", "uso-1"],
+      ["id", USO],
       ["organization_id", ORG],
     ]);
   });
@@ -512,7 +513,7 @@ describe("lo inesperado (SCRUM-516)", () => {
     ["finalizeWinAttachmentAction", () => finalizeWinAttachmentAction({ winId: WIN, storagePath: RUTA, fileName: "f.png", mimeType: "image/png", fileSize: 1 }), "[finalizeWinAttachment]", "win_attachments"],
     ["deleteWinAttachmentAction", () => deleteWinAttachmentAction(CAPTURA), "[deleteWinAttachment]", "win_attachments"],
     ["addWinUsageAction", () => addWinUsageAction({ winId: WIN, channel: "landing" }), "[addWinUsage]", "win_usages"],
-    ["deleteWinUsageAction", () => deleteWinUsageAction("uso-1"), "[deleteWinUsage]", "win_usages"],
+    ["deleteWinUsageAction", () => deleteWinUsageAction(USO), "[deleteWinUsage]", "win_usages"],
     ["updateClientBaselineAction", () => updateClientBaselineAction(CLIENTE, {}), "[updateClientBaseline]", "clients"],
   ] as const;
 
@@ -642,4 +643,18 @@ describe("lecturas que no rechazan: sin sesión y lo interno de Next (MENOR-2 de
       expect(base.reportes).toEqual([]);
     }
   );
+});
+
+describe("ids sueltos (MENOR-5 de la AR pasada 2)", () => {
+  it.each([
+    ["updateWinAction", () => updateWinAction("no-es-un-id", { achievement: "x" })],
+    ["deleteWinAction", () => deleteWinAction("no-es-un-id")],
+    ["deleteWinAttachmentAction", () => deleteWinAttachmentAction("no-es-un-id")],
+    ["deleteWinUsageAction", () => deleteWinUsageAction("no-es-un-id")],
+    ["updateClientBaselineAction", () => updateClientBaselineAction("no-es-un-id", {})],
+  ] as const)("⭐ %s con un id que no es UUID: «ID inválido» sin tocar la base", async (_n, correr) => {
+    await expect(correr()).resolves.toEqual({ success: false, error: "ID inválido" });
+    expect(base.operaciones).toEqual([]);
+    expect(base.reportes).toEqual([]);
+  });
 });

@@ -458,3 +458,14 @@ describe("un PGRST002 no es una tabla ausente (SCRUM-516, AR pasada 2)", () => {
     expect(base.reportes).toHaveLength(1);
   });
 });
+
+describe("ids sueltos (MENOR-5 de la AR pasada 2)", () => {
+  it.each([
+    ["updatePlanAction", () => updatePlanAction("no-es-un-id", { name: "x" })],
+    ["deletePlanAction", () => deletePlanAction("no-es-un-id")],
+  ] as const)("⭐ %s con un id que no es UUID: «ID inválido» sin tocar la base", async (_n, correr) => {
+    await expect(correr()).resolves.toEqual({ success: false, error: "ID inválido" });
+    expect(base.operaciones).toEqual([]);
+    expect(base.reportes).toEqual([]);
+  });
+});

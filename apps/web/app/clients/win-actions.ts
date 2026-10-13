@@ -384,6 +384,7 @@ export async function updateWinAction(
   input: Partial<CreateWinInput>
 ): Promise<MutationResult<ClientWin>> {
   return mutacionConErroresEsperables("[updateWin]", async () => {
+    if (!uuidSchema.safeParse(id).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
 
     const parsed = winSchema.partial().safeParse(input);
@@ -445,6 +446,7 @@ export async function updateWinAction(
  */
 export async function deleteWinAction(id: string): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[deleteWin]", async () => {
+    if (!uuidSchema.safeParse(id).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -600,6 +602,7 @@ export async function deleteWinAttachmentAction(
   id: string
 ): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[deleteWinAttachment]", async () => {
+    if (!uuidSchema.safeParse(id).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -686,6 +689,7 @@ export async function addWinUsageAction(
 
 export async function deleteWinUsageAction(id: string): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[deleteWinUsage]", async () => {
+    if (!uuidSchema.safeParse(id).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
     const { error } = await supabase
@@ -725,6 +729,7 @@ export async function updateClientBaselineAction(
   input: z.input<typeof baselineSchema>
 ): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[updateClientBaseline]", async () => {
+    if (!uuidSchema.safeParse(clientId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
     const parsed = baselineSchema.safeParse(input);
     if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
