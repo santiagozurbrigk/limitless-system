@@ -81,12 +81,12 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **244 archivos, ~2.600 casos** (recontado el 2026-10-12 con SCRUM-517 sobre `main` `97e724d6`; el runner ejecuta 3.421 por los `it.each`; la tabla lista todas las carpetas con tests y sus filas suman ese total; las carpetas anidadas, como `app/api/integrations/fathom`, cuentan en la fila de su carpeta padre). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **244 archivos, ~2.601 casos** (recontado el 2026-10-13 con SCRUM-517 sobre `main` `97e724d6`; el runner ejecuta 3.422 por los `it.each`; la tabla lista todas las carpetas con tests y sus filas suman ese total; las carpetas anidadas, como `app/api/integrations/fathom`, cuentan en la fila de su carpeta padre). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|
 | `lib/funnels` | 10 | 186 | motor de embudos puro: compute, spine, períodos, KPIs, fuentes, conformidad de plantillas |
-| `lib/fathom` | 22 | 226 | match con turnos, contraparte, identidades, links compartidos, ventana de sync, reclamo de trabadas, cliente de la org (filtro por organización), día de cada llamada, días desde la última 1-1 y fecha de la llamada en la zona de la org (incluido el llamador real con la base simulada), cursor y lectura de la ventana con presupuesto, plazo y orden rotativo del cron, fallas de sync registradas y las dos corridas de la sync de la org |
+| `lib/fathom` | 22 | 227 | match con turnos, contraparte, identidades, links compartidos, ventana de sync, reclamo de trabadas, cliente de la org (filtro por organización), día de cada llamada, días desde la última 1-1 y fecha de la llamada en la zona de la org (incluido el llamador real con la base simulada), cursor y lectura de la ventana con presupuesto, plazo y orden rotativo del cron, fallas de sync registradas y las dos corridas de la sync de la org; con `fathom_calls` caída, el contador de 1-1 sigue en cero y lo anota en la consola, y el resumen de la ficha usa la variante que lanza (SCRUM-517) |
 | `lib/checkpoints` | 7 | 105 | recorrido del cliente, etapas, propuestas, trabados (vence y atraso en días de la zona de la org), fecha de un hito en la zona de la org y validación "no futura" por día (incluidas UTC+12 y UTC-6) |
 | `lib/custom-fields` | 7 | 85 | campos configurables: validación, merge, formato, alertas por fecha |
 | `lib/payments` | 5 | 85 | normalización Whop/Commas, firmas, agregados, retención |

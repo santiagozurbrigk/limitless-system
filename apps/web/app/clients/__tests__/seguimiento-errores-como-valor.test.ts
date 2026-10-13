@@ -88,13 +88,10 @@ vi.mock("@/app/clients/win-actions", () => ({
 }));
 // Como el real: usa el cliente admin y relanza el error de la base como
 // `Error` común.
-vi.mock("@/lib/checkpoints/create-proposal", () => ({
-  createCheckpointProposal: async () => {
-    if (sim.lanza) throw sim.lanza;
-    if (sim.errorGlobal) throw new Error(sim.errorGlobal.message);
-    return { created: sim.propuestaCreada };
-  },
-}));
+// Un `vi.fn` para comprobar que la escritura con service role no ocurre
+// cuando la verificación de la org rechaza.
+const proponer = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/checkpoints/create-proposal", () => ({ createCheckpointProposal: proponer }));
 
 /** Un supabase-js falso que aplica los filtros pedidos sobre `sim.tablas`. */
 function crearSupabase() {
@@ -369,6 +366,12 @@ beforeEach(() => {
   sim.lanza = null;
   sim.operaciones = [];
   sim.propuestaCreada = true;
+  proponer.mockReset();
+  proponer.mockImplementation(async () => {
+    if (sim.lanza) throw sim.lanza;
+    if (sim.errorGlobal) throw new Error(sim.errorGlobal.message);
+    return { created: sim.propuestaCreada };
+  });
   sim.tablas = {
     client_journey_stages: [fase(FASE, ORG, "Onboarding"), fase(FASE_AJENA, OTRA_ORG, "Ajena")],
     client_checkpoints: [checkpoint(CHECKPOINT, ORG, FASE, "Kickoff")],
@@ -1334,6 +1337,7 @@ describe("⭐ crear una propuesta (service role) exige cliente y checkpoint de l
       error: "El cliente no existe",
     });
     expect(sim.reportes).toEqual([]);
+    expect(proponer).not.toHaveBeenCalled();
   });
 
   it("un checkpoint de otra org no existe", async () => {
@@ -1342,6 +1346,7 @@ describe("⭐ crear una propuesta (service role) exige cliente y checkpoint de l
       success: false,
       error: "El checkpoint no existe",
     });
+    expect(proponer).not.toHaveBeenCalled();
   });
 
   it("si no se puede verificar, es una falla y no se propone nada", async () => {
@@ -1350,12 +1355,17 @@ describe("⭐ crear una propuesta (service role) exige cliente y checkpoint de l
       success: false,
       error: ERROR_INESPERADO,
     });
+    expect(proponer).not.toHaveBeenCalled();
   });
 
-  it("con los dos de la org, propone", async () => {
+  it("con los dos de la org, propone en la org de la sesión", async () => {
     await expect(createCheckpointProposalAction(entrada(CLIENTE, CHECKPOINT))).resolves.toEqual({
       success: true,
       data: { created: true },
     });
+    expect(proponer).toHaveBeenCalledTimes(1);
+    expect(proponer).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: ORG, clientId: CLIENTE, checkpointId: CHECKPOINT })
+    );
   });
 });

@@ -9,8 +9,10 @@
  * cuántas sesiones lleva, qué le quedó pendiente, dónde está en el programa.
  *
  * Cada número lo calcula el módulo que ya lo sabe: el contador de 1-1 sale de
- * `loadClientOneOnOneStats`, el recorrido de `summarizeJourneyPosition`. Acá no
- * hay una segunda fórmula de nada; sólo se juntan.
+ * `leerEstadisticasDeUnoAUno` (la misma lectura que `loadClientOneOnOneStats`,
+ * pero lanza si `fathom_calls` falla), el recorrido de
+ * `summarizeJourneyPosition`. Acá no hay una segunda fórmula de nada; sólo se
+ * juntan.
  */
 
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
