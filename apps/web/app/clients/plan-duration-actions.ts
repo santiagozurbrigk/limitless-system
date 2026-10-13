@@ -21,7 +21,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { respaldoDeLectura } from "@/lib/server/lectura-degradable";
+import { lecturaDegradable } from "@/lib/server/lectura-degradable";
 import { AI_KEY_REJECTED_MESSAGE } from "@/lib/ai/anthropic-auth-errors";
 import { claudeNoCreditsUserMessage } from "@/lib/ai/anthropic-errors";
 import { firstZodError } from "@/lib/validations";
@@ -131,8 +131,10 @@ export async function getClientsTableEnrichmentAction(): Promise<
     const [profile, payments, planDurations] = await Promise.all([
       getCurrentProfile(),
       leerPagosDeLaOrganizacion(supabase, organizationId),
-      leerDuracionesDePlan(supabase, organizationId).catch((error: unknown) =>
-        respaldoDeLectura("cobros:duraciones-de-plan", error, [] as PlanDuration[])
+      lecturaDegradable(
+        "cobros:duraciones-de-plan",
+        () => leerDuracionesDePlan(supabase, organizationId),
+        [] as PlanDuration[]
       ),
     ]);
 

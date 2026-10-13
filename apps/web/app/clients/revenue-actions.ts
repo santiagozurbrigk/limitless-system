@@ -27,7 +27,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { respaldoDeLectura } from "@/lib/server/lectura-degradable";
+import { lecturaDegradableQueNoRechaza } from "@/lib/server/lectura-degradable";
 import { firstZodError, uuidSchema } from "@/lib/validations";
 import {
   normalizePeriod,
@@ -200,42 +200,44 @@ export async function deleteClientRevenueAction(
  *
  * La compone el tablero de Clientes (`getClientsBoardAction`), que espera el
  * dato y no un `MutationResult`: si falla, la tabla sigue sin la columna de
- * facturación y la falla queda registrada (`respaldoDeLectura`, SCRUM-516).
+ * facturación y la falla queda registrada (`lecturaDegradableQueNoRechaza`, SCRUM-516).
  * Antes se perdía sin rastro.
  */
 export async function getRevenueByClientAction(): Promise<
   Record<string, RevenueSummary>
 > {
-  try {
-    const organizationId = await requireOrganizationId();
-    if (!(await orgHasAddOn(organizationId, ADD_ON))) return {};
-    const supabase = await createClient();
+  return lecturaDegradableQueNoRechaza(
+    "clientes:facturacion-por-cliente",
+    async () => {
+      const organizationId = await requireOrganizationId();
+      if (!(await orgHasAddOn(organizationId, ADD_ON))) return {};
+      const supabase = await createClient();
 
-    const { data, error } = await supabase
-      .from("client_revenue_entries")
-      .select(COLUMNS)
-      .eq("organization_id", organizationId)
-      .order("period", { ascending: false });
+      const { data, error } = await supabase
+        .from("client_revenue_entries")
+        .select(COLUMNS)
+        .eq("organization_id", organizationId)
+        .order("period", { ascending: false });
 
-    if (error) {
-      if (isMissingTableError(error.message)) return {};
-      throw new FallaDeLaBase(error);
-    }
+      if (error) {
+        if (isMissingTableError(error.message)) return {};
+        throw new FallaDeLaBase(error);
+      }
 
-    const porCliente = new Map<string, ClientRevenueEntry[]>();
-    for (const row of (data ?? []) as ClientRevenueRow[]) {
-      const entry = rowToRevenueEntry(row);
-      const lista = porCliente.get(entry.clientId) ?? [];
-      lista.push(entry);
-      porCliente.set(entry.clientId, lista);
-    }
+      const porCliente = new Map<string, ClientRevenueEntry[]>();
+      for (const row of (data ?? []) as ClientRevenueRow[]) {
+        const entry = rowToRevenueEntry(row);
+        const lista = porCliente.get(entry.clientId) ?? [];
+        lista.push(entry);
+        porCliente.set(entry.clientId, lista);
+      }
 
-    const result: Record<string, RevenueSummary> = {};
-    for (const [clientId, entries] of porCliente) {
-      result[clientId] = summarizeRevenue(entries);
-    }
-    return result;
-  } catch (error) {
-    return respaldoDeLectura("clientes:facturacion-por-cliente", error, {});
-  }
+      const result: Record<string, RevenueSummary> = {};
+      for (const [clientId, entries] of porCliente) {
+        result[clientId] = summarizeRevenue(entries);
+      }
+      return result;
+    },
+    {} as Record<string, RevenueSummary>
+  );
 }

@@ -12,7 +12,6 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import {
   getCurrentProfile,
@@ -45,7 +44,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { lecturaDegradable } from "@/lib/server/lectura-degradable";
+import { lecturaDegradableQueNoRechaza } from "@/lib/server/lectura-degradable";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -154,21 +153,16 @@ export async function listFieldDefinitionsAction(
    * bandeja de onboarding) y otras acciones que devuelven la lista tal cual,
    * así que conserva su tipo. Lo que cambia es que una falla ya no se esconde:
    * `lecturaDegradable` la registra (consola y Sentry, tag `lectura_degradada`)
-   * y recién ahí devuelve la lista vacía. Las escrituras no la usan para
-   * validar: leen con `leerColumnas`, que lanza.
+   * y recién ahí devuelve la lista vacía; sin sesión, vacía sin registrarse
+   * (`lecturaDegradableQueNoRechaza`). Las escrituras no la usan para validar:
+   * leen con `leerColumnas`, que lanza (también las de wins y sub-clientes,
+   * SCRUM-516).
    */
-  try {
-    return await lecturaDegradable(
-      "listFieldDefinitions",
-      async () => leerColumnas(await createClient(), await requireOrganizationId(), entity),
-      []
-    );
-  } catch (error) {
-    // Sólo llegan acá un error interno de Next (se relanza) y la sesión que
-    // falta, que no es una falla: sin sesión no hay columnas que mostrar.
-    unstable_rethrow(error);
-    return [];
-  }
+  return lecturaDegradableQueNoRechaza(
+    "listFieldDefinitions",
+    async () => leerColumnas(await createClient(), await requireOrganizationId(), entity),
+    []
+  );
 }
 
 export type CustomFieldsPageData = {

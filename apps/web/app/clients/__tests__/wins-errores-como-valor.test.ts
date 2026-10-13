@@ -162,6 +162,17 @@ describe("listWinsAction (la componen la pantalla de Wins y la revisión semanal
     ]);
   });
 
+  it("⭐ si fallan los usos, los wins se ven igual sin ellos y la falla queda registrada", async () => {
+    base.errores.win_usages = FETCH_FAILED;
+    const wins = await listWinsAction();
+    expect(wins.map((w) => w.id)).toEqual([WIN]);
+    expect(wins[0].usages).toEqual([]);
+    expect(wins[0].attachments).toHaveLength(1);
+    expect(base.reportes).toEqual([
+      { error: expect.objectContaining({ name: "FallaDeLaBase" }), contexto: { lectura: "clientes:wins-usos" } },
+    ]);
+  });
+
   it("si Storage no firma, las capturas quedan sin link y se registra", async () => {
     base.storage.error = { message: "Bucket not found" };
     const wins = await listWinsAction();

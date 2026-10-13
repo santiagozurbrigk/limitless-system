@@ -17,7 +17,7 @@ vi.mock("@/lib/observability/reportar-falla", () => ({
   reportarFalla: (error: unknown, contexto: unknown) => sim.reportes.push({ error, contexto }),
 }));
 
-import { lecturaDegradable, respaldoDeLectura } from "../lectura-degradable";
+import { lecturaDegradable, lecturaDegradableQueNoRechaza } from "../lectura-degradable";
 import { ErrorEsperable } from "../error-esperable";
 
 let aviso: ReturnType<typeof vi.spyOn>;
@@ -82,20 +82,29 @@ describe("lecturaDegradable", () => {
 });
 
 /**
- * SCRUM-516: el `catch` de las lecturas que otras pantallas componen sin
- * `MutationResult` (wins, facturación por cliente). Antes era
- * `catch { return [] }`: la falla no quedaba en ningún lado.
+ * SCRUM-516 y SCRUM-517: las lecturas que otras pantallas componen sin
+ * `MutationResult` (columnas, seguimiento, wins, facturación por cliente).
+ * Antes eran `catch { return [] }`: la falla no quedaba en ningún lado. Usan el
+ * mismo mecanismo que `lecturaDegradable` y sólo cambia que un rechazo esperable
+ * (sin sesión) devuelve el valor por defecto en vez de relanzarse.
  */
-describe("respaldoDeLectura", () => {
-  it("⭐ una falla devuelve el valor por defecto y queda registrada con su etiqueta", () => {
+describe("lecturaDegradableQueNoRechaza", () => {
+  it("si la lectura anda, devuelve su valor y no registra nada", async () => {
+    await expect(lecturaDegradableQueNoRechaza("x", async () => [1], [])).resolves.toEqual([1]);
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("⭐ una falla devuelve el valor por defecto y queda registrada una sola vez con su etiqueta", async () => {
     const error = new Error("fetch failed");
-    expect(respaldoDeLectura("clientes:wins", error, [])).toEqual([]);
+    await expect(lecturaDegradableQueNoRechaza("clientes:wins", falla<number[]>(error), [])).resolves.toEqual([]);
     expect(sim.reportes).toEqual([{ error, contexto: { lectura: "clientes:wins" } }]);
     expect(aviso).toHaveBeenCalledOnce();
   });
 
-  it("⭐ un rechazo esperable (sin sesión) devuelve el valor por defecto sin registrarse, como antes", () => {
-    expect(respaldoDeLectura("x", new ErrorEsperable("Sesión no válida"), {})).toEqual({});
+  it("⭐ un rechazo esperable (sin sesión) devuelve el valor por defecto sin registrarse, como antes", async () => {
+    await expect(
+      lecturaDegradableQueNoRechaza("x", falla<object>(new ErrorEsperable("Sesión no válida")), {})
+    ).resolves.toEqual({});
     expect(sim.reportes).toEqual([]);
     expect(aviso).not.toHaveBeenCalled();
   });
@@ -103,9 +112,9 @@ describe("respaldoDeLectura", () => {
   it.each([
     ["redirect", () => getRedirectError("/login", RedirectType.replace)],
     ["ruta dinámica", () => new DynamicServerError("Route usó `cookies`")],
-  ])("⭐ el error de Next (%s) se relanza y no se registra", (_nombre, crear) => {
+  ])("⭐ el error de Next (%s) se relanza y no se registra", async (_nombre, crear) => {
     const error = crear();
-    expect(() => respaldoDeLectura("w", error, [])).toThrow();
+    await expect(lecturaDegradableQueNoRechaza("w", falla(error), [])).rejects.toBe(error);
     expect(sim.reportes).toEqual([]);
   });
 });

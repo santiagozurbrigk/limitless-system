@@ -38,24 +38,31 @@ export async function lecturaDegradable<T>(
 }
 
 /**
- * El `catch` de una lectura que ya devolvía un valor por defecto ante cualquier
- * error y que otras pantallas componen sin esperar un `MutationResult`
- * (SCRUM-516: los wins y la facturación por cliente, que leen la revisión
- * semanal y el tablero de Clientes).
+ * `lecturaDegradable` para una lectura de una server action que otras pantallas
+ * componen sin esperar un `MutationResult` y que nunca rechazó (SCRUM-516 y
+ * SCRUM-517: las columnas, el seguimiento, los wins y la facturación por
+ * cliente).
  *
- * Antes esas lecturas hacían `catch { return [] }`: una caída de la base se
- * veía como "sin datos" y nadie se enteraba. Ahora la falla se registra como en
- * `lecturaDegradable` (consola y Sentry con el tag `lectura_degradada`) y la
- * pantalla sigue con `porDefecto`. Lo interno de Next se relanza. A diferencia
- * de `lecturaDegradable`, un `ErrorEsperable` (sin sesión, cuenta desactivada)
- * no se relanza: devuelve `porDefecto` sin registrarse, como antes, porque no es
- * una falla y estas lecturas nunca lanzaron.
+ * Es el mismo mecanismo: la falla se registra en `lecturaDegradable` (consola y
+ * Sentry con el tag `lectura_degradada`) y la pantalla sigue con `porDefecto`.
+ * Lo único distinto es qué pasa con lo que `lecturaDegradable` relanza:
+ *   - lo interno de Next sigue su camino (`unstable_rethrow`);
+ *   - un `ErrorEsperable` (sin sesión, cuenta desactivada) devuelve
+ *     `porDefecto` sin registrarse: no es una falla, y estas lecturas siempre
+ *     devolvieron vacío en ese caso. No abre nada: el vacío no da acceso.
+ *
+ * Antes cada lectura repetía `try { lecturaDegradable } catch { return [] }`
+ * (SCRUM-517) o tenía su propio registro (`respaldoDeLectura`, SCRUM-516).
  */
-export function respaldoDeLectura<T>(etiqueta: string, error: unknown, porDefecto: T): T {
-  unstable_rethrow(error);
-  if (!esErrorEsperable(error)) {
-    console.warn(`[${etiqueta}] la lectura falló; se usa el valor por defecto`);
-    reportarFalla(error, { lectura: etiqueta });
+export async function lecturaDegradableQueNoRechaza<T>(
+  etiqueta: string,
+  leer: () => Promise<T>,
+  porDefecto: T
+): Promise<T> {
+  try {
+    return await lecturaDegradable(etiqueta, leer, porDefecto);
+  } catch (error) {
+    unstable_rethrow(error);
+    return porDefecto;
   }
-  return porDefecto;
 }

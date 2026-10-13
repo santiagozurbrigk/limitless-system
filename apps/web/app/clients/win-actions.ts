@@ -51,7 +51,10 @@ import {
   registrarFallaDeAccion,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { respaldoDeLectura } from "@/lib/server/lectura-degradable";
+import {
+  lecturaDegradable,
+  lecturaDegradableQueNoRechaza,
+} from "@/lib/server/lectura-degradable";
 import { firstZodError, uuidSchema } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -134,7 +137,8 @@ function revalidate(clientId?: string) {
  *
  * Las lecturas (`listWinsAction`, baselines y nichos) las componen la pantalla
  * de Wins y la revisión semanal, que esperan el dato: siguen devolviendo vacío
- * ante una falla, pero ahora la falla queda registrada (`respaldoDeLectura`).
+ * ante una falla, pero ahora la falla queda registrada
+ * (`lecturaDegradableQueNoRechaza`).
  * Antes `catch { return [] }` la escondía.
  */
 
@@ -173,123 +177,144 @@ function errorDeLoDelWin(error: { message: string; code?: string | null }): Erro
  * y la falla queda registrada.
  */
 export async function listWinsAction(clientId?: string): Promise<ClientWin[]> {
-  try {
-    const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
+  return lecturaDegradableQueNoRechaza(
+    "clientes:wins",
+    async () => {
+      const organizationId = await requireOrganizationId();
+      const supabase = await createClient();
 
-    let winsQuery = supabase
-      .from("client_wins")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("win_date", { ascending: false });
+      let winsQuery = supabase
+        .from("client_wins")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .order("win_date", { ascending: false });
 
-    if (clientId) winsQuery = winsQuery.eq("client_id", clientId);
+      if (clientId) winsQuery = winsQuery.eq("client_id", clientId);
 
-    const { data: winRows, error } = await winsQuery;
-    if (error) {
-      if (isMissingTableError(error.message)) return [];
-      throw new FallaDeLaBase(error);
-    }
+      const { data: winRows, error } = await winsQuery;
+      if (error) {
+        if (isMissingTableError(error.message)) return [];
+        throw new FallaDeLaBase(error);
+      }
 
-    const rows = winRows as ClientWinRow[];
-    if (rows.length === 0) return [];
+      const rows = winRows as ClientWinRow[];
+      if (rows.length === 0) return [];
 
-    const winIds = rows.map((row) => row.id);
-    const [attachmentsResult, usagesResult] = await Promise.all([
-      supabase.from("win_attachments").select("*").in("win_id", winIds),
-      supabase.from("win_usages").select("*").in("win_id", winIds),
-    ]);
+      const winIds = rows.map((row) => row.id);
+      const [attachmentRows, usageRows] = await Promise.all([
+        lecturaDegradable(
+          "clientes:wins-capturas",
+          async () => {
+            const { data, error } = await supabase
+              .from("win_attachments")
+              .select("*")
+              .in("win_id", winIds);
+            if (error) throw new FallaDeLaBase(error);
+            return (data as WinAttachmentRow[]) ?? [];
+          },
+          [] as WinAttachmentRow[]
+        ),
+        lecturaDegradable(
+          "clientes:wins-usos",
+          async () => {
+            const { data, error } = await supabase
+              .from("win_usages")
+              .select("*")
+              .in("win_id", winIds);
+            if (error) throw new FallaDeLaBase(error);
+            return (data as WinUsageRow[]) ?? [];
+          },
+          [] as WinUsageRow[]
+        ),
+      ]);
 
-    const attachmentRows: WinAttachmentRow[] = attachmentsResult.error
-      ? respaldoDeLectura("clientes:wins-capturas", new FallaDeLaBase(attachmentsResult.error), [])
-      : ((attachmentsResult.data as WinAttachmentRow[]) ?? []);
-    const usageRows: WinUsageRow[] = usagesResult.error
-      ? respaldoDeLectura("clientes:wins-usos", new FallaDeLaBase(usagesResult.error), [])
-      : ((usagesResult.data as WinUsageRow[]) ?? []);
+      const attachments = await withSignedUrls(
+        attachmentRows.map(rowToWinAttachment),
+        organizationId
+      );
+      const usages = usageRows.map(rowToWinUsage);
 
-    const attachments = await withSignedUrls(
-      attachmentRows.map(rowToWinAttachment),
-      organizationId
-    );
-    const usages = usageRows.map(rowToWinUsage);
+      const byWinAttachments = groupBy(attachments, (item) => item.winId ?? "");
+      const byWinUsages = groupBy(usages, (item) => item.winId);
 
-    const byWinAttachments = groupBy(attachments, (item) => item.winId ?? "");
-    const byWinUsages = groupBy(usages, (item) => item.winId);
-
-    return rows.map((row) =>
-      rowToClientWin(row, {
-        attachments: byWinAttachments.get(row.id) ?? [],
-        usages: byWinUsages.get(row.id) ?? [],
-      })
-    );
-  } catch (error) {
-    return respaldoDeLectura("clientes:wins", error, []);
-  }
+      return rows.map((row) =>
+        rowToClientWin(row, {
+          attachments: byWinAttachments.get(row.id) ?? [],
+          usages: byWinUsages.get(row.id) ?? [],
+        })
+      );
+    },
+    []
+  );
 }
 
 /** El baseline de cada cliente, para el dashboard. */
 export async function listClientBaselinesAction(): Promise<
   Record<string, ClientBaseline>
 > {
-  try {
-    const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("clients")
-      .select("id, niche, baseline_metric_key, baseline_metric_value, baseline_metric_unit, baseline_captured_at")
-      .eq("organization_id", organizationId)
-      .not("baseline_metric_key", "is", null);
+  return lecturaDegradableQueNoRechaza(
+    "clientes:wins-baselines",
+    async () => {
+      const organizationId = await requireOrganizationId();
+      const supabase = await createClient();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, niche, baseline_metric_key, baseline_metric_value, baseline_metric_unit, baseline_captured_at")
+        .eq("organization_id", organizationId)
+        .not("baseline_metric_key", "is", null);
 
-    if (error) throw new FallaDeLaBase(error);
+      if (error) throw new FallaDeLaBase(error);
 
-    const result: Record<string, ClientBaseline> = {};
-    for (const row of data as {
-      id: string;
-      baseline_metric_key: string | null;
-      baseline_metric_value: number | string | null;
-      baseline_metric_unit: string | null;
-      baseline_captured_at: string | null;
-    }[]) {
-      const key = row.baseline_metric_key?.trim();
-      const value =
-        typeof row.baseline_metric_value === "number"
-          ? row.baseline_metric_value
-          : Number(row.baseline_metric_value);
-      // Un baseline sin número no es un baseline de cero: no existe.
-      if (!key || !Number.isFinite(value)) continue;
-      result[row.id] = {
-        metricKey: key,
-        metricValue: value,
-        metricUnit: row.baseline_metric_unit?.trim() || null,
-        capturedAt: row.baseline_captured_at,
-      };
-    }
-    return result;
-  } catch (error) {
-    return respaldoDeLectura("clientes:wins-baselines", error, {});
-  }
+      const result: Record<string, ClientBaseline> = {};
+      for (const row of data as {
+        id: string;
+        baseline_metric_key: string | null;
+        baseline_metric_value: number | string | null;
+        baseline_metric_unit: string | null;
+        baseline_captured_at: string | null;
+      }[]) {
+        const key = row.baseline_metric_key?.trim();
+        const value =
+          typeof row.baseline_metric_value === "number"
+            ? row.baseline_metric_value
+            : Number(row.baseline_metric_value);
+        // Un baseline sin número no es un baseline de cero: no existe.
+        if (!key || !Number.isFinite(value)) continue;
+        result[row.id] = {
+          metricKey: key,
+          metricValue: value,
+          metricUnit: row.baseline_metric_unit?.trim() || null,
+          capturedAt: row.baseline_captured_at,
+        };
+      }
+      return result;
+    },
+    {}
+  );
 }
 
 /** El nicho de cada cliente, para el dashboard. */
 export async function listClientNichesAction(): Promise<Record<string, string>> {
-  try {
-    const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("clients")
-      .select("id, niche")
-      .eq("organization_id", organizationId)
-      .not("niche", "is", null);
+  return lecturaDegradableQueNoRechaza(
+    "clientes:wins-nichos",
+    async () => {
+      const organizationId = await requireOrganizationId();
+      const supabase = await createClient();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, niche")
+        .eq("organization_id", organizationId)
+        .not("niche", "is", null);
 
-    if (error) throw new FallaDeLaBase(error);
-    const result: Record<string, string> = {};
-    for (const row of data as { id: string; niche: string | null }[]) {
-      if (row.niche?.trim()) result[row.id] = row.niche.trim();
-    }
-    return result;
-  } catch (error) {
-    return respaldoDeLectura("clientes:wins-nichos", error, {});
-  }
+      if (error) throw new FallaDeLaBase(error);
+      const result: Record<string, string> = {};
+      for (const row of data as { id: string; niche: string | null }[]) {
+        if (row.niche?.trim()) result[row.id] = row.niche.trim();
+      }
+      return result;
+    },
+    {}
+  );
 }
 
 // ─── Escritura ──────────────────────────────────────────────────────────────
@@ -772,15 +797,24 @@ async function withSignedUrls(
     "wins"
   );
   const admin = createAdminClient();
-  const { data, error } =
-    rutas.length > 0
-      ? await admin.storage.from(CLIENT_WINS_BUCKET).createSignedUrls(rutas, WIN_SIGNED_URL_TTL_SECONDS)
-      : { data: [], error: null };
   // Sin links las capturas no se ven, pero el win sí: la falla se registra.
-  if (error) respaldoDeLectura("clientes:wins-links-de-capturas", new FallaDeLaBase(error), null);
+  const firmados =
+    rutas.length > 0
+      ? await lecturaDegradable(
+          "clientes:wins-links-de-capturas",
+          async () => {
+            const { data, error } = await admin.storage
+              .from(CLIENT_WINS_BUCKET)
+              .createSignedUrls(rutas, WIN_SIGNED_URL_TTL_SECONDS);
+            if (error) throw new FallaDeLaBase(error);
+            return data ?? [];
+          },
+          []
+        )
+      : [];
 
   const urlByPath = new Map(
-    (data ?? []).map((entry) => [entry.path ?? "", entry.signedUrl])
+    firmados.map((entry) => [entry.path ?? "", entry.signedUrl])
   );
 
   return attachments.map((item) => ({

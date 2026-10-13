@@ -13,7 +13,6 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import {
   getCurrentProfile,
@@ -41,7 +40,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { lecturaDegradable } from "@/lib/server/lectura-degradable";
+import { lecturaDegradableQueNoRechaza } from "@/lib/server/lectura-degradable";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -65,24 +64,18 @@ type TrackingRow = {
  *
  * SCRUM-517: la usa la pantalla de Wins junto con otras lecturas que devuelven
  * el dato tal cual, así que conserva su tipo; lo que cambia es que una falla
- * ya no se esconde: `lecturaDegradable` la registra (consola y Sentry, tag
- * `lectura_degradada`) y recién ahí devuelve `{}`.
+ * ya no se esconde: `lecturaDegradableQueNoRechaza` la registra (consola y
+ * Sentry, tag `lectura_degradada`) y recién ahí devuelve `{}`.
  */
 export async function listClientTrackingAction(): Promise<
   Record<string, ClientTracking>
 > {
-  try {
-    return await lecturaDegradable(
-      "listClientTracking",
-      async () => leerSeguimiento(await createClient(), await requireOrganizationId()),
-      {}
-    );
-  } catch (error) {
-    // Sólo llegan acá un error interno de Next (se relanza) y la sesión que
-    // falta, que no es una falla: sin sesión no hay seguimiento que mostrar.
-    unstable_rethrow(error);
-    return {};
-  }
+  // Sin sesión, `{}` sin registrarse: no es una falla.
+  return lecturaDegradableQueNoRechaza(
+    "listClientTracking",
+    async () => leerSeguimiento(await createClient(), await requireOrganizationId()),
+    {}
+  );
 }
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
