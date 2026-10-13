@@ -49,7 +49,7 @@ export async function lecturaDegradable<T>(
  * Es el mismo mecanismo que `lecturaDegradable`: la falla se registra ahí
  * (consola y Sentry con el tag `lectura_degradada`) y la pantalla sigue con el
  * valor por defecto. Acá sólo llega lo que `lecturaDegradable` relanza:
- *   - lo interno de Next sigue su camino (`unstable_rethrow`);
+ *   - lo interno de Next (redirect, ruta dinámica) se relanza tal cual;
  *   - un `ErrorEsperable` (sin sesión, cuenta desactivada) devuelve
  *     `porDefecto` sin registrarse: no es una falla, y estas lecturas siempre
  *     devolvieron vacío en ese caso. No abre nada: el vacío no da acceso.
@@ -62,7 +62,6 @@ export async function lecturaDegradable<T>(
  * registro (`respaldoDeLectura`, SCRUM-516).
  */
 export function valorSiNoEsFalla<T>(error: unknown, porDefecto: T): T {
-  unstable_rethrow(error);
-  if (!esErrorEsperable(error)) throw error;
-  return porDefecto;
+  if (esErrorEsperable(error)) return porDefecto;
+  throw error;
 }
