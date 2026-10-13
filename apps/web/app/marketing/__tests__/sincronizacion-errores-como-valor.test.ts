@@ -65,7 +65,7 @@ vi.mock("@/lib/marketing/sync-content-metrics", () => ({
 }));
 vi.mock("@/lib/marketing/story-thumbnail-storage", () => ({
   persistContentThumbnail: async () => null,
-  isInstagramCdnUrl: () => false,
+  isInstagramCdnUrl: (url: string) => url.includes("cdninstagram"),
 }));
 
 import { maybeSyncZernioContentAction, syncZernioContentAction } from "../content/sync-actions";
@@ -279,6 +279,26 @@ describe("maybeSyncZernioContentAction", () => {
   it("si falla la lectura de la última pieza, texto fijo", async () => {
     base.errores["content_pieces:select:filas"] = FETCH_FAILED;
     await expect(maybeSyncZernioContentAction()).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+  });
+
+  it("⭐ la reparación de miniaturas vencidas sólo toca las piezas de la organización", async () => {
+    const CDN = "https://scontent.cdninstagram.com/v/vencida.jpg";
+    base.tablas.content_pieces = [
+      { id: "p", organization_id: ORG, source: "zernio", updated_at: RECIENTE, thumbnail_url: CDN },
+      // Gemela de otra org con el mismo id: sin el filtro por organización en
+      // la actualización, también perdería su miniatura.
+      { id: "p", organization_id: OTRA_ORG, source: "zernio", updated_at: RECIENTE, thumbnail_url: CDN },
+    ];
+    await maybeSyncZernioContentAction();
+    await vi.waitFor(() => expect(base.tablas.content_pieces[0].thumbnail_url).toBeNull());
+    expect(base.tablas.content_pieces[1].thumbnail_url).toBe(CDN);
+    const lectura = base.operaciones.find(
+      (o) => o.op === "select" && o.filtros.some(([columna]) => columna === "not:thumbnail_url")
+    );
+    expect(lectura?.filtros).toEqual([
+      ["organization_id", ORG],
+      ["not:thumbnail_url", null],
+    ]);
   });
 
   it("sin perfil (sin sesión), el motivo", async () => {
