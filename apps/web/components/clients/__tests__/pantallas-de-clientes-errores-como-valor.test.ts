@@ -84,6 +84,7 @@ import { subirCapturaDeWin } from "../wins/win-form-modal";
 import { cargarPlanes } from "@/components/closing/payment-modal";
 import { cargarPlanesDeCobros } from "@/components/sales/cobros-page";
 import {
+  EncabezadoDelResumen,
   ResultRow,
   StepMapper,
   importarClientesDelArchivo,
@@ -270,5 +271,16 @@ describe("el resumen del asistente de importación", () => {
       })
     );
     expect(html).toContain("Se importaron 50 de 60");
+  });
+  it("⭐ el encabezado de una importación incompleta no dice «completada» ni va en verde", () => {
+    const html = renderToStaticMarkup(createElement(EncabezadoDelResumen, { incompleta: true }));
+    expect(html).toContain("Importación incompleta");
+    expect(html).not.toContain("Importación completada");
+    expect(html).not.toContain("text-green-600");
+  });
+
+  it("el encabezado de una importación entera dice «completada»", () => {
+    const html = renderToStaticMarkup(createElement(EncabezadoDelResumen, { incompleta: false }));
+    expect(html).toContain("Importación completada");
   });
 });

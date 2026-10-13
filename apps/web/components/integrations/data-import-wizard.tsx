@@ -28,6 +28,7 @@ import {
   Database,
   FileSpreadsheet,
   CheckCircle,
+  AlertTriangle,
   Loader2,
   ChevronRight,
   ChevronLeft,
@@ -684,10 +685,7 @@ function StepConfirm({
   if (summary) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-2 text-green-600">
-          <CheckCircle className="h-5 w-5" />
-          <span className="text-sm font-medium">Importación completada</span>
-        </div>
+        <EncabezadoDelResumen incompleta={Boolean(summary.clientsResult?.incompleta)} />
         {summary.clientsResult && (
           <ResultRow
             label="Clientes"
@@ -759,6 +757,28 @@ function StepConfirm({
           "Importar"
         )}
       </Button>
+    </div>
+  );
+}
+
+/**
+ * El encabezado del resumen. Si la importación quedó incompleta (se guardaron
+ * algunos lotes y otro falló), lo dice, como el aviso, en vez de "completada"
+ * con el ícono verde (SCRUM-516, AR pasada 2).
+ */
+export function EncabezadoDelResumen({ incompleta }: { incompleta: boolean }) {
+  if (incompleta) {
+    return (
+      <div className="flex items-center gap-2 text-destructive">
+        <AlertTriangle className="h-5 w-5" />
+        <span className="text-sm font-medium">Importación incompleta</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 text-green-600">
+      <CheckCircle className="h-5 w-5" />
+      <span className="text-sm font-medium">Importación completada</span>
     </div>
   );
 }
