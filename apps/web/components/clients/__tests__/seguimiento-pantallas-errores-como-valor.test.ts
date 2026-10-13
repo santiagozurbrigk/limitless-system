@@ -112,7 +112,10 @@ import {
   cargarColumnasDelCliente,
   guardarCamposDelCliente,
 } from "@/components/clients/client-custom-fields-section";
-import { cargarResumenDelCliente } from "@/components/clients/client-overview-strip";
+import {
+  cargarResumenDelCliente,
+  celdasDelResumen,
+} from "@/components/clients/client-overview-strip";
 import { cargarTableroYSenales } from "@/components/clients/clients-list";
 import {
   cambiarRecorridoDelCliente,
@@ -318,5 +321,37 @@ describe("lecturas de la ficha y la lista", () => {
     );
     expect(html).toContain("No se pudo cargar el resumen del cliente.");
     expect(html).toContain(ERROR_INESPERADO);
+  });
+});
+
+describe("⭐ las celdas del resumen de la ficha", () => {
+  const resumen = {
+    oneOnOne: { total: 3, daysSinceLast: 1 },
+    tasks: { pending: 0, coach: 0 },
+    journey: { configured: false, reached: 0, total: 0, next: null },
+  };
+
+  it("si el recorrido no se pudo leer, dice 'no se pudo cargar', no 'sin recorrido configurado'", () => {
+    const c = celdasDelResumen({ ...resumen, journey: null }, null);
+    expect(c.recorrido).toEqual({ valor: "—", detalle: "no se pudo cargar" });
+    expect(c.sesiones).toEqual({ valor: 3, detalle: "la última fue ayer" });
+  });
+
+  it("si las sesiones 1-1 no se pudieron leer, «—» y no '0'", () => {
+    const c = celdasDelResumen({ ...resumen, oneOnOne: null }, null);
+    expect(c.sesiones).toEqual({ valor: "—", detalle: "no se pudo cargar" });
+    expect(c.tareas).toEqual({ valor: 0, detalle: "al día" });
+  });
+
+  it("un recorrido sin configurar sigue diciéndolo", () => {
+    expect(celdasDelResumen(resumen, null).recorrido).toEqual({
+      valor: "—",
+      detalle: "sin recorrido configurado",
+    });
+  });
+
+  it("si la lectura entera falló, todas dicen 'no se pudo cargar'; mientras carga, 'cargando…'", () => {
+    expect(celdasDelResumen(null, "Sesión no válida").tareas.detalle).toBe("no se pudo cargar");
+    expect(celdasDelResumen(null, null).sesiones).toEqual({ valor: "—", detalle: "cargando…" });
   });
 });

@@ -22,7 +22,7 @@
  * En pantallas angostas las columnas se apilan, trabajo primero.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@ai-coo/ui";
 import { ExternalLink, History, PhoneCall, Sparkles } from "lucide-react";
 import { usePlatformData } from "@/providers";
@@ -68,14 +68,19 @@ export function ClientDetail({ client: initial }: { client: Client }) {
    * Las usan dos tarjetas —la de secciones y la de campos sueltos—, y pedirlas
    * por separado sería el mismo fetch dos veces por ficha abierta.
    */
-  const [clientFields, setClientFields] = useState<FieldDefinition[]>([]);
-  /** Si no se pudieron leer, el motivo (SCRUM-517): antes se callaba. */
+  /** Todas, archivadas incluidas; `null` mientras cargan o si fallaron. */
+  const [columnas, setColumnas] = useState<FieldDefinition[] | null>(null);
+  /**
+   * Si no se pudieron leer, el motivo (SCRUM-517): antes se callaba. Un solo
+   * aviso para las dos tarjetas que las usan.
+   */
   const [motivoColumnas, setMotivoColumnas] = useState<string | null>(null);
+  const clientFields = useMemo(() => activeFields(columnas ?? []), [columnas]);
   useEffect(() => {
     let alive = true;
     void cargarColumnasDelCliente().then((lectura) => {
       if (!alive) return;
-      if (lectura.ok) setClientFields(activeFields(lectura.data));
+      if (lectura.ok) setColumnas(lectura.data);
       else setMotivoColumnas(lectura.motivo);
     });
     return () => {
@@ -130,6 +135,13 @@ export function ClientDetail({ client: initial }: { client: Client }) {
 
         {/* ── El contexto ────────────────────────────────────────────── */}
         <aside className="min-w-0 space-y-4">
+          {motivoColumnas ? (
+            <AvisoDeLecturaFallida
+              titulo="No se pudieron cargar los datos del cliente."
+              motivo={motivoColumnas}
+            />
+          ) : null}
+
           {growthPartners ? (
             <>
               {/*
@@ -137,12 +149,6 @@ export function ClientDetail({ client: initial }: { client: Client }) {
                 cada uno. Va primero porque es el contexto con el que se lee
                 todo lo demás.
               */}
-              {motivoColumnas ? (
-                <AvisoDeLecturaFallida
-                  titulo="No se pudieron cargar las columnas de Marketing, Ventas y Sistemas."
-                  motivo={motivoColumnas}
-                />
-              ) : null}
               <ClientSubClientsCard client={client} fields={clientFields} />
 
               {/* Cuánto factura su negocio: la medida de si esto está funcionando. */}
@@ -151,7 +157,7 @@ export function ClientDetail({ client: initial }: { client: Client }) {
           ) : null}
 
           {/* Las columnas sueltas, las que no están en ninguna sección. */}
-          <ClientCustomFieldsSection client={client} />
+          <ClientCustomFieldsSection client={client} columnas={columnas} />
 
           <ClientSatisfactionSection
             clientId={client.id}

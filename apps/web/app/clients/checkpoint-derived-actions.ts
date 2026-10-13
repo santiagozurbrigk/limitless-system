@@ -179,6 +179,11 @@ export async function createCheckpointProposalAction(
     if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
+    // `createCheckpointProposal` escribe con service role (lo comparten los
+    // crons, que no tienen sesión): la RLS no frena un cliente o un checkpoint
+    // de otra organización. Acá se verifica con la sesión y la org efectiva.
+    await exigirClienteYCheckpointDeLaOrg(organizationId, values.clientId, values.checkpointId);
+
     const result = await createCheckpointProposal({
       organizationId,
       clientId: values.clientId,
@@ -199,6 +204,36 @@ export async function createCheckpointProposalAction(
 }
 
 // ─── Ayudas ─────────────────────────────────────────────────────────────────
+
+/**
+ * El cliente y el checkpoint de una propuesta tienen que ser de la
+ * organización de la sesión (SCRUM-517). Si no, se rechaza con el mismo motivo
+ * que si no existieran: no se confirma que exista algo de otra org.
+ */
+async function exigirClienteYCheckpointDeLaOrg(
+  organizationId: string,
+  clientId: string,
+  checkpointId: string
+) {
+  const supabase = await createClient();
+  const cliente = await supabase
+    .from("clients")
+    .select("id")
+    .eq("id", clientId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (cliente.error) throw new FallaDeLaBase(cliente.error);
+  if (!cliente.data) throw new ErrorEsperable("El cliente no existe");
+
+  const checkpoint = await supabase
+    .from("client_checkpoints")
+    .select("id")
+    .eq("id", checkpointId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (checkpoint.error) throw new FallaDeLaBase(checkpoint.error);
+  if (!checkpoint.data) throw new ErrorEsperable("El checkpoint no existe");
+}
 
 async function resolveProposal(
   proposalId: string,

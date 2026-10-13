@@ -17,7 +17,6 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { Button } from "@ai-coo/ui";
 import { ListChecks } from "lucide-react";
 import { FichaCard } from "@/components/clients/ficha-section";
-import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { useToast } from "@/providers/toast-provider";
 import { correrMutacion, leerConMotivo, type Aviso } from "@/lib/client/correr-accion";
 import { usePlatformData } from "@/providers";
@@ -63,28 +62,25 @@ export function guardarCamposDelCliente(
   });
 }
 
-export function ClientCustomFieldsSection({ client }: { client: Client }) {
+/**
+ * `columnas` las lee una sola vez la ficha (`cargarColumnasDelCliente`) y las
+ * comparte con la tarjeta de secciones: `null` mientras cargan o si no se
+ * pudieron leer. En ese caso la ficha muestra un solo aviso con el motivo y
+ * esta tarjeta no se dibuja (SCRUM-517).
+ */
+export function ClientCustomFieldsSection({
+  client,
+  columnas,
+}: {
+  client: Client;
+  columnas: FieldDefinition[] | null;
+}) {
   const { push } = useToast();
   const { refreshClients } = usePlatformData();
 
-  const [fields, setFields] = useState<FieldDefinition[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [motivo, setMotivo] = useState<string | null>(null);
   const [draft, setDraft] = useState<CustomFieldValues>(client.custom ?? {});
   const [pending, startTransition] = useTransition();
-
-  useEffect(() => {
-    let alive = true;
-    void cargarColumnasDelCliente().then((lectura) => {
-      if (!alive) return;
-      if (lectura.ok) setFields(lectura.data);
-      else setMotivo(lectura.motivo);
-      setLoading(false);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const fields = useMemo(() => columnas ?? [], [columnas]);
 
   // El borrador se resincroniza si el cliente cambia por fuera (otra pestaña,
   // un refresco del provider). Sin esto, quedaría mostrando lo viejo.
@@ -127,12 +123,7 @@ export function ClientCustomFieldsSection({ client }: { client: Client }) {
     return false;
   }, [client.custom, draft]);
 
-  if (motivo !== null) {
-    return (
-      <AvisoDeLecturaFallida titulo="No se pudieron cargar los datos del cliente." motivo={motivo} />
-    );
-  }
-  if (loading || (offered.length === 0 && archivedWithValue.length === 0)) {
+  if (columnas === null || (offered.length === 0 && archivedWithValue.length === 0)) {
     return null;
   }
 

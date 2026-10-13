@@ -15,7 +15,7 @@
 
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
-import { loadClientOneOnOneStats } from "@/lib/fathom/one-on-ones";
+import { leerEstadisticasDeUnoAUno } from "@/lib/fathom/one-on-ones";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { summarizeJourneyPosition } from "@/lib/checkpoints/progress";
 import { leerRecorridoDelCliente } from "@/lib/checkpoints/lecturas-del-recorrido";
@@ -28,33 +28,39 @@ import {
 import { lecturaDegradable } from "@/lib/server/lectura-degradable";
 
 export type ClientOverview = {
+  /** `null` si no se pudieron leer (la falla queda registrada). */
   oneOnOne: {
     total: number;
     /** Días desde la última. `null` si no hubo ninguna. */
     daysSinceLast: number | null;
-  };
+  } | null;
   tasks: {
     pending: number;
     /** De las pendientes, cuántas le tocan al coach. */
     coach: number;
   };
+  /** `null` si no se pudo leer (la falla queda registrada). */
   journey: {
     configured: boolean;
     reached: number;
     total: number;
     /** El próximo hito que falta, para decir "sigue: X". */
     next: string | null;
-  };
+  } | null;
 };
 
 /**
  * SCRUM-517: devuelve sus errores como valor. Antes lanzaba sin sesión (en
- * producción, un digest que la franja tragaba) y una falla de la base se veía
- * como cero sesiones y cero pendientes, o como un cliente que no existe.
+ * producción, un digest que la franja tragaba), un cliente de otra
+ * organización se veía como un resumen en cero y una falla de las tareas, de
+ * las sesiones 1-1 o del recorrido se veía como cero pendientes, "0 sesiones"
+ * o "sin recorrido configurado".
  *
- * El recorrido es la parte opcional: si no se puede leer, la franja muestra
- * «—» en esa celda (como antes) y la falla queda registrada
- * (`lecturaDegradable`); las otras dos no esconden su falla.
+ * La pertenencia y las tareas son imprescindibles: si fallan, la acción
+ * devuelve el texto fijo. Las sesiones 1-1 y el recorrido son celdas sueltas:
+ * si una no se puede leer, viene en `null` (la franja muestra «—» y "no se pudo
+ * cargar") y la falla queda registrada (`lecturaDegradable`); las otras celdas
+ * salen igual.
  */
 export async function getClientOverviewAction(
   clientId: string
@@ -87,8 +93,15 @@ export async function getClientOverviewAction(
         .eq("client_id", clientId)
         .eq("status", "pending"),
       // La zona de la org, una lectura por pedido: el contador de 1-1 cuenta en ella.
-      leerZonaHorariaDeLaOrganizacion(supabase, organizationId).then((zona) =>
-        loadClientOneOnOneStats(organizationId, clientId, zona)
+      lecturaDegradable(
+        "getClientOverview:sesiones",
+        async () =>
+          leerEstadisticasDeUnoAUno(
+            organizationId,
+            clientId,
+            await leerZonaHorariaDeLaOrganizacion(supabase, organizationId)
+          ),
+        null
       ),
       lecturaDegradable(
         "getClientOverview:recorrido",
@@ -103,17 +116,19 @@ export async function getClientOverviewAction(
     const resumen = journey ? summarizeJourneyPosition(journey.progress) : null;
 
     return {
-      oneOnOne: { total: stats.totalCalls, daysSinceLast: stats.daysSinceLast },
+      oneOnOne: stats ? { total: stats.totalCalls, daysSinceLast: stats.daysSinceLast } : null,
       tasks: {
         pending: pendientes.length,
         coach: pendientes.filter((t) => t.owner === "coach").length,
       },
-      journey: {
-        configured: Boolean(journey?.journeyConfigured),
-        reached: resumen?.reached ?? 0,
-        total: resumen?.total ?? 0,
-        next: resumen?.nextCheckpoint?.name ?? null,
-      },
+      journey: journey
+        ? {
+            configured: journey.journeyConfigured,
+            reached: resumen?.reached ?? 0,
+            total: resumen?.total ?? 0,
+            next: resumen?.nextCheckpoint?.name ?? null,
+          }
+        : null,
     };
   });
 }

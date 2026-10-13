@@ -12,6 +12,7 @@
  * acompañamiento el día que se firmó el contrato.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 import { fechaDeHoyEnZona, fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import {
@@ -112,6 +113,28 @@ export async function loadClientOneOnOneStats(
   clientId: string,
   zona: string | null
 ): Promise<OneOnOneStats> {
+  try {
+    return await leerEstadisticasDeUnoAUno(organizationId, clientId, zona);
+  } catch (error) {
+    console.error(
+      "[fathom:one-on-ones] stats",
+      error instanceof Error ? error.message : error
+    );
+    return computeOneOnOneStats([], fechaDeHoyEnZona(zona), zona);
+  }
+}
+
+/**
+ * Lo mismo que `loadClientOneOnOneStats`, pero si `fathom_calls` no se puede
+ * leer lanza una `FallaDeLaBase` en vez de devolver las estadísticas de una
+ * lista vacía (SCRUM-517): el resumen de la ficha no puede decir "0 sesiones"
+ * cuando lo que pasó es que la base falló.
+ */
+export async function leerEstadisticasDeUnoAUno(
+  organizationId: string,
+  clientId: string,
+  zona: string | null
+): Promise<OneOnOneStats> {
   const admin = createAdminClient();
 
   const { data, error } = await admin
@@ -121,16 +144,12 @@ export async function loadClientOneOnOneStats(
     .eq("client_id", clientId)
     .eq("purpose", "delivery")
     .not("call_date", "is", null);
-  const hoy = fechaDeHoyEnZona(zona);
 
-  if (error) {
-    console.error("[fathom:one-on-ones] stats", error.message);
-    return computeOneOnOneStats([], hoy, zona);
-  }
+  if (error) throw new FallaDeLaBase(error);
 
   return computeOneOnOneStats(
     ((data ?? []) as { call_date: string }[]).map((row) => row.call_date),
-    hoy,
+    fechaDeHoyEnZona(zona),
     zona
   );
 }

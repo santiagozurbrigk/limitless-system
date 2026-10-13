@@ -44,7 +44,12 @@ const sim = vi.hoisted(() => ({
   errorGlobal: null as { message: string; code?: string } | null,
   // Si está, `from()` lanza: como una excepción de la red o un bug.
   lanza: null as unknown,
-  operaciones: [] as Array<{ tabla: string; op: string; filtros: Array<[string, unknown]> }>,
+  operaciones: [] as Array<{
+    tabla: string;
+    op: string;
+    filtros: Array<[string, unknown]>;
+    valores?: unknown;
+  }>,
   propuestaCreada: true,
 }));
 
@@ -73,10 +78,8 @@ vi.mock("@/lib/auth/add-ons", () => ({
     throw new Error("no se usa: las acciones de SCRUM-517 usan exigirAddOn");
   },
 }));
-vi.mock("@/lib/fathom/one-on-ones", () => ({
-  loadClientOneOnOneStats: async () => ({ totalCalls: 3, daysSinceLast: 2 }),
-  loadLastOneOnOneByClient: async () => ({}),
-}));
+// Las sesiones 1-1 (`lib/fathom/one-on-ones.ts`) son las reales: leen
+// `fathom_calls` del Supabase falso.
 vi.mock("@/app/clients/revenue-actions", () => ({ getRevenueByClientAction: async () => ({}) }));
 vi.mock("@/app/clients/actions", () => ({ listClientsAction: async () => [] }));
 vi.mock("@/app/clients/win-actions", () => ({
@@ -115,7 +118,7 @@ function crearSupabase() {
         op.filtros.every(([c, v]) => fila[c] === v) &&
         op.nots.every((c) => valorDe(fila, c) != null);
       const ejecutar = () => {
-        sim.operaciones.push({ tabla, op: op.op, filtros: op.filtros });
+        sim.operaciones.push({ tabla, op: op.op, filtros: op.filtros, valores: op.valores });
         const error: ErrorDeLaBase =
           sim.errorGlobal ?? sim.errores[`${tabla}:${op.op}`] ?? sim.errores[tabla] ?? null;
         if (error) return { data: null, error, count: null };
@@ -322,6 +325,18 @@ function cliente(id: string, org: string): Fila {
   return { id, organization_id: org, name: "Ana", custom: {}, manual_stage_id: null };
 }
 
+function llamada(org: string, fecha: string): Fila {
+  return {
+    organization_id: org,
+    client_id: CLIENTE,
+    purpose: "delivery",
+    call_date: `${fecha}T15:00:00Z`,
+    resolution_method: null,
+    title: "1-1",
+    fathom_url: null,
+  };
+}
+
 function propuesta(id: string, org: string, status = "pending"): Fila {
   return {
     id,
@@ -365,7 +380,12 @@ beforeEach(() => {
     clients: [cliente(CLIENTE, ORG), cliente(CLIENTE_AJENO, OTRA_ORG)],
     client_checkpoint_proposals: [propuesta(PROPUESTA, ORG), propuesta("prop-ajena", OTRA_ORG)],
     client_tasks: [],
-    organizations: [{ id: ORG, client_silence_days: 20, timezone: null }],
+    // La de otra org va primero: si el umbral no filtrara por id, la leería.
+    organizations: [
+      { id: OTRA_ORG, client_silence_days: 99, timezone: null },
+      { id: ORG, client_silence_days: 20, timezone: null },
+    ],
+    fathom_calls: [],
   };
   consola = vi.spyOn(console, "error").mockImplementation(() => {});
   aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -544,9 +564,12 @@ describe("recorrido: fases y checkpoints", () => {
   });
 
   it("las escrituras filtran por organización", async () => {
+    // Con un orden distinto del índice que manda la pantalla: si el filtro
+    // faltara, reordenar le escribiría 0.
+    sim.tablas.client_journey_stages![1]!.sort_order = 5;
     await setJourneyStageArchivedAction(FASE_AJENA, true);
     await reorderJourneyStagesAction([FASE_AJENA]);
-    expect(sim.tablas.client_journey_stages?.[1]).toMatchObject({ archived_at: null, sort_order: 0 });
+    expect(sim.tablas.client_journey_stages?.[1]).toMatchObject({ archived_at: null, sort_order: 5 });
   });
 
   it("una fase con checkpoints no se borra", async () => {
@@ -883,9 +906,10 @@ describe("señales", () => {
   });
 
   it("cambia el umbral sólo de la organización de la sesión", async () => {
-    sim.tablas.organizations?.push({ id: OTRA_ORG, client_silence_days: 20 });
     await expect(setClientSilenceDaysAction(10)).resolves.toEqual({ success: true, data: 10 });
-    expect(sim.tablas.organizations?.map((o) => o.client_silence_days)).toEqual([10, 20]);
+    expect(
+      Object.fromEntries(sim.tablas.organizations!.map((o) => [o.id, o.client_silence_days]))
+    ).toEqual({ [ORG]: 10, [OTRA_ORG]: 99 });
   });
 });
 
@@ -1021,27 +1045,46 @@ describe("fase fijada, resumen y tablero", () => {
     });
   });
 
-  it("el resumen junta sesiones, tareas y recorrido", async () => {
+  it("el resumen junta sesiones, tareas y recorrido, sólo de la organización", async () => {
     sim.tablas.client_tasks = [
       { organization_id: ORG, client_id: CLIENTE, status: "pending", owner: "coach" },
+      { organization_id: OTRA_ORG, client_id: CLIENTE, status: "pending", owner: "coach" },
+    ];
+    sim.tablas.fathom_calls = [
+      llamada(ORG, "2026-08-01"),
+      llamada(ORG, "2026-08-15"),
+      llamada(ORG, "2026-09-01"),
+      llamada(OTRA_ORG, "2026-09-02"),
     ];
     const r = await getClientOverviewAction(CLIENTE);
-    expect(r).toEqual({
+    expect(r).toMatchObject({
       success: true,
       data: {
-        oneOnOne: { total: 3, daysSinceLast: 2 },
+        oneOnOne: { total: 3 },
         tasks: { pending: 1, coach: 1 },
         journey: { configured: true, reached: 0, total: 1, next: "Kickoff" },
       },
     });
+    expect(r.success && typeof r.data.oneOnOne?.daysSinceLast).toBe("number");
   });
 
-  it("⭐ si sólo el recorrido falla, el resumen sale igual y la falla queda registrada", async () => {
+  it("⭐ si sólo el recorrido falla, el resumen sale igual, sin 'sin recorrido configurado', y la falla queda registrada", async () => {
     sim.errores.client_checkpoints = { message: "TypeError: fetch failed" };
     const r = await getClientOverviewAction(CLIENTE);
-    expect(r.success && r.data.journey.configured).toBe(false);
+    expect(r.success && r.data.journey).toBeNull();
+    expect(r.success && r.data.oneOnOne).toEqual({ total: 0, daysSinceLast: null });
     expect(sim.reportes.map((x) => x.contexto)).toEqual([
       { lectura: "getClientOverview:recorrido" },
+    ]);
+  });
+
+  it("⭐ si las sesiones 1-1 no se pueden leer, esa celda viene vacía (no '0 sesiones') y la falla queda registrada", async () => {
+    sim.errores.fathom_calls = { message: "TypeError: fetch failed" };
+    const r = await getClientOverviewAction(CLIENTE);
+    expect(r.success && r.data.oneOnOne).toBeNull();
+    expect(r.success && r.data.journey).toMatchObject({ configured: true });
+    expect(sim.reportes.map((x) => x.contexto)).toEqual([
+      { lectura: "getClientOverview:sesiones" },
     ]);
   });
 
@@ -1070,5 +1113,231 @@ describe("fase fijada, resumen y tablero", () => {
       { id: EVENTO, organization_id: OTRA_ORG, client_id: CLIENTE, checkpoint_id: CHECKPOINT, reached_at: FECHA },
     ];
     await expect(listCheckpointEventsAction(CLIENTE)).resolves.toEqual({ success: true, data: [] });
+  });
+});
+
+// ─── AR pasada 1: el filtro por organización y la tabla ausente ─────────────
+
+const CP_AJENO = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+/** Las filas de esta org con su gemela de otra org (mismo id) al lado. */
+function conGemela(tabla: string, id: string) {
+  const propia = sim.tablas[tabla]!.find((f) => f.id === id)!;
+  const gemela: Fila = { ...structuredClone(propia), organization_id: OTRA_ORG };
+  sim.tablas[tabla]!.push(gemela);
+  return gemela;
+}
+
+describe("⭐ toda consulta del alcance filtra por la organización de la sesión", () => {
+  it.each(ACCIONES)("%s", async (nombre, correr) => {
+    if (SIN_DATOS_PREVIOS.has(nombre)) sim.tablas.client_journey_stages = [];
+    if (nombre === "deleteJourneyStage") sim.tablas.client_checkpoints = [];
+    await correr();
+    expect(sim.operaciones.length).toBeGreaterThan(0);
+    for (const op of sim.operaciones) {
+      if (op.op === "insert" || op.op === "upsert") {
+        const filas = Array.isArray(op.valores) ? op.valores : [op.valores];
+        for (const fila of filas) expect(fila, `${op.tabla}:${op.op}`).toMatchObject({ organization_id: ORG });
+        continue;
+      }
+      const columna = op.tabla === "organizations" ? "id" : "organization_id";
+      expect(op.filtros, `${op.tabla}:${op.op}`).toContainEqual([columna, ORG]);
+    }
+  });
+});
+
+describe("⭐ una fila de otra organización queda intacta o no se lee", () => {
+  beforeEach(() => {
+    sim.tablas.client_checkpoints!.push({
+      ...checkpoint(CP_AJENO, OTRA_ORG, FASE_AJENA, "Ajeno"),
+      sort_order: 5,
+    });
+    sim.tablas.client_journey_stages![1]!.sort_order = 5;
+    sim.tablas.field_definitions![1]!.sort_order = 5;
+  });
+
+  it("borrar una fase de otra org no la borra", async () => {
+    await deleteJourneyStageAction(FASE_AJENA);
+    expect(sim.tablas.client_journey_stages?.map((f) => f.id)).toContain(FASE_AJENA);
+  });
+
+  it("reordenar fases no toca la de otra org", async () => {
+    await reorderJourneyStagesAction([FASE_AJENA]);
+    expect(sim.tablas.client_journey_stages?.[1]).toMatchObject({ sort_order: 5 });
+  });
+
+  it("archivar, borrar y reordenar checkpoints no tocan el de otra org", async () => {
+    await setCheckpointArchivedAction(CP_AJENO, true);
+    await deleteCheckpointAction(CP_AJENO);
+    await reorderCheckpointsAction(FASE_AJENA, [CP_AJENO]);
+    expect(sim.tablas.client_checkpoints?.find((c) => c.id === CP_AJENO)).toMatchObject({
+      archived_at: null,
+      sort_order: 5,
+    });
+  });
+
+  it("un evento de otra org no impide borrar un checkpoint propio", async () => {
+    sim.tablas.client_checkpoint_events = [
+      { id: EVENTO, organization_id: OTRA_ORG, client_id: CLIENTE, checkpoint_id: CHECKPOINT, reached_at: FECHA },
+    ];
+    await expect(deleteCheckpointAction(CHECKPOINT)).resolves.toEqual({ success: true, data: undefined });
+  });
+
+  it("los checkpoints son sólo los de la org", async () => {
+    const r = await listCheckpointsAction();
+    expect(r.success && r.data.map((c) => c.id)).toEqual([CHECKPOINT]);
+  });
+
+  it("editar y borrar una columna no tocan su gemela de otra org", async () => {
+    const gemela = conGemela("field_definitions", COLUMNA);
+    await updateFieldDefinitionAction({ id: COLUMNA, label: "Meta" });
+    expect(gemela.label).toBe("Objetivo");
+    await deleteFieldDefinitionAction(COLUMNA);
+    expect(sim.tablas.field_definitions).toContain(gemela);
+  });
+
+  it("archivar y reordenar no tocan la columna de otra org", async () => {
+    await setFieldDefinitionArchivedAction(COLUMNA_AJENA, true);
+    await reorderFieldDefinitionsAction("client", [COLUMNA_AJENA]);
+    expect(sim.tablas.field_definitions?.[1]).toMatchObject({ archived_at: null, sort_order: 5 });
+  });
+
+  it("el seguimiento es sólo de los clientes de la org", async () => {
+    expect(Object.keys(await listClientTrackingAction())).toEqual([CLIENTE]);
+  });
+
+  it("objetivo y satisfacción no tocan un cliente de otra org", async () => {
+    await updateClientTrackingAction(CLIENTE_AJENO, { goalText: "pisado" });
+    await updateClientSatisfactionAction(CLIENTE_AJENO, "conforme");
+    expect(sim.tablas.clients?.[1]).not.toHaveProperty("goal_text");
+    expect(sim.tablas.clients?.[1]).not.toHaveProperty("satisfaction");
+  });
+
+  it("el umbral es el de la org (no el de la primera fila)", async () => {
+    await expect(getClientSilenceDaysAction()).resolves.toEqual({ success: true, data: 20 });
+  });
+
+  it("registrar un hito no cambia el estado ni la fase de la gemela de otra org", async () => {
+    sim.tablas.client_checkpoints![0]!.sets_client_status = "success_case";
+    const gemela = conGemela("clients", CLIENTE);
+    await recordCheckpointAction({ clientId: CLIENTE, checkpointId: CHECKPOINT });
+    expect(sim.tablas.clients?.[0]).toMatchObject({ status: "success_case", current_stage_id: FASE });
+    expect(gemela).not.toHaveProperty("status");
+    expect(gemela).not.toHaveProperty("current_stage_id");
+  });
+
+  it("fijar la fase y guardar los campos no tocan la gemela de otra org", async () => {
+    const gemela = conGemela("clients", CLIENTE);
+    await setClientManualStageAction({ clientId: CLIENTE, stageId: FASE });
+    await updateClientCustomFieldsAction({ clientId: CLIENTE, values: { objetivo: "50k" } });
+    expect(gemela).toMatchObject({ manual_stage_id: null, custom: {} });
+  });
+
+  it("la próxima tarea del tablero no trae tareas de otra org", async () => {
+    sim.tablas.client_tasks = [
+      {
+        id: "t-ajena",
+        organization_id: OTRA_ORG,
+        client_id: CLIENTE,
+        title: "Ajena",
+        description: null,
+        owner: "coach",
+        status: "pending",
+        due_date: null,
+        source: "manual",
+        source_call_id: null,
+        workboard_task_id: null,
+        completed_at: null,
+        created_at: FECHA,
+      },
+    ];
+    const r = await getClientsBoardAction();
+    expect(r.success && r.data.nextTask).toEqual({});
+  });
+
+  it("los estados del recorrido no cuentan eventos de otra org", async () => {
+    const antes = await getClientsJourneyStatusAction();
+    sim.tablas.client_checkpoint_events = [
+      { id: EVENTO, organization_id: OTRA_ORG, client_id: CLIENTE, checkpoint_id: CHECKPOINT, reached_at: FECHA, metrics: {}, note: null, recorded_by: null, source: "manual", created_at: FECHA, updated_at: FECHA },
+    ];
+    const despues = await getClientsJourneyStatusAction();
+    expect(despues).toEqual(antes);
+    expect(despues.success && despues.data[CLIENTE]?.reached).toBe(0);
+  });
+});
+
+describe("⭐ antes de su migración, una tabla ausente cuenta como vacía", () => {
+  const ausente = (tabla: string) => ({ message: `relation "public.${tabla}" does not exist` });
+  const CASOS: Array<[string, string, () => Promise<unknown>, unknown]> = [
+    ["fases", "client_journey_stages", () => listJourneyStagesAction(), { success: true, data: [] }],
+    ["checkpoints", "client_checkpoints", () => listCheckpointsAction(), { success: true, data: [] }],
+    ["eventos", "client_checkpoint_events", () => listCheckpointEventsAction(CLIENTE), { success: true, data: [] }],
+    ["eventos en los estados", "client_checkpoint_events", () => getClientsJourneyStatusAction(), { success: true, data: {} }],
+    ["columnas", "field_definitions", () => listClientFieldDefinitionsAction(), { success: true, data: [] }],
+    ["columnas (tipo fijo)", "field_definitions", () => listFieldDefinitionsAction(), []],
+    ["seguimiento", "clients", () => listClientTrackingAction(), {}],
+    ["propuestas", "client_checkpoint_proposals", () => listCheckpointProposalsAction(), { success: true, data: [] }],
+  ];
+
+  it.each(CASOS)("%s: vacío, sin registrar", async (_n, tabla, correr, vacio) => {
+    sim.errores[tabla] = ausente(tabla);
+    await expect(correr()).resolves.toEqual(vacio);
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("las fechas de los hitos de la revisión: vacías, sin registrar", async () => {
+    sim.errores["client_checkpoint_events"] = ausente("client_checkpoint_events");
+    const r = await getWeeklyReviewAction();
+    expect(r.success).toBe(true);
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it.each(CASOS)("%s: cualquier otro error se registra (y, si la acción devuelve valor, es el texto fijo)", async (_n, tabla, correr, vacio) => {
+    sim.errores[tabla] = { message: "canceling statement due to statement timeout" };
+    const r = await correr();
+    // Las dos de tipo fijo devuelven vacío a propósito, pero registrado.
+    if (typeof vacio === "object" && vacio !== null && "success" in vacio) {
+      expect(r).toEqual({ success: false, error: ERROR_INESPERADO });
+    }
+    expect(sim.reportes.length).toBeGreaterThan(0);
+  });
+});
+
+describe("⭐ crear una propuesta (service role) exige cliente y checkpoint de la org", () => {
+  const entrada = (clientId: string, checkpointId: string) => ({
+    clientId,
+    checkpointId,
+    source: "fathom" as const,
+  });
+
+  it("un cliente de otra org no existe", async () => {
+    await expect(createCheckpointProposalAction(entrada(CLIENTE_AJENO, CHECKPOINT))).resolves.toEqual({
+      success: false,
+      error: "El cliente no existe",
+    });
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("un checkpoint de otra org no existe", async () => {
+    sim.tablas.client_checkpoints!.push(checkpoint(CP_AJENO, OTRA_ORG, FASE_AJENA, "Ajeno"));
+    await expect(createCheckpointProposalAction(entrada(CLIENTE, CP_AJENO))).resolves.toEqual({
+      success: false,
+      error: "El checkpoint no existe",
+    });
+  });
+
+  it("si no se puede verificar, es una falla y no se propone nada", async () => {
+    sim.errores.clients = { message: "TypeError: fetch failed" };
+    await expect(createCheckpointProposalAction(entrada(CLIENTE, CHECKPOINT))).resolves.toEqual({
+      success: false,
+      error: ERROR_INESPERADO,
+    });
+  });
+
+  it("con los dos de la org, propone", async () => {
+    await expect(createCheckpointProposalAction(entrada(CLIENTE, CHECKPOINT))).resolves.toEqual({
+      success: true,
+      data: { created: true },
+    });
   });
 });

@@ -61,6 +61,56 @@ export function cargarResumenDelCliente(clientId: string) {
   );
 }
 
+const NO_SE_PUDO = "no se pudo cargar";
+
+type Celda = { valor: string | number; detalle: string };
+
+/**
+ * Lo que dicen las tres celdas que vienen del servidor (SCRUM-517). Sin dato
+ * todavía, «—» y "cargando…"; si la lectura entera falló, «—» y "no se pudo
+ * cargar". Si sólo falló una celda (las sesiones 1-1 o el recorrido vienen en
+ * `null`), esa celda dice "no se pudo cargar" y las otras se muestran: antes
+ * una falla se leía como "0 sesiones" o "sin recorrido configurado".
+ */
+export function celdasDelResumen(
+  data: ClientOverview | null,
+  motivo: string | null
+): { sesiones: Celda; tareas: Celda; recorrido: Celda } {
+  const sinDato: Celda = { valor: "—", detalle: motivo ? NO_SE_PUDO : "cargando…" };
+  if (!data) return { sesiones: sinDato, tareas: sinDato, recorrido: sinDato };
+
+  const fallo: Celda = { valor: "—", detalle: NO_SE_PUDO };
+  const { oneOnOne, tasks, journey } = data;
+
+  return {
+    sesiones: oneOnOne
+      ? { valor: oneOnOne.total, detalle: antiguedad(oneOnOne.daysSinceLast) }
+      : fallo,
+    tareas: {
+      valor: tasks.pending,
+      detalle:
+        tasks.pending === 0
+          ? "al día"
+          : tasks.coach > 0
+            ? `${tasks.coach} le ${tasks.coach === 1 ? "toca" : "tocan"} al coach`
+            : "todas del cliente",
+    },
+    recorrido: journey
+      ? {
+          valor:
+            journey.configured && journey.total > 0
+              ? `${journey.reached} de ${journey.total}`
+              : "—",
+          detalle: journey.next
+            ? `sigue: ${journey.next}`
+            : journey.configured && journey.total > 0
+              ? "completo"
+              : "sin recorrido configurado",
+        }
+      : fallo,
+  };
+}
+
 export function ClientOverviewStrip({
   clientId,
   satisfaction,
@@ -103,14 +153,7 @@ export function ClientOverviewStrip({
       : null;
   const nivel = nivelId ? ETIQUETAS_DE_SATISFACCION[nivelId] : null;
 
-  const journey = data?.journey;
-  const recorrido =
-    journey && journey.configured && journey.total > 0
-      ? `${journey.reached} de ${journey.total}`
-      : "—";
-
-  /** Lo que dice una celda sin dato: cargando, o que no se pudo. */
-  const sinDato = motivo ? "no se pudo cargar" : "cargando…";
+  const { sesiones, tareas, recorrido } = celdasDelResumen(data, motivo);
 
   const celda =
     "bg-card/60 px-4 py-3.5 dark:bg-white/[0.02] sm:px-5 [&_.metric-stat-value]:text-[1.5rem] [&_.metric-stat-value]:leading-8";
@@ -125,40 +168,24 @@ export function ClientOverviewStrip({
           <MetricStat
             icon={<Phone />}
             title="Sesiones 1-1"
-            value={data ? data.oneOnOne.total : "—"}
-            subtitle={data ? antiguedad(data.oneOnOne.daysSinceLast) : sinDato}
+            value={sesiones.valor}
+            subtitle={sesiones.detalle}
           />
         </div>
         <div className={celda}>
           <MetricStat
             icon={<ClipboardList />}
             title="Tareas pendientes"
-            value={data ? data.tasks.pending : "—"}
-            subtitle={
-              data
-                ? data.tasks.pending === 0
-                  ? "al día"
-                  : data.tasks.coach > 0
-                    ? `${data.tasks.coach} le ${data.tasks.coach === 1 ? "toca" : "tocan"} al coach`
-                    : "todas del cliente"
-                : sinDato
-            }
+            value={tareas.valor}
+            subtitle={tareas.detalle}
           />
         </div>
         <div className={celda}>
           <MetricStat
             icon={<Flag />}
             title="Recorrido"
-            value={recorrido}
-            subtitle={
-              journey?.next
-                ? `sigue: ${journey.next}`
-                : journey?.configured && journey.total > 0
-                  ? "completo"
-                  : data
-                    ? "sin recorrido configurado"
-                    : sinDato
-            }
+            value={recorrido.valor}
+            subtitle={recorrido.detalle}
           />
         </div>
         <div className={celda}>
