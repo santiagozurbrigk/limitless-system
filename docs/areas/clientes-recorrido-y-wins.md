@@ -136,6 +136,21 @@ Ficha: acceptCheckpointProposalAction → recordCheckpointAction (mismas validac
   `[FASE-MANUAL-SIN-PLAZOS]`.
 - **Fase actual = la del hito más avanzado en el orden del recorrido**, no el más reciente por fecha. El «n de m» cuenta
   sólo la fase actual y sin archivados.
+- **Errores como valor (SCRUM-517).** Las acciones de `checkpoint-actions.ts`, `checkpoint-event-actions.ts`,
+  `checkpoint-derived-actions.ts`, `custom-field-actions.ts`, `client-custom-fields-actions.ts`, `tracking-actions.ts`,
+  `signals-actions.ts`, `stage-actions.ts`, `overview-actions.ts` y `clients-board-actions.ts` devuelven `MutationResult`
+  con `mutacionConErroresEsperables`: un rechazo esperable (validación, sesión, sólo el founder, add-on, fase,
+  checkpoint, columna o cliente inexistente o de otra org) vuelve con su motivo; una falla de la base va a Sentry
+  (tag `server_action`) y el usuario ve el texto fijo. Las pantallas (recorrido, campos, revisión semanal) y la ficha
+  y la lista muestran el motivo en vez de una lista vacía. Dos lecturas conservan su tipo porque las usan Wins y la
+  bandeja de onboarding: `listFieldDefinitionsAction` y `listClientTrackingAction` registran la falla
+  (`lecturaDegradable`, tag `lectura_degradada`) y devuelven vacío.
+- **Las escrituras validan con lecturas que lanzan** (`lib/checkpoints/lecturas-del-recorrido.ts`,
+  `lib/custom-fields/leer-columnas.ts`). Si no se pueden leer las fases, los checkpoints o las columnas, la escritura
+  no sigue: antes una falla se volvía un rechazo falso («La fase elegida no existe»), una clave repetida o un
+  «Datos del cliente guardados» sin lo editado. Si no se puede saber si un checkpoint o una columna están en uso, no
+  se borra y es una falla (antes decía que había datos cargados). Si el recálculo de la fase después de registrar o
+  deshacer un hito falla, el registro vale, la falla va a Sentry y la fase no se pisa con una vacía.
 - **Deshacer un hito no revierte `clients.status`** (sería adivinar a cuál volver); sí recalcula la fase.
 - **Aceptar una propuesta pasa por `recordCheckpointAction`.** Es lo que impide que el buzón sea una puerta trasera.
   Efecto colateral: el evento queda con `source = 'manual'` y se pierde que vino de Discord/Fathom (`[C3-ORIGEN-PROPUESTA]`).

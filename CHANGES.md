@@ -28,6 +28,27 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-12 — Clientes, seguimiento: errores esperables como valor (SCRUM-517)
+
+**Rama:** `fix/SCRUM-517-clientes-seguimiento-errores`
+**Commit(s):** `c913295e`: fix(clientes): errores esperables como valor en el seguimiento de clientes; este (docs)
+**Módulo(s) afectado(s):** Clientes: `app/clients/{checkpoint-actions,custom-field-actions,tracking-actions,signals-actions,checkpoint-derived-actions,checkpoint-event-actions,stage-actions,overview-actions,clients-board-actions,client-custom-fields-actions}.ts`, `lib/checkpoints/lecturas-del-recorrido.ts`, `lib/custom-fields/leer-columnas.ts`, `lib/auth/exigir-add-on.ts`, `app/(platform)/clients/{checkpoints,campos,revision}/page.tsx`, `components/clients/{checkpoints/journey-page,checkpoints/client-journey-section,custom-fields/custom-fields-page,weekly-review/weekly-review-page,wins/wins-dashboard,client-notes-section,client-satisfaction-section,client-custom-fields-section,client-detail,client-overview-strip,clients-list}.tsx`; docs `areas/clientes-recorrido-y-wins.md`, `operacion/testing.md`, `PENDIENTES.md`
+
+**Qué se hizo:** avance de `[ACTIONS-ERRORES-EN-PRODUCCION]` (historia SCRUM-496).
+- Las 34 funciones del conteo en esos diez archivos (30 con `runMutation`, que le mostraban al usuario el texto crudo de la base, y 4 lecturas que lanzaban sin sesión: el tablero de la lista, el resumen de la ficha, las señales y el umbral de "sin novedades") pasan a `mutacionConErroresEsperables`. Validación, sesión, sólo el founder, add-on, nombre repetido, fase, checkpoint, columna, propuesta o cliente inexistente o de otra org vuelven con su motivo (`ErrorEsperable`); lo demás es `FallaDeLaBase`, se registra, va a Sentry con su etiqueta y el usuario ve el texto fijo.
+- Las 13 lecturas de esos archivos que atrapaban todo y devolvían `[]` o `{}` dejan de esconder la falla: 11 devuelven `MutationResult` y 2 (`listFieldDefinitionsAction`, `listClientTrackingAction`, que usan Wins y la bandeja de onboarding) la registran con `lecturaDegradable`.
+- Las escrituras validan con lecturas que lanzan. Antes, con la base caída: crear un checkpoint decía "La fase elegida no existe", fijar la fase decía "Esa fase no existe en tu recorrido", borrar un checkpoint o una columna decía que había datos cargados, crear una columna podía repetir una clave, guardar los campos de un cliente decía "guardados" sin guardar lo editado, y el recálculo de la fase después de registrar un hito la dejaba en blanco. El umbral de "sin novedades" sólo cae en el de por defecto si la columna no existe.
+- `exigirAddOn` traduce `requireAddOn` (un `Error` común) a `ErrorEsperable` con el mismo texto.
+- Pantallas: `/clients/checkpoints`, `/clients/campos` y `/clients/revision` muestran el motivo (`EmptyState`); recargas, botones y diálogos usan `leerConMotivo`/`correrMutacion`; la ficha (resumen, recorrido, campos) y la lista (tablero, señales) muestran `AvisoDeLecturaFallida`.
+- Tests: `app/clients/__tests__/seguimiento-errores-como-valor.test.ts` (250 en el runner: las 45 acciones con éxito, sin sesión, `TypeError("fetch failed")` y error de supabase-js, más los rechazos, el filtro por organización y las escrituras que ya no validan contra una lectura vacía) y `components/clients/__tests__/seguimiento-pantallas-errores-como-valor.test.ts` (46). Control negativo con las acciones de `origin/main`: 159 fallan; con los componentes en la forma vieja: 32 fallan.
+- Reconteo (`contar-throws.cjs` de SCRUM-504): 401 → **367 funciones** en 70 archivos; 0 en los diez archivos.
+
+**Por qué / finalidad:** en producción el cliente recibe un digest cuando una server action lanza, y `runMutation` devolvía el mensaje de la base en inglés; varias lecturas mostraban vacío ("Todavía no hay un recorrido", "Ningún cliente pide atención esta semana") cuando la base había fallado.
+
+**Decisiones de diseño relevantes:** `listFieldDefinitionsAction` y `listClientTrackingAction` conservan su tipo porque las llaman archivos de SCRUM-516 (Wins, sub-clientes); esa tarea puede pasar sus escrituras a `leerColumnas`. Las lecturas nuevas de `lib/` reciben el cliente de Supabase y tratan una tabla ausente como vacía, igual que antes. El recorrido es la parte opcional del resumen de la ficha: si falla, esa celda queda en «—» y la falla se registra. Un cliente de otra organización en el resumen ahora es "No se encontró el cliente" en vez de ceros. En los `Promise.all`, las consultas armadas en el lugar van primero para que un `from()` que lanza no deje rechazos sin atender.
+
+**Riesgos / deuda técnica pendiente:** quedan en Clientes 44 funciones, todas de SCRUM-516 (`getWeeklyReviewAction` y `getClientsBoardAction` siguen llamando a `listWinsAction`, `listClientBaselinesAction`, `getRevenueByClientAction` y `listClientsAction` con su tipo de hoy: si SCRUM-516 lo cambia, el merge los adapta). `getCurrentProfile` y `loadEnabledAddOns` (compartidos) devuelven `null`/`[]` si la base falla: un founder con la base caída ve "Solo el founder…" o "no está habilitada" en vez del texto fijo; queda fuera del alcance.
+
 ### 2026-10-10 — Pantallas de error propias y una plataforma que no se cae entera (SCRUM-108)
 
 **Rama:** `fix/SCRUM-108-paginas-de-error`
