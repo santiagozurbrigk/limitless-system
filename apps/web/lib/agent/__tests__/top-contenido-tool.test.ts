@@ -8,12 +8,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sim = vi.hoisted(() => ({
   respuesta: { piezas: [] as Array<Record<string, unknown>>, sinMetricas: 0 },
+  fallas: {} as Record<string, string>,
 }));
 
-vi.mock("@/app/marketing/content/actions", () => ({
-  // Devuelve `MutationResult` (SCRUM-502).
-  getTopPerformingContentAction: async () => ({ success: true, data: sim.respuesta }),
-}));
+// Las tres acciones de Contenido devuelven `MutationResult` (SCRUM-502).
+vi.mock("@/app/marketing/content/actions", () => {
+  const resultado = (nombre: string, data: unknown) =>
+    sim.fallas[nombre] ? { success: false, error: sim.fallas[nombre] } : { success: true, data };
+  return {
+    getTopPerformingContentAction: async () => resultado("top", sim.respuesta),
+    analyzeContentPieceAction: async () =>
+      resultado("analizar", {
+        formato: { name: "F" },
+        dolor: { name: "D" },
+        angulo: { name: "A" },
+        why_it_worked: "W",
+      }),
+    createContentVariantsAction: async () => resultado("variantes", ["v1", "v2"]),
+  };
+});
 
 import { createAgentToolHandler } from "../agent-tool-handler";
 
@@ -26,9 +39,16 @@ function handler() {
   });
 }
 
+beforeEach(() => {
+  sim.respuesta = { piezas: [], sinMetricas: 0 };
+  sim.fallas = {};
+});
+
 describe("get_top_performing_content", () => {
-  beforeEach(() => {
-    sim.respuesta = { piezas: [], sinMetricas: 0 };
+  it("⭐ (SCRUM-502) si la acción vuelve con error, el agente recibe el motivo", async () => {
+    sim.fallas.top = "Sesión no válida";
+    const json = JSON.parse(await handler()("get_top_performing_content", { metric: "views" }));
+    expect(json).toEqual({ success: false, error: "Sesión no válida" });
   });
 
   it("⭐ con piezas sin métricas incluye piezas_sin_metricas en la respuesta", async () => {
@@ -48,5 +68,23 @@ describe("get_top_performing_content", () => {
     sim.respuesta = { piezas: [{ id: "p1", score: 10 }], sinMetricas: 0 };
     const json = JSON.parse(await handler()("get_top_performing_content", { metric: "views" }));
     expect(json).not.toHaveProperty("piezas_sin_metricas");
+  });
+});
+
+describe("analyze_content_piece y create_content_variants (SCRUM-502)", () => {
+  it("con éxito devuelven el análisis y las variantes", async () => {
+    const analisis = JSON.parse(await handler()("analyze_content_piece", { content_piece_id: "p1" }));
+    expect(analisis).toMatchObject({ success: true, analysis: { formato: "F", dolor: "D", angulo: "A" } });
+    const variantes = JSON.parse(await handler()("create_content_variants", { source_content_id: "p1", count: 2 }));
+    expect(variantes).toMatchObject({ success: true, variant_ids: ["v1", "v2"], count: 2 });
+  });
+
+  it("⭐ si la acción vuelve con error, el agente recibe el motivo", async () => {
+    sim.fallas.analizar = "Esta pieza no tiene un video de Drive vinculado.";
+    sim.fallas.variantes = "Ocurrió un error inesperado. Intentá de nuevo.";
+    const analisis = JSON.parse(await handler()("analyze_content_piece", { content_piece_id: "p1" }));
+    expect(analisis).toMatchObject({ success: false, error: "Esta pieza no tiene un video de Drive vinculado." });
+    const variantes = JSON.parse(await handler()("create_content_variants", { source_content_id: "p1" }));
+    expect(variantes).toEqual({ success: false, error: "Ocurrió un error inesperado. Intentá de nuevo." });
   });
 });
