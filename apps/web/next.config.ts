@@ -32,6 +32,11 @@ const nextConfig: NextConfig = {
   },
   transpilePackages: ["@ai-coo/ui", "@ai-coo/types"],
   experimental: {
+    // Compila webpack en un proceso aparte que termina al compilar (SCRUM-518).
+    // Next lo apaga solo si hay un `webpack` propio, y `withSentryConfig` lo
+    // define: sin esto el proceso principal retenía la memoria de la compilación
+    // durante lint y tipos, y un deploy de producción murió sin memoria (8 GB).
+    webpackBuildWorker: true,
     serverActions: {
       // Adjuntos de la bandeja de ventas (Unipile permite hasta 15MB).
       bodySizeLimit: "16mb",

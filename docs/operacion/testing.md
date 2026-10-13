@@ -175,7 +175,7 @@ Los cuatro jobs corren en paralelo, con permisos de sólo lectura sobre el repo 
 | `migrations` | servicio `pgvector/pgvector:pg17` → `supabase/ci/check-migrations.sh` (nombres, versiones únicas, todas desde cero, tests de RLS) |
 | `backlog` | checkout → Python 3.12 → `pendientes_a_jira.py --check` → `historias_a_jira.py --check` |
 
-`web-build` frena lo que pasa `tsc` y lint pero rompe `next build`, por ejemplo un import de servidor (`next/headers`) en un componente cliente. Como `next build` también revisa los tipos de todo lo que incluye el `tsconfig.json` de web, un error en un archivo del reel-worker que web importa en sus tests (`org-path.ts`) aparece en los dos jobs. La caché de `.next/cache` se guarda por rama; un PR arranca con la de `main`.
+`web-build` frena lo que pasa `tsc` y lint pero rompe `next build`, por ejemplo un import de servidor (`next/headers`) en un componente cliente. Como `next build` también revisa los tipos de todo lo que incluye el `tsconfig.json` de web, un error en un archivo del reel-worker que web importa en sus tests (`org-path.ts`) aparece en los dos jobs. La caché de `.next/cache` se guarda por rama; un PR arranca con la de `main`. Los checks del CI no son obligatorios para mergear (`main` sin protección, `[MAIN-SIN-PROTECCION]`): un PR en rojo se puede mergear, y entonces lo frena recién el build de Vercel, que también revisa tipos y lint.
 
 Tiempos medidos el 2026-10-07 (SCRUM-261), con los cuatro jobs en paralelo:
 
