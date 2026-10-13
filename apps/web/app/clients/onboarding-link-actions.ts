@@ -17,6 +17,7 @@ import {
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { orgHasAddOn } from "@/lib/auth/add-ons";
+import { exigirAddOn } from "@/lib/auth/exigir-add-on";
 import {
   ONBOARDING_LINK_COLUMNS,
   ONBOARDING_SUBMISSION_COLUMNS,
@@ -69,20 +70,9 @@ function nuevoToken(): string {
  * lecturas mostraban "sin link" ante una falla, con el botón de generar otro.
  */
 
-/** El mismo texto que `requireAddOn`, como rechazo esperable. */
-const SIN_ADD_ON = "Esta función no está habilitada para tu organización.";
 const FALTA_LA_MIGRACION = "Falta aplicar la migración del onboarding en la base.";
 const CLIENTE_AJENO = "No se encontró ese cliente en tu organización.";
 const SUB_CLIENTE_INEXISTENTE = "Ese cliente ya no existe.";
-
-/**
- * `requireAddOn` lanza un `Error` común, que `mutacionConErroresEsperables`
- * tomaría como falla. Es la misma pregunta (`orgHasAddOn`) con el mismo texto,
- * como `ErrorEsperable`.
- */
-async function exigirGrowthPartners(organizationId: string) {
-  if (!(await orgHasAddOn(organizationId, ADD_ON))) throw new ErrorEsperable(SIN_ADD_ON);
-}
 
 function errorDeAlta(error: { message: string; code?: string | null }): Error {
   if (isMissingTableError(error.message)) return new ErrorEsperable(FALTA_LA_MIGRACION);
@@ -159,7 +149,7 @@ export async function createOnboardingLinkAction(
   return mutacionConErroresEsperables("[createOnboardingLink]", async () => {
     if (!idSchema.safeParse(subClientId).success) throw new ErrorEsperable("Cliente inválido.");
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const profile = await getCurrentProfile();
     const supabase = await createClient();
 
@@ -214,7 +204,7 @@ export async function revokeOnboardingLinkAction(
   return mutacionConErroresEsperables("[revokeOnboardingLink]", async () => {
     if (!idSchema.safeParse(linkId).success) throw new ErrorEsperable("Link inválido.");
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const { error } = await supabase
@@ -276,7 +266,7 @@ export async function createGeneralOnboardingLinkAction(): Promise<
 > {
   return mutacionConErroresEsperables("[createGeneralOnboardingLink]", async () => {
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const profile = await getCurrentProfile();
     const supabase = await createClient();
 
@@ -333,7 +323,7 @@ export async function discardOnboardingSubmissionAction(
   return mutacionConErroresEsperables("[discardOnboardingSubmission]", async () => {
     if (!idSchema.safeParse(submissionId).success) throw new ErrorEsperable("Envío inválido.");
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const { admin } = await envioPendiente(organizationId, submissionId);
 
     const { error } = await admin
@@ -394,7 +384,7 @@ export async function assignOnboardingSubmissionAction(
     const v = parsed.data;
 
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const profile = await getCurrentProfile();
     const supabase = await createClient();
     const { admin, envio } = await envioPendiente(organizationId, v.submissionId);

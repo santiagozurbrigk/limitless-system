@@ -20,6 +20,7 @@ import {
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { orgHasAddOn } from "@/lib/auth/add-ons";
+import { exigirAddOn } from "@/lib/auth/exigir-add-on";
 import { leerColumnas } from "@/lib/custom-fields/leer-columnas";
 import { activeFields, mergeCustomFieldValues, validateFieldValues } from "@/lib/custom-fields";
 import {
@@ -88,19 +89,8 @@ function revalidar(clientId: string) {
  * devolvía `[]` ante una falla: la ficha decía "Todavía no cargaste clientes".
  */
 
-/** El mismo texto que `requireAddOn`, como rechazo esperable. */
-const SIN_ADD_ON = "Esta función no está habilitada para tu organización.";
 const CLIENTE_AJENO = "No se encontró ese cliente en tu organización.";
 const SUB_CLIENTE_INEXISTENTE = "Ese cliente ya no existe.";
-
-/**
- * `requireAddOn` lanza un `Error` común, que `mutacionConErroresEsperables`
- * tomaría como falla. Es la misma pregunta (`orgHasAddOn`) con el mismo texto,
- * como `ErrorEsperable`.
- */
-async function exigirGrowthPartners(organizationId: string) {
-  if (!(await orgHasAddOn(organizationId, ADD_ON))) throw new ErrorEsperable(SIN_ADD_ON);
-}
 
 function linkOError(raw: string | null | undefined): string | null {
   const link = normalizeInstagramUrl(raw);
@@ -158,7 +148,7 @@ export async function createSubClientAction(
     const instagramUrl = linkOError(parsed.data.instagramUrl);
 
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const profile = await getCurrentProfile();
     const supabase = await createClient();
 
@@ -209,7 +199,7 @@ export async function updateSubClientAction(
     const instagramUrl = linkOError(parsed.data.instagramUrl);
 
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const { data, error } = await supabase
@@ -244,7 +234,7 @@ export async function updateSubClientFieldsAction(
     const { id, values } = parsed.data;
 
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const { data: current, error: readError } = await supabase
@@ -281,7 +271,7 @@ export async function updateSubClientFieldsAction(
 export async function deleteSubClientAction(id: string): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[deleteSubClient]", async () => {
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const { data, error } = await supabase
@@ -316,7 +306,7 @@ export async function moveLegacySectionValuesAction(
     const { clientId, subClientId } = parsed.data;
 
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const [{ data: client, error: clientError }, { data: sub, error: subError }] =

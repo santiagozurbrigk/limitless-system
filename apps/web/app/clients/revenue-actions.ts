@@ -19,6 +19,7 @@ import {
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { orgHasAddOn } from "@/lib/auth/add-ons";
+import { exigirAddOn } from "@/lib/auth/exigir-add-on";
 import { createClient } from "@/lib/supabase/server";
 import {
   ErrorEsperable,
@@ -71,18 +72,7 @@ const entrySchema = z.object({
  * facturación cargada".
  */
 
-/** El mismo texto que `requireAddOn`, como rechazo esperable. */
-const SIN_ADD_ON = "Esta función no está habilitada para tu organización.";
 const CLIENTE_AJENO = "No se encontró ese cliente en tu organización.";
-
-/**
- * `requireAddOn` lanza un `Error` común, que `mutacionConErroresEsperables`
- * tomaría como falla. Es la misma pregunta (`orgHasAddOn`) con el mismo texto,
- * como `ErrorEsperable`.
- */
-async function exigirGrowthPartners(organizationId: string) {
-  if (!(await orgHasAddOn(organizationId, ADD_ON))) throw new ErrorEsperable(SIN_ADD_ON);
-}
 
 export async function listClientRevenueAction(
   clientId: string
@@ -127,7 +117,7 @@ export async function saveClientRevenueAction(
     if (!period) throw new ErrorEsperable("Ese mes no se entiende. Elegilo del calendario.");
 
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const profile = await getCurrentProfile();
     const supabase = await createClient();
 
@@ -189,7 +179,7 @@ export async function deleteClientRevenueAction(
 ): Promise<MutationResult<void>> {
   return mutacionConErroresEsperables("[deleteClientRevenue]", async () => {
     const organizationId = await requireOrganizationId();
-    await exigirGrowthPartners(organizationId);
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const { error } = await supabase

@@ -688,6 +688,44 @@ describe("getRevenueByClientAction (la compone el tablero de Clientes)", () => {
   });
 });
 
+// ─── Add-on (MENOR-1 de la AR de SCRUM-516) ─────────────────────────────────
+
+describe("las 12 escrituras sin el add-on growth_partners (exigirAddOn de SCRUM-517)", () => {
+  // Antes cada archivo tenía su copia de `exigirGrowthPartners`; ahora las tres
+  // usan `exigirAddOn` (`lib/auth/exigir-add-on.ts`): misma pregunta, mismo
+  // texto que `requireAddOn`, como `ErrorEsperable`.
+  const escrituras = [
+    ["createSubClientAction", () => createSubClientAction({ clientId: CLIENTE, name: "Otra" })],
+    ["updateSubClientAction", () => updateSubClientAction({ id: SUB, name: "Otra" })],
+    ["updateSubClientFieldsAction", () => updateSubClientFieldsAction({ id: SUB, values: { seguidores: "1" } })],
+    ["deleteSubClientAction", () => deleteSubClientAction(SUB)],
+    ["moveLegacySectionValuesAction", () => moveLegacySectionValuesAction({ clientId: CLIENTE, subClientId: SUB })],
+    ["createOnboardingLinkAction", () => createOnboardingLinkAction(SUB)],
+    ["revokeOnboardingLinkAction", () => revokeOnboardingLinkAction(LINK)],
+    ["createGeneralOnboardingLinkAction", () => createGeneralOnboardingLinkAction()],
+    ["discardOnboardingSubmissionAction", () => discardOnboardingSubmissionAction(ENVIO)],
+    ["assignOnboardingSubmissionAction", () => assignOnboardingSubmissionAction({ submissionId: ENVIO, clientId: CLIENTE })],
+    ["saveClientRevenueAction", () => saveClientRevenueAction({ clientId: CLIENTE, amount: 1, period: "2026-10" })],
+    ["deleteClientRevenueAction", () => deleteClientRevenueAction(MES)],
+  ] as const;
+
+  it.each(escrituras)(
+    "⭐ %s: el motivo de requireAddOn, sin escribir, sin leer nada más y sin reportar",
+    async (_n, correr) => {
+      base.addOn = false;
+      await expect(correr()).resolves.toEqual({ success: false, error: SIN_ADD_ON });
+      expect(base.operaciones).toEqual([]);
+      expect(base.reportes).toEqual([]);
+      expect(consola).not.toHaveBeenCalled();
+    }
+  );
+
+  it("el texto es el de lib/auth/exigir-add-on.ts y el de requireAddOn", async () => {
+    const { ADD_ON_NO_HABILITADO } = await import("@/lib/auth/exigir-add-on");
+    expect(ADD_ON_NO_HABILITADO).toBe(SIN_ADD_ON);
+  });
+});
+
 // ─── Lo inesperado ──────────────────────────────────────────────────────────
 
 describe("lo inesperado (SCRUM-516)", () => {
