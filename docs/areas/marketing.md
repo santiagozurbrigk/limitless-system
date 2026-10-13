@@ -227,6 +227,30 @@ como JSON.
 
 ## Reglas de negocio y decisiones no obvias
 
+- **Errores como valor en Contenido (SCRUM-502).** Las acciones de piezas, borradores, análisis, variantes,
+  ranking y atribución (`app/marketing/content/actions.ts`), las lecturas y ediciones de Trial Reels
+  (`getReelVariationJobAction`, `listReelVariationJobsForPieceAction`, `updateReelVariationAction`,
+  `setReelVariationDelayAction`, `refreshVariationPreviewUrlsAction`), la ruta de la música
+  (`getReelMusicPathAction`), los anuncios (`getContentPieceAdsAction`, `getMarketingAdsAction`) y los comentarios
+  de una pieza (`getContentPieceCommentsAction`) devuelven `MutationResult` con `mutacionConErroresEsperables`.
+  Vuelven con su motivo: sesión, ID inválido (`uuidSchema`; las que aceptan el ID de la plataforma sólo exigen
+  texto), pieza, variante o job inexistente o de otra org, pieza sin Drive o sin post, demora fuera de 0 a 72 horas
+  (el CHECK de la tabla), y los rechazos con motivo de los servicios (`lib/marketing/rechazos-de-contenido.ts`):
+  Zernio sin conectar o con un 401/403, Google sin conectar, sin permisos o un archivo de más de 500 MB, y la
+  clave de Claude rechazada o sin créditos. Cualquier otra respuesta de Zernio (404, 429, 5xx, tiempo agotado),
+  de Drive o de Claude, y toda falla de la base (`FallaDeLaBase`) se registra (consola y Sentry, tag
+  `server_action`) y el usuario ve el texto fijo. Una falla de `createPost` de Zernio se registra sin el cuerpo de
+  la respuesta, que puede repetir el caption. Lo que antes se escondía y ahora no: el detalle de una pieza
+  respondía 404 ante cualquier falla (ahora sólo si la pieza no existe en la org; `getContentPieceAction` devuelve
+  `null`), el promedio de la org y los Trial Reels del detalle quedaban vacíos sin aviso, las piezas padre de los
+  borradores, la pieza fuente de un caption, la firma y el guardado de las vistas previas y la ruta de la música
+  ignoraban su error, una falla de la base al leer una variante se mostraba como "Variante no encontrada", y
+  `getMarketingAdsAction` devolvía el texto crudo de Zernio. Las pantallas `/marketing/content`, el detalle y
+  `/marketing/anuncios` muestran el motivo; el panel de Trial Reels, la tarjeta de variante, Administrar Drive,
+  anuncios y comentarios de la pieza lo avisan (`leerConMotivo`, `correrMutacion`). Los Trial Reels del detalle se
+  buscan con el ID interno de la pieza (antes, con un ID de plataforma en la URL, la lista salía vacía).
+  Vincular y desvincular Drive (`drive-actions.ts`, SCRUM-519) todavía no miran el resultado
+  `[MKT-VINCULAR-DRIVE-IGNORA-RESULTADO]`.
 - **Comentarios y anuncios son live-fetch.** No persistirlos. Excepción única: `ad_metrics_daily`, porque sin
   la foto diaria el histórico de gasto no se puede reconstruir.
 - **Un analytics no reconocido no es un cero.** Ni el cron ni la sync de contenido (`sync-actions.ts`) pisan
@@ -305,6 +329,7 @@ como JSON.
 ## Limitaciones conocidas y deuda
 
 - Content ignora el negocio activo del holding `[MKT-HOLDING-ORG]`.
+- Vincular o desvincular un archivo de Drive avisa éxito aunque la base falle `[MKT-VINCULAR-DRIVE-IGNORA-RESULTADO]`.
 - Música propia de Trial Reels nunca llega al worker (zod la descarta) y no hay pantalla para subirla `[TRIAL-REELS-MUSICA]`, `[TRIAL-4]`.
 - `WORKER_AUTH_SECRET` viaja en la URL de QStash y se loguea `[TRIAL-SECRET-EN-URL]`.
 - Overview y Conexión con Ventas sobre tablas legacy `[MKT-OVERVIEW-LEGACY]`, `[MKT-SALES-CONN-VACIA]`.
@@ -332,7 +357,10 @@ Detalle y prioridades: `PENDIENTES.md` (entregado al integrador del backlog).
 | Mapeo y dedupe de la foto diaria de anuncios | `apps/web/lib/marketing/__tests__/ad-metrics-snapshot.test.ts` |
 | Cola del cron de métricas: nuevas primero, piezas medidas antes que reintentos, espera creciente, historias una sola vez (de 30 h a 7 días, con cron caído y 429), 401/403 que corta la corrida, otra org y otra fuente, simulación de 40 días con 5, 8 y 15 historias por día | `apps/web/lib/marketing/__tests__/sync-content-metrics.test.ts`, `cola-de-metricas.test.ts` |
 | Lectores sin ceros inventados: promedios, ranking y prompt de patrones | `apps/web/lib/marketing/__tests__/metricas-medidas.test.ts`, `ranking-de-contenido.test.ts`, `patrones-de-contenido.test.ts`, `orden-de-piezas.test.ts`, `apps/web/app/marketing/content/__tests__/top-performing-content.test.ts` |
-| Tools del agente con piezas sin métricas | `apps/web/lib/agent/__tests__/contenido-sin-metricas.test.ts`, `top-contenido-tool.test.ts` |
+| Tools del agente con piezas sin métricas, y el motivo cuando la acción de contenido vuelve con error | `apps/web/lib/agent/__tests__/contenido-sin-metricas.test.ts`, `top-contenido-tool.test.ts` |
+| Errores como valor de las acciones de Contenido, Trial Reels, música, anuncios y comentarios (motivo exacto, falla registrada con su etiqueta, cada filtro por organización) | `apps/web/app/marketing/content/__tests__/contenido-errores-como-valor.test.ts`, `trial-reels-errores-como-valor.test.ts`, `zernio-en-vivo-errores-como-valor.test.ts` (base falsa en `supabase-falso.ts`) |
+| Qué falla de Zernio, Drive y Claude es un rechazo con motivo | `apps/web/lib/marketing/__tests__/rechazos-de-contenido.test.ts` |
+| Pantallas de contenido, detalle y anuncios con el motivo; avisos de Trial Reels, Drive, anuncios y comentarios | `apps/web/app/(platform)/marketing/__tests__/pantallas-de-contenido.test.ts`, `apps/web/components/marketing/__tests__/contenido-pantallas-errores-como-valor.test.ts` |
 | Triggers de comentarios Zernio (Embudos) | `apps/web/lib/zernio/__tests__/triggers.test.ts` |
 | `/api/cron/sync-content-metrics` pasa sin sesión y `/api/content/analyze` exige sesión (`isPublicPath`; `/api/utm/*` no tiene caso de test) | `apps/web/lib/supabase/__tests__/public-paths.test.ts` |
 
