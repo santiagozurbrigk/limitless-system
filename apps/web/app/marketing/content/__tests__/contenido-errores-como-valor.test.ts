@@ -21,6 +21,11 @@ const sim = vi.hoisted(() => ({
   cliente: null as null | Record<string, (...args: unknown[]) => Promise<unknown>>,
   pedidosAClaude: [] as unknown[],
   posts: [] as unknown[],
+  /** Con qué organización se pidió cada servicio (SCRUM-502, AR pasada 1). */
+  orgsPedidas: [] as Array<[string, unknown]>,
+  /** Si está, el análisis usa el `transcribeAudioBuffer` real (sin red). */
+  whisperReal: false,
+  audio: Buffer.from("a"),
 }));
 
 vi.mock("@/lib/observability/reportar-falla", async () => {
@@ -51,11 +56,16 @@ vi.mock("@/lib/ai/anthropic", () => {
   };
   return { callClaudeJson: llamar, callClaudeVisionJson: llamar };
 });
-vi.mock("@/lib/content/transcribe-whisper", () => ({
-  transcribeAudioBuffer: async () => "transcripción",
-}));
+vi.mock("@/lib/content/transcribe-whisper", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/content/transcribe-whisper")>();
+  return {
+    ...real,
+    transcribeAudioBuffer: async (audio: Buffer) =>
+      sim.whisperReal ? real.transcribeAudioBuffer(audio) : "transcripción",
+  };
+});
 vi.mock("@/lib/content/video-processor", () => ({
-  processVideoForAnalysis: async () => ({ audioBuffer: Buffer.from("a"), frames: [] }),
+  processVideoForAnalysis: async () => ({ audioBuffer: sim.audio, frames: [] }),
 }));
 vi.mock("@/app/marketing/content/drive-actions", () => ({
   downloadDriveFileAction: async () => {
@@ -64,17 +74,20 @@ vi.mock("@/app/marketing/content/drive-actions", () => ({
   },
 }));
 vi.mock("@/lib/marketing/content-sales-attribution", () => ({
-  computeSalesAttributionForOrg: async () => {
+  computeSalesAttributionForOrg: async (_supabase: unknown, org: unknown) => {
+    sim.orgsPedidas.push(["atribucion", org]);
     if (sim.atribucion instanceof Error) throw sim.atribucion;
     return sim.atribucion;
   },
 }));
 vi.mock("@/lib/zernio/integration", () => ({
-  getZernioIntegrationForOrg: async () => {
+  getZernioIntegrationForOrg: async (org: unknown) => {
+    sim.orgsPedidas.push(["zernio:integracion", org]);
     if (sim.integracionLanza) throw sim.integracionLanza;
     return sim.integracion;
   },
-  getZernioClientForOrganization: async () => {
+  getZernioClientForOrganization: async (org: unknown) => {
+    sim.orgsPedidas.push(["zernio:cliente", org]);
     if (!sim.cliente) throw new Error("Zernio no está conectado");
     return sim.cliente;
   },
@@ -93,7 +106,7 @@ import {
   updateContentPieceAction,
   updateSalesAttributionAction,
 } from "../actions";
-import { ZernioHttpError } from "@/lib/zernio/client";
+import { createZernioClient, ZernioHttpError } from "@/lib/zernio/client";
 import { GoogleIntegrationPermissionError } from "@/lib/google/errors";
 import { AI_KEY_REJECTED_MESSAGE } from "@/lib/ai/anthropic-auth-errors";
 import { base, CACHE_CAIDA, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
@@ -184,9 +197,30 @@ beforeEach(() => {
   sim.cliente = null;
   sim.pedidosAClaude = [];
   sim.posts = [];
+  sim.orgsPedidas = [];
+  sim.whisperReal = false;
+  sim.audio = Buffer.from("a");
   consola = vi.spyOn(console, "error").mockImplementation(() => {});
 });
-afterEach(() => consola.mockRestore());
+afterEach(() => {
+  consola.mockRestore();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+/** Cada servicio externo se pidió con la organización de la sesión. */
+function serviciosConLaOrg(esperados: string[]) {
+  expect(sim.orgsPedidas.map(([servicio]) => servicio)).toEqual(esperados);
+  for (const [, org] of sim.orgsPedidas) expect(org).toBe(ORG);
+}
+
+/** Claude se pidió con la clave (la organización) de la sesión. */
+function claudeConLaOrg() {
+  expect(sim.pedidosAClaude.length).toBeGreaterThan(0);
+  for (const pedido of sim.pedidosAClaude) {
+    expect((pedido as { organizationId: unknown }).organizationId).toBe(ORG);
+  }
+}
 
 /** Una falla inesperada vuelve con el texto fijo y queda registrada con su etiqueta. */
 async function esFallaRegistrada(resultado: unknown, etiqueta: string) {
@@ -327,6 +361,47 @@ describe("analyzeContentPieceAction", () => {
     expect(filaDe(PIEZA, ORG)).toMatchObject({ analysis: ANALISIS, format_type: "talking_head" });
     expect(filaDe(PIEZA, OTRA_ORG)?.analysis).toBeNull();
     cadaConsultaFiltraPorOrg();
+    claudeConLaOrg();
+  });
+
+  it("⭐ un audio de más de 25 MB vuelve con el motivo, sin pedir la transcripción (Whisper real)", async () => {
+    sim.whisperReal = true;
+    vi.stubEnv("OPENAI_API_KEY", "sk-falsa");
+    const pedidos: string[] = [];
+    vi.stubGlobal("fetch", async (url: unknown) => {
+      pedidos.push(String(url));
+      return new Response("{}", { status: 500 });
+    });
+    sim.descarga = { buffer: Buffer.from("v"), mimeType: "video/mp4", name: "v.mp4" };
+    sim.audio = Buffer.alloc(25 * 1024 * 1024 + 1);
+    await expect(analyzeContentPieceAction(PIEZA)).resolves.toEqual({
+      success: false,
+      error: "El audio del video supera los 25 MB que acepta la transcripción. Probá con un video más corto.",
+    });
+    expect(pedidos).toEqual([]);
+    expect(sim.pedidosAClaude).toEqual([]);
+    sinRegistro();
+  });
+
+  it("un audio de 25 MB justos se transcribe (Whisper real con fetch falso)", async () => {
+    sim.whisperReal = true;
+    vi.stubEnv("OPENAI_API_KEY", "sk-falsa");
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ text: "hola" }), { status: 200 }));
+    sim.descarga = { buffer: Buffer.from("v"), mimeType: "video/mp4", name: "v.mp4" };
+    sim.audio = Buffer.alloc(25 * 1024 * 1024);
+    sim.claude = ANALISIS;
+    await expect(analyzeContentPieceAction(PIEZA)).resolves.toEqual({ success: true, data: ANALISIS });
+    expect(filaDe(PIEZA, ORG)?.transcript).toBe("hola");
+  });
+
+  it("⭐ sin OPENAI_API_KEY la transcripción es una falla (configuración), no un motivo", async () => {
+    sim.whisperReal = true;
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("no debería pedir nada");
+    });
+    sim.descarga = { buffer: Buffer.from("v"), mimeType: "video/mp4", name: "v.mp4" };
+    await esFallaRegistrada(await analyzeContentPieceAction(PIEZA), "[analyzeContentPiece]");
   });
 
   it("⭐ una pieza que no existe vuelve con el motivo", async () => {
@@ -415,6 +490,7 @@ describe("createContentVariantsAction", () => {
     expect(JSON.stringify(sim.pedidosAClaude)).toContain("caption mío");
     expect(JSON.stringify(sim.pedidosAClaude)).not.toContain("caption ajeno");
     cadaConsultaFiltraPorOrg();
+    claudeConLaOrg();
   });
 
   it("⭐ una pieza fuente que no existe vuelve con el motivo, sin llamar a Claude", async () => {
@@ -488,6 +564,7 @@ describe("updateSalesAttributionAction", () => {
     await expect(updateSalesAttributionAction()).resolves.toEqual({ success: true, data: undefined });
     expect(filaDe(PIEZA, ORG)?.sales_attributed).toEqual(venta);
     expect(filaDe(PIEZA, OTRA_ORG)?.sales_attributed).toBeNull();
+    serviciosConLaOrg(["atribucion"]);
   });
 
   it("filtra por los IDs pedidos", async () => {
@@ -559,6 +636,7 @@ describe("generateVariantCaptionAction", () => {
     expect(pedido).toContain("caption mío");
     expect(pedido).not.toContain("caption ajeno");
     cadaConsultaFiltraPorOrg();
+    claudeConLaOrg();
   });
 
   it("⭐ una variante de otra organización vuelve como no encontrada", async () => {
@@ -621,6 +699,7 @@ describe("publishVariantAsZernioDraftAction", () => {
     expect(filaDe(VARIANTE, ORG)).toMatchObject({ platform_post_id: "post-1", caption: "mi caption" });
     expect(filaDe(VARIANTE, OTRA_ORG)?.caption).toBe("caption ajeno");
     cadaConsultaFiltraPorOrg();
+    serviciosConLaOrg(["zernio:integracion", "zernio:cliente"]);
   });
 
   it("⭐ la pieza fuente se lee en la organización (su tipo decide el del post)", async () => {
@@ -681,27 +760,40 @@ describe("publishVariantAsZernioDraftAction", () => {
     sinRegistro();
   });
 
-  it("⭐ Zernio rechaza la clave (401): vuelve con el motivo", async () => {
-    clienteZernio(async () => {
-      throw new ZernioHttpError("Zernio createPost: HTTP 401 — unauthorized", 401);
+  /** El cliente REAL de Zernio (`createZernioClient`) con un `fetch` falso. */
+  function clienteRealQueResponde(status: number, cuerpo: string) {
+    const pedidos: string[] = [];
+    vi.stubGlobal("fetch", async (url: unknown) => {
+      pedidos.push(String(url));
+      return new Response(cuerpo, { status, headers: { "content-type": "application/json" } });
     });
-    await expect(publishVariantAsZernioDraftAction(VARIANTE, "c")).resolves.toEqual({
-      success: false,
-      error: "Zernio rechazó la conexión de tu organización. Volvé a conectarlo desde Integraciones.",
-    });
-    sinRegistro();
-  });
+    sim.cliente = createZernioClient("clave-falsa") as unknown as typeof sim.cliente;
+    return pedidos;
+  }
 
-  it("⭐ una falla de createPost se registra sin el cuerpo de la respuesta (puede repetir el caption)", async () => {
-    clienteZernio(async () => {
-      throw new Error('Zernio createPost: {"error":"bad content: mi caption privado"}');
-    });
+  it.each([[401], [403]])(
+    "⭐ Zernio rechaza la clave (%s, cliente real): vuelve con el motivo",
+    async (status) => {
+      const pedidos = clienteRealQueResponde(status, '{"error":"Unauthorized"}');
+      await expect(publishVariantAsZernioDraftAction(VARIANTE, "mi caption")).resolves.toEqual({
+        success: false,
+        error: "Zernio rechazó la conexión de tu organización. Volvé a conectarlo desde Integraciones.",
+      });
+      expect(pedidos).toEqual([expect.stringContaining("/posts")]);
+      sinRegistro();
+    }
+  );
+
+  it("⭐ una falla de createPost (500, cliente real) se registra con el status y sin el cuerpo, que repite el caption", async () => {
+    clienteRealQueResponde(500, '{"error":"bad content: mi caption privado"}');
     await esFallaRegistrada(
       await publishVariantAsZernioDraftAction(VARIANTE, "mi caption privado"),
       "[publishVariantAsZernioDraft]"
     );
-    const registrado = base.reportes[0].error as Error;
-    expect(registrado.message).toBe("Zernio createPost: la respuesta no fue exitosa (cuerpo omitido)");
+    const registrado = base.reportes[0].error as ZernioHttpError;
+    expect(registrado).toBeInstanceOf(ZernioHttpError);
+    expect(registrado.message).toBe("Zernio createPost: HTTP 500");
+    expect(registrado.status).toBe(500);
     expect(JSON.stringify(consola.mock.calls)).not.toContain("mi caption privado");
   });
 

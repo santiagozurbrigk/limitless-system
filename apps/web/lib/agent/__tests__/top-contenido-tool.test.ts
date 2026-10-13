@@ -48,7 +48,12 @@ describe("get_top_performing_content", () => {
   it("⭐ (SCRUM-502) si la acción vuelve con error, el agente recibe el motivo", async () => {
     sim.fallas.top = "Sesión no válida";
     const json = JSON.parse(await handler()("get_top_performing_content", { metric: "views" }));
-    expect(json).toEqual({ success: false, error: "Sesión no válida" });
+    expect(json).toEqual({
+      success: false,
+      error: "Sesión no válida",
+      suggestion:
+        "Reintentá con type_filter='all' y metric='engagement_total'. Si el error persiste, informá al usuario que no se pudo acceder a las métricas de contenido.",
+    });
   });
 
   it("⭐ con piezas sin métricas incluye piezas_sin_metricas en la respuesta", async () => {

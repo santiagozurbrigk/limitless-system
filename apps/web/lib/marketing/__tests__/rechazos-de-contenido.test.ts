@@ -9,6 +9,7 @@ import {
   rechazoDeClaude,
   rechazoDeDrive,
   rechazoDeZernio,
+  sinCuerpoDeZernio,
   ZERNIO_NO_CONECTADO,
   ZERNIO_SIN_ACCESO,
 } from "../rechazos-de-contenido";
@@ -80,5 +81,40 @@ describe("rechazoDeClaude", () => {
     const otra = new Error("overloaded_error");
     expect(rechazoDeClaude(red)).toBe(red);
     expect(rechazoDeClaude(otra)).toBe(otra);
+  });
+});
+
+describe("sinCuerpoDeZernio (SCRUM-502, AR pasada 1)", () => {
+  const CUERPO = '{"detail":"CUERPO-DE-ZERNIO"}';
+
+  it("una respuesta HTTP fallida conserva la clase y el status, sin el cuerpo", () => {
+    const error = new ZernioHttpError(`Zernio listAds: HTTP 500 \u2014 ${CUERPO}`, 500);
+    const limpio = sinCuerpoDeZernio(error) as ZernioHttpError;
+    expect(limpio).toBeInstanceOf(ZernioHttpError);
+    expect(limpio.message).toBe("Zernio listAds: HTTP 500");
+    expect(limpio.status).toBe(500);
+  });
+
+  it("una falla de rechazoDeZernio (404) ya sale sin el cuerpo", () => {
+    const limpio = rechazoDeZernio(new ZernioHttpError(`Zernio getLinkedAds: HTTP 404 \u2014 ${CUERPO}`, 404));
+    expect((limpio as Error).message).toBe("Zernio getLinkedAds: HTTP 404");
+  });
+
+  it("HTML o JSON inválido (Error común del cliente) salen sin el cuerpo", () => {
+    expect((sinCuerpoDeZernio(new Error(`Zernio listAds: respuesta HTML inesperada \u2014 <html>${CUERPO}`)) as Error).message).toBe(
+      "Zernio listAds: respuesta HTML inesperada"
+    );
+    expect((sinCuerpoDeZernio(new Error(`Zernio listAds: JSON inválido \u2014 ${CUERPO}`)) as Error).message).toBe(
+      "Zernio listAds: JSON inválido"
+    );
+  });
+
+  it("lo que no es un error del cliente de Zernio no cambia", () => {
+    const red = new TypeError("fetch failed");
+    const tiempo = new ZernioTimeoutError("listAds", 30_000);
+    const otro = new Error(`Otra cosa \u2014 ${CUERPO}`);
+    expect(sinCuerpoDeZernio(red)).toBe(red);
+    expect(sinCuerpoDeZernio(tiempo)).toBe(tiempo);
+    expect(sinCuerpoDeZernio(otro)).toBe(otro);
   });
 });

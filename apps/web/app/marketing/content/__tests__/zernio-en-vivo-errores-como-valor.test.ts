@@ -12,6 +12,8 @@ const sim = vi.hoisted(() => ({
   cliente: null as null | Record<string, (...args: unknown[]) => Promise<unknown>>,
   integracion: null as unknown,
   pedidos: [] as unknown[][],
+  /** Con qué organización se pidió Zernio (SCRUM-502, AR pasada 1). */
+  orgsPedidas: [] as Array<[string, unknown]>,
 }));
 
 vi.mock("@/lib/observability/reportar-falla", async () => {
@@ -35,8 +37,12 @@ vi.mock("@/lib/auth/bootstrap", async () => {
   };
 });
 vi.mock("@/lib/zernio/integration", () => ({
-  getZernioIntegrationForOrg: async () => sim.integracion,
-  getZernioClientForOrganization: async () => {
+  getZernioIntegrationForOrg: async (org: unknown) => {
+    sim.orgsPedidas.push(["zernio:integracion", org]);
+    return sim.integracion;
+  },
+  getZernioClientForOrganization: async (org: unknown) => {
+    sim.orgsPedidas.push(["zernio:cliente", org]);
     if (!sim.cliente) throw new Error("Zernio no está conectado");
     return sim.cliente;
   },
@@ -44,7 +50,7 @@ vi.mock("@/lib/zernio/integration", () => ({
 
 import { getContentPieceAdsAction, getMarketingAdsAction } from "../ad-actions";
 import { getContentPieceCommentsAction } from "../comment-actions";
-import { ZernioHttpError, ZernioTimeoutError } from "@/lib/zernio/client";
+import { createZernioClient, ZernioHttpError, ZernioTimeoutError } from "@/lib/zernio/client";
 import { base, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
 
 const PIEZA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -78,6 +84,7 @@ beforeEach(() => {
   ];
   sim.integracion = { connected_accounts: [{ platform: "instagram", accountId: "cuenta-ig" }] };
   sim.pedidos = [];
+  sim.orgsPedidas = [];
   clienteZernio(async (m) =>
     m === "getPostComments"
       ? { comments: [{ id: "c1" }], pagination: { hasMore: false } }
@@ -85,7 +92,44 @@ beforeEach(() => {
   );
   consola = vi.spyOn(console, "error").mockImplementation(() => {});
 });
-afterEach(() => consola.mockRestore());
+afterEach(() => {
+  consola.mockRestore();
+  vi.unstubAllGlobals();
+});
+
+/** Zernio se pidió con la organización de la sesión, en este orden. */
+function zernioConLaOrg(esperados: string[]) {
+  expect(sim.orgsPedidas.map(([servicio]) => servicio)).toEqual(esperados);
+  for (const [, org] of sim.orgsPedidas) expect(org).toBe(ORG);
+}
+
+/**
+ * El cliente REAL de Zernio con un `fetch` falso que responde un 500 con un
+ * cuerpo marcado: lo que se registra no puede llevar ese cuerpo.
+ */
+function clienteRealCon500() {
+  vi.stubGlobal(
+    "fetch",
+    async () =>
+      new Response('{"error":"internal","detail":"CUERPO-DE-ZERNIO"}', {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      })
+  );
+  sim.cliente = createZernioClient("clave-falsa") as unknown as typeof sim.cliente;
+}
+
+/**
+ * Ni el reporte a Sentry ni la línea de consola del registro de la acción
+ * llevan el cuerpo. (El `console.error` propio de `zernioFetchJson` sí lo
+ * muestra en los logs del servidor; la consola no llega a Sentry: SCRUM-501.)
+ */
+function nadaDelCuerpoRegistrado(etiqueta: string) {
+  expect(JSON.stringify(base.reportes.map((r) => (r.error as Error).message))).not.toContain("CUERPO-DE-ZERNIO");
+  const registro = consola.mock.calls.filter((llamada) => llamada[0] === etiqueta);
+  expect(registro).toHaveLength(1);
+  expect(String(registro[0][1])).not.toContain("CUERPO-DE-ZERNIO");
+}
 
 async function esFallaRegistrada(resultado: unknown, etiqueta: string) {
   expect(resultado).toEqual({ success: false, error: TEXTO_FIJO });
@@ -104,6 +148,15 @@ describe("getContentPieceAdsAction", () => {
     const r = await getContentPieceAdsAction(PIEZA);
     expect(r).toEqual({ success: true, data: { ads: [ANUNCIO, ANUNCIO_CON_ERROR] } });
     expect(sim.pedidos).toEqual([["getLinkedAds", "post-mio"]]);
+    zernioConLaOrg(["zernio:cliente"]);
+  });
+
+  it("⭐ un 500 de Zernio (cliente real) se registra con el status y sin el cuerpo", async () => {
+    clienteRealCon500();
+    await esFallaRegistrada(await getContentPieceAdsAction(PIEZA), "[getContentPieceAds]");
+    expect((base.reportes[0].error as ZernioHttpError).message).toBe("Zernio getLinkedAds: HTTP 500");
+    expect((base.reportes[0].error as ZernioHttpError).status).toBe(500);
+    nadaDelCuerpoRegistrado("[getContentPieceAds]");
   });
 
   it("una pieza sin post (o de otra organización) no tiene anuncios", async () => {
@@ -153,6 +206,14 @@ describe("getMarketingAdsAction", () => {
       data: { ads: [ANUNCIO, ANUNCIO_CON_ERROR], pagination: { hasMore: false } },
     });
     expect(sim.pedidos[0][1]).toMatchObject({ fromDate: "2026-09-01", toDate: "2026-10-01", limit: 100 });
+    zernioConLaOrg(["zernio:cliente"]);
+  });
+
+  it("⭐ un 500 de Zernio (cliente real) se registra con el status y sin el cuerpo", async () => {
+    clienteRealCon500();
+    await esFallaRegistrada(await getMarketingAdsAction(), "[getMarketingAds]");
+    expect((base.reportes[0].error as Error).message).toBe("Zernio listAds: HTTP 500");
+    nadaDelCuerpoRegistrado("[getMarketingAds]");
   });
 
   it("el filtro «error» trae los rechazados y con error", async () => {
@@ -203,6 +264,14 @@ describe("getContentPieceCommentsAction", () => {
       ["id", PIEZA],
       ["organization_id", ORG],
     ]);
+    zernioConLaOrg(["zernio:integracion", "zernio:cliente"]);
+  });
+
+  it("⭐ un 500 de Zernio (cliente real) se registra con el status y sin el cuerpo", async () => {
+    clienteRealCon500();
+    await esFallaRegistrada(await getContentPieceCommentsAction(PIEZA), "[getContentPieceComments]");
+    expect((base.reportes[0].error as Error).message).toBe("Zernio getPostComments: HTTP 500");
+    nadaDelCuerpoRegistrado("[getContentPieceComments]");
   });
 
   it("⭐ una pieza sin post (o de otra organización) vuelve con el motivo", async () => {
