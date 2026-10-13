@@ -144,9 +144,10 @@ Ficha: acceptCheckpointProposalAction → recordCheckpointAction (mismas validac
   (tag `server_action`) y el usuario ve el texto fijo. Las pantallas (recorrido, campos, revisión semanal) y la ficha
   y la lista muestran el motivo en vez de una lista vacía. Dos lecturas conservan su tipo porque las usan Wins y la
   bandeja de onboarding: `listFieldDefinitionsAction` y `listClientTrackingAction` registran la falla
-  (`lecturaDegradable`, tag `lectura_degradada`) y devuelven vacío.
+  (`lecturaDegradable`, tag `lectura_degradada`) y devuelven vacío; sin sesión, vacío sin registrar
+  (`valorSiNoEsFalla`, el mismo mecanismo que las lecturas de wins y facturación de SCRUM-516).
 - **Las escrituras validan con lecturas que lanzan** (`lib/checkpoints/lecturas-del-recorrido.ts`,
-  `lib/custom-fields/leer-columnas.ts`). Si no se pueden leer las fases, los checkpoints o las columnas, la escritura
+  `lib/custom-fields/leer-columnas.ts`; también las de wins y sub-clientes desde SCRUM-516). Si no se pueden leer las fases, los checkpoints o las columnas, la escritura
   no sigue: antes una falla se volvía un rechazo falso («La fase elegida no existe»), una clave repetida o un
   «Datos del cliente guardados» sin lo editado. Si no se puede saber si un checkpoint o una columna están en uso, no
   se borra y es una falla (antes decía que había datos cargados). Si el recálculo de la fase después de registrar o

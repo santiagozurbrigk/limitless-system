@@ -122,7 +122,7 @@ Las acciones de `import-actions.ts`, `onboarding-link-actions.ts`, `win-actions.
 `sub-client-actions.ts`, `revenue-actions.ts`, `plan-actions.ts` y `plan-duration-actions.ts` siguen el mismo
 contrato que `actions.ts` (SCRUM-497): corren dentro de `mutacionConErroresEsperables` y devuelven
 `MutationResult`. Vuelven con su motivo la validación, la sesión, el add-on `growth_partners` no habilitado
-(mismo texto que `requireAddOn`, como `ErrorEsperable`), ser founder (duraciones), un archivo que no se puede
+(`exigirAddOn`, `lib/auth/exigir-add-on.ts`: mismo texto que `requireAddOn`, como `ErrorEsperable`), ser founder (duraciones), un archivo que no se puede
 leer como planilla, un recurso inexistente o de otra org (`PGRST116`, `23503`), la tabla que falta y la clave
 de Claude rechazada o sin créditos. Lo demás se registra, va a Sentry (tag `server_action`) y el usuario ve el
 texto fijo.
@@ -132,8 +132,16 @@ texto fijo.
   antes una falla se veía como "sin datos".
 - `listWinsAction`, `listClientBaselinesAction`, `listClientNichesAction` y `getRevenueByClientAction` las
   componen la revisión semanal, el tablero de Clientes y la pantalla de Wins, que esperan el dato: siguen
-  devolviendo vacío ante una falla, pero la registran con `respaldoDeLectura` (`lib/server/lectura-degradable.ts`,
-  tag `lectura_degradada`). Si fallan las capturas o los usos, los wins se ven sin ellos.
+  devolviendo vacío ante una falla, pero la registran: `lecturaDegradable(...)` con
+  `.catch((error) => valorSiNoEsFalla(error, vacío))` (`lib/server/lectura-degradable.ts`, tag
+  `lectura_degradada`), el mismo mecanismo que `listFieldDefinitionsAction` y `listClientTrackingAction`. Sin
+  sesión devuelven vacío sin registrar. Si fallan las capturas, los usos o los links de las capturas, los wins se
+  ven sin ellos y cada falla queda registrada.
+- Crear o editar un win y guardar los campos de un sub-cliente (o pasarle los datos viejos del growth partner)
+  validan las columnas con `leerColumnas` (`lib/custom-fields/leer-columnas.ts`), que lanza si la base falla: la
+  escritura termina en el texto fijo sin tocar la fila. Antes, con `listFieldDefinitionsAction` (que devuelve `[]`
+  ante una falla), el win perdía sus columnas y el sub-cliente la edición, y la pantalla decía que se guardó. Sin
+  la tabla de columnas (antes de su migración) se guarda sin columnas, como antes.
 - Lecturas que antes se ignoraban y ahora cortan antes de escribir: el import de Excel no importa si no puede
   leer los clientes existentes (duplicaría) o los planes; crear un link de onboarding no crea otro si no puede
   leer el activo; borrar un win o una captura no borra la fila si Storage no borró el archivo.
@@ -171,8 +179,10 @@ texto fijo.
   hacen cumplir las actions con `requireFounder()` (el umbral de silencio, con un chequeo equivalente de `profile.role` en `setClientSilenceDaysAction`). Todo lo demás (alta, borrado, tareas, notas, hitos, wins) sólo
   exige estar en la org: el permiso por módulo (`full` / `read` / `none`) corta el render y esconde botones
   (`useModuleAccess("clients")`), **no** las server actions ni la RLS (`[PERMISOS-SERVER-ACTIONS]`).
-- **Add-on `growth_partners`.** `useHasAddOn` esconde las tarjetas; el servidor lo vuelve a exigir con `requireAddOn`
-  en cada escritura (`lib/auth/add-ons.ts`).
+- **Add-on `growth_partners`.** `useHasAddOn` esconde las tarjetas; el servidor lo vuelve a exigir en cada
+  escritura: las de carga y negocio y las del seguimiento con `exigirAddOn` (`lib/auth/exigir-add-on.ts`, la misma
+  pregunta que `requireAddOn` de `lib/auth/add-ons.ts`, con el motivo como valor). Si la lectura de los add-ons
+  falla, se toma como "sin el add-on" (`[ADD-ONS-FALLA-COMO-SIN-ADD-ON]`).
 
 ## Limitaciones conocidas y deuda
 
