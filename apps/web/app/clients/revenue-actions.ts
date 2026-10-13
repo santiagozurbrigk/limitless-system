@@ -15,13 +15,19 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   getCurrentProfile,
-  isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
-import { orgHasAddOn, requireAddOn } from "@/lib/auth/add-ons";
+import { orgHasAddOn } from "@/lib/auth/add-ons";
+import { exigirAddOn } from "@/lib/auth/exigir-add-on";
 import { createClient } from "@/lib/supabase/server";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
-import { firstZodError } from "@/lib/validations";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { lecturaDegradable, valorSiNoEsFalla } from "@/lib/server/lectura-degradable";
+import { firstZodError, uuidSchema } from "@/lib/validations";
 import {
   normalizePeriod,
   rowToRevenueEntry,
@@ -31,19 +37,21 @@ import {
   type RevenueSummary,
 } from "@/lib/clients/revenue";
 import { paths } from "@/routes";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
+
+const ADD_ON = "growth_partners" as const;
 
 const COLUMNS = "id, client_id, amount, currency, period, note, created_at";
 
 const entrySchema = z.object({
-  clientId: z.string().uuid(),
+  clientId: uuidSchema,
   amount: z
     .number({ error: "La facturación tiene que ser un número." })
-    .finite()
     .min(0, "La facturación no puede ser negativa.")
     .max(1_000_000_000, "Ese monto es demasiado grande."),
-  currency: z.enum(["USD", "ARS"]).default("USD"),
+  currency: z.enum(["USD", "ARS"], { error: "Elegí la moneda: USD o ARS." }).default("USD"),
   period: z.string().min(4, "Elegí un mes."),
-  note: z.string().trim().max(300).default(""),
+  note: z.string().trim().max(300, "La nota puede tener hasta 300 caracteres.").default(""),
   /**
    * ⭐ El mes que se está corrigiendo, si se entró por «Editar».
    *
@@ -51,31 +59,45 @@ const entrySchema = z.object({
    * upsert de abajo escribe julio, pero agosto quedaría ahí — corregir el mes
    * habría creado un mes de más en vez de mover el que estaba.
    */
-  replacesEntryId: z.string().uuid().nullish(),
+  replacesEntryId: uuidSchema.nullish(),
 });
+
+/**
+ * SCRUM-516: las acciones de facturación devuelven sus errores esperables como
+ * valor (`MutationResult`), dentro de `mutacionConErroresEsperables`.
+ * Validación, sesión, add-on no habilitado y cliente o mes de otra
+ * organización vuelven con su motivo; lo inesperado se registra, va a Sentry y
+ * vuelve con el texto fijo. Antes el texto crudo de la base llegaba a la
+ * tarjeta, y la lista devolvía `[]` ante una falla: la ficha decía "sin
+ * facturación cargada".
+ */
+
+const CLIENTE_AJENO = "No se encontró ese cliente en tu organización.";
 
 export async function listClientRevenueAction(
   clientId: string
-): Promise<ClientRevenueEntry[]> {
-  const organizationId = await requireOrganizationId();
-  if (!(await orgHasAddOn(organizationId, "growth_partners"))) return [];
-  const supabase = await createClient();
+): Promise<MutationResult<ClientRevenueEntry[]>> {
+  return mutacionConErroresEsperables("[listClientRevenue]", async () => {
+    if (!uuidSchema.safeParse(clientId).success) throw new ErrorEsperable("ID inválido");
+    const organizationId = await requireOrganizationId();
+    if (!(await orgHasAddOn(organizationId, ADD_ON))) return [];
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("client_revenue_entries")
-    .select(COLUMNS)
-    .eq("organization_id", organizationId)
-    .eq("client_id", clientId)
-    .order("period", { ascending: false });
+    const { data, error } = await supabase
+      .from("client_revenue_entries")
+      .select(COLUMNS)
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      .order("period", { ascending: false });
 
-  if (error) {
-    // Sin la tabla, la ficha muestra la tarjeta vacía en vez de romperse.
-    if (isMissingTableError(error.message)) return [];
-    console.error("[client-revenue] list", error.message);
-    return [];
-  }
+    if (error) {
+      // Sin la tabla, la ficha muestra la tarjeta vacía en vez de romperse.
+      if (esTablaAusente(error)) return [];
+      throw new FallaDeLaBase(error);
+    }
 
-  return ((data ?? []) as ClientRevenueRow[]).map(rowToRevenueEntry);
+    return ((data ?? []) as ClientRevenueRow[]).map(rowToRevenueEntry);
+  });
 }
 
 /**
@@ -87,27 +109,28 @@ export async function listClientRevenueAction(
 export async function saveClientRevenueAction(
   input: z.input<typeof entrySchema>
 ): Promise<MutationResult<ClientRevenueEntry>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[saveClientRevenue]", async () => {
     const parsed = entrySchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
     const period = normalizePeriod(values.period);
-    if (!period) throw new Error("Ese mes no se entiende. Elegilo del calendario.");
+    if (!period) throw new ErrorEsperable("Ese mes no se entiende. Elegilo del calendario.");
 
     const organizationId = await requireOrganizationId();
-    await requireAddOn(organizationId, "growth_partners");
+    await exigirAddOn(organizationId, ADD_ON);
     const profile = await getCurrentProfile();
     const supabase = await createClient();
 
     // La pertenencia del cliente se chequea con la sesión del usuario.
-    const { data: client } = await supabase
+    const { data: client, error: clientError } = await supabase
       .from("clients")
       .select("id")
       .eq("id", values.clientId)
       .eq("organization_id", organizationId)
       .maybeSingle();
-    if (!client) throw new Error("No se encontró ese cliente en tu organización.");
+    if (clientError) throw new FallaDeLaBase(clientError);
+    if (!client) throw new ErrorEsperable(CLIENTE_AJENO);
 
     const { data, error } = await supabase
       .from("client_revenue_entries")
@@ -127,7 +150,7 @@ export async function saveClientRevenueAction(
       .select(COLUMNS)
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
     const guardada = rowToRevenueEntry(data as ClientRevenueRow);
 
@@ -143,7 +166,7 @@ export async function saveClientRevenueAction(
         .eq("id", values.replacesEntryId)
         .eq("organization_id", organizationId)
         .eq("client_id", values.clientId);
-      if (errorBorrado) throw new Error(errorBorrado.message);
+      if (errorBorrado) throw new FallaDeLaBase(errorBorrado);
     }
 
     revalidatePath(paths.platform.clients.detail(values.clientId));
@@ -155,9 +178,10 @@ export async function saveClientRevenueAction(
 export async function deleteClientRevenueAction(
   entryId: string
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteClientRevenue]", async () => {
+    if (!uuidSchema.safeParse(entryId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
-    await requireAddOn(organizationId, "growth_partners");
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const { error } = await supabase
@@ -166,7 +190,7 @@ export async function deleteClientRevenueAction(
       .eq("id", entryId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
   });
 }
 
@@ -175,41 +199,47 @@ export async function deleteClientRevenueAction(
  *
  * Una consulta para toda la organización, agrupada en memoria: pedir el
  * historial por fila sería una consulta por cliente.
+ *
+ * La compone el tablero de Clientes (`getClientsBoardAction`), que espera el
+ * dato y no un `MutationResult`: si falla, la tabla sigue sin la columna de
+ * facturación y la falla queda registrada (`lecturaDegradable` y `valorSiNoEsFalla`, SCRUM-516).
+ * Antes se perdía sin rastro.
  */
 export async function getRevenueByClientAction(): Promise<
   Record<string, RevenueSummary>
 > {
-  try {
-    const organizationId = await requireOrganizationId();
-    if (!(await orgHasAddOn(organizationId, "growth_partners"))) return {};
-    const supabase = await createClient();
+  return lecturaDegradable(
+    "clientes:facturacion-por-cliente",
+    async () => {
+      const organizationId = await requireOrganizationId();
+      if (!(await orgHasAddOn(organizationId, ADD_ON))) return {};
+      const supabase = await createClient();
 
-    const { data, error } = await supabase
-      .from("client_revenue_entries")
-      .select(COLUMNS)
-      .eq("organization_id", organizationId)
-      .order("period", { ascending: false });
+      const { data, error } = await supabase
+        .from("client_revenue_entries")
+        .select(COLUMNS)
+        .eq("organization_id", organizationId)
+        .order("period", { ascending: false });
 
-    if (error) {
-      if (isMissingTableError(error.message)) return {};
-      console.error("[client-revenue] por cliente", error.message);
-      return {};
-    }
+      if (error) {
+        if (esTablaAusente(error)) return {};
+        throw new FallaDeLaBase(error);
+      }
 
-    const porCliente = new Map<string, ClientRevenueEntry[]>();
-    for (const row of (data ?? []) as ClientRevenueRow[]) {
-      const entry = rowToRevenueEntry(row);
-      const lista = porCliente.get(entry.clientId) ?? [];
-      lista.push(entry);
-      porCliente.set(entry.clientId, lista);
-    }
+      const porCliente = new Map<string, ClientRevenueEntry[]>();
+      for (const row of (data ?? []) as ClientRevenueRow[]) {
+        const entry = rowToRevenueEntry(row);
+        const lista = porCliente.get(entry.clientId) ?? [];
+        lista.push(entry);
+        porCliente.set(entry.clientId, lista);
+      }
 
-    const result: Record<string, RevenueSummary> = {};
-    for (const [clientId, entries] of porCliente) {
-      result[clientId] = summarizeRevenue(entries);
-    }
-    return result;
-  } catch {
-    return {};
-  }
+      const result: Record<string, RevenueSummary> = {};
+      for (const [clientId, entries] of porCliente) {
+        result[clientId] = summarizeRevenue(entries);
+      }
+      return result;
+    },
+    {} as Record<string, RevenueSummary>
+  ).catch((error: unknown) => valorSiNoEsFalla(error, {} as Record<string, RevenueSummary>));
 }

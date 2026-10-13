@@ -1325,3 +1325,23 @@ Desde SCRUM-51 el secreto `WORKER_AUTH_SECRET` ya no viaja en la URL, pero el va
 6. Pedirlo 4 veces seguidas con el mismo mail: la cuarta dice que hay demasiados intentos.
 7. Con todo bien, prender "Confirm email" (paso 9) y anotar acá la fecha. **Hecho el 2026-10-09** (`mailer_autoconfirm: false`).
 
+
+## Clientes, carga y negocio: errores como valor (SCRUM-516)
+
+**Prerrequisitos:** el PR de SCRUM-516 mergeado y desplegado; una org con el add-on `growth_partners` y otra sin él.
+Probado con `next start` y Supabase y Sentry falsos (evidencia de SCRUM-516); falta con la base real.
+
+1. ⭐ Integraciones → Importar → Excel: subir un `.xlsx` dañado (por ejemplo, uno renombrado desde un `.zip`
+   cualquiera). → El paso de mapeo dice "No se pudo leer el archivo." con el motivo, no queda en blanco.
+2. Importar un Excel de clientes con uno que ya existe: el resumen lo cuenta como salteado, sin duplicarlo.
+3. Ficha de un cliente → Tareas: crear, tildar, mandar al tablero y borrar una tarea. Con la red cortada (DevTools →
+   Offline), tildar otra. → Toast "No se pudo actualizar" con "Ocurrió un error inesperado. Intentá de nuevo."; nada
+   del párrafo técnico de Next.
+4. En la org sin `growth_partners`: la ficha se ve igual que antes (sin avisos de error nuevos en las tarjetas del
+   add-on).
+5. En la org con el add-on: agregar un cliente del cliente, generar y desactivar su link de onboarding, cargar y
+   borrar un mes de facturación. Todo igual que antes.
+6. Wins: subir una captura que no es imagen. → El formulario dice "La captura tiene que ser una imagen PNG, JPG o
+   WEBP.". Borrar una captura con la red cortada: vuelve a aparecer con el motivo.
+7. Ventas → Cobros y el cierre de venta de Closing: los planes se ven como antes. En Sentry no aparecen eventos con
+   `server_action` de estas acciones salvo fallas reales.

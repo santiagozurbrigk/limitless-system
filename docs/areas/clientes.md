@@ -110,11 +110,48 @@ PlatformDataProvider.listClientsAction()  ← select * de clients (incluye custo
 | Franja de la ficha | `getClientOverviewAction` | `app/clients/overview-actions.ts` |
 | 1-1 por link | `uploadOneOnOneFromShareLinkAction` → `fetchFathomShare` (página pública de Fathom, sin API key) → `finalizeAssociatedCall` | `app/fathom/manual-upload-actions.ts`, `lib/fathom/share-link.ts`. **No corre el clasificador**: el cliente lo eligió una persona |
 | Tareas desde la 1-1 | `lib/fathom/one-on-one-tasks.ts` (Claude) → `lib/clients/client-tasks.ts` | Marca `one_on_one_tasks_extracted_at` sólo si la respuesta se pudo leer. Reintento: `retryOneOnOneTasksAction` (`app/fathom/one-on-one-actions.ts`, botón «Buscar tareas») |
-| Tareas a mano | `create/update/toggle/delete/sendClientTaskToBoardAction` | `app/clients/task-actions.ts`. `sendClientTaskToBoardAction` crea un `workboard_tasks` y guarda `workboard_task_id` (no duplica) |
+| Tareas a mano | `create/update/toggle/delete/sendClientTaskToBoardAction` | `app/clients/task-actions.ts`. `sendClientTaskToBoardAction` crea un `workboard_tasks` y guarda `workboard_task_id` (no duplica); si el tablero no la crea es una falla (texto fijo y Sentry), porque `createWorkboardTasksAction` devuelve el texto crudo de la base |
 | Notas, satisfacción, seguimiento | `updateClientNotesAction`, `updateClientSatisfactionAction`, `updateClientTrackingAction`, `updateClientCurrentStatusAction` | `app/clients/tracking-actions.ts` |
 | Fase manual | `setClientManualStageAction` (valida que la fase sea de la org) | `app/clients/stage-actions.ts`. La UI llama `refreshClients()` después (recarga la lista entera) |
 | Llamadas sin asociar | `listPendingFathomCallsAction`, confirmación y siembra de identidades | `app/fathom/actions.ts`, `lib/fathom/identities.ts`, `lib/fathom/seed-identities.ts` |
 | Propuestas de hitos | cron `/api/cron/daily-signals` (07:20 UTC) | Ver doc de recorrido |
+
+### Errores como valor en carga y negocio (SCRUM-516)
+
+Las acciones de `import-actions.ts`, `onboarding-link-actions.ts`, `win-actions.ts`, `task-actions.ts`,
+`sub-client-actions.ts`, `revenue-actions.ts`, `plan-actions.ts` y `plan-duration-actions.ts` siguen el mismo
+contrato que `actions.ts` (SCRUM-497): corren dentro de `mutacionConErroresEsperables` y devuelven
+`MutationResult`. Vuelven con su motivo la validación, la sesión, el add-on `growth_partners` no habilitado
+(`exigirAddOn`, `lib/auth/exigir-add-on.ts`: mismo texto que `requireAddOn`, como `ErrorEsperable`), ser founder (duraciones), un archivo que no se puede
+leer como planilla, un recurso inexistente o de otra org (`PGRST116`, `23503`), la tabla que falta y la clave
+de Claude rechazada o sin créditos. Lo demás se registra, va a Sentry (tag `server_action`) y el usuario ve el
+texto fijo.
+
+- Las lecturas que usan los componentes (tareas, clientes del cliente, onboarding, bandeja, facturación,
+  planes, duraciones) devuelven `MutationResult` y la pantalla muestra el motivo con `AvisoDeLecturaFallida`;
+  antes una falla se veía como "sin datos".
+- `listWinsAction`, `listClientBaselinesAction`, `listClientNichesAction` y `getRevenueByClientAction` las
+  componen la revisión semanal, el tablero de Clientes y la pantalla de Wins, que esperan el dato: siguen
+  devolviendo vacío ante una falla, pero la registran: `lecturaDegradable(...)` con
+  `.catch((error) => valorSiNoEsFalla(error, vacío))` (`lib/server/lectura-degradable.ts`, tag
+  `lectura_degradada`), el mismo mecanismo que `listFieldDefinitionsAction` y `listClientTrackingAction`. Sin
+  sesión devuelven vacío sin registrar. Si fallan las capturas, los usos o los links de las capturas, los wins se
+  ven sin ellos y cada falla queda registrada.
+- Crear o editar un win y guardar los campos de un sub-cliente (o pasarle los datos viejos del growth partner)
+  validan las columnas con `leerColumnas` (`lib/custom-fields/leer-columnas.ts`), que lanza si la base falla: la
+  escritura termina en el texto fijo sin tocar la fila. Antes, con `listFieldDefinitionsAction` (que devuelve `[]`
+  ante una falla), el win perdía sus columnas y el sub-cliente la edición, y la pantalla decía que se guardó. Sin
+  la tabla de columnas (antes de su migración) se guarda sin columnas, como antes. La tabla ausente se decide por
+  el código del error (`PGRST205`, `42P01`; `lib/server/tabla-ausente.ts`), no por el texto: un `PGRST002` de
+  PostgREST (503 al armar su caché, "schema cache" en el texto) es una falla y corta la escritura.
+- Los ids que llegan sueltos (borrar o editar un win, una captura, un uso, el baseline, un plan, un mes de
+  facturación, un sub-cliente o una tarea, y las listas de facturación, sub-clientes y tareas) se validan antes de
+  la sesión: uno que no es UUID vuelve con "ID inválido" sin llegar a la base.
+- Lecturas que antes se ignoraban y ahora cortan antes de escribir: el import de Excel no importa si no puede
+  leer los clientes existentes (duplicaría) o los planes; crear un link de onboarding no crea otro si no puede
+  leer el activo; borrar un win o una captura no borra la fila si Storage no borró el archivo.
+- Una ruta de Storage de otra org al registrar una captura es inesperada (señal de manipulación), como en el
+  Tablero.
 
 ## Integraciones externas
 
@@ -147,8 +184,10 @@ PlatformDataProvider.listClientsAction()  ← select * de clients (incluye custo
   hacen cumplir las actions con `requireFounder()` (el umbral de silencio, con un chequeo equivalente de `profile.role` en `setClientSilenceDaysAction`). Todo lo demás (alta, borrado, tareas, notas, hitos, wins) sólo
   exige estar en la org: el permiso por módulo (`full` / `read` / `none`) corta el render y esconde botones
   (`useModuleAccess("clients")`), **no** las server actions ni la RLS (`[PERMISOS-SERVER-ACTIONS]`).
-- **Add-on `growth_partners`.** `useHasAddOn` esconde las tarjetas; el servidor lo vuelve a exigir con `requireAddOn`
-  en cada escritura (`lib/auth/add-ons.ts`).
+- **Add-on `growth_partners`.** `useHasAddOn` esconde las tarjetas; el servidor lo vuelve a exigir en cada
+  escritura: las de carga y negocio y las del seguimiento con `exigirAddOn` (`lib/auth/exigir-add-on.ts`, la misma
+  pregunta que `requireAddOn` de `lib/auth/add-ons.ts`, con el motivo como valor). Si la lectura de los add-ons
+  falla, se toma como "sin el add-on" (`[ADD-ONS-FALLA-COMO-SIN-ADD-ON]`).
 
 ## Limitaciones conocidas y deuda
 

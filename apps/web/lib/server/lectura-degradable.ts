@@ -36,3 +36,32 @@ export async function lecturaDegradable<T>(
     return porDefecto;
   }
 }
+
+/**
+ * El `.catch` de una lectura de una server action que otras pantallas componen
+ * sin esperar un `MutationResult` y que nunca rechazó (SCRUM-516 y SCRUM-517:
+ * las columnas, el seguimiento, los wins y la facturación por cliente):
+ *
+ *     lecturaDegradable("clientes:wins", leer, []).catch((error) =>
+ *       valorSiNoEsFalla(error, [])
+ *     );
+ *
+ * Es el mismo mecanismo que `lecturaDegradable`: la falla se registra ahí
+ * (consola y Sentry con el tag `lectura_degradada`) y la pantalla sigue con el
+ * valor por defecto. Acá sólo llega lo que `lecturaDegradable` relanza:
+ *   - lo interno de Next (redirect, ruta dinámica) se relanza tal cual;
+ *   - un `ErrorEsperable` (sin sesión, cuenta desactivada) devuelve
+ *     `porDefecto` sin registrarse: no es una falla, y estas lecturas siempre
+ *     devolvieron vacío en ese caso. No abre nada: el vacío no da acceso.
+ *   - cualquier otra cosa se relanza: no se esconde una falla sin registrarla.
+ *
+ * El `.catch` va en el lugar, y no dentro de otro envoltorio, para que se vea
+ * en cada lectura que no rechaza (y lo vea el conteo de
+ * `[ACTIONS-ERRORES-EN-PRODUCCION]`). Antes cada lectura repetía
+ * `try { lecturaDegradable } catch { return [] }` (SCRUM-517) o tenía su propio
+ * registro (`respaldoDeLectura`, SCRUM-516).
+ */
+export function valorSiNoEsFalla<T>(error: unknown, porDefecto: T): T {
+  if (esErrorEsperable(error)) return porDefecto;
+  throw error;
+}

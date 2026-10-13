@@ -50,6 +50,8 @@ import { RespuestasDelEnvio } from "@/components/clients/sub-client-onboarding";
 import { onboardingFormPath, type OnboardingSubmission } from "@/lib/client-onboarding/links";
 import type { SubClient } from "@/lib/clients/sub-clients";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import type { Client } from "@/types/clients";
 import type { FieldDefinition } from "@/types/custom-fields";
 
@@ -63,6 +65,48 @@ function fecha(iso: string): string {
   return new Date(iso).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
 }
 
+/**
+ * El link general y la bandeja, o el motivo si no se pudieron leer (SCRUM-516).
+ * Antes una falla se mostraba como "sin link y sin envíos".
+ */
+export function cargarBandejaDeOnboarding(): Promise<Lectura<GeneralOnboarding>> {
+  return leerConMotivo(getGeneralOnboardingAction, "[ClientOnboardingInbox] bandeja");
+}
+
+/**
+ * Los creadores de un growth partner, o el motivo si no se pudieron leer.
+ * Antes una falla se mostraba como "no tiene creadores" y el envío se asignaba
+ * a uno nuevo, duplicado.
+ */
+export function cargarCreadores(clientId: string): Promise<Lectura<SubClient[]>> {
+  return leerConMotivo(
+    () => listSubClientsAction(clientId),
+    "[ClientOnboardingInbox] creadores"
+  );
+}
+
+/**
+ * Si el botón «Asignar» está habilitado. Con un cliente existente hace falta
+ * haber leído sus creadores (SCRUM-516): si la lectura falló, el envío iría a
+ * un creador nuevo y duplicaría al que ya existe. Con un cliente nuevo no hay
+ * creadores que leer.
+ */
+export function sePuedeAsignar(estado: {
+  clientId: string;
+  newClientName: string;
+  subClientId: string;
+  newSubName: string;
+  creadoresError: string | null;
+}): boolean {
+  const esNuevo = estado.clientId === NUEVO;
+  return (
+    (esNuevo
+      ? estado.newClientName.trim() !== ""
+      : estado.clientId !== "" && estado.creadoresError === null) &&
+    (estado.subClientId !== NUEVO || estado.newSubName.trim() !== "")
+  );
+}
+
 export function ClientOnboardingInbox({
   clients,
   onAssigned,
@@ -73,15 +117,18 @@ export function ClientOnboardingInbox({
 }) {
   const { push } = useToast();
   const [data, setData] = useState<GeneralOnboarding | null>(null);
+  const [motivo, setMotivo] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [bandeja, setBandeja] = useState(false);
 
   const cargar = useCallback(async () => {
-    try {
-      setData(await getGeneralOnboardingAction());
-    } catch {
-      setData({ link: null, pending: [] });
+    const lectura = await cargarBandejaDeOnboarding();
+    if (lectura.ok) {
+      setData(lectura.data);
+      setMotivo(null);
+    } else {
+      setMotivo(lectura.motivo);
     }
   }, []);
 
@@ -89,7 +136,11 @@ export function ClientOnboardingInbox({
     void cargar();
   }, [cargar]);
 
-  if (data === null) return null;
+  if (data === null) {
+    return motivo ? (
+      <AvisoDeLecturaFallida titulo="No se pudo cargar el onboarding para clientes nuevos." motivo={motivo} />
+    ) : null;
+  }
 
   const url =
     data.link && typeof window !== "undefined"
@@ -98,13 +149,14 @@ export function ClientOnboardingInbox({
 
   const generar = async () => {
     setWorking(true);
-    const result = await createGeneralOnboardingLinkAction();
+    await correrMutacion({
+      accion: createGeneralOnboardingLinkAction,
+      alExito: (link) => setData((d) => ({ pending: d?.pending ?? [], link })),
+      avisar: push,
+      tituloError: "No se pudo generar el link",
+      etiqueta: "[ClientOnboardingInbox] generar link",
+    });
     setWorking(false);
-    if (!result.success) {
-      push({ title: "No se pudo generar el link", description: result.error });
-      return;
-    }
-    setData((d) => ({ pending: d?.pending ?? [], link: result.data }));
   };
 
   const copiar = async () => {
@@ -127,14 +179,16 @@ export function ClientOnboardingInbox({
     ) {
       return;
     }
+    const linkId = data.link.id;
     setWorking(true);
-    const result = await revokeOnboardingLinkAction(data.link.id);
+    await correrMutacion({
+      accion: () => revokeOnboardingLinkAction(linkId),
+      alExito: () => setData((d) => ({ pending: d?.pending ?? [], link: null })),
+      avisar: push,
+      tituloError: "No se pudo desactivar",
+      etiqueta: "[ClientOnboardingInbox] desactivar link",
+    });
     setWorking(false);
-    if (!result.success) {
-      push({ title: "No se pudo desactivar", description: result.error });
-      return;
-    }
-    setData((d) => ({ pending: d?.pending ?? [], link: null }));
   };
 
   const quitar = (id: string) =>
@@ -263,6 +317,9 @@ function EnvioSinAsignar({
   const [clientId, setClientId] = useState<string>("");
   const [newClientName, setNewClientName] = useState(envio.respondentName ?? "");
   const [creadores, setCreadores] = useState<SubClient[] | null>(null);
+  // Si no se pudieron leer los creadores, no se asigna: el envío iría a un
+  // creador nuevo y duplicaría al que ya existe.
+  const [creadoresError, setCreadoresError] = useState<string | null>(null);
   const [subClientId, setSubClientId] = useState<string>(NUEVO);
   const [newSubName, setNewSubName] = useState(envio.creatorName ?? "");
   const [saving, setSaving] = useState(false);
@@ -274,42 +331,57 @@ function EnvioSinAsignar({
   // que ya existe en vez de duplicarlo.
   useEffect(() => {
     setCreadores(null);
+    setCreadoresError(null);
     setSubClientId(NUEVO);
     if (!clientId || clientId === NUEVO) return;
     let vivo = true;
-    listSubClientsAction(clientId)
-      .then((lista) => {
-        if (!vivo) return;
-        setCreadores(lista);
-        const mismo = lista.find(
-          (s) => s.name.trim().toLowerCase() === (envio.creatorName ?? "").trim().toLowerCase()
-        );
-        if (mismo) setSubClientId(mismo.id);
-      })
-      .catch(() => vivo && setCreadores([]));
+    void cargarCreadores(clientId).then((lectura) => {
+      if (!vivo) return;
+      if (!lectura.ok) {
+        setCreadoresError(lectura.motivo);
+        return;
+      }
+      const lista = lectura.data;
+      setCreadores(lista);
+      const mismo = lista.find(
+        (s) => s.name.trim().toLowerCase() === (envio.creatorName ?? "").trim().toLowerCase()
+      );
+      if (mismo) setSubClientId(mismo.id);
+    });
     return () => {
       vivo = false;
     };
   }, [clientId, envio.creatorName]);
 
-  const puedeAsignar =
-    (esNuevo ? newClientName.trim() !== "" : clientId !== "") &&
-    (subClientId !== NUEVO || newSubName.trim() !== "");
+  const puedeAsignar = sePuedeAsignar({
+    clientId,
+    newClientName,
+    subClientId,
+    newSubName,
+    creadoresError,
+  });
 
   const asignar = async () => {
     setSaving(true);
-    const result = await assignOnboardingSubmissionAction({
-      submissionId: envio.id,
-      clientId: esNuevo ? null : clientId,
-      newClientName: esNuevo ? newClientName : null,
-      subClientId: subClientId === NUEVO ? null : subClientId,
-      newSubClientName: subClientId === NUEVO ? newSubName : null,
+    let asignado = false;
+    await correrMutacion({
+      accion: () =>
+        assignOnboardingSubmissionAction({
+          submissionId: envio.id,
+          clientId: esNuevo ? null : clientId,
+          newClientName: esNuevo ? newClientName : null,
+          subClientId: subClientId === NUEVO ? null : subClientId,
+          newSubClientName: subClientId === NUEVO ? newSubName : null,
+        }),
+      alExito: () => {
+        asignado = true;
+      },
+      avisar: push,
+      tituloError: "No se pudo asignar",
+      etiqueta: "[ClientOnboardingInbox] asignar",
     });
     setSaving(false);
-    if (!result.success) {
-      push({ title: "No se pudo asignar", description: result.error });
-      return;
-    }
+    if (!asignado) return;
     push({ title: "Onboarding asignado", variant: "success" });
     onResolved(true);
   };
@@ -319,13 +391,18 @@ function EnvioSinAsignar({
       return;
     }
     setSaving(true);
-    const result = await discardOnboardingSubmissionAction(envio.id);
+    let descartado = false;
+    await correrMutacion({
+      accion: () => discardOnboardingSubmissionAction(envio.id),
+      alExito: () => {
+        descartado = true;
+      },
+      avisar: push,
+      tituloError: "No se pudo descartar",
+      etiqueta: "[ClientOnboardingInbox] descartar",
+    });
     setSaving(false);
-    if (!result.success) {
-      push({ title: "No se pudo descartar", description: result.error });
-      return;
-    }
-    onResolved(false);
+    if (descartado) onResolved(false);
   };
 
   return (
@@ -407,6 +484,9 @@ function EnvioSinAsignar({
               </option>
             ))}
           </select>
+          {creadoresError ? (
+            <AvisoDeLecturaFallida titulo="No se pudieron cargar sus creadores." motivo={creadoresError} />
+          ) : null}
           {subClientId === NUEVO ? (
             <Input
               value={newSubName}

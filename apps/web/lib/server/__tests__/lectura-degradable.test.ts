@@ -17,7 +17,7 @@ vi.mock("@/lib/observability/reportar-falla", () => ({
   reportarFalla: (error: unknown, contexto: unknown) => sim.reportes.push({ error, contexto }),
 }));
 
-import { lecturaDegradable } from "../lectura-degradable";
+import { lecturaDegradable, valorSiNoEsFalla } from "../lectura-degradable";
 import { ErrorEsperable } from "../error-esperable";
 
 let aviso: ReturnType<typeof vi.spyOn>;
@@ -78,5 +78,52 @@ describe("lecturaDegradable", () => {
     await expect(lecturaDegradable("w", falla(error), "defecto")).rejects.toBe(error);
     expect(sim.reportes).toEqual([]);
     expect(aviso).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * SCRUM-516 y SCRUM-517: las lecturas que otras pantallas componen sin
+ * `MutationResult` (columnas, seguimiento, wins, facturación por cliente) son
+ * `lecturaDegradable(...).catch((e) => valorSiNoEsFalla(e, porDefecto))`.
+ * Antes eran `catch { return [] }`: la falla no quedaba en ningún lado.
+ */
+describe("lecturaDegradable con valorSiNoEsFalla", () => {
+  const leerSinRechazo = <T>(etiqueta: string, leer: () => Promise<T>, porDefecto: T) =>
+    lecturaDegradable(etiqueta, leer, porDefecto).catch((error: unknown) =>
+      valorSiNoEsFalla(error, porDefecto)
+    );
+
+  it("si la lectura anda, devuelve su valor y no registra nada", async () => {
+    await expect(leerSinRechazo("x", async () => [1], [] as number[])).resolves.toEqual([1]);
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("⭐ una falla devuelve el valor por defecto y queda registrada una sola vez con su etiqueta", async () => {
+    const error = new Error("fetch failed");
+    await expect(leerSinRechazo("clientes:wins", falla<number[]>(error), [])).resolves.toEqual([]);
+    expect(sim.reportes).toEqual([{ error, contexto: { lectura: "clientes:wins" } }]);
+    expect(aviso).toHaveBeenCalledOnce();
+  });
+
+  it("⭐ un rechazo esperable (sin sesión) devuelve el valor por defecto sin registrarse, como antes", async () => {
+    await expect(
+      leerSinRechazo("x", falla<object>(new ErrorEsperable("Sesión no válida")), {})
+    ).resolves.toEqual({});
+    expect(sim.reportes).toEqual([]);
+    expect(aviso).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["redirect", () => getRedirectError("/login", RedirectType.replace)],
+    ["ruta dinámica", () => new DynamicServerError("Route usó `cookies`")],
+  ])("⭐ el error de Next (%s) se relanza y no se registra", async (_nombre, crear) => {
+    const error = crear();
+    await expect(leerSinRechazo("w", falla(error), [])).rejects.toBe(error);
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("⭐ valorSiNoEsFalla no esconde una falla que le llegue sin registrar: la relanza", () => {
+    const error = new TypeError("fetch failed");
+    expect(() => valorSiNoEsFalla(error, [])).toThrow(error);
   });
 });

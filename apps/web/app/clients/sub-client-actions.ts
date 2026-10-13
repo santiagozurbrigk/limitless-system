@@ -16,11 +16,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   getCurrentProfile,
-  isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
-import { orgHasAddOn, requireAddOn } from "@/lib/auth/add-ons";
-import { listFieldDefinitionsAction } from "@/app/clients/custom-field-actions";
+import { orgHasAddOn } from "@/lib/auth/add-ons";
+import { exigirAddOn } from "@/lib/auth/exigir-add-on";
+import { leerColumnas } from "@/lib/custom-fields/leer-columnas";
 import { activeFields, mergeCustomFieldValues, validateFieldValues } from "@/lib/custom-fields";
 import {
   SUB_CLIENT_COLUMNS,
@@ -31,11 +31,17 @@ import {
   type SubClient,
   type SubClientRow,
 } from "@/lib/clients/sub-clients";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
-import { firstZodError } from "@/lib/validations";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { firstZodError, uuidSchema } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import type { CustomFieldValues } from "@/types/custom-fields";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 const ADD_ON = "growth_partners" as const;
 
@@ -45,87 +51,118 @@ const nameSchema = z
   .min(1, "Poné el nombre del cliente.")
   .max(SUB_CLIENT_NAME_MAX, "Ese nombre es demasiado largo.");
 
+const LINK_LARGO = "El link de Instagram puede tener hasta 500 caracteres.";
+
 const createSchema = z.object({
-  clientId: z.string().uuid(),
+  clientId: uuidSchema,
   name: nameSchema,
-  instagramUrl: z.string().max(500).nullish(),
+  instagramUrl: z.string().max(500, LINK_LARGO).nullish(),
 });
 
 const updateSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   name: nameSchema,
-  instagramUrl: z.string().max(500).nullish(),
+  instagramUrl: z.string().max(500, LINK_LARGO).nullish(),
 });
 
 const valuesSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   values: z.record(z.string(), z.unknown()).default({}),
 });
 
 const moveSchema = z.object({
-  clientId: z.string().uuid(),
-  subClientId: z.string().uuid(),
+  clientId: uuidSchema,
+  subClientId: uuidSchema,
 });
 
 function revalidar(clientId: string) {
   revalidatePath(paths.platform.clients.detail(clientId));
 }
 
+/**
+ * SCRUM-516: las acciones de los clientes de un cliente devuelven sus errores
+ * esperables como valor (`MutationResult`), dentro de
+ * `mutacionConErroresEsperables`. Validación, sesión, add-on no habilitado,
+ * link inválido y cliente o sub-cliente inexistente o de otra organización
+ * vuelven con su motivo; lo inesperado se registra, va a Sentry y vuelve con el
+ * texto fijo. Antes el texto crudo de la base llegaba a la tarjeta, y la lista
+ * devolvía `[]` ante una falla: la ficha decía "Todavía no cargaste clientes".
+ */
+
+const CLIENTE_AJENO = "No se encontró ese cliente en tu organización.";
+const SUB_CLIENTE_INEXISTENTE = "Ese cliente ya no existe.";
+
 function linkOError(raw: string | null | undefined): string | null {
   const link = normalizeInstagramUrl(raw);
-  if (!link.ok) throw new Error(link.error);
+  if (!link.ok) throw new ErrorEsperable(link.error);
   return link.url;
 }
 
-/** Los campos de Marketing, Ventas y Sistemas: todos, archivados incluidos. */
-async function sectionFields() {
-  const all = await listFieldDefinitionsAction("client");
+/**
+ * Los campos de Marketing, Ventas y Sistemas: todos, archivados incluidos.
+ *
+ * Lee con `leerColumnas` (SCRUM-517), que lanza si la base falla. Antes usaba
+ * `listFieldDefinitionsAction`, que ante una falla devuelve `[]`: guardar los
+ * campos de un sub-cliente decía "guardados" y descartaba lo editado, y pasar
+ * los datos viejos respondía "No se pasó ningún dato". Ahora la falla corta
+ * antes de escribir y el usuario ve el texto fijo (SCRUM-516).
+ */
+async function sectionFields(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string
+) {
+  const all = await leerColumnas(supabase, organizationId, "client");
   return all.filter((field) => field.section !== null);
 }
 
-export async function listSubClientsAction(clientId: string): Promise<SubClient[]> {
-  const organizationId = await requireOrganizationId();
-  if (!(await orgHasAddOn(organizationId, ADD_ON))) return [];
+export async function listSubClientsAction(
+  clientId: string
+): Promise<MutationResult<SubClient[]>> {
+  return mutacionConErroresEsperables("[listSubClients]", async () => {
+    if (!uuidSchema.safeParse(clientId).success) throw new ErrorEsperable("ID inválido");
+    const organizationId = await requireOrganizationId();
+    if (!(await orgHasAddOn(organizationId, ADD_ON))) return [];
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("client_sub_clients")
-    .select(SUB_CLIENT_COLUMNS)
-    .eq("organization_id", organizationId)
-    .eq("client_id", clientId)
-    .order("created_at", { ascending: true });
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("client_sub_clients")
+      .select(SUB_CLIENT_COLUMNS)
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: true });
 
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    console.error("[sub-clients] listar", error.message);
-    return [];
-  }
-  return ((data ?? []) as SubClientRow[]).map(rowToSubClient);
+    if (error) {
+      if (esTablaAusente(error)) return [];
+      throw new FallaDeLaBase(error);
+    }
+    return ((data ?? []) as SubClientRow[]).map(rowToSubClient);
+  });
 }
 
 export async function createSubClientAction(
   input: z.input<typeof createSchema>
 ): Promise<MutationResult<SubClient>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[createSubClient]", async () => {
     const parsed = createSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const { clientId, name } = parsed.data;
     const instagramUrl = linkOError(parsed.data.instagramUrl);
 
     const organizationId = await requireOrganizationId();
-    await requireAddOn(organizationId, ADD_ON);
+    await exigirAddOn(organizationId, ADD_ON);
     const profile = await getCurrentProfile();
     const supabase = await createClient();
 
     // RLS mira la organización de la fila nueva, no la del cliente: sin esto
     // se podría colgar un sub-cliente de un cliente ajeno.
-    const { data: client } = await supabase
+    const { data: client, error: clientError } = await supabase
       .from("clients")
       .select("id")
       .eq("id", clientId)
       .eq("organization_id", organizationId)
       .maybeSingle();
-    if (!client) throw new Error("No se encontró ese cliente en tu organización.");
+    if (clientError) throw new FallaDeLaBase(clientError);
+    if (!client) throw new ErrorEsperable(CLIENTE_AJENO);
 
     const { data, error } = await supabase
       .from("client_sub_clients")
@@ -140,10 +177,12 @@ export async function createSubClientAction(
       .single();
 
     if (error) {
-      if (isMissingTableError(error.message)) {
-        throw new Error("La tabla de clientes todavía no existe en la base. Falta aplicar la migración.");
+      if (esTablaAusente(error)) {
+        throw new ErrorEsperable(
+          "La tabla de clientes todavía no existe en la base. Falta aplicar la migración."
+        );
       }
-      throw new Error(error.message);
+      throw new FallaDeLaBase(error);
     }
 
     revalidar(clientId);
@@ -154,14 +193,14 @@ export async function createSubClientAction(
 export async function updateSubClientAction(
   input: z.input<typeof updateSchema>
 ): Promise<MutationResult<SubClient>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateSubClient]", async () => {
     const parsed = updateSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const { id, name } = parsed.data;
     const instagramUrl = linkOError(parsed.data.instagramUrl);
 
     const organizationId = await requireOrganizationId();
-    await requireAddOn(organizationId, ADD_ON);
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const { data, error } = await supabase
@@ -172,8 +211,8 @@ export async function updateSubClientAction(
       .select(SUB_CLIENT_COLUMNS)
       .maybeSingle();
 
-    if (error) throw new Error(error.message);
-    if (!data) throw new Error("Ese cliente ya no existe.");
+    if (error) throw new FallaDeLaBase(error);
+    if (!data) throw new ErrorEsperable(SUB_CLIENTE_INEXISTENTE);
 
     const sub = rowToSubClient(data as SubClientRow);
     revalidar(sub.clientId);
@@ -190,13 +229,13 @@ export async function updateSubClientAction(
 export async function updateSubClientFieldsAction(
   input: z.input<typeof valuesSchema>
 ): Promise<MutationResult<CustomFieldValues>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateSubClientFields]", async () => {
     const parsed = valuesSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const { id, values } = parsed.data;
 
     const organizationId = await requireOrganizationId();
-    await requireAddOn(organizationId, ADD_ON);
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const { data: current, error: readError } = await supabase
@@ -205,14 +244,14 @@ export async function updateSubClientFieldsAction(
       .eq("id", id)
       .eq("organization_id", organizationId)
       .maybeSingle();
-    if (readError) throw new Error(readError.message);
-    if (!current) throw new Error("Ese cliente ya no existe.");
+    if (readError) throw new FallaDeLaBase(readError);
+    if (!current) throw new ErrorEsperable(SUB_CLIENTE_INEXISTENTE);
 
-    const all = await sectionFields();
+    const all = await sectionFields(supabase, organizationId);
     const validation = validateFieldValues(activeFields(all), values);
     if (!validation.ok) {
       const mensajes = Object.values(validation.errors);
-      throw new Error(mensajes.join(" · ") || "Datos inválidos");
+      throw new ErrorEsperable(mensajes.join(" · ") || "Datos inválidos");
     }
 
     const loaded = (current.custom ?? {}) as CustomFieldValues;
@@ -223,7 +262,7 @@ export async function updateSubClientFieldsAction(
       .update({ custom: merged, updated_at: new Date().toISOString() })
       .eq("id", id)
       .eq("organization_id", organizationId);
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
     revalidar(current.client_id as string);
     return merged;
@@ -231,9 +270,10 @@ export async function updateSubClientFieldsAction(
 }
 
 export async function deleteSubClientAction(id: string): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteSubClient]", async () => {
+    if (!uuidSchema.safeParse(id).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
-    await requireAddOn(organizationId, ADD_ON);
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const { data, error } = await supabase
@@ -243,7 +283,7 @@ export async function deleteSubClientAction(id: string): Promise<MutationResult<
       .eq("organization_id", organizationId)
       .select("client_id")
       .maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     if (data?.client_id) revalidar(data.client_id as string);
   });
 }
@@ -262,13 +302,13 @@ export async function deleteSubClientAction(id: string): Promise<MutationResult<
 export async function moveLegacySectionValuesAction(
   input: z.input<typeof moveSchema>
 ): Promise<MutationResult<{ moved: number; kept: number }>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[moveLegacySectionValues]", async () => {
     const parsed = moveSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const { clientId, subClientId } = parsed.data;
 
     const organizationId = await requireOrganizationId();
-    await requireAddOn(organizationId, ADD_ON);
+    await exigirAddOn(organizationId, ADD_ON);
     const supabase = await createClient();
 
     const [{ data: client, error: clientError }, { data: sub, error: subError }] =
@@ -287,13 +327,13 @@ export async function moveLegacySectionValuesAction(
           .eq("organization_id", organizationId)
           .maybeSingle(),
       ]);
-    if (clientError) throw new Error(clientError.message);
-    if (subError) throw new Error(subError.message);
-    if (!client) throw new Error("No se encontró ese cliente en tu organización.");
-    if (!sub) throw new Error("Ese cliente ya no existe.");
+    if (clientError) throw new FallaDeLaBase(clientError);
+    if (subError) throw new FallaDeLaBase(subError);
+    if (!client) throw new ErrorEsperable(CLIENTE_AJENO);
+    if (!sub) throw new ErrorEsperable(SUB_CLIENTE_INEXISTENTE);
 
     const plan = planLegacyMove(
-      await sectionFields(),
+      await sectionFields(supabase, organizationId),
       (client.custom ?? {}) as CustomFieldValues,
       (sub.custom ?? {}) as CustomFieldValues
     );
@@ -306,14 +346,14 @@ export async function moveLegacySectionValuesAction(
         .update({ custom: plan.subClientCustom, updated_at: now })
         .eq("id", subClientId)
         .eq("organization_id", organizationId);
-      if (subUpdateError) throw new Error(subUpdateError.message);
+      if (subUpdateError) throw new FallaDeLaBase(subUpdateError);
 
       const { error: clientUpdateError } = await supabase
         .from("clients")
         .update({ custom: plan.clientCustom, updated_at: now })
         .eq("id", clientId)
         .eq("organization_id", organizationId);
-      if (clientUpdateError) throw new Error(clientUpdateError.message);
+      if (clientUpdateError) throw new FallaDeLaBase(clientUpdateError);
     }
 
     revalidar(clientId);

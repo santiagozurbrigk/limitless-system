@@ -21,7 +21,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   getCurrentProfile,
-  isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import { FIELD_OPTION_COLORS } from "@/types/custom-fields";
@@ -51,6 +50,7 @@ import {
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
 
 const stageSchema = z.object({
   name: z.string().trim().min(1, "La fase necesita un nombre.").max(120),
@@ -580,7 +580,7 @@ async function checkpointHasEvents(
     .eq("checkpoint_id", checkpointId);
 
   if (error) {
-    if (isMissingTableError(error.message)) return false;
+    if (esTablaAusente(error)) return false;
     throw new FallaDeLaBase(error);
   }
 

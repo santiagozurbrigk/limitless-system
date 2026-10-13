@@ -41,6 +41,8 @@ import {
   type RevenueCurrency,
 } from "@/lib/clients/revenue";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 
 const CONTROL_CLASS =
   "h-9 w-full rounded-md border border-border bg-background px-2 text-sm";
@@ -79,21 +81,22 @@ function Formulario({
     }
 
     setSaving(true);
-    const result = await saveClientRevenueAction({
-      clientId,
-      amount: monto,
-      currency,
-      period,
-      note: "",
-      replacesEntryId: editando?.id ?? null,
+    await correrMutacion({
+      accion: () =>
+        saveClientRevenueAction({
+          clientId,
+          amount: monto,
+          currency,
+          period,
+          note: "",
+          replacesEntryId: editando?.id ?? null,
+        }),
+      alExito: (entry) => onSaved(entry, editando?.id ?? null),
+      avisar: push,
+      tituloError: "No se pudo guardar",
+      etiqueta: "[ClientRevenueCard] guardar",
     });
     setSaving(false);
-
-    if (!result.success) {
-      push({ title: "No se pudo guardar", description: result.error });
-      return;
-    }
-    onSaved(result.data, editando?.id ?? null);
   };
 
   return (
@@ -156,10 +159,19 @@ function Formulario({
   );
 }
 
+/**
+ * La facturación del cliente, o el motivo si no se pudo leer (SCRUM-516).
+ * Antes una falla se mostraba como «Sin datos todavía».
+ */
+export function cargarFacturacion(clientId: string): Promise<Lectura<ClientRevenueEntry[]>> {
+  return leerConMotivo(() => listClientRevenueAction(clientId), "[ClientRevenueCard] listar");
+}
+
 export function ClientRevenueCard({ clientId }: { clientId: string }) {
   const { push } = useToast();
   const [entries, setEntries] = useState<ClientRevenueEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [motivo, setMotivo] = useState<string | null>(null);
   /**
    * El formulario abierto: `"nuevo"` para cargar un mes, la entrada para
    * corregirla, `null` cerrado.
@@ -168,13 +180,16 @@ export function ClientRevenueCard({ clientId }: { clientId: string }) {
 
   const cargar = useCallback(() => {
     let alive = true;
-    listClientRevenueAction(clientId)
-      .then((next) => {
-        if (alive) setEntries(next);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+    void cargarFacturacion(clientId).then((lectura) => {
+      if (!alive) return;
+      if (lectura.ok) {
+        setEntries(lectura.data);
+        setMotivo(null);
+      } else {
+        setMotivo(lectura.motivo);
+      }
+      setLoading(false);
+    });
     return () => {
       alive = false;
     };
@@ -183,12 +198,13 @@ export function ClientRevenueCard({ clientId }: { clientId: string }) {
   useEffect(() => cargar(), [cargar]);
 
   const borrar = async (entryId: string) => {
-    const result = await deleteClientRevenueAction(entryId);
-    if (!result.success) {
-      push({ title: "No se pudo borrar", description: result.error });
-      return;
-    }
-    setEntries((prev) => prev.filter((entry) => entry.id !== entryId));
+    await correrMutacion({
+      accion: () => deleteClientRevenueAction(entryId),
+      alExito: () => setEntries((prev) => prev.filter((entry) => entry.id !== entryId)),
+      avisar: push,
+      tituloError: "No se pudo borrar",
+      etiqueta: "[ClientRevenueCard] borrar",
+    });
   };
 
   if (loading) return null;
@@ -351,7 +367,9 @@ export function ClientRevenueCard({ clientId }: { clientId: string }) {
               </details>
             ) : null}
           </>
-        ) : form ? null : (
+        ) : form ? null : motivo ? (
+          <AvisoDeLecturaFallida titulo="No se pudo cargar la facturación." motivo={motivo} />
+        ) : (
           <p className="text-xs text-muted-foreground">
             Sin datos todavía. Cargá cuánto facturó su negocio este mes y vas a
             poder ver cómo evoluciona.

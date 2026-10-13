@@ -18,6 +18,7 @@ import {
   updatePlanAction,
 } from "@/app/clients/plan-actions";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import type { InstallmentSystem, Plan } from "@/types/plans";
 import { montoACentavos } from "@/lib/clients/payment-utils";
 
@@ -254,45 +255,57 @@ export function PlanManagerDialog({
         : null;
 
       if (mode === "new") {
-        const result = await createPlanAction({
-          name: form.name,
-          durationDays,
-          installmentSystems: systems,
+        await correrMutacion({
+          accion: () =>
+            createPlanAction({
+              name: form.name,
+              durationDays,
+              installmentSystems: systems,
+            }),
+          alExito: (creado) => {
+            onUpdated([creado, ...plans]);
+            push({ title: "Plan creado", variant: "success" });
+            cancelForm();
+          },
+          avisar: push,
+          tituloError: "No se pudo crear el plan",
+          etiqueta: "[PlanManagerDialog] crear",
         });
-        if (!result.success) {
-          push({ title: "No se pudo crear el plan", description: result.error });
-          return;
-        }
-        onUpdated([result.data!, ...plans]);
-        push({ title: "Plan creado", variant: "success" });
       } else {
         // editar
-        const result = await updatePlanAction(mode, {
-          name: form.name,
-          durationDays,
-          installmentSystems: systems,
+        const editando = mode;
+        await correrMutacion({
+          accion: () =>
+            updatePlanAction(editando, {
+              name: form.name,
+              durationDays,
+              installmentSystems: systems,
+            }),
+          alExito: (actualizado) => {
+            onUpdated(plans.map((p) => (p.id === editando ? actualizado : p)));
+            push({ title: "Plan actualizado", variant: "success" });
+            cancelForm();
+          },
+          avisar: push,
+          tituloError: "No se pudo actualizar el plan",
+          etiqueta: "[PlanManagerDialog] actualizar",
         });
-        if (!result.success) {
-          push({ title: "No se pudo actualizar el plan", description: result.error });
-          return;
-        }
-        onUpdated(plans.map((p) => (p.id === mode ? result.data! : p)));
-        push({ title: "Plan actualizado", variant: "success" });
       }
-
-      cancelForm();
     });
   };
 
   const handleDelete = (planId: string, planName: string) => {
     startTransition(async () => {
-      const result = await deletePlanAction(planId);
-      if (!result.success) {
-        push({ title: "No se pudo eliminar el plan", description: result.error });
-        return;
-      }
-      onUpdated(plans.filter((p) => p.id !== planId));
-      push({ title: `Plan "${planName}" eliminado`, variant: "success" });
+      await correrMutacion({
+        accion: () => deletePlanAction(planId),
+        alExito: () => {
+          onUpdated(plans.filter((p) => p.id !== planId));
+          push({ title: `Plan "${planName}" eliminado`, variant: "success" });
+        },
+        avisar: push,
+        tituloError: "No se pudo eliminar el plan",
+        etiqueta: "[PlanManagerDialog] eliminar",
+      });
     });
   };
 

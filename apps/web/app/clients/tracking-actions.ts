@@ -13,7 +13,6 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import {
   getCurrentProfile,
@@ -41,7 +40,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { lecturaDegradable } from "@/lib/server/lectura-degradable";
+import { lecturaDegradable, valorSiNoEsFalla } from "@/lib/server/lectura-degradable";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -71,18 +70,12 @@ type TrackingRow = {
 export async function listClientTrackingAction(): Promise<
   Record<string, ClientTracking>
 > {
-  try {
-    return await lecturaDegradable(
-      "listClientTracking",
-      async () => leerSeguimiento(await createClient(), await requireOrganizationId()),
-      {}
-    );
-  } catch (error) {
-    // Sólo llegan acá un error interno de Next (se relanza) y la sesión que
-    // falta, que no es una falla: sin sesión no hay seguimiento que mostrar.
-    unstable_rethrow(error);
-    return {};
-  }
+  // Sin sesión, `{}` sin registrarse: no es una falla.
+  return lecturaDegradable(
+    "listClientTracking",
+    async () => leerSeguimiento(await createClient(), await requireOrganizationId()),
+    {} as Record<string, ClientTracking>
+  ).catch((error: unknown) => valorSiNoEsFalla(error, {} as Record<string, ClientTracking>));
 }
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;

@@ -6,6 +6,8 @@ import {
   Button,
 } from "@ai-coo/ui";
 import { useToast } from "@/providers/toast-provider";
+import { falloInesperado, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { previewGHLContactsAction, importGHLContactsAction } from "@/app/ghl/import-actions";
 import {
   importClientsFromExcelAction,
@@ -26,6 +28,7 @@ import {
   Database,
   FileSpreadsheet,
   CheckCircle,
+  AlertTriangle,
   Loader2,
   ChevronRight,
   ChevronLeft,
@@ -558,7 +561,7 @@ function SheetPicker({
 
 // ─── Paso 2.5 — Mapeo de columnas (solo para archivo de clientes) ─────────────
 
-function StepMapper({
+export function StepMapper({
   clientsPreview,
   clientsFile,
   mapping,
@@ -568,6 +571,7 @@ function StepMapper({
   onClientsSheetChange,
   sheetConfirmed,
   onSheetConfirm,
+  motivo = null,
 }: {
   clientsPreview: ExcelPreview | null;
   clientsFile: ExcelFile | null;
@@ -578,6 +582,8 @@ function StepMapper({
   onClientsSheetChange: (sheet: string) => void;
   sheetConfirmed: boolean;
   onSheetConfirm: () => void;
+  /** Por qué no se pudo leer el archivo, si no se pudo. */
+  motivo?: string | null;
 }) {
   if (loading) {
     return (
@@ -586,6 +592,10 @@ function StepMapper({
         <span className="text-sm">Leyendo columnas del archivo…</span>
       </div>
     );
+  }
+
+  if (motivo && !clientsPreview) {
+    return <AvisoDeLecturaFallida titulo="No se pudo leer el archivo." motivo={motivo} />;
   }
 
   // Fase 1: selector de hoja (solo si el archivo tiene más de una hoja y aún no se confirmó)
@@ -651,7 +661,7 @@ function StepMapper({
 
 // ─── Paso 3 — Confirmación ────────────────────────────────────────────────────
 
-function StepConfirm({
+export function StepConfirm({
   origin,
   what,
   ghlPreview,
@@ -672,28 +682,7 @@ function StepConfirm({
   summary: ImportSummary | null;
   onImport: () => void;
 }) {
-  if (summary) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 text-green-600">
-          <CheckCircle className="h-5 w-5" />
-          <span className="text-sm font-medium">Importación completada</span>
-        </div>
-        {summary.clientsResult && (
-          <ResultRow
-            label="Clientes"
-            inserted={summary.clientsResult.inserted}
-            skipped={summary.clientsResult.skipped}
-            errors={summary.clientsResult.errors.length}
-            planMatchCount={summary.clientsResult.planMatchCount}
-          />
-        )}
-        {summary.salesMetricsResult && (
-          <ResultRow label="Métricas de ventas" inserted={summary.salesMetricsResult.inserted} skipped={summary.salesMetricsResult.skipped} errors={summary.salesMetricsResult.errors.length} />
-        )}
-      </div>
-    );
-  }
+  if (summary) return <ResumenDeImportacion summary={summary} />;
 
   const salesRowsWithPeriod = manualSalesRows.filter(r => r.period);
   const canImport =
@@ -753,8 +742,57 @@ function StepConfirm({
   );
 }
 
-function ResultRow({ label, inserted, skipped, errors, planMatchCount }: {
+/**
+ * El paso de resultados: encabezado, clientes y métricas importados. Si la
+ * importación de clientes quedó incompleta, el encabezado lo dice (SCRUM-516).
+ */
+export function ResumenDeImportacion({ summary }: { summary: ImportSummary }) {
+  return (
+    <div className="space-y-4">
+      <EncabezadoDelResumen incompleta={Boolean(summary.clientsResult?.incompleta)} />
+      {summary.clientsResult && (
+        <ResultRow
+          label="Clientes"
+          inserted={summary.clientsResult.inserted}
+          skipped={summary.clientsResult.skipped}
+          errors={summary.clientsResult.errors.length}
+          planMatchCount={summary.clientsResult.planMatchCount}
+          incompleta={summary.clientsResult.incompleta}
+        />
+      )}
+      {summary.salesMetricsResult && (
+        <ResultRow label="Métricas de ventas" inserted={summary.salesMetricsResult.inserted} skipped={summary.salesMetricsResult.skipped} errors={summary.salesMetricsResult.errors.length} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * El encabezado del resumen. Si la importación quedó incompleta (se guardaron
+ * algunos lotes y otro falló), lo dice, como el aviso, en vez de "completada"
+ * con el ícono verde (SCRUM-516, AR pasada 2).
+ */
+export function EncabezadoDelResumen({ incompleta }: { incompleta: boolean }) {
+  if (incompleta) {
+    return (
+      <div className="flex items-center gap-2 text-destructive">
+        <AlertTriangle className="h-5 w-5" />
+        <span className="text-sm font-medium">Importación incompleta</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 text-green-600">
+      <CheckCircle className="h-5 w-5" />
+      <span className="text-sm font-medium">Importación completada</span>
+    </div>
+  );
+}
+
+export function ResultRow({ label, inserted, skipped, errors, planMatchCount, incompleta }: {
   label: string; inserted: number; skipped: number; errors: number; planMatchCount?: number;
+  /** Un lote falló después de guardar otros: cuántos se importaron y qué hacer (SCRUM-516). */
+  incompleta?: string;
 }) {
   return (
     <div className="text-sm">
@@ -767,6 +805,7 @@ function ResultRow({ label, inserted, skipped, errors, planMatchCount }: {
           <span className="text-brand-500">{planMatchCount} con plan asignado</span>
         )}
       </div>
+      {incompleta ? <p className="mt-1 text-xs text-destructive">{incompleta}</p> : null}
     </div>
   );
 }
@@ -805,6 +844,45 @@ function autoMapClients(headers: string[]): Record<string, string> {
   return result;
 }
 
+// ─── Llamadas a las acciones (SCRUM-516) ──────────────────────────────────────
+
+/**
+ * Las columnas y primeras filas del archivo, o el motivo si no se pudo leer:
+ * el que devuelve la acción (archivo ilegible, sesión) o, si lanzó, el texto
+ * fijo. Antes una falla dejaba el paso de mapeo en blanco, sin explicación.
+ */
+export function leerVistaPrevia(
+  fileBase64: string,
+  sheetName?: string
+): Promise<Lectura<ExcelPreview>> {
+  return leerConMotivo(
+    () => getExcelPreviewAction(fileBase64, sheetName),
+    "[DataImportWizard] vista previa"
+  );
+}
+
+/** Importa los clientes del archivo, o devuelve el motivo si no se pudo. */
+export function importarClientesDelArchivo(
+  fileBase64: string,
+  columnMapping: ColumnMapping | undefined,
+  sheetName: string | undefined
+): Promise<Lectura<ExcelImportResult>> {
+  return leerConMotivo(
+    () => importClientsFromExcelAction(fileBase64, columnMapping, sheetName),
+    "[DataImportWizard] importar clientes"
+  );
+}
+
+/** Importa las métricas de ventas cargadas a mano, o devuelve el motivo. */
+export function importarMetricasManuales(
+  rows: ManualSalesMetricInput[]
+): Promise<Lectura<ExcelImportResult>> {
+  return leerConMotivo(
+    () => importSalesMetricsManualAction(rows),
+    "[DataImportWizard] importar métricas"
+  );
+}
+
 // ─── Wizard principal ─────────────────────────────────────────────────────────
 
 export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
@@ -823,6 +901,9 @@ export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
 
   // ── Mapper state (solo para clientes) ──
   const [clientsPreview, setClientsPreview] = useState<ExcelPreview | null>(null);
+  // Por qué no se pudo leer el archivo (SCRUM-516): sin esto el paso de mapeo
+  // quedaba en blanco.
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [columnMapping, setColumnMapping] = useState<ExcelColumnMapperValue>({});
   const [mapperLoading, setMapperLoading] = useState(false);
   const [clientsSheetLoading, setClientsSheetLoading] = useState(false);
@@ -858,10 +939,11 @@ export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
     if (needsMapper) {
       setMapperLoading(true);
       setSheetConfirmed(false); // Siempre pedir confirmación de hoja al entrar al mapper
+      setPreviewError(null);
       setStep("mapper");
       try {
-        const result = clientsFile ? await getExcelPreviewAction(clientsFile.base64) : null;
-        if (result?.success) {
+        const result = clientsFile ? await leerVistaPrevia(clientsFile.base64) : null;
+        if (result?.ok) {
           setClientsPreview(result.data);
           setColumnMapping({ clientsMapping: autoMapClients(result.data.headers) as Partial<ColumnMapping> });
           // Si el archivo tiene una sola hoja, no hace falta confirmación explícita
@@ -870,6 +952,7 @@ export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
           }
         } else {
           setClientsPreview(null);
+          if (result) setPreviewError(result.motivo);
         }
       } finally {
         setMapperLoading(false);
@@ -896,13 +979,16 @@ export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
     if (!clientsFile) return;
     setClientsSheetLoading(true);
     try {
-      const result = await getExcelPreviewAction(clientsFile.base64, sheet);
-      if (result.success) {
+      const result = await leerVistaPrevia(clientsFile.base64, sheet);
+      if (result.ok) {
         setClientsPreview(result.data);
         setColumnMapping((prev) => ({
           ...prev,
           clientsMapping: autoMapClients(result.data.headers) as Partial<ColumnMapping>,
         }));
+      } else {
+        // Queda la hoja que se veía; se avisa por qué no cambió.
+        push({ title: "No se pudo leer esa hoja", description: result.motivo });
       }
     } finally {
       setClientsSheetLoading(false);
@@ -912,12 +998,17 @@ export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
   const handleImport = async () => {
     setImporting(true);
     const result: ImportSummary = {};
+    // El motivo que devolvió la acción, tal cual (SCRUM-516).
+    const fallar = (motivo: string) => push({ title: "Error al importar", description: motivo });
     try {
       // ── Clientes ──
       if (what.has("clients")) {
         if (origin === "ghl") {
           const r = await importGHLContactsAction();
-          if (!r.success) throw new Error(r.error);
+          if (!r.success) {
+            fallar(r.error);
+            return;
+          }
           result.clientsResult = {
             inserted: r.data.inserted,
             skipped:  r.data.skippedExisting,
@@ -925,12 +1016,15 @@ export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
             source:   "ghl",
           };
         } else if (clientsFile) {
-          const r = await importClientsFromExcelAction(
+          const r = await importarClientesDelArchivo(
             clientsFile.base64,
             columnMapping.clientsMapping as ColumnMapping | undefined,
             clientsPreview?.activeSheet
           );
-          if (!r.success) throw new Error(r.error);
+          if (!r.ok) {
+            fallar(r.motivo);
+            return;
+          }
           result.clientsResult = { ...r.data, source: "excel" };
         }
       }
@@ -952,8 +1046,11 @@ export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
             facturacion:    parseNum(r.facturacion),
             gastos:         parseNum(r.gastos),
           }));
-        const r = await importSalesMetricsManualAction(rows);
-        if (!r.success) throw new Error(r.error);
+        const r = await importarMetricasManuales(rows);
+        if (!r.ok) {
+          fallar(r.motivo);
+          return;
+        }
         result.salesMetricsResult = r.data;
       }
 
@@ -961,18 +1058,22 @@ export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
       const totalImported =
         (result.clientsResult?.inserted ?? 0) +
         (result.salesMetricsResult?.inserted ?? 0);
-      push({
-        title: "Importación completada",
-        description: `${totalImported} registros importados`,
-        variant: "success",
-      });
+      const incompleta = result.clientsResult?.incompleta;
+      push(
+        incompleta
+          ? { title: "Importación incompleta", description: incompleta }
+          : {
+              title: "Importación completada",
+              description: `${totalImported} registros importados`,
+              variant: "success",
+            }
+      );
 
       setTimeout(() => router.refresh(), 500);
     } catch (e) {
-      push({
-        title: "Error al importar",
-        description: e instanceof Error ? e.message : "Error inesperado",
-      });
+      // Una acción que lanzó (en producción el navegador sólo recibe un
+      // digest): el texto fijo, nunca el párrafo técnico de Next.
+      fallar(falloInesperado("[DataImportWizard] importar", e));
     } finally {
       setImporting(false);
     }
@@ -1056,6 +1157,7 @@ export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
             onClientsSheetChange={handleClientsSheetChange}
             sheetConfirmed={sheetConfirmed}
             onSheetConfirm={() => setSheetConfirmed(true)}
+            motivo={previewError}
           />
         )}
         {step === "confirm" && (

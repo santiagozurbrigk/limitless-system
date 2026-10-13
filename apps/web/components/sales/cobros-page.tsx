@@ -33,6 +33,7 @@ import { BookOpen, Settings2, X } from "lucide-react";
 import { assignClientPlanAction } from "@/app/clients/actions";
 import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 import { listPlansAction } from "@/app/clients/plan-actions";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { getClientsTableEnrichmentAction } from "@/app/clients/plan-duration-actions";
 import { FilterPills } from "@/components/marketing/filter-pills";
 import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
@@ -168,6 +169,11 @@ export function cargarCobradoPorCliente(): Promise<
   return leerConMotivo(getClientsTableEnrichmentAction, "[CobrosPage] cobrado");
 }
 
+/** Los planes de la organización, o el motivo si no se pudieron leer (SCRUM-516). */
+export function cargarPlanesDeCobros(): Promise<Lectura<Plan[]>> {
+  return leerConMotivo(listPlansAction, "[CobrosPage] planes");
+}
+
 /** Aviso cuando no se pudieron leer los pagos: lo cobrado y adeudado no está al día. */
 export function AvisoDeCobradoSinLeer({ motivo }: { motivo: string }) {
   return (
@@ -213,12 +219,15 @@ export function CobrosPage({
   // Por qué no se pudo leer lo cobrado (SCRUM-504): sin esto, todos los
   // clientes se verían con la deuda completa.
   const [cobradoError, setCobradoError] = useState<string | null>(null);
+  // Sin los planes, la columna de plan y los días restantes no están al día
+  // (SCRUM-516): antes se veían como "sin plan".
+  const [planesError, setPlanesError] = useState<string | null>(null);
 
   useEffect(() => {
     startLoad(async () => {
       const [enrichment, fetchedPlans] = await Promise.all([
         cargarCobradoPorCliente(),
-        listPlansAction(),
+        cargarPlanesDeCobros(),
       ]);
       if (enrichment.ok) {
         setPaidByClientId(enrichment.data.paidByClientId);
@@ -227,7 +236,12 @@ export function CobrosPage({
       } else {
         setCobradoError(enrichment.motivo);
       }
-      setPlans(fetchedPlans);
+      if (fetchedPlans.ok) {
+        setPlans(fetchedPlans.data);
+        setPlanesError(null);
+      } else {
+        setPlanesError(fetchedPlans.motivo);
+      }
     });
   }, [clients]);
 
@@ -349,6 +363,9 @@ export function CobrosPage({
       <PageHeader description="Plan, monto, adeudado y comprobantes de cada cliente" />
 
       {cobradoError ? <AvisoDeCobradoSinLeer motivo={cobradoError} /> : null}
+      {planesError ? (
+        <AvisoDeLecturaFallida titulo="No se pudieron cargar los planes." motivo={planesError} />
+      ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
