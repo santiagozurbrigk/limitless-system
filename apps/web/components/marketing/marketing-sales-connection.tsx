@@ -19,6 +19,20 @@ import { ContentPatternReport } from "@/components/marketing/content-pattern-rep
 import type { ClosedBuyerJourney } from "@/types/marketing-insights";
 import type { ContentPatternReport as ContentPatternReportType } from "@/app/marketing/content/pattern-report-actions";
 
+/**
+ * Lo que necesita la sección del último reporte (SCRUM-519): el reporte o, si
+ * no se pudo leer, el motivo. Sin el motivo, la falla se veía como "todavía no
+ * hay reporte" y la sección ofrecía generar el primero.
+ */
+export async function leerUltimoReporte(
+  leer: typeof getLatestContentPatternReportAction = getLatestContentPatternReportAction
+): Promise<{ reporte: ContentPatternReportType | null; motivo: string | null }> {
+  const lectura = await leerConMotivo(leer, "[MarketingSalesConnection] último reporte");
+  return lectura.ok
+    ? { reporte: lectura.data, motivo: null }
+    : { reporte: null, motivo: lectura.motivo };
+}
+
 export function MarketingSalesConnection() {
   const [loading, setLoading] = useState(true);
   const [rank, setRank] = useState<SalesContentRankView[]>([]);
@@ -33,16 +47,14 @@ export function MarketingSalesConnection() {
     Promise.all([
       getSalesContentRankAction(),
       getClosedBuyerJourneysAction(),
-      // El último reporte devuelve su error como valor (SCRUM-519): si no se
-      // pudo leer, la sección lo dice en vez de ofrecer generar el primero.
-      leerConMotivo(getLatestContentPatternReportAction, "[MarketingSalesConnection] último reporte"),
+      leerUltimoReporte(),
     ])
-      .then(([rankData, journeyData, reporte]) => {
+      .then(([rankData, journeyData, ultimo]) => {
         if (!active) return;
         setRank(rankData);
         setJourneys(journeyData);
-        setLatestReport(reporte.ok ? reporte.data : null);
-        setMotivoDelReporte(reporte.ok ? null : reporte.motivo);
+        setLatestReport(ultimo.reporte);
+        setMotivoDelReporte(ultimo.motivo);
       })
       .catch(() => {
         if (!active) return;
