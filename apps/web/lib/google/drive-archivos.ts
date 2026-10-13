@@ -79,13 +79,15 @@ async function primerErrorDelCuerpo(
  * Los `reason` de un 403 que se le explican al usuario, con su texto. Salen de la
  * guía de errores de la API de Drive
  * (`developers.google.com/workspace/drive/api/guides/handle-errors`, copia en la
- * evidencia de SCRUM-519, `fuentes-google/drive-handle-errors.txt`); sólo estos
- * cuatro dicen que la cuenta de Google no puede leer el archivo y qué tiene que
- * hacer el usuario:
- *   - `appNotAuthorizedToFile`: la app no está en el ACL del archivo (la guía:
- *     que el usuario lo abra con el selector o desde Drive).
- *   - `insufficientFilePermissions`: la cuenta no tiene permiso sobre el archivo
- *     (la guía: pedirle acceso al dueño).
+ * evidencia de SCRUM-519, `fuentes-google/drive-handle-errors.txt`); estos
+ * cuatro dicen que la cuenta o la app no tienen acceso al archivo y qué tiene
+ * que hacer el usuario:
+ *   - `appNotAuthorizedToFile`: la app no está en los permisos (ACL) del archivo
+ *     (la guía: que el usuario lo abra con el selector o desde Drive).
+ *   - `insufficientFilePermissions`: según la guía, la cuenta no tiene permiso
+ *     de escritura y la app intenta modificar el archivo (arreglo: pedirle
+ *     acceso de edición al dueño). Con el scope de sólo lectura y acciones que
+ *     sólo leen, en la práctica no debería llegar; si llega, es el mismo motivo.
  *   - `teamDriveMembershipRequired`: la cuenta no es miembro de la unidad
  *     compartida del archivo.
  *   - `domainPolicy`: el administrador del dominio no deja que apps externas

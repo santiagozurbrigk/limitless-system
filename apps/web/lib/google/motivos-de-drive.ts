@@ -14,9 +14,11 @@ export const MOTIVO_DRIVE_SIN_PERMISOS =
   "Permisos insuficientes. Reconectá tu cuenta de Google con acceso completo a Drive.";
 
 /**
- * 403 de Drive porque la cuenta de Google no puede leer ese archivo
- * (`appNotAuthorizedToFile`, `insufficientFilePermissions`,
- * `teamDriveMembershipRequired`). Reconectar no lo arregla.
+ * 403 de Drive porque la cuenta o la app no tienen acceso al archivo
+ * (`appNotAuthorizedToFile`: la app no está en sus permisos;
+ * `teamDriveMembershipRequired`: la cuenta no es miembro de la unidad
+ * compartida; `insufficientFilePermissions`: sin permiso de escritura, que con
+ * acciones que sólo leen no debería llegar). Reconectar no lo arregla.
  */
 export const MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO =
   "Tu cuenta de Google no tiene acceso a ese archivo. Pedile acceso a quien lo comparte o elegí otro.";
