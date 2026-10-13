@@ -52,7 +52,7 @@ import {
   type MutationResult,
 } from "@/lib/server/action-result";
 import { respaldoDeLectura } from "@/lib/server/lectura-degradable";
-import { firstZodError } from "@/lib/validations";
+import { firstZodError, uuidSchema } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paths } from "@/routes";
@@ -75,7 +75,7 @@ const winSchema = z.object({
   custom: z.record(z.string(), z.unknown()).default({}),
   notes: z.string().trim().max(2000).nullable().default(null),
   /** Adjuntos subidos antes de guardar; se enganchan al win recién creado. */
-  draftId: z.string().uuid().nullable().default(null),
+  draftId: uuidSchema.nullable().default(null),
 
   /**
    * ⭐ Los permisos del cliente. `not_asked` es el estado honesto por defecto:
@@ -605,7 +605,7 @@ export async function deleteWinAttachmentAction(
 // ─── Usos ───────────────────────────────────────────────────────────────────
 
 const usageSchema = z.object({
-  winId: z.string().uuid(),
+  winId: uuidSchema,
   channel: z.enum(WIN_USAGE_CHANNELS),
   locationLabel: z.string().trim().max(200).nullable().default(null),
   url: z.string().trim().url("El link no es válido.").max(500).nullable().default(null),

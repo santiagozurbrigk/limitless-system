@@ -252,6 +252,16 @@ describe("updateSubClientFieldsAction", () => {
     expect(base.escrituras()).toEqual([]);
   });
 
+  it("un id inválido vuelve con el motivo en castellano (antes, el \"Invalid input\" de zod)", async () => {
+    await expect(updateSubClientFieldsAction({ id: "no-es-un-id", values: {} })).resolves.toEqual({
+      success: false,
+      error: "ID inválido",
+    });
+    await expect(
+      assignOnboardingSubmissionAction({ submissionId: "no-es-un-id", clientId: CLIENTE })
+    ).resolves.toEqual({ success: false, error: "ID inválido" });
+  });
+
   it("⭐ uno de otra organización vuelve como inexistente", async () => {
     await expect(updateSubClientFieldsAction({ id: SUB_AJENO, values: {} })).resolves.toEqual({
       success: false,

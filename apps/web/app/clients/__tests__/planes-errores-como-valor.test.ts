@@ -353,8 +353,14 @@ describe("updatePlanDurationAction", () => {
   });
 
   it("⭐ un dato inválido vuelve con el mensaje de validación, sin escribir", async () => {
-    const r = await updatePlanDurationAction({ planName: "", durationDays: 60 });
-    expect(r.success).toBe(false);
+    await expect(updatePlanDurationAction({ planName: "", durationDays: 60 })).resolves.toEqual({
+      success: false,
+      error: "Falta el nombre del plan.",
+    });
+    await expect(updatePlanDurationAction({ planName: "Plan", durationDays: 0 })).resolves.toEqual({
+      success: false,
+      error: "La duración tiene que ser de al menos 1 día.",
+    });
     expect(base.escrituras()).toEqual([]);
     expect(base.reportes).toEqual([]);
   });

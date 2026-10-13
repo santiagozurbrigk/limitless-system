@@ -42,14 +42,14 @@ import {
   registrarFallaDeAccion,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { firstZodError } from "@/lib/validations";
+import { firstZodError, uuidSchema } from "@/lib/validations";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { CustomFieldValues } from "@/types/custom-fields";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 
 const ADD_ON = "growth_partners" as const;
-const idSchema = z.string().uuid();
+const idSchema = uuidSchema;
 
 type LinkRow = OnboardingLinkRow;
 const rowToLink = rowToOnboardingLink;
@@ -347,13 +347,13 @@ export async function discardOnboardingSubmissionAction(
 
 const assignSchema = z
   .object({
-    submissionId: z.string().uuid(),
+    submissionId: uuidSchema,
     /** Un growth partner que ya existe… */
-    clientId: z.string().uuid().nullish(),
+    clientId: uuidSchema.nullish(),
     /** …o el nombre de uno nuevo. */
     newClientName: z.string().trim().min(1).max(200).nullish(),
     /** Un creador que ya existe de ese growth partner… */
-    subClientId: z.string().uuid().nullish(),
+    subClientId: uuidSchema.nullish(),
     /** …o el nombre de uno nuevo (por defecto, el que escribió en el link). */
     newSubClientName: z.string().trim().min(1).max(200).nullish(),
   })

@@ -37,7 +37,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { firstZodError } from "@/lib/validations";
+import { firstZodError, uuidSchema } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import type { CustomFieldValues } from "@/types/custom-fields";
@@ -51,25 +51,25 @@ const nameSchema = z
   .max(SUB_CLIENT_NAME_MAX, "Ese nombre es demasiado largo.");
 
 const createSchema = z.object({
-  clientId: z.string().uuid(),
+  clientId: uuidSchema,
   name: nameSchema,
   instagramUrl: z.string().max(500).nullish(),
 });
 
 const updateSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   name: nameSchema,
   instagramUrl: z.string().max(500).nullish(),
 });
 
 const valuesSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   values: z.record(z.string(), z.unknown()).default({}),
 });
 
 const moveSchema = z.object({
-  clientId: z.string().uuid(),
-  subClientId: z.string().uuid(),
+  clientId: uuidSchema,
+  subClientId: uuidSchema,
 });
 
 function revalidar(clientId: string) {

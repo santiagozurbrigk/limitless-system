@@ -30,8 +30,13 @@ import { paths } from "@/routes";
 import type { PlanDuration } from "@/types/plan-durations";
 
 const updatePlanDurationSchema = z.object({
-  planName: z.string().trim().min(1).max(500),
-  durationDays: z.number().int().min(1).max(3650).nullable(),
+  planName: z.string().trim().min(1, "Falta el nombre del plan.").max(500, "El nombre del plan es demasiado largo."),
+  durationDays: z
+    .number({ error: "La duración tiene que ser un número de días." })
+    .int("La duración tiene que ser un número entero de días.")
+    .min(1, "La duración tiene que ser de al menos 1 día.")
+    .max(3650, "La duración no puede pasar de 3650 días.")
+    .nullable(),
 });
 
 /**

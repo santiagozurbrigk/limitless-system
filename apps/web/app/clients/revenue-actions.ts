@@ -27,7 +27,7 @@ import {
   type MutationResult,
 } from "@/lib/server/action-result";
 import { respaldoDeLectura } from "@/lib/server/lectura-degradable";
-import { firstZodError } from "@/lib/validations";
+import { firstZodError, uuidSchema } from "@/lib/validations";
 import {
   normalizePeriod,
   rowToRevenueEntry,
@@ -43,7 +43,7 @@ const ADD_ON = "growth_partners" as const;
 const COLUMNS = "id, client_id, amount, currency, period, note, created_at";
 
 const entrySchema = z.object({
-  clientId: z.string().uuid(),
+  clientId: uuidSchema,
   amount: z
     .number({ error: "La facturación tiene que ser un número." })
     .finite()
@@ -59,7 +59,7 @@ const entrySchema = z.object({
    * upsert de abajo escribe julio, pero agosto quedaría ahí — corregir el mes
    * habría creado un mes de más en vez de mover el que estaba.
    */
-  replacesEntryId: z.string().uuid().nullish(),
+  replacesEntryId: uuidSchema.nullish(),
 });
 
 /**

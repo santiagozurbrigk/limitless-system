@@ -24,7 +24,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { firstZodError } from "@/lib/validations";
+import { firstZodError, uuidSchema } from "@/lib/validations";
 import { createWorkboardTasksAction } from "@/app/agent/workboard-actions";
 import {
   rowToClientTask,
@@ -37,7 +37,7 @@ const SELECT_COLUMNS =
   "id, client_id, title, description, owner, status, due_date, source, source_call_id, workboard_task_id, completed_at, created_at, fathom_calls(title, call_date)";
 
 const taskInputSchema = z.object({
-  clientId: z.string().uuid(),
+  clientId: uuidSchema,
   title: z.string().trim().min(1, "La tarea necesita un título.").max(120),
   description: z.string().trim().max(500).default(""),
   owner: z.enum(["client", "coach"]).default("client"),
