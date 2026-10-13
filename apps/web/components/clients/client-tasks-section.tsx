@@ -44,6 +44,8 @@ import {
 import { fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
 import { ACCION_DE_FILA, FichaSection } from "@/components/clients/ficha-section";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { cn } from "@/lib/utils";
 
 const CONTROL_CLASS =
@@ -85,24 +87,27 @@ function CampoRapido({
   const guardar = async () => {
     if (!title.trim() || saving) return;
     setSaving(true);
-    const result = await createClientTaskAction({
-      clientId,
-      title,
-      description: "",
-      owner,
-      dueDate: dueDate || null,
+    await correrMutacion({
+      accion: () =>
+        createClientTaskAction({
+          clientId,
+          title,
+          description: "",
+          owner,
+          dueDate: dueDate || null,
+        }),
+      alExito: (task) => {
+        onCreated(task);
+        notifyClientTasksChanged();
+        setTitle("");
+        setDueDate("");
+        setDetalles(false);
+      },
+      avisar: push,
+      tituloError: "No se pudo crear la tarea",
+      etiqueta: "[ClientTasksSection] crear",
     });
     setSaving(false);
-
-    if (!result.success) {
-      push({ title: "No se pudo crear la tarea", description: result.error });
-      return;
-    }
-    onCreated(result.data);
-    notifyClientTasksChanged();
-    setTitle("");
-    setDueDate("");
-    setDetalles(false);
   };
 
   return (
@@ -202,40 +207,45 @@ function Tarea({
 
   const tildar = async () => {
     setBusy(true);
-    const result = await toggleClientTaskAction({ taskId: task.id, done: !hecha });
+    await correrMutacion({
+      accion: () => toggleClientTaskAction({ taskId: task.id, done: !hecha }),
+      alExito: onChanged,
+      avisar: push,
+      tituloError: "No se pudo actualizar",
+      etiqueta: "[ClientTasksSection] tildar",
+    });
     setBusy(false);
-    if (!result.success) {
-      push({ title: "No se pudo actualizar", description: result.error });
-      return;
-    }
-    onChanged(result.data);
   };
 
   const borrar = async () => {
     setBusy(true);
-    const result = await deleteClientTaskAction(task.id);
+    await correrMutacion({
+      accion: () => deleteClientTaskAction(task.id),
+      alExito: () => onRemoved(task.id),
+      avisar: push,
+      tituloError: "No se pudo borrar",
+      etiqueta: "[ClientTasksSection] borrar",
+    });
     setBusy(false);
-    if (!result.success) {
-      push({ title: "No se pudo borrar", description: result.error });
-      return;
-    }
-    onRemoved(task.id);
   };
 
   const mandarAlTablero = async () => {
     setBusy(true);
-    const result = await sendClientTaskToBoardAction({ taskId: task.id });
-    setBusy(false);
-    if (!result.success) {
-      push({ title: "No se pudo mandar al tablero", description: result.error });
-      return;
-    }
-    onChanged(result.data);
-    push({
-      title: "Está en el tablero",
-      description: "La tarea sigue acá y ahora también aparece en el tablero de trabajo.",
-      variant: "success",
+    await correrMutacion({
+      accion: () => sendClientTaskToBoardAction({ taskId: task.id }),
+      alExito: (enElTablero) => {
+        onChanged(enElTablero);
+        push({
+          title: "Está en el tablero",
+          description: "La tarea sigue acá y ahora también aparece en el tablero de trabajo.",
+          variant: "success",
+        });
+      },
+      avisar: push,
+      tituloError: "No se pudo mandar al tablero",
+      etiqueta: "[ClientTasksSection] mandar al tablero",
     });
+    setBusy(false);
   };
 
   return (
@@ -369,19 +379,31 @@ function Grupo({
   );
 }
 
+/**
+ * Las tareas del cliente, o el motivo si no se pudieron leer (SCRUM-516).
+ * Antes una falla se mostraba como «Sin tareas todavía».
+ */
+export function cargarTareasDelCliente(clientId: string): Promise<Lectura<ClientTask[]>> {
+  return leerConMotivo(() => listClientTasksAction(clientId), "[ClientTasksSection] listar");
+}
+
 export function ClientTasksSection({ clientId }: { clientId: string }) {
   const [tasks, setTasks] = useState<ClientTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [motivo, setMotivo] = useState<string | null>(null);
 
   const cargar = useCallback(() => {
     let alive = true;
-    listClientTasksAction(clientId)
-      .then((next) => {
-        if (alive) setTasks(next);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+    void cargarTareasDelCliente(clientId).then((lectura) => {
+      if (!alive) return;
+      if (lectura.ok) {
+        setTasks(lectura.data);
+        setMotivo(null);
+      } else {
+        setMotivo(lectura.motivo);
+      }
+      setLoading(false);
+    });
     return () => {
       alive = false;
     };
@@ -427,7 +449,11 @@ export function ClientTasksSection({ clientId }: { clientId: string }) {
           onCreated={(task) => setTasks((prev) => [...prev, task])}
         />
 
-        {tasks.length === 0 ? (
+        {motivo ? (
+          <AvisoDeLecturaFallida titulo="No se pudieron cargar las tareas." motivo={motivo} />
+        ) : null}
+
+        {motivo && tasks.length === 0 ? null : tasks.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border/60 px-4 py-6 text-center text-xs text-muted-foreground dark:border-white/[0.08]">
             Sin tareas todavía. Escribí una arriba, o subí una sesión 1-1 y se
             cargan solas.

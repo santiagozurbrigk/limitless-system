@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { FilterPills } from "@/components/marketing/filter-pills";
 import { useToast } from "@/providers/toast-provider";
 import type { MutationResult } from "@/lib/server/action-result";
+import { correrMutacion, leerConMotivo } from "@/lib/client/correr-accion";
 import type { Client } from "@/types/clients";
 import type { ClientWin } from "@/types/wins";
 import {
@@ -102,12 +103,13 @@ export function WinsTracker({
 
   function run(operation: () => Promise<MutationResult<unknown>>) {
     startTransition(async () => {
-      const result = await operation();
-      if (!result.success) {
-        push({ title: "No se pudo guardar", description: result.error });
-        return;
-      }
-      await onChanged();
+      await correrMutacion({
+        accion: operation,
+        alExito: onChanged,
+        avisar: push,
+        tituloError: "No se pudo guardar",
+        etiqueta: "[WinsTracker] guardar",
+      });
     });
   }
 
@@ -157,12 +159,16 @@ export function WinsTracker({
         needsScreenshot: draft.needsScreenshot,
       };
 
-      const result = modal.win
-        ? await updateWinAction(modal.win.id, payload)
-        : await createWinAction(payload);
+      const editando = modal.win;
+      // El motivo va al formulario, que queda abierto; si la acción lanzó, el
+      // texto fijo (SCRUM-516).
+      const result = await leerConMotivo<ClientWin>(
+        () => (editando ? updateWinAction(editando.id, payload) : createWinAction(payload)),
+        "[WinsTracker] guardar win"
+      );
 
-      if (!result.success) {
-        setModalError(result.error);
+      if (!result.ok) {
+        setModalError(result.motivo);
         return;
       }
       setModal({ open: false, win: null });

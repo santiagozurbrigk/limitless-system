@@ -44,7 +44,14 @@ import {
 } from "@/lib/wins";
 import { activeFields, validateFieldValues } from "@/lib/custom-fields";
 import { listFieldDefinitionsAction } from "@/app/clients/custom-field-actions";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  registrarFallaDeAccion,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { respaldoDeLectura } from "@/lib/server/lectura-degradable";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -96,13 +103,51 @@ function assertConsentIsComplete(values: {
   consentDisplay?: string | null;
 }) {
   if (values.consentStatus === "granted" && !values.consentDisplay) {
-    throw new Error("Si el cliente autorizó, elegí cómo quiere aparecer.");
+    throw new ErrorEsperable("Si el cliente autorizó, elegí cómo quiere aparecer.");
   }
 }
 
 function revalidate(clientId?: string) {
   revalidatePath(paths.platform.clients.wins);
   if (clientId) revalidatePath(paths.platform.clients.detail(clientId));
+}
+
+/**
+ * SCRUM-516: las escrituras de wins devuelven sus errores esperables como
+ * valor (`MutationResult`), dentro de `mutacionConErroresEsperables`.
+ * Validación, sesión, permiso del cliente a medias, captura que no es imagen o
+ * es muy grande, y win o cliente que ya no existe (PGRST116, 23503) vuelven con
+ * su motivo; lo inesperado (la base, Storage, una ruta ajena) se registra, va a
+ * Sentry y vuelve con el texto fijo. Antes el texto crudo de la base o de
+ * Storage llegaba al formulario.
+ *
+ * Las lecturas (`listWinsAction`, baselines y nichos) las componen la pantalla
+ * de Wins y la revisión semanal, que esperan el dato: siguen devolviendo vacío
+ * ante una falla, pero ahora la falla queda registrada (`respaldoDeLectura`).
+ * Antes `catch { return [] }` la escondía.
+ */
+
+/** Código de PostgREST cuando `.single()` no encuentra la fila. */
+const SIN_FILAS = "PGRST116";
+/** Código de Postgres de una clave foránea que apunta a algo que no existe. */
+const REFERENCIA_INEXISTENTE = "23503";
+
+const WIN_NO_ENCONTRADO = "No se encontró el win. Puede que lo hayan borrado.";
+const CLIENTE_INEXISTENTE = "El cliente que elegiste ya no existe. Recargá la página.";
+const WIN_INEXISTENTE = "El win ya no existe. Recargá la página.";
+const SIN_DESTINO = "Falta indicar a qué win va la captura.";
+
+/** Escritura de un win: el win o el cliente que no está vuelven con su motivo. */
+function errorDeWin(error: { message: string; code?: string | null }): Error {
+  if (error.code === SIN_FILAS) return new ErrorEsperable(WIN_NO_ENCONTRADO);
+  if (error.code === REFERENCIA_INEXISTENTE) return new ErrorEsperable(CLIENTE_INEXISTENTE);
+  return new FallaDeLaBase(error);
+}
+
+/** Escritura que cuelga de un win (captura, uso): el win que ya no está. */
+function errorDeLoDelWin(error: { message: string; code?: string | null }): Error {
+  if (error.code === REFERENCIA_INEXISTENTE) return new ErrorEsperable(WIN_INEXISTENTE);
+  return new FallaDeLaBase(error);
 }
 
 // ─── Lectura ────────────────────────────────────────────────────────────────
@@ -112,6 +157,9 @@ function revalidate(clientId?: string) {
  *
  * Trae todo de una y arma en memoria: una consulta por win para adjuntos y otra
  * para usos serían dos consultas por fila de la tabla.
+ *
+ * Si no se pueden leer las capturas o los usos, los wins se muestran sin ellos
+ * y la falla queda registrada.
  */
 export async function listWinsAction(clientId?: string): Promise<ClientWin[]> {
   try {
@@ -129,8 +177,7 @@ export async function listWinsAction(clientId?: string): Promise<ClientWin[]> {
     const { data: winRows, error } = await winsQuery;
     if (error) {
       if (isMissingTableError(error.message)) return [];
-      console.error("[listWins]", error.message);
-      return [];
+      throw new FallaDeLaBase(error);
     }
 
     const rows = winRows as ClientWinRow[];
@@ -142,11 +189,18 @@ export async function listWinsAction(clientId?: string): Promise<ClientWin[]> {
       supabase.from("win_usages").select("*").in("win_id", winIds),
     ]);
 
+    const attachmentRows: WinAttachmentRow[] = attachmentsResult.error
+      ? respaldoDeLectura("clientes:wins-capturas", new FallaDeLaBase(attachmentsResult.error), [])
+      : ((attachmentsResult.data as WinAttachmentRow[]) ?? []);
+    const usageRows: WinUsageRow[] = usagesResult.error
+      ? respaldoDeLectura("clientes:wins-usos", new FallaDeLaBase(usagesResult.error), [])
+      : ((usagesResult.data as WinUsageRow[]) ?? []);
+
     const attachments = await withSignedUrls(
-      ((attachmentsResult.data as WinAttachmentRow[]) ?? []).map(rowToWinAttachment),
+      attachmentRows.map(rowToWinAttachment),
       organizationId
     );
-    const usages = ((usagesResult.data as WinUsageRow[]) ?? []).map(rowToWinUsage);
+    const usages = usageRows.map(rowToWinUsage);
 
     const byWinAttachments = groupBy(attachments, (item) => item.winId ?? "");
     const byWinUsages = groupBy(usages, (item) => item.winId);
@@ -157,8 +211,8 @@ export async function listWinsAction(clientId?: string): Promise<ClientWin[]> {
         usages: byWinUsages.get(row.id) ?? [],
       })
     );
-  } catch {
-    return [];
+  } catch (error) {
+    return respaldoDeLectura("clientes:wins", error, []);
   }
 }
 
@@ -175,7 +229,7 @@ export async function listClientBaselinesAction(): Promise<
       .eq("organization_id", organizationId)
       .not("baseline_metric_key", "is", null);
 
-    if (error) return {};
+    if (error) throw new FallaDeLaBase(error);
 
     const result: Record<string, ClientBaseline> = {};
     for (const row of data as {
@@ -200,8 +254,8 @@ export async function listClientBaselinesAction(): Promise<
       };
     }
     return result;
-  } catch {
-    return {};
+  } catch (error) {
+    return respaldoDeLectura("clientes:wins-baselines", error, {});
   }
 }
 
@@ -216,14 +270,14 @@ export async function listClientNichesAction(): Promise<Record<string, string>> 
       .eq("organization_id", organizationId)
       .not("niche", "is", null);
 
-    if (error) return {};
+    if (error) throw new FallaDeLaBase(error);
     const result: Record<string, string> = {};
     for (const row of data as { id: string; niche: string | null }[]) {
       if (row.niche?.trim()) result[row.id] = row.niche.trim();
     }
     return result;
-  } catch {
-    return {};
+  } catch (error) {
+    return respaldoDeLectura("clientes:wins-nichos", error, {});
   }
 }
 
@@ -232,12 +286,12 @@ export async function listClientNichesAction(): Promise<Record<string, string>> 
 export async function createWinAction(
   input: CreateWinInput
 ): Promise<MutationResult<ClientWin>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[createWin]", async () => {
     const organizationId = await requireOrganizationId();
     const profile = await getCurrentProfile();
 
     const parsed = winSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
     assertConsentIsComplete(values);
@@ -269,17 +323,22 @@ export async function createWinAction(
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw errorDeWin(error);
 
     const win = rowToClientWin(data as ClientWinRow);
 
-    // Los adjuntos subidos antes de guardar se enganchan ahora.
+    // Los adjuntos subidos antes de guardar se enganchan ahora. El win ya
+    // quedó guardado: si esto falla no se devuelve error (reintentar crearía
+    // otro win), pero la falla queda registrada en vez de perderse.
     if (values.draftId) {
-      await supabase
+      const { error: errorCapturas } = await supabase
         .from("win_attachments")
         .update({ win_id: win.id, draft_id: null })
         .eq("draft_id", values.draftId)
         .eq("organization_id", organizationId);
+      if (errorCapturas) {
+        registrarFallaDeAccion("[createWin] capturas", new FallaDeLaBase(errorCapturas));
+      }
     }
 
     revalidate(values.clientId);
@@ -291,11 +350,11 @@ export async function updateWinAction(
   id: string,
   input: Partial<CreateWinInput>
 ): Promise<MutationResult<ClientWin>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateWin]", async () => {
     const organizationId = await requireOrganizationId();
 
     const parsed = winSchema.partial().safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
     const patch: Record<string, unknown> = {};
@@ -336,7 +395,7 @@ export async function updateWinAction(
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw errorDeWin(error);
     const win = rowToClientWin(data as ClientWinRow);
     revalidate(win.clientId);
     return win;
@@ -348,17 +407,20 @@ export async function updateWinAction(
  *
  * Los archivos del bucket se borran también: la cascada de la base se lleva las
  * filas, pero no los objetos de storage — quedarían ocupando lugar para siempre.
+ * Por eso, si no se pueden leer o borrar las capturas, no se borra el win:
+ * vuelve el texto fijo y se puede reintentar sin dejar archivos huérfanos.
  */
 export async function deleteWinAction(id: string): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteWin]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
-    const { data: attachments } = await supabase
+    const { data: attachments, error: readError } = await supabase
       .from("win_attachments")
       .select("storage_path")
       .eq("win_id", id)
       .eq("organization_id", organizationId);
+    if (readError) throw new FallaDeLaBase(readError);
 
     const paths_ = soloRutasDeLaOrg(
       ((attachments as { storage_path: string }[]) ?? []).map((row) => row.storage_path),
@@ -367,7 +429,10 @@ export async function deleteWinAction(id: string): Promise<MutationResult<void>>
     );
     if (paths_.length > 0) {
       const admin = createAdminClient();
-      await admin.storage.from(CLIENT_WINS_BUCKET).remove(paths_);
+      const { error: storageError } = await admin.storage
+        .from(CLIENT_WINS_BUCKET)
+        .remove(paths_);
+      if (storageError) throw new FallaDeLaBase(storageError);
     }
 
     const { error } = await supabase
@@ -376,7 +441,7 @@ export async function deleteWinAction(id: string): Promise<MutationResult<void>>
       .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
   });
 }
@@ -404,7 +469,7 @@ function rutaDeCaptura(
 ): string {
   if (destino.winId) return `${organizationId}/wins/${destino.winId}/${archivo}`;
   if (destino.draftId) return `${organizationId}/drafts/${destino.draftId}/${archivo}`;
-  throw new Error("Falta indicar a qué win va la captura.");
+  throw new ErrorEsperable(SIN_DESTINO);
 }
 
 export async function prepareWinAttachmentUploadAction(input: DestinoDeCaptura & {
@@ -414,7 +479,7 @@ export async function prepareWinAttachmentUploadAction(input: DestinoDeCaptura &
 }): Promise<
   MutationResult<{ storagePath: string; signedUrl: string; contentType: string }>
 > {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[prepareWinAttachmentUpload]", async () => {
     const organizationId = await requireOrganizationId();
 
     const allowed = isAllowedWinAttachment(
@@ -422,7 +487,7 @@ export async function prepareWinAttachmentUploadAction(input: DestinoDeCaptura &
       input.mimeType,
       input.fileSize
     );
-    if (!allowed.ok) throw new Error(allowed.error);
+    if (!allowed.ok) throw new ErrorEsperable(allowed.error);
 
     const attachmentId = crypto.randomUUID();
     const safeName = sanitizeFilename(input.fileName);
@@ -437,30 +502,36 @@ export async function prepareWinAttachmentUploadAction(input: DestinoDeCaptura &
       .from(CLIENT_WINS_BUCKET)
       .createSignedUploadUrl(storagePath);
 
-    if (error || !data?.signedUrl) {
-      throw new Error(
-        error?.message ??
-          `No se pudo preparar la subida. ¿Existe el bucket "${CLIENT_WINS_BUCKET}"?`
-      );
+    // Sin el bucket o con Storage caído es una falla: el texto de Storage no
+    // le sirve al usuario.
+    if (error) throw new FallaDeLaBase(error);
+    if (!data?.signedUrl) {
+      throw new FallaDeLaBase({
+        message: `Storage no devolvió el link de subida del bucket "${CLIENT_WINS_BUCKET}"`,
+      });
     }
 
     return { storagePath, signedUrl: data.signedUrl, contentType: allowed.mimeType };
   });
 }
 
-/** Paso 2: registrar la captura ya subida. */
+/**
+ * Paso 2: registrar la captura ya subida. Una ruta de otra organización
+ * (`assertOrgStoragePath`) es inesperada: es una señal de manipulación, no un
+ * error del usuario (el mismo criterio que el Tablero, SCRUM-503).
+ */
 export async function finalizeWinAttachmentAction(input: DestinoDeCaptura & {
   storagePath: string;
   fileName: string;
   mimeType: string;
   fileSize: number;
 }): Promise<MutationResult<WinAttachment>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[finalizeWinAttachment]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
     if (!input.winId && !input.draftId) {
-      throw new Error("Falta indicar a qué win va la captura.");
+      throw new ErrorEsperable(SIN_DESTINO);
     }
     assertOrgStoragePath(input.storagePath, organizationId);
 
@@ -479,7 +550,7 @@ export async function finalizeWinAttachmentAction(input: DestinoDeCaptura & {
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw errorDeLoDelWin(error);
     const [withUrl] = await withSignedUrls(
       [rowToWinAttachment(data as WinAttachmentRow)],
       organizationId
@@ -488,19 +559,24 @@ export async function finalizeWinAttachmentAction(input: DestinoDeCaptura & {
   });
 }
 
+/**
+ * Borra una captura. Primero el archivo y después la fila: si Storage falla,
+ * no se borra la fila (quedaría el archivo sin dueño) y vuelve el texto fijo.
+ */
 export async function deleteWinAttachmentAction(
   id: string
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteWinAttachment]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
-    const { data } = await supabase
+    const { data, error: readError } = await supabase
       .from("win_attachments")
       .select("storage_path")
       .eq("id", id)
       .eq("organization_id", organizationId)
       .maybeSingle();
+    if (readError) throw new FallaDeLaBase(readError);
 
     const rutas = soloRutasDeLaOrg(
       [(data as { storage_path: string } | null)?.storage_path],
@@ -509,7 +585,10 @@ export async function deleteWinAttachmentAction(
     );
     if (rutas.length > 0) {
       const admin = createAdminClient();
-      await admin.storage.from(CLIENT_WINS_BUCKET).remove(rutas);
+      const { error: storageError } = await admin.storage
+        .from(CLIENT_WINS_BUCKET)
+        .remove(rutas);
+      if (storageError) throw new FallaDeLaBase(storageError);
     }
 
     const { error } = await supabase
@@ -518,7 +597,7 @@ export async function deleteWinAttachmentAction(
       .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
   });
 }
@@ -539,10 +618,10 @@ export type CreateWinUsageInput = z.input<typeof usageSchema>;
 export async function addWinUsageAction(
   input: CreateWinUsageInput
 ): Promise<MutationResult<WinUsage>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[addWinUsage]", async () => {
     const organizationId = await requireOrganizationId();
     const parsed = usageSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
     const supabase = await createClient();
@@ -560,14 +639,14 @@ export async function addWinUsageAction(
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw errorDeLoDelWin(error);
     revalidate();
     return rowToWinUsage(data as WinUsageRow);
   });
 }
 
 export async function deleteWinUsageAction(id: string): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteWinUsage]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
     const { error } = await supabase
@@ -575,7 +654,7 @@ export async function deleteWinUsageAction(id: string): Promise<MutationResult<v
       .delete()
       .eq("id", id)
       .eq("organization_id", organizationId);
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
   });
 }
@@ -594,10 +673,10 @@ export async function updateClientBaselineAction(
   clientId: string,
   input: z.input<typeof baselineSchema>
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateClientBaseline]", async () => {
     const organizationId = await requireOrganizationId();
     const parsed = baselineSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
     // Una clave sin número, o un número sin clave, no forman un baseline: se
@@ -618,7 +697,7 @@ export async function updateClientBaselineAction(
       .eq("id", clientId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate(clientId);
   });
 }
@@ -630,14 +709,15 @@ async function validateCustom(raw: Record<string, unknown>) {
   const fields = activeFields(await listFieldDefinitionsAction("win"));
   const validation = validateFieldValues(fields, raw);
   if (!validation.ok) {
-    throw new Error(Object.values(validation.errors)[0] ?? "Datos inválidos");
+    throw new ErrorEsperable(Object.values(validation.errors)[0] ?? "Datos inválidos");
   }
   return validation.values;
 }
 
 /**
  * El bucket es privado: cada captura necesita su link firmado para verse. Sólo
- * se firman rutas de la org (SCRUM-81); una ajena queda sin link.
+ * se firman rutas de la org (SCRUM-81); una ajena queda sin link. Si Storage no
+ * firma, las capturas quedan sin link y la falla se registra.
  */
 async function withSignedUrls(
   attachments: WinAttachment[],
@@ -651,10 +731,12 @@ async function withSignedUrls(
     "wins"
   );
   const admin = createAdminClient();
-  const { data } =
+  const { data, error } =
     rutas.length > 0
       ? await admin.storage.from(CLIENT_WINS_BUCKET).createSignedUrls(rutas, WIN_SIGNED_URL_TTL_SECONDS)
-      : { data: [] };
+      : { data: [], error: null };
+  // Sin links las capturas no se ven, pero el win sí: la falla se registra.
+  if (error) respaldoDeLectura("clientes:wins-links-de-capturas", new FallaDeLaBase(error), null);
 
   const urlByPath = new Map(
     (data ?? []).map((entry) => [entry.path ?? "", entry.signedUrl])

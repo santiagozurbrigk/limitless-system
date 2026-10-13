@@ -16,10 +16,14 @@ import { leerPagosDeLaOrganizacion } from "@/lib/sales/pagos";
 import { listClientsAction } from "@/app/clients/actions";
 import { extractPlanDurationsFromRAG } from "@/lib/rag/extract-plan-durations";
 import {
+  ErrorEsperable,
+  FallaDeLaBase,
   mutacionConErroresEsperables,
-  runMutation,
   type MutationResult,
 } from "@/lib/server/action-result";
+import { respaldoDeLectura } from "@/lib/server/lectura-degradable";
+import { AI_KEY_REJECTED_MESSAGE } from "@/lib/ai/anthropic-auth-errors";
+import { claudeNoCreditsUserMessage } from "@/lib/ai/anthropic-errors";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -30,40 +34,69 @@ const updatePlanDurationSchema = z.object({
   durationDays: z.number().int().min(1).max(3650).nullable(),
 });
 
+/**
+ * SCRUM-516: las duraciones de plan devuelven sus errores esperables como valor
+ * (`MutationResult`), dentro de `mutacionConErroresEsperables`. Ser founder,
+ * la sesión, la validación, la tabla que falta y la clave de Claude rechazada o
+ * sin créditos vuelven con su motivo; lo inesperado se registra, va a Sentry y
+ * vuelve con el texto fijo. Antes el texto crudo de la base llegaba a la
+ * pantalla y la lista devolvía `[]` ante cualquier falla.
+ */
+
+const SOLO_FOUNDER = "Solo el founder puede gestionar duraciones de planes";
+const FALTA_LA_TABLA =
+  "Falta la tabla plan_durations. Ejecutá supabase/migrations/20260720100000_clients_offered_product_and_plan_durations.sql";
+
 async function requireFounder() {
   const profile = await getCurrentProfile();
   if (profile?.role !== "founder") {
-    throw new Error("Solo el founder puede gestionar duraciones de planes");
+    throw new ErrorEsperable(SOLO_FOUNDER);
   }
 }
 
-export async function listPlanDurationsAction(): Promise<PlanDuration[]> {
-  try {
+function errorDeEscritura(error: { message: string; code?: string | null }): Error {
+  if (isMissingTableError(error.message)) return new ErrorEsperable(FALTA_LA_TABLA);
+  return new FallaDeLaBase(error);
+}
+
+/**
+ * Las duraciones de la organización. Sin la tabla devuelve `[]` (la migración
+ * todavía no corrió); cualquier otro error es una `FallaDeLaBase`.
+ */
+async function leerDuracionesDePlan(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string
+): Promise<PlanDuration[]> {
+  const { data, error } = await supabase
+    .from("plan_durations")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("plan_name", { ascending: true });
+
+  if (error) {
+    if (isMissingTableError(error.message)) return [];
+    throw new FallaDeLaBase(error);
+  }
+
+  return (data as PlanDurationRow[]).map(rowToPlanDuration);
+}
+
+export async function listPlanDurationsAction(): Promise<MutationResult<PlanDuration[]>> {
+  return mutacionConErroresEsperables("[listPlanDurations]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
-
-    const { data, error } = await supabase
-      .from("plan_durations")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("plan_name", { ascending: true });
-
-    if (error) {
-      if (isMissingTableError(error.message)) return [];
-      console.error("[listPlanDurations]", error.message);
-      return [];
-    }
-
-    return (data as PlanDurationRow[]).map(rowToPlanDuration);
-  } catch {
-    return [];
-  }
+    return leerDuracionesDePlan(supabase, organizationId);
+  });
 }
 
 /**
  * Lo cobrado por cliente y las duraciones de plan, para Cobros. Devuelve su
  * error como valor (SCRUM-504): si los pagos no se pueden leer, la pantalla
  * avisa en vez de mostrar a todos los clientes con la deuda completa.
+ *
+ * Las duraciones son secundarias (los días que le quedan al programa): si no se
+ * pueden leer, la falla se registra (SCRUM-516) y Cobros sigue con lo cobrado,
+ * sin los días restantes de los clientes cuyo plan no tiene duración propia.
  */
 export async function getClientsTableEnrichmentAction(): Promise<
   MutationResult<{
@@ -78,7 +111,9 @@ export async function getClientsTableEnrichmentAction(): Promise<
     const [profile, payments, planDurations] = await Promise.all([
       getCurrentProfile(),
       leerPagosDeLaOrganizacion(supabase, organizationId),
-      listPlanDurationsAction(),
+      leerDuracionesDePlan(supabase, organizationId).catch((error: unknown) =>
+        respaldoDeLectura("cobros:duraciones-de-plan", error, [] as PlanDuration[])
+      ),
     ]);
 
     const paidByClientId: Record<string, number> = {};
@@ -95,10 +130,22 @@ export async function getClientsTableEnrichmentAction(): Promise<
   });
 }
 
+/** Un rechazo conocido de Claude (clave rechazada, sin créditos) vuelve con su motivo. */
+function rechazoDeClaude(error: unknown): unknown {
+  if (
+    error instanceof Error &&
+    error.constructor === Error &&
+    (error.message === AI_KEY_REJECTED_MESSAGE || error.message === claudeNoCreditsUserMessage())
+  ) {
+    return new ErrorEsperable(error.message);
+  }
+  return error;
+}
+
 export async function resolvePlanDurationsAction(
   planNames?: string[]
 ): Promise<MutationResult<{ resolved: number }>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[resolvePlanDurations]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
@@ -108,17 +155,21 @@ export async function resolvePlanDurationsAction(
       distinctPlanNames(await listClientsAction());
 
     if (!names.length) {
-      throw new Error("No hay planes para inferir. Asigná productos a los clientes primero.");
+      throw new ErrorEsperable("No hay planes para inferir. Asigná productos a los clientes primero.");
     }
 
-    const existingRows = await listPlanDurationsAction();
+    const existingRows = await leerDuracionesDePlan(supabase, organizationId);
     const manualPlans = new Set(
       existingRows
         .filter((r) => r.source === "manual")
         .map((r) => r.planName.toLowerCase())
     );
 
-    const extracted = await extractPlanDurationsFromRAG(organizationId, names);
+    const extracted = await extractPlanDurationsFromRAG(organizationId, names).catch(
+      (error: unknown) => {
+        throw rechazoDeClaude(error);
+      }
+    );
     const now = new Date().toISOString();
 
     let resolved = 0;
@@ -138,14 +189,7 @@ export async function resolvePlanDurationsAction(
         { onConflict: "organization_id,plan_name" }
       );
 
-      if (error) {
-        if (isMissingTableError(error.message)) {
-          throw new Error(
-            "Falta la tabla plan_durations. Ejecutá supabase/migrations/20260720100000_clients_offered_product_and_plan_durations.sql"
-          );
-        }
-        throw new Error(error.message);
-      }
+      if (error) throw errorDeEscritura(error);
       resolved += 1;
     }
 
@@ -157,12 +201,10 @@ export async function resolvePlanDurationsAction(
 export async function updatePlanDurationAction(
   input: unknown
 ): Promise<MutationResult<PlanDuration>> {
-  const parsed = updatePlanDurationSchema.safeParse(input);
-  if (!parsed.success) {
-    return { success: false, error: firstZodError(parsed.error) };
-  }
+  return mutacionConErroresEsperables("[updatePlanDuration]", async () => {
+    const parsed = updatePlanDurationSchema.safeParse(input);
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
 
-  return runMutation(async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
@@ -186,14 +228,7 @@ export async function updatePlanDurationAction(
       .select("*")
       .single();
 
-    if (error) {
-      if (isMissingTableError(error.message)) {
-        throw new Error(
-          "Falta la tabla plan_durations. Ejecutá supabase/migrations/20260720100000_clients_offered_product_and_plan_durations.sql"
-        );
-      }
-      throw new Error(error.message);
-    }
+    if (error) throw errorDeEscritura(error);
 
     revalidatePath(paths.platform.clients.root);
     return rowToPlanDuration(data as PlanDurationRow);

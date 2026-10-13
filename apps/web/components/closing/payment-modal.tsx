@@ -27,6 +27,16 @@ import Link from "next/link";
 import { paths } from "@/routes";
 import { getProfileAreaDataAction } from "@/app/profile/actions";
 import { listPlansAction } from "@/app/clients/plan-actions";
+import { leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
+
+/**
+ * Los planes de la organización, o el motivo si no se pudieron leer
+ * (SCRUM-516). Antes una falla escondía el selector de plan sin decir nada.
+ */
+export function cargarPlanes(): Promise<Lectura<Plan[]>> {
+  return leerConMotivo(listPlansAction, "[PaymentModal] planes");
+}
 
 const selectClass =
   "flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm";
@@ -96,6 +106,7 @@ export function PaymentModal({
 
   // ── Planes y sistemas de cuotas ──────────────────────────────────────────
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [plansError, setPlansError] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string>("");
   const [selectedSystemId, setSelectedSystemId] = useState<string>("");
   /** Montos manuales por cuota (un elemento por cuota del sistema seleccionado) */
@@ -157,7 +168,14 @@ export function PaymentModal({
         setCloserName(data?.userName?.trim() ?? "");
       });
       // Cargar planes
-      void listPlansAction().then(setPlans);
+      void cargarPlanes().then((lectura) => {
+        if (lectura.ok) {
+          setPlans(lectura.data);
+          setPlansError(null);
+        } else {
+          setPlansError(lectura.motivo);
+        }
+      });
     }
   }, [open, defaultName, paymentPlatforms, paymentDestId]);
 
@@ -318,6 +336,9 @@ export function PaymentModal({
               </FormField>
 
               {/* Selector de plan (opcional) */}
+              {plansError ? (
+                <AvisoDeLecturaFallida titulo="No se pudieron cargar los planes." motivo={plansError} />
+              ) : null}
               {plans.length > 0 && (
                 <FormField label="Plan contratado (opcional)">
                   <select

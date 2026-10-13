@@ -13,10 +13,12 @@ import {
   Input,
 } from "@ai-coo/ui";
 import {
+  listPlanDurationsAction,
   resolvePlanDurationsAction,
   updatePlanDurationAction,
 } from "@/app/clients/plan-duration-actions";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion } from "@/lib/client/correr-accion";
 import type { PlanDuration } from "@/types/plan-durations";
 
 const SOURCE_LABEL: Record<PlanDuration["source"], string> = {
@@ -57,20 +59,28 @@ export function PlanDurationsDialog({
 
   const handleInfer = () => {
     startTransition(async () => {
-      const result = await resolvePlanDurationsAction(planNames);
-      if (!result.success) {
-        push({ title: "No se pudo inferir", description: result.error });
-        return;
-      }
-      push({
-        title: "Duraciones actualizadas",
-        description: `${result.data.resolved} plan(es) procesados`,
-        variant: "success",
+      await correrMutacion({
+        accion: () => resolvePlanDurationsAction(planNames),
+        alExito: async ({ resolved }) => {
+          push({
+            title: "Duraciones actualizadas",
+            description: `${resolved} plan(es) procesados`,
+            variant: "success",
+          });
+          // Si la relectura falla, avisa con su motivo y la lista queda como
+          // estaba (SCRUM-516): antes se reemplazaba por una vacía.
+          await correrMutacion({
+            accion: listPlanDurationsAction,
+            alExito: onUpdated,
+            avisar: push,
+            tituloError: "No se pudieron recargar las duraciones",
+            etiqueta: "[PlanDurationsDialog] recargar",
+          });
+        },
+        avisar: push,
+        tituloError: "No se pudo inferir",
+        etiqueta: "[PlanDurationsDialog] inferir",
       });
-      const { listPlanDurationsAction } = await import(
-        "@/app/clients/plan-duration-actions"
-      );
-      onUpdated(await listPlanDurationsAction());
     });
   };
 
@@ -83,25 +93,27 @@ export function PlanDurationsDialog({
     }
 
     startTransition(async () => {
-      const result = await updatePlanDurationAction({
-        planName: editingPlan,
-        durationDays: parsed,
+      await correrMutacion({
+        accion: () =>
+          updatePlanDurationAction({
+            planName: editingPlan,
+            durationDays: parsed,
+          }),
+        alExito: (guardada) => {
+          onUpdated(
+            durations.some((d) => d.planName.toLowerCase() === editingPlan.toLowerCase())
+              ? durations.map((d) =>
+                  d.planName.toLowerCase() === editingPlan.toLowerCase() ? guardada : d
+                )
+              : [...durations, guardada]
+          );
+          setEditingPlan(null);
+          push({ title: "Duración guardada", variant: "success" });
+        },
+        avisar: push,
+        tituloError: "No se pudo guardar",
+        etiqueta: "[PlanDurationsDialog] guardar",
       });
-      if (!result.success) {
-        push({ title: "No se pudo guardar", description: result.error });
-        return;
-      }
-      onUpdated(
-        durations.some((d) => d.planName.toLowerCase() === editingPlan.toLowerCase())
-          ? durations.map((d) =>
-              d.planName.toLowerCase() === editingPlan.toLowerCase()
-                ? result.data
-                : d
-            )
-          : [...durations, result.data]
-      );
-      setEditingPlan(null);
-      push({ title: "Duración guardada", variant: "success" });
     });
   };
 

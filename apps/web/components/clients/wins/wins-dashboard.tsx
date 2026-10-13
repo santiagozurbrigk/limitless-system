@@ -36,6 +36,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Trophy } from "lucide-react";
 import { useToast } from "@/providers/toast-provider";
 import { updateClientBaselineAction } from "@/app/clients/win-actions";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import { updateClientTrackingAction } from "@/app/clients/tracking-actions";
 import { leerConMotivo } from "@/lib/client/correr-accion";
 import {
@@ -124,15 +125,21 @@ export function WinsDashboard({
     }
 
     startTransition(async () => {
-      const result = await updateClientBaselineAction(editing.id, {
-        niche: draft.niche.trim() || null,
-        baselineMetricKey: key || null,
-        baselineMetricValue: value,
-        baselineMetricUnit: draft.metricUnit.trim() || null,
-        baselineCapturedAt: draft.capturedAt || null,
-      });
-      if (!result.success) {
-        setDialogError(result.error);
+      // El motivo va al diálogo, que queda abierto; si la acción lanzó, el
+      // texto fijo (SCRUM-516).
+      const result = await leerConMotivo(
+        () =>
+          updateClientBaselineAction(editing.id, {
+            niche: draft.niche.trim() || null,
+            baselineMetricKey: key || null,
+            baselineMetricValue: value,
+            baselineMetricUnit: draft.metricUnit.trim() || null,
+            baselineCapturedAt: draft.capturedAt || null,
+          }),
+        "[WinsDashboard] guardar baseline"
+      );
+      if (!result.ok) {
+        setDialogError(result.motivo);
         return;
       }
 

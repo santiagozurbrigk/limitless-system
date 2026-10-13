@@ -33,6 +33,8 @@ import { ACCION_DE_FILA } from "@/components/clients/ficha-section";
 import { onboardingFormPath, type OnboardingSubmission } from "@/lib/client-onboarding/links";
 import { findOption } from "@/lib/custom-fields";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { paths } from "@/routes";
 import type { FieldDefinition } from "@/types/custom-fields";
 
@@ -53,6 +55,18 @@ function comoTexto(value: unknown, field: FieldDefinition | undefined): string {
     .join(", ");
 }
 
+/**
+ * El link y los envíos del cliente, o el motivo si no se pudieron leer
+ * (SCRUM-516). Antes una falla se mostraba como "sin link", con el botón de
+ * generar uno.
+ */
+export function cargarEstadoDelOnboarding(subClientId: string): Promise<Lectura<OnboardingStatus>> {
+  return leerConMotivo(
+    () => getOnboardingStatusAction(subClientId),
+    "[SubClientOnboarding] estado"
+  );
+}
+
 export function SubClientOnboarding({
   subClient,
   fields,
@@ -66,6 +80,7 @@ export function SubClientOnboarding({
 }) {
   const { push } = useToast();
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
+  const [motivo, setMotivo] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [historial, setHistorial] = useState(false);
@@ -73,19 +88,26 @@ export function SubClientOnboarding({
   const preguntas = fields.filter((field) => field.onboarding !== null && field.section !== null);
 
   const cargar = useCallback(async () => {
-    try {
-      setStatus(await getOnboardingStatusAction(subClient.id));
-    } catch {
-      setStatus({ link: null, submissions: [] });
+    const lectura = await cargarEstadoDelOnboarding(subClient.id);
+    if (lectura.ok) {
+      setStatus(lectura.data);
+      setMotivo(null);
+    } else {
+      setMotivo(lectura.motivo);
     }
   }, [subClient.id]);
 
   useEffect(() => {
     setStatus(null);
+    setMotivo(null);
     void cargar();
   }, [cargar]);
 
-  if (status === null) return null;
+  if (status === null) {
+    return motivo ? (
+      <AvisoDeLecturaFallida titulo="No se pudo cargar el formulario de onboarding." motivo={motivo} />
+    ) : null;
+  }
 
   if (preguntas.length === 0) {
     return (
@@ -107,13 +129,14 @@ export function SubClientOnboarding({
 
   const generar = async () => {
     setWorking(true);
-    const result = await createOnboardingLinkAction(subClient.id);
+    await correrMutacion({
+      accion: () => createOnboardingLinkAction(subClient.id),
+      alExito: (link) => setStatus((s) => ({ submissions: s?.submissions ?? [], link })),
+      avisar: push,
+      tituloError: "No se pudo generar el link",
+      etiqueta: "[SubClientOnboarding] generar link",
+    });
     setWorking(false);
-    if (!result.success) {
-      push({ title: "No se pudo generar el link", description: result.error });
-      return;
-    }
-    setStatus((s) => ({ submissions: s?.submissions ?? [], link: result.data }));
   };
 
   const copiar = async () => {
@@ -136,14 +159,16 @@ export function SubClientOnboarding({
     ) {
       return;
     }
+    const linkId = status.link.id;
     setWorking(true);
-    const result = await revokeOnboardingLinkAction(status.link.id);
+    await correrMutacion({
+      accion: () => revokeOnboardingLinkAction(linkId),
+      alExito: () => setStatus((s) => ({ submissions: s?.submissions ?? [], link: null })),
+      avisar: push,
+      tituloError: "No se pudo desactivar",
+      etiqueta: "[SubClientOnboarding] desactivar link",
+    });
     setWorking(false);
-    if (!result.success) {
-      push({ title: "No se pudo desactivar", description: result.error });
-      return;
-    }
-    setStatus((s) => ({ submissions: s?.submissions ?? [], link: null }));
   };
 
   return (

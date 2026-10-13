@@ -47,6 +47,48 @@ import {
   finalizeWinAttachmentAction,
   prepareWinAttachmentUploadAction,
 } from "@/app/clients/win-actions";
+import { falloInesperado, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
+
+/**
+ * Sube una captura: pide el link firmado, sube el archivo y la registra.
+ * Devuelve la captura o el motivo para el formulario: el que devolvió la
+ * acción, el de la subida o, si una acción lanzó, el texto fijo (SCRUM-516).
+ * Antes el catch mostraba el mensaje de la excepción, que en producción es el
+ * párrafo técnico de Next.
+ */
+export async function subirCapturaDeWin(
+  destino: { winId: string } | { draftId: string },
+  file: File
+): Promise<Lectura<WinAttachment>> {
+  try {
+    const prepared = await prepareWinAttachmentUploadAction({
+      ...destino,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+    });
+    if (!prepared.success) return { ok: false, motivo: prepared.error };
+
+    const uploadResponse = await fetch(prepared.data.signedUrl, {
+      method: "PUT",
+      headers: { "Content-Type": prepared.data.contentType },
+      body: file,
+    });
+    if (!uploadResponse.ok) return { ok: false, motivo: "No se pudo subir la captura." };
+
+    const finalized = await finalizeWinAttachmentAction({
+      ...destino,
+      storagePath: prepared.data.storagePath,
+      fileName: file.name,
+      mimeType: prepared.data.contentType,
+      fileSize: file.size,
+    });
+    if (!finalized.success) return { ok: false, motivo: finalized.error };
+    return { ok: true, data: finalized.data };
+  } catch (error) {
+    return { ok: false, motivo: falloInesperado("[WinFormModal] subir captura", error) };
+  }
+}
 
 const CONTROL_CLASS =
   "h-9 w-full rounded-md border border-border bg-background px-2 text-sm";
@@ -152,44 +194,27 @@ export function WinFormModal({
     }
     setUploading(true);
     setUploadError(null);
-    try {
-      const prepared = await prepareWinAttachmentUploadAction({
-        ...destino,
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: file.type,
-      });
-      if (!prepared.success) throw new Error(prepared.error);
-
-      const uploadResponse = await fetch(prepared.data.signedUrl, {
-        method: "PUT",
-        headers: { "Content-Type": prepared.data.contentType },
-        body: file,
-      });
-      if (!uploadResponse.ok) throw new Error("No se pudo subir la captura.");
-
-      const finalized = await finalizeWinAttachmentAction({
-        ...destino,
-        storagePath: prepared.data.storagePath,
-        fileName: file.name,
-        mimeType: prepared.data.contentType,
-        fileSize: file.size,
-      });
-      if (!finalized.success) throw new Error(finalized.error);
-
-      setAttachments((current) => [...current, finalized.data]);
-    } catch (uploadFailure) {
-      setUploadError(
-        uploadFailure instanceof Error ? uploadFailure.message : "No se pudo subir"
-      );
-    } finally {
-      setUploading(false);
-    }
+    const subida = await subirCapturaDeWin(destino, file);
+    setUploading(false);
+    if (subida.ok) setAttachments((current) => [...current, subida.data]);
+    else setUploadError(subida.motivo);
   }
 
+  /**
+   * Saca la captura de la vista mientras se borra. Si no se pudo borrar
+   * (SCRUM-516), vuelve a aparecer con el motivo: antes desaparecía igual y
+   * seguía guardada.
+   */
   async function removeAttachment(attachment: WinAttachment) {
     setAttachments((current) => current.filter((item) => item.id !== attachment.id));
-    await deleteWinAttachmentAction(attachment.id);
+    const borrado = await leerConMotivo(
+      () => deleteWinAttachmentAction(attachment.id),
+      "[WinFormModal] borrar captura"
+    );
+    if (!borrado.ok) {
+      setAttachments((current) => [...current, attachment]);
+      setUploadError(borrado.motivo);
+    }
   }
 
   return (

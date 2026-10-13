@@ -481,13 +481,16 @@ export function ClientsList({ clients }: { clients: Client[] }) {
   function marcarTareaHecha(task: ClientTask | undefined) {
     if (!task) return;
     startTransition(async () => {
-      const result = await toggleClientTaskAction({ taskId: task.id, done: true });
-      if (!result.success) {
-        push({ title: "No se pudo marcar", description: result.error });
-        return;
-      }
-      await refreshClients();
-      push({ title: "Tarea completada", variant: "success" });
+      await correrMutacion({
+        accion: () => toggleClientTaskAction({ taskId: task.id, done: true }),
+        alExito: async () => {
+          await refreshClients();
+          push({ title: "Tarea completada", variant: "success" });
+        },
+        avisar: push,
+        tituloError: "No se pudo marcar",
+        etiqueta: "[ClientsList] marcar tarea",
+      });
     });
   }
 

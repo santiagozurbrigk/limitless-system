@@ -18,7 +18,12 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { fechaDeInstanteEnZona } from "@/lib/fechas/calendario";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import { firstZodError } from "@/lib/validations";
 import { createWorkboardTasksAction } from "@/app/agent/workboard-actions";
 import {
@@ -44,48 +49,76 @@ const taskInputSchema = z.object({
 });
 
 /**
+ * SCRUM-516: las acciones de tareas devuelven sus errores esperables como valor
+ * (`MutationResult`), dentro de `mutacionConErroresEsperables`. Validación,
+ * sesión, tarea inexistente o de otra organización (PGRST116) y cliente que ya
+ * no existe (23503) vuelven con su motivo; lo inesperado se registra, va a
+ * Sentry y vuelve con el texto fijo. Antes el texto crudo de la base llegaba a
+ * la ficha, y la lista devolvía `[]` ante una falla: «Sin tareas todavía».
+ */
+
+/** Código de PostgREST cuando `.single()` no encuentra la fila. */
+const SIN_FILAS = "PGRST116";
+/** Código de Postgres de una clave foránea que apunta a algo que no existe. */
+const REFERENCIA_INEXISTENTE = "23503";
+
+const TAREA_NO_ENCONTRADA = "No se encontró la tarea. Puede que la hayan borrado.";
+const CLIENTE_INEXISTENTE = "El cliente ya no existe. Recargá la página.";
+const SIN_TITULO = "La tarea necesita un título.";
+const FECHA_INVALIDA = "La fecha tiene que ser un día del calendario.";
+
+function errorDeTarea(error: { message: string; code?: string | null }): Error {
+  if (error.code === SIN_FILAS) return new ErrorEsperable(TAREA_NO_ENCONTRADA);
+  if (error.code === REFERENCIA_INEXISTENTE) return new ErrorEsperable(CLIENTE_INEXISTENTE);
+  return new FallaDeLaBase(error);
+}
+
+/**
  * Las tareas de un cliente, las pendientes primero.
  *
  * Devuelve `[]` —no rompe la ficha— si la migración todavía no corrió. El resto
  * de la pantalla no tiene por qué caerse por una sección que aún no existe en la
- * base.
+ * base. Cualquier otro error vuelve como valor, con el texto fijo.
  */
-export async function listClientTasksAction(clientId: string): Promise<ClientTask[]> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+export async function listClientTasksAction(
+  clientId: string
+): Promise<MutationResult<ClientTask[]>> {
+  return mutacionConErroresEsperables("[listClientTasks]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("client_tasks")
-    .select(SELECT_COLUMNS)
-    .eq("organization_id", organizationId)
-    .eq("client_id", clientId)
-    // Pendientes arriba; dentro de cada grupo, las más viejas primero.
-    .order("status", { ascending: true })
-    .order("position", { ascending: true })
-    .order("created_at", { ascending: true });
+    const { data, error } = await supabase
+      .from("client_tasks")
+      .select(SELECT_COLUMNS)
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      // Pendientes arriba; dentro de cada grupo, las más viejas primero.
+      .order("status", { ascending: true })
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true });
 
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    console.error("[client-tasks] list", error.message);
-    return [];
-  }
+    if (error) {
+      if (isMissingTableError(error.message)) return [];
+      throw new FallaDeLaBase(error);
+    }
 
-  return ((data ?? []) as unknown as ClientTaskRow[]).map(rowToClientTask);
+    return ((data ?? []) as unknown as ClientTaskRow[]).map(rowToClientTask);
+  });
 }
 
 export async function createClientTaskAction(
   input: z.input<typeof taskInputSchema>
 ): Promise<MutationResult<ClientTask>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[createClientTask]", async () => {
     const parsed = taskInputSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
     const organizationId = await requireOrganizationId();
     const profile = await getCurrentProfile();
     const supabase = await createClient();
 
-    const { data: ultima } = await supabase
+    const { data: ultima, error: errorUltima } = await supabase
       .from("client_tasks")
       .select("position")
       .eq("organization_id", organizationId)
@@ -93,6 +126,7 @@ export async function createClientTaskAction(
       .order("position", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (errorUltima) throw new FallaDeLaBase(errorUltima);
 
     const { data, error } = await supabase
       .from("client_tasks")
@@ -110,7 +144,7 @@ export async function createClientTaskAction(
       .select(SELECT_COLUMNS)
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw errorDeTarea(error);
 
     revalidatePath(paths.platform.clients.detail(values.clientId));
     return rowToClientTask(data as unknown as ClientTaskRow);
@@ -124,7 +158,7 @@ export async function updateClientTaskAction(input: {
   owner?: "client" | "coach";
   dueDate?: string | null;
 }): Promise<MutationResult<ClientTask>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateClientTask]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -132,7 +166,7 @@ export async function updateClientTaskAction(input: {
 
     if (input.title != null) {
       const title = input.title.trim().slice(0, 120);
-      if (!title) throw new Error("La tarea necesita un título.");
+      if (!title) throw new ErrorEsperable(SIN_TITULO);
       patch.title = title;
     }
     if (input.description != null) {
@@ -141,7 +175,7 @@ export async function updateClientTaskAction(input: {
     if (input.owner != null) patch.owner = input.owner;
     if (input.dueDate !== undefined) {
       if (input.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) {
-        throw new Error("La fecha tiene que ser un día del calendario.");
+        throw new ErrorEsperable(FECHA_INVALIDA);
       }
       patch.due_date = input.dueDate || null;
     }
@@ -154,7 +188,7 @@ export async function updateClientTaskAction(input: {
       .select(SELECT_COLUMNS)
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw errorDeTarea(error);
 
     const task = rowToClientTask(data as unknown as ClientTaskRow);
     revalidatePath(paths.platform.clients.detail(task.clientId));
@@ -173,7 +207,7 @@ export async function toggleClientTaskAction(input: {
   taskId: string;
   done: boolean;
 }): Promise<MutationResult<ClientTask>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[toggleClientTask]", async () => {
     const organizationId = await requireOrganizationId();
     const profile = await getCurrentProfile();
     const supabase = await createClient();
@@ -191,7 +225,7 @@ export async function toggleClientTaskAction(input: {
       .select(SELECT_COLUMNS)
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw errorDeTarea(error);
 
     const task = rowToClientTask(data as unknown as ClientTaskRow);
     revalidatePath(paths.platform.clients.detail(task.clientId));
@@ -202,7 +236,7 @@ export async function toggleClientTaskAction(input: {
 export async function deleteClientTaskAction(
   taskId: string
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteClientTask]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -212,7 +246,7 @@ export async function deleteClientTaskAction(
       .eq("id", taskId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
   });
 }
 
@@ -225,11 +259,15 @@ export async function deleteClientTaskAction(
  * hacer.
  *
  * Es idempotente: si ya se mandó, no crea una segunda.
+ *
+ * Si el tablero no crea la tarea es inesperado (la sesión y la tarea ya se
+ * validaron): `createWorkboardTasksAction` devuelve el texto crudo de la base
+ * en `error`, así que se registra como falla y el usuario ve el texto fijo.
  */
 export async function sendClientTaskToBoardAction(input: {
   taskId: string;
 }): Promise<MutationResult<ClientTask>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[sendClientTaskToBoard]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -240,16 +278,17 @@ export async function sendClientTaskToBoardAction(input: {
       .eq("organization_id", organizationId)
       .single();
 
-    if (readError) throw new Error(readError.message);
+    if (readError) throw errorDeTarea(readError);
 
     const task = rowToClientTask(existente as unknown as ClientTaskRow);
     if (task.workboardTaskId) return task;
 
-    const [{ data: client }, zona] = await Promise.all([
+    const [{ data: client, error: clientError }, zona] = await Promise.all([
       supabase.from("clients").select("name").eq("id", task.clientId).maybeSingle(),
       // El día de la 1-1 que se menciona es el de la zona de la organización.
       leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
     ]);
+    if (clientError) throw new FallaDeLaBase(clientError);
 
     const clientName = (client?.name as string | undefined) ?? "cliente";
     const diaDeLaLlamada = fechaDeInstanteEnZona(task.sourceCallAt, zona);
@@ -274,7 +313,9 @@ export async function sendClientTaskToBoardAction(input: {
     });
 
     if (!created.ok || !created.taskIds.length) {
-      throw new Error(created.error ?? "No se pudo crear la tarea en el tablero.");
+      throw new FallaDeLaBase({
+        message: created.error ?? "El tablero no devolvió la tarea creada",
+      });
     }
 
     const { data, error } = await supabase
@@ -288,7 +329,7 @@ export async function sendClientTaskToBoardAction(input: {
       .select(SELECT_COLUMNS)
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw errorDeTarea(error);
 
     revalidatePath(paths.platform.clients.detail(task.clientId));
     revalidatePath(paths.platform.workboard.root);
