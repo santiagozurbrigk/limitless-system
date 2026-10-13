@@ -1,7 +1,16 @@
 import { CustomFieldsPage } from "@/components/clients/custom-fields";
 import { getCustomFieldsPageDataAction } from "@/app/clients/custom-field-actions";
+import { EmptyState } from "@/components/shared/empty-state";
 
 export default async function CustomFieldsRoute() {
-  const { fields, canManage } = await getCustomFieldsPageDataAction();
+  const resultado = await getCustomFieldsPageDataAction();
+  // La lectura devuelve su error como valor (SCRUM-517): la pantalla muestra
+  // el motivo en vez de "Todavía no hay columnas".
+  if (!resultado.success) {
+    return (
+      <EmptyState title="No se pudieron cargar las columnas" description={resultado.error} />
+    );
+  }
+  const { fields, canManage } = resultado.data;
   return <CustomFieldsPage initialFields={fields} canManage={canManage} />;
 }

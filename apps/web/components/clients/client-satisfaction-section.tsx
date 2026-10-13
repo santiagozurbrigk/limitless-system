@@ -18,12 +18,39 @@ import { GlassPanel, cn } from "@ai-coo/ui";
 import { Gauge, TriangleAlert } from "lucide-react";
 import { useToast } from "@/providers/toast-provider";
 import { updateClientSatisfactionAction } from "@/app/clients/tracking-actions";
+import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
 import {
   ETIQUETAS_DE_SATISFACCION,
   NIVELES_DE_SATISFACCION,
   resolverSatisfaccion,
   type NivelDeSatisfaccion,
 } from "@/lib/clients/satisfaction";
+
+/**
+ * Guarda (o borra, con `null`) la marca de satisfacción (SCRUM-517): el motivo
+ * de un rechazo se avisa; si la acción lanzó, el texto fijo. Con éxito,
+ * `alGuardar` con la fecha de la marca.
+ */
+export function guardarSatisfaccion(
+  clientId: string,
+  nivel: NivelDeSatisfaccion | null,
+  avisar: (aviso: Aviso) => void,
+  alGuardar: (updatedAt: string | null) => void
+): Promise<void> {
+  return correrMutacion({
+    accion: () => updateClientSatisfactionAction(clientId, nivel),
+    avisar,
+    tituloError: "No se pudo guardar",
+    etiqueta: "[ClientSatisfaction] guardar",
+    alExito: (data) => {
+      alGuardar(data.updatedAt);
+      avisar({
+        title: nivel ? "Satisfacción actualizada" : "Marca borrada",
+        variant: "success",
+      });
+    },
+  });
+}
 
 export function ClientSatisfactionSection({
   clientId,
@@ -53,19 +80,12 @@ export function ClientSatisfactionSection({
     // equivoqué" sin agregar un botón de borrar.
     const siguiente = nivel === elegido ? null : elegido;
 
-    startTransition(async () => {
-      const result = await updateClientSatisfactionAction(clientId, siguiente);
-      if (!result.success) {
-        push({ title: "No se pudo guardar", description: result.error });
-        return;
-      }
-      setNivel(siguiente);
-      setMarcadaEl(result.data.updatedAt);
-      push({
-        title: siguiente ? "Satisfacción actualizada" : "Marca borrada",
-        variant: "success",
-      });
-    });
+    startTransition(() =>
+      guardarSatisfaccion(clientId, siguiente, push, (updatedAt) => {
+        setNivel(siguiente);
+        setMarcadaEl(updatedAt);
+      })
+    );
   }
 
   return (

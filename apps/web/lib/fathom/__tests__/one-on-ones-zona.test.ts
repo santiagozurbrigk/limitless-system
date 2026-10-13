@@ -10,6 +10,8 @@ import { conZona, restaurarZona } from "@/lib/fechas/__tests__/zona";
 const sim = vi.hoisted(() => ({
   zona: "America/Argentina/Buenos_Aires" as string | null,
   llamadas: [] as { call_date: string }[],
+  // Error de supabase-js para `fathom_calls` (SCRUM-517).
+  errorDeLlamadas: null as { message: string } | null,
   filtrosDeLaZona: [] as [string, unknown][],
 }));
 
@@ -26,7 +28,11 @@ vi.mock("@/lib/supabase/admin", () => ({
         order: () => builder,
         maybeSingle: async () => ({ data: { timezone: sim.zona }, error: null }),
         then(resolver: (r: unknown) => void) {
-          resolver({ data: sim.llamadas, error: null });
+          resolver(
+            sim.errorDeLlamadas
+              ? { data: null, error: sim.errorDeLlamadas }
+              : { data: sim.llamadas, error: null }
+          );
         },
       };
       return builder;
@@ -40,6 +46,7 @@ beforeEach(() => {
   sim.zona = "America/Argentina/Buenos_Aires";
   sim.llamadas = [];
   sim.filtrosDeLaZona = [];
+  sim.errorDeLlamadas = null;
   vi.useFakeTimers();
 });
 
@@ -65,6 +72,22 @@ describe("⭐ loadClientOneOnOneStats en la zona de la organización", () => {
     vi.setSystemTime(new Date("2026-10-02T02:00:00Z"));
     sim.llamadas = [{ call_date: "2026-10-02T01:00:00Z" }];
     expect((await loadClientOneOnOneStats("org-1", "cliente-1", sim.zona)).daysSinceLast).toBe(0);
+  });
+});
+
+describe("loadClientOneOnOneStats con fathom_calls caída (SCRUM-517)", () => {
+  it("devuelve las estadísticas en cero, como siempre, y lo anota en la consola", async () => {
+    conZona("UTC");
+    vi.setSystemTime(new Date("2026-10-02T18:00:00Z"));
+    sim.errorDeLlamadas = { message: "TypeError: fetch failed" };
+    const consola = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const stats = await loadClientOneOnOneStats("org-1", "cliente-1", sim.zona);
+      expect(stats).toMatchObject({ totalCalls: 0, lastDate: null, daysSinceLast: null });
+      expect(consola).toHaveBeenCalledWith("[fathom:one-on-ones] stats", "TypeError: fetch failed");
+    } finally {
+      consola.mockRestore();
+    }
   });
 });
 

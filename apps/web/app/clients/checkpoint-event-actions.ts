@@ -20,27 +20,28 @@ import {
   isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
-import type {
-  CheckpointEvent,
-  CheckpointEventRow,
-  CheckpointWithEvent,
-} from "@/types/checkpoints";
-import {
-  buildClientProgress,
-  resolveCurrentStageId,
-  rowToCheckpointEvent,
-} from "@/lib/checkpoints";
+import type { CheckpointEvent, CheckpointEventRow } from "@/types/checkpoints";
+import { resolveCurrentStageId, rowToCheckpointEvent } from "@/lib/checkpoints";
 import { resolveMetricSchema } from "@/lib/checkpoints/metric-schema";
 import { validateFieldValues } from "@/lib/custom-fields";
 import {
-  listCheckpointsAction,
-  listJourneyStagesAction,
-} from "@/app/clients/checkpoint-actions";
-import { listFieldDefinitionsAction } from "@/app/clients/custom-field-actions";
+  leerCheckpoints,
+  leerEventosDelCliente,
+  leerFasesDelRecorrido,
+  leerRecorridoDelCliente,
+  type RecorridoDelCliente,
+} from "@/lib/checkpoints/lecturas-del-recorrido";
+import { leerColumnas } from "@/lib/custom-fields/leer-columnas";
 import { buildJourney } from "@/lib/checkpoints";
 import { hitoEsFuturo } from "@/lib/checkpoints/fecha-del-hito";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  registrarFallaDeAccion,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -63,29 +64,19 @@ function revalidate(clientId: string) {
 
 // ─── Lectura ────────────────────────────────────────────────────────────────
 
-/** Los eventos de un cliente. */
+/**
+ * Los eventos de un cliente.
+ *
+ * SCRUM-517: las lecturas devuelven su error como valor. Antes atrapaban todo
+ * y devolvían listas vacías: una caída de la base se veía como "sin hitos".
+ */
 export async function listCheckpointEventsAction(
   clientId: string
-): Promise<CheckpointEvent[]> {
-  try {
+): Promise<MutationResult<CheckpointEvent[]>> {
+  return mutacionConErroresEsperables("[listCheckpointEvents]", async () => {
     const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("client_checkpoint_events")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .eq("client_id", clientId)
-      .order("reached_at", { ascending: false });
-
-    if (error) {
-      if (isMissingTableError(error.message)) return [];
-      console.error("[listCheckpointEvents]", error.message);
-      return [];
-    }
-    return (data as CheckpointEventRow[]).map(rowToCheckpointEvent);
-  } catch {
-    return [];
-  }
+    return leerEventosDelCliente(await createClient(), organizationId, clientId);
+  });
 }
 
 /**
@@ -94,24 +85,13 @@ export async function listCheckpointEventsAction(
  * Devuelve también los campos de C0 (para el formulario de métricas) y si el
  * recorrido está vacío (para el estado que manda a configurarlo).
  */
-export async function getClientJourneyAction(clientId: string): Promise<{
-  progress: CheckpointWithEvent[];
-  checkpointFields: Awaited<ReturnType<typeof listFieldDefinitionsAction>>;
-  journeyConfigured: boolean;
-}> {
-  const [stages, checkpoints, events, fields] = await Promise.all([
-    listJourneyStagesAction(),
-    listCheckpointsAction(),
-    listCheckpointEventsAction(clientId),
-    listFieldDefinitionsAction("checkpoint"),
-  ]);
-
-  const journey = buildJourney(stages, checkpoints);
-  return {
-    progress: buildClientProgress(journey.stages, events),
-    checkpointFields: fields,
-    journeyConfigured: journey.stages.length > 0,
-  };
+export async function getClientJourneyAction(
+  clientId: string
+): Promise<MutationResult<RecorridoDelCliente>> {
+  return mutacionConErroresEsperables("[getClientJourney]", async () => {
+    const organizationId = await requireOrganizationId();
+    return leerRecorridoDelCliente(await createClient(), organizationId, clientId);
+  });
 }
 
 // ─── Escritura ──────────────────────────────────────────────────────────────
@@ -126,18 +106,20 @@ export async function getClientJourneyAction(clientId: string): Promise<{
 export async function recordCheckpointAction(
   input: RecordCheckpointInput
 ): Promise<MutationResult<CheckpointEvent>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[recordCheckpoint]", async () => {
     const organizationId = await requireOrganizationId();
     const profile = await getCurrentProfile();
 
     const parsed = recordSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
+    // Con las lecturas que lanzan: antes, si fallaban, el checkpoint "no
+    // existía" o las métricas se validaban contra ninguna columna.
     const supabase = await createClient();
     const [checkpoints, fields, zona] = await Promise.all([
-      listCheckpointsAction(),
-      listFieldDefinitionsAction("checkpoint"),
+      leerCheckpoints(supabase, organizationId),
+      leerColumnas(supabase, organizationId, "checkpoint"),
       leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
     ]);
 
@@ -147,10 +129,10 @@ export async function recordCheckpointAction(
     // mañana todavía no llegó y no por eso es futuro.
     const reachedAt = values.reachedAt ?? new Date().toISOString();
     if (hitoEsFuturo(reachedAt, zona)) {
-      throw new Error("La fecha no puede ser futura: registrás algo que ya pasó.");
+      throw new ErrorEsperable("La fecha no puede ser futura: registrás algo que ya pasó.");
     }
     const checkpoint = checkpoints.find((c) => c.id === values.checkpointId);
-    if (!checkpoint) throw new Error("El checkpoint no existe");
+    if (!checkpoint) throw new ErrorEsperable("El checkpoint no existe");
 
     // Las métricas se validan con las reglas de C0, contra sólo los campos que
     // este checkpoint pide y que todavía existen. Una referencia rota no pide
@@ -162,7 +144,7 @@ export async function recordCheckpointAction(
 
     const validation = validateFieldValues(askedFields, values.metrics);
     if (!validation.ok) {
-      throw new Error(Object.values(validation.errors)[0] ?? "Métricas inválidas");
+      throw new ErrorEsperable(Object.values(validation.errors)[0] ?? "Métricas inválidas");
     }
 
     const { data, error } = await supabase
@@ -183,7 +165,7 @@ export async function recordCheckpointAction(
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
     // Si el checkpoint fija un estado, el cliente pasa a ese estado solo. Es la
     // mitad del pedido: configurar una vez y que el estado se mantenga.
@@ -191,7 +173,7 @@ export async function recordCheckpointAction(
       await applyClientStatus(values.clientId, organizationId, checkpoint.setsClientStatus);
     }
 
-    await recomputeCurrentStage(values.clientId, organizationId);
+    await recomputeCurrentStage(supabase, values.clientId, organizationId);
 
     revalidate(values.clientId);
     return rowToCheckpointEvent(data as CheckpointEventRow);
@@ -209,7 +191,7 @@ export async function undoCheckpointAction(
   eventId: string,
   clientId: string
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[undoCheckpoint]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -219,9 +201,9 @@ export async function undoCheckpointAction(
       .eq("id", eventId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
-    await recomputeCurrentStage(clientId, organizationId);
+    await recomputeCurrentStage(supabase, clientId, organizationId);
     revalidate(clientId);
   });
 }
@@ -248,28 +230,40 @@ async function applyClientStatus(
     .eq("id", clientId)
     .eq("organization_id", organizationId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw new FallaDeLaBase(error);
 }
 
-/** Recalcula clients.current_stage_id desde los eventos vigentes del cliente. */
-async function recomputeCurrentStage(clientId: string, organizationId: string) {
-  const [stages, checkpoints, events] = await Promise.all([
-    listJourneyStagesAction(),
-    listCheckpointsAction(),
-    listCheckpointEventsAction(clientId),
-  ]);
+/**
+ * Recalcula clients.current_stage_id desde los eventos vigentes del cliente.
+ *
+ * El evento ya quedó escrito: si el recálculo falla, la acción no se da por
+ * fallida (igual que antes), pero la falla se registra y va a Sentry. Y si no
+ * se pudieron leer las fases, los checkpoints o los eventos, no se escribe
+ * nada: antes, con esas lecturas vacías, la fase del cliente quedaba en blanco.
+ */
+async function recomputeCurrentStage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  clientId: string,
+  organizationId: string
+) {
+  try {
+    const [stages, checkpoints, events] = await Promise.all([
+      leerFasesDelRecorrido(supabase, organizationId),
+      leerCheckpoints(supabase, organizationId),
+      leerEventosDelCliente(supabase, organizationId, clientId),
+    ]);
 
-  const journey = buildJourney(stages, checkpoints);
-  const currentStageId = resolveCurrentStageId(journey.stages, events);
+    const journey = buildJourney(stages, checkpoints);
+    const currentStageId = resolveCurrentStageId(journey.stages, events);
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("clients")
-    .update({ current_stage_id: currentStageId })
-    .eq("id", clientId)
-    .eq("organization_id", organizationId);
+    const { error } = await supabase
+      .from("clients")
+      .update({ current_stage_id: currentStageId })
+      .eq("id", clientId)
+      .eq("organization_id", organizationId);
 
-  if (error && !isMissingTableError(error.message)) {
-    console.error("[recomputeCurrentStage]", error.message);
+    if (error && !isMissingTableError(error.message)) throw new FallaDeLaBase(error);
+  } catch (error) {
+    registrarFallaDeAccion("[recomputeCurrentStage]", error);
   }
 }

@@ -27,6 +27,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { useToast } from "@/providers/toast-provider";
 import type { MutationResult } from "@/lib/server/action-result";
+import { correrMutacion, leerConMotivo, type Aviso } from "@/lib/client/correr-accion";
 import {
   CHECKPOINT_CLIENT_STATUS_LABEL,
   type Checkpoint,
@@ -49,6 +50,7 @@ import {
   setJourneyStageArchivedAction,
   updateCheckpointAction,
   updateJourneyStageAction,
+  type JourneyPageData,
 } from "@/app/clients/checkpoint-actions";
 import { paths } from "@/routes";
 import {
@@ -60,9 +62,41 @@ import {
   type StageDraft,
 } from "@/components/clients/checkpoints/stage-dialog";
 
-type PageData = Awaited<ReturnType<typeof getJourneyPageDataAction>>;
+/**
+ * Vuelve a leer el recorrido después de un cambio (SCRUM-517). Si no se pudo,
+ * avisa el motivo (o el texto fijo si la acción lanzó) y devuelve `null`: la
+ * pantalla se queda con lo que ya mostraba.
+ */
+export async function recargarRecorrido(
+  avisar: (aviso: Aviso) => void
+): Promise<JourneyPageData | null> {
+  const lectura = await leerConMotivo(getJourneyPageDataAction, "[JourneyPage] recargar");
+  if (!lectura.ok) {
+    avisar({ title: "No se pudo actualizar el recorrido", description: lectura.motivo });
+    return null;
+  }
+  return lectura.data;
+}
 
-export function JourneyPage({ initialData }: { initialData: PageData }) {
+/**
+ * Un cambio del recorrido desde un botón (SCRUM-517): el motivo de un rechazo
+ * se avisa; si la acción lanzó, el texto fijo. Con éxito, `alExito`.
+ */
+export function cambiarRecorrido(
+  accion: () => Promise<MutationResult<unknown>>,
+  avisar: (aviso: Aviso) => void,
+  alExito: () => void | Promise<void>
+): Promise<void> {
+  return correrMutacion({
+    accion,
+    alExito,
+    avisar,
+    tituloError: "No se pudo guardar",
+    etiqueta: "[JourneyPage] cambio",
+  });
+}
+
+export function JourneyPage({ initialData }: { initialData: JourneyPageData }) {
   const { push } = useToast();
   const [data, setData] = useState(initialData);
   const [pending, startTransition] = useTransition();
@@ -80,29 +114,28 @@ export function JourneyPage({ initialData }: { initialData: PageData }) {
   const { canManage, checkpointFields, orphanCheckpoints, stages } = data;
 
   async function refresh() {
-    setData(await getJourneyPageDataAction());
+    const next = await recargarRecorrido(push);
+    if (next) setData(next);
   }
 
   function run(operation: () => Promise<MutationResult<unknown>>) {
-    startTransition(async () => {
-      const result = await operation();
-      if (!result.success) {
-        push({ title: "No se pudo guardar", description: result.error });
-        return;
-      }
-      await refresh();
-    });
+    startTransition(() => cambiarRecorrido(operation, push, refresh));
   }
 
   function submitStage(draft: StageDraft) {
     setDialogError(null);
     startTransition(async () => {
-      const result = stageDialog.stage
-        ? await updateJourneyStageAction(stageDialog.stage.id, draft)
-        : await createJourneyStageAction(draft);
+      // Si la acción lanzó, el diálogo muestra el texto fijo (SCRUM-517).
+      const result = await leerConMotivo(
+        () =>
+          stageDialog.stage
+            ? updateJourneyStageAction(stageDialog.stage.id, draft)
+            : createJourneyStageAction(draft),
+        "[JourneyPage] guardar fase"
+      );
 
-      if (!result.success) {
-        setDialogError(result.error);
+      if (!result.ok) {
+        setDialogError(result.motivo);
         return;
       }
       setStageDialog({ open: false, stage: null });
@@ -138,12 +171,16 @@ export function JourneyPage({ initialData }: { initialData: PageData }) {
         metricSchema: draft.metricSchema,
       };
 
-      const result = checkpointDialog.checkpoint
-        ? await updateCheckpointAction(checkpointDialog.checkpoint.id, payload)
-        : await createCheckpointAction(payload);
+      const result = await leerConMotivo(
+        () =>
+          checkpointDialog.checkpoint
+            ? updateCheckpointAction(checkpointDialog.checkpoint.id, payload)
+            : createCheckpointAction(payload),
+        "[JourneyPage] guardar checkpoint"
+      );
 
-      if (!result.success) {
-        setDialogError(result.error);
+      if (!result.ok) {
+        setDialogError(result.motivo);
         return;
       }
       setCheckpointDialog({ open: false, stage: null, checkpoint: null });

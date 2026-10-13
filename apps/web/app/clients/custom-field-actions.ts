@@ -12,6 +12,7 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import {
   getCurrentProfile,
@@ -35,8 +36,16 @@ import {
   fieldTypeUsesOptions,
   rowToFieldDefinition,
 } from "@/lib/custom-fields";
-import { orgHasAddOn, requireAddOn } from "@/lib/auth/add-ons";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import { orgHasAddOn } from "@/lib/auth/add-ons";
+import { exigirAddOn } from "@/lib/auth/exigir-add-on";
+import { leerColumnas } from "@/lib/custom-fields/leer-columnas";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { lecturaDegradable } from "@/lib/server/lectura-degradable";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -120,7 +129,7 @@ export type UpdateFieldDefinitionInput = z.input<typeof updateSchema>;
 async function requireFounder() {
   const profile = await getCurrentProfile();
   if (profile?.role !== "founder") {
-    throw new Error("Solo el founder puede configurar las columnas");
+    throw new ErrorEsperable("Solo el founder puede configurar las columnas");
   }
 }
 
@@ -140,44 +149,49 @@ function revalidate() {
 export async function listFieldDefinitionsAction(
   entity?: FieldEntity
 ): Promise<FieldDefinition[]> {
+  /*
+   * SCRUM-517: esta lectura la usan pantallas para mostrar datos (Wins, la
+   * bandeja de onboarding) y otras acciones que devuelven la lista tal cual,
+   * así que conserva su tipo. Lo que cambia es que una falla ya no se esconde:
+   * `lecturaDegradable` la registra (consola y Sentry, tag `lectura_degradada`)
+   * y recién ahí devuelve la lista vacía. Las escrituras no la usan para
+   * validar: leen con `leerColumnas`, que lanza.
+   */
   try {
-    const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-
-    let query = supabase
-      .from("field_definitions")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("sort_order", { ascending: true })
-      .order("label", { ascending: true });
-
-    if (entity) query = query.eq("entity", entity);
-
-    const { data, error } = await query;
-
-    if (error) {
-      if (isMissingTableError(error.message)) return [];
-      console.error("[listFieldDefinitions]", error.message);
-      return [];
-    }
-
-    return (data as FieldDefinitionRow[])
-      .map(rowToFieldDefinition)
-      .filter((field): field is FieldDefinition => field !== null);
-  } catch {
+    return await lecturaDegradable(
+      "listFieldDefinitions",
+      async () => leerColumnas(await createClient(), await requireOrganizationId(), entity),
+      []
+    );
+  } catch (error) {
+    // Sólo llegan acá un error interno de Next (se relanza) y la sesión que
+    // falta, que no es una falla: sin sesión no hay columnas que mostrar.
+    unstable_rethrow(error);
     return [];
   }
 }
 
-export async function getCustomFieldsPageDataAction(): Promise<{
+export type CustomFieldsPageData = {
   fields: FieldDefinition[];
   canManage: boolean;
-}> {
-  const [fields, profile] = await Promise.all([
-    listFieldDefinitionsAction(),
-    getCurrentProfile(),
-  ]);
-  return { fields, canManage: profile?.role === "founder" };
+};
+
+/**
+ * Lo que la pantalla de Campos personalizados necesita. La usan el server
+ * component y la recarga después de cada cambio: con un error, la pantalla
+ * muestra el motivo en vez de "Todavía no hay columnas".
+ */
+export async function getCustomFieldsPageDataAction(): Promise<
+  MutationResult<CustomFieldsPageData>
+> {
+  return mutacionConErroresEsperables("[getCustomFieldsPageData]", async () => {
+    const organizationId = await requireOrganizationId();
+    const [fields, profile] = await Promise.all([
+      leerColumnas(await createClient(), organizationId),
+      getCurrentProfile(),
+    ]);
+    return { fields, canManage: profile?.role === "founder" };
+  });
 }
 
 // ─── Escritura ──────────────────────────────────────────────────────────────
@@ -185,20 +199,21 @@ export async function getCustomFieldsPageDataAction(): Promise<{
 export async function createFieldDefinitionAction(
   input: CreateFieldDefinitionInput
 ): Promise<MutationResult<FieldDefinition>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[createFieldDefinition]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
     const parsed = createSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
-    const existing = await listFieldDefinitionsAction(values.entity);
+    const supabase = await createClient();
+    const existing = await leerColumnas(supabase, organizationId, values.entity);
     const key = deriveFieldKeyOrError(
       values.label,
       existing.map((field) => field.key)
     );
-    if (!key.ok) throw new Error(key.error);
+    if (!key.ok) throw new ErrorEsperable(key.error);
 
     assertOptionsMatchType(values.fieldType, values.options);
 
@@ -206,7 +221,6 @@ export async function createFieldDefinitionAction(
     // suelta, que es la única forma en que esa organización la ve.
     const conApartados = await orgHasAddOn(organizationId, "growth_partners");
 
-    const supabase = await createClient();
     const { data, error } = await supabase
       .from("field_definitions")
       .insert({
@@ -238,10 +252,10 @@ export async function createFieldDefinitionAction(
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
     const field = rowToFieldDefinition(data as FieldDefinitionRow);
-    if (!field) throw new Error("No se pudo leer la columna recién creada");
+    if (!field) throw new FallaDeLaBase({ message: "No se pudo leer la columna recién creada" });
 
     revalidate();
     return field;
@@ -251,15 +265,16 @@ export async function createFieldDefinitionAction(
 export async function updateFieldDefinitionAction(
   input: UpdateFieldDefinitionInput
 ): Promise<MutationResult<FieldDefinition>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateFieldDefinition]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
     const parsed = updateSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const { id, ...changes } = parsed.data;
 
-    const current = await findFieldOrThrow(id);
+    const supabase = await createClient();
+    const current = await findFieldOrThrow(supabase, organizationId, id);
 
     if (changes.options !== undefined) {
       assertOptionsMatchType(current.fieldType, changes.options);
@@ -301,7 +316,8 @@ export async function updateFieldDefinitionAction(
 
     if (Object.keys(patch).length === 0) return current;
 
-    const supabase = await createClient();
+    // `.single()` sin filas (PGRST116): la columna dejó de existir entre la
+    // lectura de arriba y esta escritura.
     const { data, error } = await supabase
       .from("field_definitions")
       .update(patch)
@@ -310,10 +326,13 @@ export async function updateFieldDefinitionAction(
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.code === SIN_FILAS) throw new ErrorEsperable(COLUMNA_INEXISTENTE);
+      throw new FallaDeLaBase(error);
+    }
 
     const field = rowToFieldDefinition(data as FieldDefinitionRow);
-    if (!field) throw new Error("No se pudo leer la columna actualizada");
+    if (!field) throw new FallaDeLaBase({ message: "No se pudo leer la columna actualizada" });
 
     revalidate();
     return field;
@@ -325,7 +344,7 @@ export async function setFieldDefinitionArchivedAction(
   id: string,
   archived: boolean
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[setFieldDefinitionArchived]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
@@ -336,7 +355,7 @@ export async function setFieldDefinitionArchivedAction(
       .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
   });
 }
@@ -351,25 +370,25 @@ export async function setFieldDefinitionArchivedAction(
 export async function deleteFieldDefinitionAction(
   id: string
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteFieldDefinition]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
-    const field = await findFieldOrThrow(id);
-    if (await isFieldInUse(field)) {
-      throw new Error(
+    const supabase = await createClient();
+    const field = await findFieldOrThrow(supabase, organizationId, id);
+    if (await isFieldInUse(supabase, field)) {
+      throw new ErrorEsperable(
         `"${field.label}" ya tiene datos cargados. Archivala en vez de borrarla: los datos viejos la siguen mostrando.`
       );
     }
 
-    const supabase = await createClient();
     const { error } = await supabase
       .from("field_definitions")
       .delete()
       .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
   });
 }
@@ -379,7 +398,7 @@ export async function reorderFieldDefinitionsAction(
   entity: FieldEntity,
   orderedIds: string[]
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[reorderFieldDefinitions]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
@@ -391,7 +410,7 @@ export async function reorderFieldDefinitionsAction(
         .eq("id", id)
         .eq("organization_id", organizationId)
         .eq("entity", entity);
-      if (error) throw new Error(error.message);
+      if (error) throw new FallaDeLaBase(error);
     }
 
     revalidate();
@@ -421,10 +440,20 @@ function nextSortOrder(existing: readonly FieldDefinition[]): number {
   return existing.reduce((max, field) => Math.max(max, field.sortOrder + 1), 0);
 }
 
-async function findFieldOrThrow(id: string): Promise<FieldDefinition> {
-  const all = await listFieldDefinitionsAction();
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/** Código de PostgREST cuando `.single()` no encuentra la fila. */
+const SIN_FILAS = "PGRST116";
+const COLUMNA_INEXISTENTE = "La columna no existe";
+
+async function findFieldOrThrow(
+  supabase: Supabase,
+  organizationId: string,
+  id: string
+): Promise<FieldDefinition> {
+  const all = await leerColumnas(supabase, organizationId);
   const field = all.find((candidate) => candidate.id === id);
-  if (!field) throw new Error("La columna no existe");
+  if (!field) throw new ErrorEsperable(COLUMNA_INEXISTENTE);
   return field;
 }
 
@@ -433,11 +462,11 @@ function assertOptionsMatchType(
   options: readonly { value: string }[]
 ) {
   if (!fieldTypeUsesOptions(fieldType) && options.length > 0) {
-    throw new Error("Sólo los campos de lista llevan opciones");
+    throw new ErrorEsperable("Sólo los campos de lista llevan opciones");
   }
   const values = options.map((option) => option.value);
   if (new Set(values).size !== values.length) {
-    throw new Error("Hay dos opciones con el mismo valor");
+    throw new ErrorEsperable("Hay dos opciones con el mismo valor");
   }
 }
 
@@ -455,7 +484,7 @@ function assertNoOptionDisappears(
   const nextValues = new Set(next.map((option) => option.value));
   const missing = current.options.filter((option) => !nextValues.has(option.value));
   if (missing.length > 0) {
-    throw new Error(
+    throw new ErrorEsperable(
       `No se puede sacar "${missing[0]?.label}": archivala para que los datos viejos la sigan mostrando.`
     );
   }
@@ -466,11 +495,10 @@ function assertNoOptionDisappears(
  *
  * La tabla de valores todavía no existe (la traen A y C2). Una tabla ausente
  * cuenta como "sin uso" — que es la verdad hoy — y el chequeo empieza a valer
- * solo cuando esas migraciones entren.
+ * solo cuando esas migraciones entren. Si no se puede saber, lanza: no se
+ * borra, pero tampoco se dice "ya tiene datos cargados" cuando falló la base.
  */
-async function isFieldInUse(field: FieldDefinition): Promise<boolean> {
-  const supabase = await createClient();
-
+async function isFieldInUse(supabase: Supabase, field: FieldDefinition): Promise<boolean> {
   for (const target of VALUES_TABLE[field.entity]) {
     const { count, error } = await supabase
       .from(target.table)
@@ -481,8 +509,7 @@ async function isFieldInUse(field: FieldDefinition): Promise<boolean> {
     if (error) {
       if (isMissingTableError(error.message)) continue;
       // Ante la duda, no se borra: es la opción que no pierde datos.
-      console.error("[isFieldInUse]", error.message);
-      return true;
+      throw new FallaDeLaBase(error);
     }
     if ((count ?? 0) > 0) return true;
   }
@@ -629,13 +656,13 @@ const PLANTILLA_LIMITLESS: { section: FieldSection; labels: string[] }[] = [
 export async function seedLimitlessClientFieldsAction(): Promise<
   MutationResult<{ created: number; skipped: number }>
 > {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[seedLimitlessClientFields]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
-    await requireAddOn(organizationId, "growth_partners");
+    await exigirAddOn(organizationId, "growth_partners");
     const supabase = await createClient();
 
-    const existing = await listFieldDefinitionsAction("client");
+    const existing = await leerColumnas(supabase, organizationId, "client");
     const existingKeys = new Set(existing.map((field) => field.key));
 
     const filas: Record<string, unknown>[] = [];
@@ -675,7 +702,7 @@ export async function seedLimitlessClientFieldsAction(): Promise<
 
     if (filas.length > 0) {
       const { error } = await supabase.from("field_definitions").insert(filas);
-      if (error) throw new Error(error.message);
+      if (error) throw new FallaDeLaBase(error);
     }
 
     revalidate();
@@ -697,13 +724,13 @@ export async function seedLimitlessClientFieldsAction(): Promise<
 export async function seedOnboardingQuestionsAction(): Promise<
   MutationResult<{ created: number; skipped: number }>
 > {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[seedOnboardingQuestions]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
-    await requireAddOn(organizationId, "growth_partners");
+    await exigirAddOn(organizationId, "growth_partners");
     const supabase = await createClient();
 
-    const existing = await listFieldDefinitionsAction("client");
+    const existing = await leerColumnas(supabase, organizationId, "client");
     const existingKeys = new Set(existing.map((field) => field.key));
 
     const filas: Record<string, unknown>[] = [];
@@ -751,7 +778,7 @@ export async function seedOnboardingQuestionsAction(): Promise<
 
     if (filas.length > 0) {
       const { error } = await supabase.from("field_definitions").insert(filas);
-      if (error) throw new Error(error.message);
+      if (error) throw new FallaDeLaBase(error);
     }
 
     revalidate();

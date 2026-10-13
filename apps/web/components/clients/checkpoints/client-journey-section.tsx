@@ -30,6 +30,10 @@ import {
 } from "@/lib/checkpoints/effective-stage";
 import { usePlatformData } from "@/providers";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, leerConMotivo, type Aviso } from "@/lib/client/correr-accion";
+import type { MutationResult } from "@/lib/server/action-result";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
+import type { RecorridoDelCliente } from "@/lib/checkpoints/lecturas-del-recorrido";
 import type {
   Checkpoint,
   CheckpointEvent,
@@ -70,13 +74,52 @@ function formatearFechaDelHito(reachedAt: string, zona: string | null): string {
   });
 }
 
-type JourneyData = Awaited<ReturnType<typeof getClientJourneyAction>>;
+type JourneyData = RecorridoDelCliente;
 
 const EMPTY: JourneyData = {
   progress: [],
   checkpointFields: [],
   journeyConfigured: false,
 };
+
+/**
+ * El recorrido del cliente y sus propuestas pendientes (SCRUM-517): el dato o
+ * el motivo. Antes una falla escondía la sección entera, como si el recorrido
+ * no estuviera configurado.
+ */
+export async function cargarRecorridoDelCliente(
+  clientId: string
+): Promise<{ ok: true; data: JourneyData; proposals: CheckpointProposal[] } | { ok: false; motivo: string }> {
+  const [recorrido, propuestas] = await Promise.all([
+    leerConMotivo(() => getClientJourneyAction(clientId), "[ClientJourney] recorrido"),
+    leerConMotivo(
+      () => listCheckpointProposalsAction(clientId),
+      "[ClientJourney] propuestas"
+    ),
+  ]);
+  if (!recorrido.ok) return { ok: false, motivo: recorrido.motivo };
+  if (!propuestas.ok) return { ok: false, motivo: propuestas.motivo };
+  return { ok: true, data: recorrido.data, proposals: propuestas.data };
+}
+
+/**
+ * Un cambio del recorrido de un cliente (SCRUM-517): el motivo de un rechazo
+ * se avisa con `tituloError`; si la acción lanzó, el texto fijo.
+ */
+export function cambiarRecorridoDelCliente<T>(
+  accion: () => Promise<MutationResult<T>>,
+  avisar: (aviso: Aviso) => void,
+  tituloError: string,
+  alExito: (data: T) => void | Promise<void>
+): Promise<void> {
+  return correrMutacion({
+    accion,
+    alExito,
+    avisar,
+    tituloError,
+    etiqueta: "[ClientJourney] cambio",
+  });
+}
 
 export function ClientJourneySection({
   clientId,
@@ -91,6 +134,7 @@ export function ClientJourneySection({
   const [data, setData] = useState<JourneyData>(EMPTY);
   const [proposals, setProposals] = useState<CheckpointProposal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [motivo, setMotivo] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   /**
    * Qué fases están desplegadas. `null` = todavía nadie tocó nada, así que
@@ -100,18 +144,16 @@ export function ClientJourneySection({
 
   useEffect(() => {
     let alive = true;
-    Promise.all([
-      getClientJourneyAction(clientId),
-      listCheckpointProposalsAction(clientId),
-    ])
-      .then(([next, pending]) => {
-        if (!alive) return;
-        setData(next);
-        setProposals(pending);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+    void cargarRecorridoDelCliente(clientId).then((lectura) => {
+      if (!alive) return;
+      if (lectura.ok) {
+        setData(lectura.data);
+        setProposals(lectura.proposals);
+      } else {
+        setMotivo(lectura.motivo);
+      }
+      setLoading(false);
+    });
     return () => {
       alive = false;
     };
@@ -131,6 +173,13 @@ export function ClientJourneySection({
   // Mientras carga no se muestra nada. Si el recorrido no está configurado,
   // tampoco: mandar a configurarlo desde la ficha de un cliente sería ruido.
   // El lugar para configurarlo es su propia pantalla.
+  if (motivo !== null) {
+    return (
+      <FichaSection icon={Flag} title="Recorrido">
+        <AvisoDeLecturaFallida titulo="No se pudo cargar el recorrido." motivo={motivo} />
+      </FichaSection>
+    );
+  }
   if (loading || !journeyConfigured) return null;
   /**
    * ⭐ Las fases del recorrido, en orden, reconstruidas desde el progreso.
@@ -200,41 +249,44 @@ export function ClientJourneySection({
   };
 
   function fijarFase(stageId: string | null) {
-    startTransition(async () => {
-      const result = await setClientManualStageAction({ clientId, stageId });
-      if (!result.success) {
-        push({ title: "No se pudo cambiar la fase", description: result.error });
-        return;
-      }
-      push({
-        title: stageId ? "Fase actualizada" : "La fase vuelve a salir de los hitos",
-        variant: "success",
-      });
-      /*
-        ⭐ El proveedor de datos, y **no** `router.refresh()`.
+    startTransition(() =>
+      cambiarRecorridoDelCliente(
+        () => setClientManualStageAction({ clientId, stageId }),
+        push,
+        "No se pudo cambiar la fase",
+        async () => {
+          push({
+            title: stageId ? "Fase actualizada" : "La fase vuelve a salir de los hitos",
+            variant: "success",
+          });
+          /*
+            ⭐ El proveedor de datos, y **no** `router.refresh()`.
 
-        La ficha lee el cliente de `clients.find(...)`, no del prop que
-        renderiza el servidor, así que refrescar el servidor no cambiaba nada:
-        la fase quedaba guardada en la base y la pantalla seguía mostrando la
-        anterior hasta recargar a mano.
+            La ficha lee el cliente de `clients.find(...)`, no del prop que
+            renderiza el servidor, así que refrescar el servidor no cambiaba nada:
+            la fase quedaba guardada en la base y la pantalla seguía mostrando la
+            anterior hasta recargar a mano.
 
-        Refrescar además el servidor tampoco es gratis: vuelve a montar la
-        columna de contexto entera y las tarjetas que cargan solas —la
-        información del cliente, la facturación— desaparecen unos segundos por
-        un cambio que no las toca. Las dos cosas se vieron probando contra el
-        preview con datos reales.
-      */
-      await refreshClients();
-    });
+            Refrescar además el servidor tampoco es gratis: vuelve a montar la
+            columna de contexto entera y las tarjetas que cargan solas —la
+            información del cliente, la facturación— desaparecen unos segundos por
+            un cambio que no las toca. Las dos cosas se vieron probando contra el
+            preview con datos reales.
+          */
+          await refreshClients();
+        }
+      )
+    );
   }
 
   async function refresh() {
-    const [next, pending] = await Promise.all([
-      getClientJourneyAction(clientId),
-      listCheckpointProposalsAction(clientId),
-    ]);
-    setData(next);
-    setProposals(pending);
+    const lectura = await cargarRecorridoDelCliente(clientId);
+    if (!lectura.ok) {
+      push({ title: "No se pudo actualizar el recorrido", description: lectura.motivo });
+      return;
+    }
+    setData(lectura.data);
+    setProposals(lectura.proposals);
   }
 
   function submit(input: {
@@ -245,13 +297,18 @@ export function ClientJourneySection({
     if (!dialog.checkpoint) return;
     setDialogError(null);
     startTransition(async () => {
-      const result = await recordCheckpointAction({
-        clientId,
-        checkpointId: dialog.checkpoint!.id,
-        ...input,
-      });
-      if (!result.success) {
-        setDialogError(result.error);
+      // Si la acción lanzó, el diálogo muestra el texto fijo (SCRUM-517).
+      const result = await leerConMotivo(
+        () =>
+          recordCheckpointAction({
+            clientId,
+            checkpointId: dialog.checkpoint!.id,
+            ...input,
+          }),
+        "[ClientJourney] registrar"
+      );
+      if (!result.ok) {
+        setDialogError(result.motivo);
         return;
       }
       setDialog({ open: false, checkpoint: null, event: null });
@@ -268,14 +325,14 @@ export function ClientJourneySection({
       : `¿Deshacer "${entry.checkpoint.name}"?`;
     if (!window.confirm(message)) return;
 
-    startTransition(async () => {
-      const result = await undoCheckpointAction(entry.event!.id, clientId);
-      if (!result.success) {
-        push({ title: "No se pudo deshacer", description: result.error });
-        return;
-      }
-      await refresh();
-    });
+    startTransition(() =>
+      cambiarRecorridoDelCliente(
+        () => undoCheckpointAction(entry.event!.id, clientId),
+        push,
+        "No se pudo deshacer",
+        refresh
+      )
+    );
   }
 
   return (
@@ -334,25 +391,27 @@ export function ClientJourneySection({
               }
               pending={pending}
               onAccept={() =>
-                startTransition(async () => {
-                  const result = await acceptCheckpointProposalAction(proposal.id);
-                  if (!result.success) {
-                    push({ title: "No se pudo aceptar", description: result.error });
-                    return;
-                  }
-                  await refresh();
-                  push({ title: "Checkpoint registrado", variant: "success" });
-                })
+                startTransition(() =>
+                  cambiarRecorridoDelCliente(
+                    () => acceptCheckpointProposalAction(proposal.id),
+                    push,
+                    "No se pudo aceptar",
+                    async () => {
+                      await refresh();
+                      push({ title: "Checkpoint registrado", variant: "success" });
+                    }
+                  )
+                )
               }
               onReject={() =>
-                startTransition(async () => {
-                  const result = await rejectCheckpointProposalAction(proposal.id);
-                  if (!result.success) {
-                    push({ title: "No se pudo descartar", description: result.error });
-                    return;
-                  }
-                  await refresh();
-                })
+                startTransition(() =>
+                  cambiarRecorridoDelCliente(
+                    () => rejectCheckpointProposalAction(proposal.id),
+                    push,
+                    "No se pudo descartar",
+                    refresh
+                  )
+                )
               }
             />
           ))}

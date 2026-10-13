@@ -8,18 +8,31 @@
  * sin el recorrido no hay etapa, sin los checkpoints no se sabe si el próximo
  * hito pide métricas, y sin las columnas configurables no hay objetivo.
  *
- * No agrega lógica: cada pieza sale de la action que ya la servía.
+ * No agrega lógica: cada pieza sale de la lectura que ya la servía.
+ *
+ * SCRUM-517: devuelve sus errores como valor. Antes lanzaba sin sesión (en
+ * producción, un digest que dejaba la tabla sin recorrido ni columnas) y cada
+ * pieza escondía su falla devolviendo vacío: la tabla mostraba a todos "sin
+ * empezar" y sin próxima tarea como si fuera cierto. Ahora las piezas propias
+ * se leen con lecturas que lanzan y la lista muestra el motivo.
  */
 
-import { listFieldDefinitionsAction } from "@/app/clients/custom-field-actions";
 import { getRevenueByClientAction } from "@/app/clients/revenue-actions";
-import { getManualStagesAction } from "@/app/clients/stage-actions";
 import { pickNextTask } from "@/lib/clients/next-task";
 import { rowToClientTask, type ClientTask, type ClientTaskRow } from "@/types/client-tasks";
 import type { RevenueSummary } from "@/lib/clients/revenue";
 import { createClient } from "@/lib/supabase/server";
-import { listCheckpointsAction } from "@/app/clients/checkpoint-actions";
-import { getClientsJourneyStatusAction } from "@/app/clients/checkpoint-derived-actions";
+import {
+  leerCheckpoints,
+  leerEstadosDelRecorrido,
+  leerFasesFijadas,
+} from "@/lib/checkpoints/lecturas-del-recorrido";
+import { leerColumnas } from "@/lib/custom-fields/leer-columnas";
+import {
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { loadLastOneOnOneByClient } from "@/lib/fathom/one-on-ones";
 import type { LastOneOnOne } from "@/lib/fathom/one-on-one-types";
@@ -62,39 +75,42 @@ export type ClientsBoardData = {
   manualStages: Record<string, string>;
 };
 
-export async function getClientsBoardAction(): Promise<ClientsBoardData> {
-  const organizationId = await requireOrganizationId();
+export async function getClientsBoardAction(): Promise<MutationResult<ClientsBoardData>> {
+  return mutacionConErroresEsperables("[getClientsBoard]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const [
-    journey,
-    checkpoints,
-    checkpointFields,
-    clientFields,
-    lastOneOnOne,
-    revenue,
-    manualStages,
-    nextTask,
-  ] = await Promise.all([
-    getClientsJourneyStatusAction(),
-    listCheckpointsAction(),
-    listFieldDefinitionsAction("checkpoint"),
-    listFieldDefinitionsAction("client"),
-    loadLastOneOnOneByClient(organizationId),
-    getRevenueByClientAction(),
-    getManualStagesAction(),
-    loadNextTaskByClient(organizationId),
-  ]);
+    const [
+      journey,
+      checkpoints,
+      checkpointFields,
+      clientFields,
+      lastOneOnOne,
+      revenue,
+      manualStages,
+      nextTask,
+    ] = await Promise.all([
+      leerEstadosDelRecorrido(supabase, organizationId),
+      leerCheckpoints(supabase, organizationId),
+      leerColumnas(supabase, organizationId, "checkpoint"),
+      leerColumnas(supabase, organizationId, "client"),
+      loadLastOneOnOneByClient(organizationId),
+      getRevenueByClientAction(),
+      leerFasesFijadas(supabase, organizationId),
+      loadNextTaskByClient(supabase, organizationId),
+    ]);
 
-  return {
-    journey,
-    checkpoints,
-    checkpointFields,
-    clientFields,
-    lastOneOnOne,
-    nextTask,
-    revenue,
-    manualStages,
-  };
+    return {
+      journey,
+      checkpoints,
+      checkpointFields,
+      clientFields,
+      lastOneOnOne,
+      nextTask,
+      revenue,
+      manualStages,
+    };
+  });
 }
 
 /**
@@ -106,35 +122,32 @@ export async function getClientsBoardAction(): Promise<ClientsBoardData> {
  * cosas distintas de la misma tarea.
  */
 async function loadNextTaskByClient(
+  supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string
 ): Promise<Record<string, ClientTask>> {
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("client_tasks")
-      .select(
-        "id, client_id, title, description, owner, status, due_date, source, source_call_id, workboard_task_id, completed_at, created_at"
-      )
-      .eq("organization_id", organizationId)
-      .eq("status", "pending");
+  const { data, error } = await supabase
+    .from("client_tasks")
+    .select(
+      "id, client_id, title, description, owner, status, due_date, source, source_call_id, workboard_task_id, completed_at, created_at"
+    )
+    .eq("organization_id", organizationId)
+    .eq("status", "pending");
 
-    if (error) return {};
+  // Antes devolvía `{}`: la columna «Próxima tarea» decía "sin tareas".
+  if (error) throw new FallaDeLaBase(error);
 
-    const porCliente = new Map<string, ClientTask[]>();
-    for (const row of (data ?? []) as unknown as ClientTaskRow[]) {
-      const task = rowToClientTask(row);
-      const lista = porCliente.get(task.clientId) ?? [];
-      lista.push(task);
-      porCliente.set(task.clientId, lista);
-    }
-
-    const result: Record<string, ClientTask> = {};
-    for (const [clientId, tasks] of porCliente) {
-      const next = pickNextTask(tasks);
-      if (next) result[clientId] = next;
-    }
-    return result;
-  } catch {
-    return {};
+  const porCliente = new Map<string, ClientTask[]>();
+  for (const row of (data ?? []) as unknown as ClientTaskRow[]) {
+    const task = rowToClientTask(row);
+    const lista = porCliente.get(task.clientId) ?? [];
+    lista.push(task);
+    porCliente.set(task.clientId, lista);
   }
+
+  const result: Record<string, ClientTask> = {};
+  for (const [clientId, tasks] of porCliente) {
+    const next = pickNextTask(tasks);
+    if (next) result[clientId] = next;
+  }
+  return result;
 }

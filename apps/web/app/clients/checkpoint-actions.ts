@@ -8,6 +8,13 @@
  *   · Lo que no se entiende se rechaza; no se guarda "como venga".
  *   · Las métricas de un checkpoint son campos configurables de C0, no un
  *     segundo mecanismo.
+ *
+ * SCRUM-517: todas las acciones devuelven sus errores como valor
+ * (`MutationResult`) dentro de `mutacionConErroresEsperables`. Un rechazo
+ * esperable (validación, sesión, sólo el founder, nombre repetido, fase o
+ * checkpoint inexistente o de otra org) vuelve con su mensaje; una falla de la
+ * base se registra, va a Sentry y el usuario ve el texto fijo. Las lecturas
+ * tampoco esconden una falla detrás de una lista vacía.
  */
 
 import { revalidatePath } from "next/cache";
@@ -33,8 +40,14 @@ import {
   rowToJourneyStage,
   serializeMetricSchema,
 } from "@/lib/checkpoints";
-import { listFieldDefinitionsAction } from "@/app/clients/custom-field-actions";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import { leerCheckpoints, leerFasesDelRecorrido } from "@/lib/checkpoints/lecturas-del-recorrido";
+import { leerColumnas } from "@/lib/custom-fields/leer-columnas";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -63,10 +76,29 @@ const checkpointSchema = z.object({
 export type CreateStageInput = z.input<typeof stageSchema>;
 export type CreateCheckpointInput = z.input<typeof checkpointSchema>;
 
+/** Código de PostgREST cuando `.single()` no encuentra la fila. */
+const SIN_FILAS = "PGRST116";
+
+const FASE_NO_ENCONTRADA = "No se encontró la fase. Puede que la hayan borrado.";
+const CHECKPOINT_NO_ENCONTRADO = "No se encontró el checkpoint. Puede que lo hayan borrado.";
+
+/**
+ * El error de una escritura que devuelve la fila (`.single()`): sin filas es
+ * que no existe o es de otra organización (`ErrorEsperable`); cualquier otro
+ * es una falla de la base.
+ */
+function errorDeEscritura(
+  error: { message: string; code?: string | null },
+  noEncontrado: string
+): Error {
+  if (error.code === SIN_FILAS) return new ErrorEsperable(noEncontrado);
+  return new FallaDeLaBase(error);
+}
+
 async function requireFounder() {
   const profile = await getCurrentProfile();
   if (profile?.role !== "founder") {
-    throw new Error("Solo el founder puede configurar el recorrido");
+    throw new ErrorEsperable("Solo el founder puede configurar el recorrido");
   }
 }
 
@@ -76,75 +108,56 @@ function revalidate() {
 
 // ─── Lectura ────────────────────────────────────────────────────────────────
 
-export async function listJourneyStagesAction(): Promise<JourneyStage[]> {
-  try {
+export async function listJourneyStagesAction(): Promise<MutationResult<JourneyStage[]>> {
+  return mutacionConErroresEsperables("[listJourneyStages]", async () => {
     const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("client_journey_stages")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("sort_order", { ascending: true });
-
-    if (error) {
-      if (isMissingTableError(error.message)) return [];
-      console.error("[listJourneyStages]", error.message);
-      return [];
-    }
-    return (data as JourneyStageRow[]).map(rowToJourneyStage);
-  } catch {
-    return [];
-  }
+    return leerFasesDelRecorrido(await createClient(), organizationId);
+  });
 }
 
-export async function listCheckpointsAction(): Promise<Checkpoint[]> {
-  try {
+export async function listCheckpointsAction(): Promise<MutationResult<Checkpoint[]>> {
+  return mutacionConErroresEsperables("[listCheckpoints]", async () => {
     const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("client_checkpoints")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("sort_order", { ascending: true });
-
-    if (error) {
-      if (isMissingTableError(error.message)) return [];
-      console.error("[listCheckpoints]", error.message);
-      return [];
-    }
-    return (data as CheckpointRow[]).map(rowToCheckpoint);
-  } catch {
-    return [];
-  }
+    return leerCheckpoints(await createClient(), organizationId);
+  });
 }
+
+export type JourneyPageData = {
+  stages: JourneyStageWithCheckpoints[];
+  orphanCheckpoints: Checkpoint[];
+  checkpointFields: FieldDefinition[];
+  canManage: boolean;
+};
 
 /**
  * Todo lo que la pantalla necesita, en una llamada.
  *
  * Incluye los campos de C0 porque sin ellos no se puede mostrar qué métrica pide
  * cada checkpoint — es el cruce, no un dato aparte.
+ *
+ * La usa el server component de la pantalla: con un error, la pantalla muestra
+ * el motivo en vez de un recorrido vacío o la pantalla de error.
  */
-export async function getJourneyPageDataAction(): Promise<{
-  stages: JourneyStageWithCheckpoints[];
-  orphanCheckpoints: Checkpoint[];
-  checkpointFields: FieldDefinition[];
-  canManage: boolean;
-}> {
-  const [stages, checkpoints, fields, profile] = await Promise.all([
-    listJourneyStagesAction(),
-    listCheckpointsAction(),
-    listFieldDefinitionsAction("checkpoint"),
-    getCurrentProfile(),
-  ]);
+export async function getJourneyPageDataAction(): Promise<MutationResult<JourneyPageData>> {
+  return mutacionConErroresEsperables("[getJourneyPageData]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+    const [stages, checkpoints, fields, profile] = await Promise.all([
+      leerFasesDelRecorrido(supabase, organizationId),
+      leerCheckpoints(supabase, organizationId),
+      leerColumnas(supabase, organizationId, "checkpoint"),
+      getCurrentProfile(),
+    ]);
 
-  const journey = buildJourney(stages, checkpoints);
+    const journey = buildJourney(stages, checkpoints);
 
-  return {
-    stages: journey.stages,
-    orphanCheckpoints: journey.orphanCheckpoints,
-    checkpointFields: fields,
-    canManage: profile?.role === "founder",
-  };
+    return {
+      stages: journey.stages,
+      orphanCheckpoints: journey.orphanCheckpoints,
+      checkpointFields: fields,
+      canManage: profile?.role === "founder",
+    };
+  });
 }
 
 // ─── Fases ──────────────────────────────────────────────────────────────────
@@ -152,17 +165,17 @@ export async function getJourneyPageDataAction(): Promise<{
 export async function createJourneyStageAction(
   input: CreateStageInput
 ): Promise<MutationResult<JourneyStage>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[createJourneyStage]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
     const parsed = stageSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
-
-    const existing = await listJourneyStagesAction();
-    assertNameIsFree(existing, parsed.data.name, "fase");
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
 
     const supabase = await createClient();
+    const existing = await leerFasesDelRecorrido(supabase, organizationId);
+    assertNameIsFree(existing, parsed.data.name, "fase");
+
     const { data, error } = await supabase
       .from("client_journey_stages")
       .insert({
@@ -174,7 +187,7 @@ export async function createJourneyStageAction(
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
     return rowToJourneyStage(data as JourneyStageRow);
   });
@@ -184,15 +197,16 @@ export async function updateJourneyStageAction(
   id: string,
   input: Partial<CreateStageInput>
 ): Promise<MutationResult<JourneyStage>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateJourneyStage]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
     const parsed = stageSchema.partial().safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
 
+    const supabase = await createClient();
     if (parsed.data.name !== undefined) {
-      const existing = await listJourneyStagesAction();
+      const existing = await leerFasesDelRecorrido(supabase, organizationId);
       assertNameIsFree(
         existing.filter((stage) => stage.id !== id),
         parsed.data.name,
@@ -200,7 +214,7 @@ export async function updateJourneyStageAction(
       );
     }
 
-    const supabase = await createClient();
+    // `.single()` sin filas (PGRST116): la fase no existe o es de otra org.
     const { data, error } = await supabase
       .from("client_journey_stages")
       .update(parsed.data)
@@ -209,7 +223,7 @@ export async function updateJourneyStageAction(
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw errorDeEscritura(error, FASE_NO_ENCONTRADA);
     revalidate();
     return rowToJourneyStage(data as JourneyStageRow);
   });
@@ -219,7 +233,7 @@ export async function setJourneyStageArchivedAction(
   id: string,
   archived: boolean
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[setJourneyStageArchived]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
@@ -230,7 +244,7 @@ export async function setJourneyStageArchivedAction(
       .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
   });
 }
@@ -240,29 +254,30 @@ export async function setJourneyStageArchivedAction(
  *
  * Con checkpoints adentro se rechaza: la cascada de la base los borraría a
  * todos, y eso es exactamente el tipo de borrado silencioso que no queremos.
+ * Si no se pueden leer los checkpoints, no se borra: es una falla, no "vacía".
  */
 export async function deleteJourneyStageAction(
   id: string
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteJourneyStage]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
-    const checkpoints = await listCheckpointsAction();
+    const supabase = await createClient();
+    const checkpoints = await leerCheckpoints(supabase, organizationId);
     if (checkpoints.some((checkpoint) => checkpoint.stageId === id)) {
-      throw new Error(
+      throw new ErrorEsperable(
         "La fase tiene checkpoints adentro. Movelos o borralos primero, o archivá la fase."
       );
     }
 
-    const supabase = await createClient();
     const { error } = await supabase
       .from("client_journey_stages")
       .delete()
       .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
   });
 }
@@ -270,7 +285,7 @@ export async function deleteJourneyStageAction(
 export async function reorderJourneyStagesAction(
   orderedIds: string[]
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[reorderJourneyStages]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
@@ -281,7 +296,7 @@ export async function reorderJourneyStagesAction(
         .update({ sort_order: index })
         .eq("id", id)
         .eq("organization_id", organizationId);
-      if (error) throw new Error(error.message);
+      if (error) throw new FallaDeLaBase(error);
     }
     revalidate();
   });
@@ -292,25 +307,25 @@ export async function reorderJourneyStagesAction(
 export async function createCheckpointAction(
   input: CreateCheckpointInput
 ): Promise<MutationResult<Checkpoint>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[createCheckpoint]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
     const parsed = checkpointSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
-    await assertStageExists(values.stageId);
-    await assertMetricsExist(values.metricSchema);
+    const supabase = await createClient();
+    await assertStageExists(supabase, organizationId, values.stageId);
+    await assertMetricsExist(supabase, organizationId, values.metricSchema);
 
-    const existing = await listCheckpointsAction();
+    const existing = await leerCheckpoints(supabase, organizationId);
     assertNameIsFree(
       existing.filter((checkpoint) => checkpoint.stageId === values.stageId),
       values.name,
       "checkpoint"
     );
 
-    const supabase = await createClient();
     const { data, error } = await supabase
       .from("client_checkpoints")
       .insert({
@@ -329,7 +344,7 @@ export async function createCheckpointAction(
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
     return rowToCheckpoint(data as CheckpointRow);
   });
@@ -339,16 +354,21 @@ export async function updateCheckpointAction(
   id: string,
   input: Partial<CreateCheckpointInput>
 ): Promise<MutationResult<Checkpoint>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateCheckpoint]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
     const parsed = checkpointSchema.partial().safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
-    if (values.stageId !== undefined) await assertStageExists(values.stageId);
-    if (values.metricSchema !== undefined) await assertMetricsExist(values.metricSchema);
+    const supabase = await createClient();
+    if (values.stageId !== undefined) {
+      await assertStageExists(supabase, organizationId, values.stageId);
+    }
+    if (values.metricSchema !== undefined) {
+      await assertMetricsExist(supabase, organizationId, values.metricSchema);
+    }
 
     const patch: Record<string, unknown> = {};
     if (values.stageId !== undefined) patch.stage_id = values.stageId;
@@ -363,7 +383,7 @@ export async function updateCheckpointAction(
     }
     if (values.productId !== undefined) patch.product_id = values.productId;
 
-    const supabase = await createClient();
+    // `.single()` sin filas (PGRST116): el checkpoint no existe o es de otra org.
     const { data, error } = await supabase
       .from("client_checkpoints")
       .update(patch)
@@ -372,7 +392,7 @@ export async function updateCheckpointAction(
       .select("*")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw errorDeEscritura(error, CHECKPOINT_NO_ENCONTRADO);
     revalidate();
     return rowToCheckpoint(data as CheckpointRow);
   });
@@ -382,7 +402,7 @@ export async function setCheckpointArchivedAction(
   id: string,
   archived: boolean
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[setCheckpointArchived]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
@@ -393,7 +413,7 @@ export async function setCheckpointArchivedAction(
       .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
   });
 }
@@ -408,24 +428,24 @@ export async function setCheckpointArchivedAction(
 export async function deleteCheckpointAction(
   id: string
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteCheckpoint]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
 
-    if (await checkpointHasEvents(id, organizationId)) {
-      throw new Error(
+    const supabase = await createClient();
+    if (await checkpointHasEvents(supabase, id, organizationId)) {
+      throw new ErrorEsperable(
         "Algún cliente ya alcanzó este checkpoint. Archivalo en vez de borrarlo: el registro viejo lo sigue mostrando."
       );
     }
 
-    const supabase = await createClient();
     const { error } = await supabase
       .from("client_checkpoints")
       .delete()
       .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate();
   });
 }
@@ -434,7 +454,7 @@ export async function reorderCheckpointsAction(
   stageId: string,
   orderedIds: string[]
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[reorderCheckpoints]", async () => {
     await requireFounder();
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
@@ -446,7 +466,7 @@ export async function reorderCheckpointsAction(
         .eq("id", id)
         .eq("organization_id", organizationId)
         .eq("stage_id", stageId);
-      if (error) throw new Error(error.message);
+      if (error) throw new FallaDeLaBase(error);
     }
     revalidate();
   });
@@ -461,10 +481,11 @@ export async function reorderCheckpointsAction(
  * de infoproductos reconoce. Se espera que Santiago los reemplace.
  */
 export async function seedExampleJourneyAction(): Promise<MutationResult<void>> {
-  return runMutation(async () => {
-    const existing = await listJourneyStagesAction();
+  return mutacionConErroresEsperables("[seedExampleJourney]", async () => {
+    const organizationId = await requireOrganizationId();
+    const existing = await leerFasesDelRecorrido(await createClient(), organizationId);
     if (existing.length > 0) {
-      throw new Error("El recorrido ya tiene fases: agregá las que falten a mano.");
+      throw new ErrorEsperable("El recorrido ya tiene fases: agregá las que falten a mano.");
     }
 
     const examples = [
@@ -475,12 +496,16 @@ export async function seedExampleJourneyAction(): Promise<MutationResult<void>> 
 
     for (const example of examples) {
       const result = await createJourneyStageAction(example);
-      if (!result.success) throw new Error(result.error);
+      // El motivo ya viene para el usuario (y si fue una falla, ya quedó
+      // registrada con la etiqueta de `createJourneyStage`): pasa tal cual.
+      if (!result.success) throw new ErrorEsperable(result.error);
     }
   });
 }
 
 // ─── Ayudas ─────────────────────────────────────────────────────────────────
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 function nextSortOrder(existing: readonly { sortOrder: number }[]): number {
   return existing.reduce((max, entry) => Math.max(max, entry.sortOrder + 1), 0);
@@ -496,7 +521,7 @@ function assertNameIsFree(
     (entry) => entry.name.trim().toLowerCase() === name.trim().toLowerCase()
   );
   if (taken) {
-    throw new Error(
+    throw new ErrorEsperable(
       what === "fase"
         ? `Ya existe una fase que se llama "${name}".`
         : `Esa fase ya tiene un checkpoint que se llama "${name}".`
@@ -504,10 +529,10 @@ function assertNameIsFree(
   }
 }
 
-async function assertStageExists(stageId: string) {
-  const stages = await listJourneyStagesAction();
+async function assertStageExists(supabase: Supabase, organizationId: string, stageId: string) {
+  const stages = await leerFasesDelRecorrido(supabase, organizationId);
   if (!stages.some((stage) => stage.id === stageId)) {
-    throw new Error("La fase elegida no existe");
+    throw new ErrorEsperable("La fase elegida no existe");
   }
 }
 
@@ -516,28 +541,38 @@ async function assertStageExists(stageId: string) {
  * activa. Guardar una referencia rota sería configurar un formulario que después
  * no puede pedir nada.
  */
-async function assertMetricsExist(metrics: readonly { fieldKey: string }[]) {
+async function assertMetricsExist(
+  supabase: Supabase,
+  organizationId: string,
+  metrics: readonly { fieldKey: string }[]
+) {
   if (metrics.length === 0) return;
 
-  const fields = await listFieldDefinitionsAction("checkpoint");
+  const fields = await leerColumnas(supabase, organizationId, "checkpoint");
   const available = new Set(
     fields.filter((f) => f.archivedAt === null).map((f) => f.key)
   );
 
   for (const metric of metrics) {
     if (!available.has(metric.fieldKey)) {
-      throw new Error(
+      throw new ErrorEsperable(
         `La métrica "${metric.fieldKey}" no es una columna de checkpoint disponible. Creala en Campos personalizados.`
       );
     }
   }
 }
 
+/**
+ * ¿Algún cliente alcanzó el checkpoint? Una tabla ausente cuenta como "sin
+ * uso". Si no se puede saber, lanza: no se borra (es la opción que no pierde
+ * datos), pero tampoco se le dice al usuario que hay clientes que lo
+ * alcanzaron cuando lo que pasó es que la base falló.
+ */
 async function checkpointHasEvents(
+  supabase: Supabase,
   checkpointId: string,
   organizationId: string
 ): Promise<boolean> {
-  const supabase = await createClient();
   const { count, error } = await supabase
     .from("client_checkpoint_events")
     .select("id", { count: "exact", head: true })
@@ -546,9 +581,7 @@ async function checkpointHasEvents(
 
   if (error) {
     if (isMissingTableError(error.message)) return false;
-    // Ante la duda, no se borra: es la opción que no pierde datos.
-    console.error("[checkpointHasEvents]", error.message);
-    return true;
+    throw new FallaDeLaBase(error);
   }
 
   return (count ?? 0) > 0;

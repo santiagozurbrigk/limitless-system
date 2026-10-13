@@ -17,6 +17,29 @@ import { Button, GlassPanel, Textarea } from "@ai-coo/ui";
 import { NotebookPen } from "lucide-react";
 import { useToast } from "@/providers/toast-provider";
 import { updateClientNotesAction } from "@/app/clients/tracking-actions";
+import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
+
+/**
+ * Guarda las notas (SCRUM-517): el motivo de un rechazo se avisa; si la acción
+ * lanzó, el texto fijo. Con éxito, `alGuardar` con la fecha de la edición.
+ */
+export function guardarNotas(
+  clientId: string,
+  notas: string,
+  avisar: (aviso: Aviso) => void,
+  alGuardar: (updatedAt: string | null) => void
+): Promise<void> {
+  return correrMutacion({
+    accion: () => updateClientNotesAction(clientId, notas),
+    avisar,
+    tituloError: "No se pudieron guardar las notas",
+    etiqueta: "[ClientNotes] guardar",
+    alExito: (data) => {
+      alGuardar(data.updatedAt);
+      avisar({ title: "Notas guardadas", variant: "success" });
+    },
+  });
+}
 
 export function ClientNotesSection({
   clientId,
@@ -41,15 +64,7 @@ export function ClientNotesSection({
   const sucio = value.trim() !== guardado;
 
   function guardar() {
-    startTransition(async () => {
-      const result = await updateClientNotesAction(clientId, value);
-      if (!result.success) {
-        push({ title: "No se pudieron guardar las notas", description: result.error });
-        return;
-      }
-      setUpdatedAt(result.data.updatedAt);
-      push({ title: "Notas guardadas", variant: "success" });
-    });
+    startTransition(() => guardarNotas(clientId, value, push, setUpdatedAt));
   }
 
   return (

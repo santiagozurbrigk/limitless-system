@@ -20,7 +20,6 @@ import {
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
 import type {
-  CheckpointEventRow,
   CheckpointProposal,
   CheckpointProposalRow,
   ClientJourneyStatus,
@@ -29,86 +28,43 @@ import {
   CHECKPOINT_PROPOSAL_SOURCES,
   CHECKPOINT_PROPOSAL_STATUSES,
 } from "@/types/checkpoints";
-import {
-  buildJourney,
-  deriveJourneyStatuses,
-  groupEventsByClient,
-  rowToCheckpointEvent,
-} from "@/lib/checkpoints";
-import {
-  listCheckpointsAction,
-  listJourneyStagesAction,
-} from "@/app/clients/checkpoint-actions";
+import { leerEstadosDelRecorrido } from "@/lib/checkpoints/lecturas-del-recorrido";
 import { createCheckpointProposal } from "@/lib/checkpoints/create-proposal";
 import { recordCheckpointAction } from "@/app/clients/checkpoint-event-actions";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
-import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { paths } from "@/routes";
 
 // ─── El resumen para la lista de clientes ───────────────────────────────────
 
 /**
- * Fase actual y "trabado" de cada cliente de la organización, en una pasada.
+ * Fase actual y "trabado" de cada cliente de la organización, en una pasada
+ * (ver `leerEstadosDelRecorrido`).
  *
- * Trae **todos** los eventos de la org de una y los agrupa en memoria. Cargar el
- * recorrido por cliente sería una consulta por fila de la lista.
+ * SCRUM-517: con un error devuelve el motivo. Antes atrapaba todo y devolvía
+ * `{}`: una caída de la base se veía como "ningún cliente trabado".
  */
 export async function getClientsJourneyStatusAction(): Promise<
-  Record<string, ClientJourneyStatus>
+  MutationResult<Record<string, ClientJourneyStatus>>
 > {
-  try {
+  return mutacionConErroresEsperables("[getClientsJourneyStatus]", async () => {
     const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-
-    const [stages, checkpoints, eventsResult, clientsResult, zona] = await Promise.all([
-      listJourneyStagesAction(),
-      listCheckpointsAction(),
-      supabase
-        .from("client_checkpoint_events")
-        .select("*")
-        .eq("organization_id", organizationId),
-      supabase.from("clients").select("id").eq("organization_id", organizationId),
-      // "Vence el" y "trabado hace N días" se cuentan en días de la organización.
-      leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
-    ]);
-
-    if (eventsResult.error) {
-      if (isMissingTableError(eventsResult.error.message)) return {};
-      console.error("[getClientsJourneyStatus]", eventsResult.error.message);
-      return {};
-    }
-    if (clientsResult.error) return {};
-
-    const journey = buildJourney(stages, checkpoints);
-    // Sin recorrido configurado no hay nada que derivar: la lista no muestra
-    // columna en vez de mostrar una vacía para cada fila.
-    if (journey.stages.length === 0) return {};
-
-    const events = (eventsResult.data as CheckpointEventRow[]).map(rowToCheckpointEvent);
-    const clientIds = (clientsResult.data as { id: string }[]).map((row) => row.id);
-
-    const statuses = deriveJourneyStatuses(
-      journey.stages,
-      groupEventsByClient(events),
-      clientIds,
-      new Date(),
-      zona
-    );
-
-    return Object.fromEntries(statuses);
-  } catch {
-    return {};
-  }
+    return leerEstadosDelRecorrido(await createClient(), organizationId);
+  });
 }
 
 // ─── El buzón de propuestas ─────────────────────────────────────────────────
 
 export async function listCheckpointProposalsAction(
   clientId?: string
-): Promise<CheckpointProposal[]> {
-  try {
+): Promise<MutationResult<CheckpointProposal[]>> {
+  return mutacionConErroresEsperables("[listCheckpointProposals]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -123,14 +79,12 @@ export async function listCheckpointProposalsAction(
 
     const { data, error } = await query;
     if (error) {
+      // Antes de su migración la tabla no existe: no hay propuestas.
       if (isMissingTableError(error.message)) return [];
-      console.error("[listCheckpointProposals]", error.message);
-      return [];
+      throw new FallaDeLaBase(error);
     }
-    return (data as CheckpointProposalRow[]).map(rowToCheckpointProposal);
-  } catch {
-    return [];
-  }
+    return ((data ?? []) as CheckpointProposalRow[]).map(rowToCheckpointProposal);
+  });
 }
 
 /**
@@ -146,7 +100,7 @@ export async function listCheckpointProposalsAction(
 export async function acceptCheckpointProposalAction(
   proposalId: string
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[acceptCheckpointProposal]", async () => {
     const organizationId = await requireOrganizationId();
     const profile = await getCurrentProfile();
     const supabase = await createClient();
@@ -158,12 +112,12 @@ export async function acceptCheckpointProposalAction(
       .eq("organization_id", organizationId)
       .maybeSingle();
 
-    if (error) throw new Error(error.message);
-    if (!data) throw new Error("La propuesta no existe");
+    if (error) throw new FallaDeLaBase(error);
+    if (!data) throw new ErrorEsperable("La propuesta no existe");
 
     const proposal = rowToCheckpointProposal(data as CheckpointProposalRow);
     if (proposal.status !== "pending") {
-      throw new Error("Esa propuesta ya estaba resuelta");
+      throw new ErrorEsperable("Esa propuesta ya estaba resuelta");
     }
 
     const recorded = await recordCheckpointAction({
@@ -173,7 +127,10 @@ export async function acceptCheckpointProposalAction(
       metrics: proposal.suggestedMetrics,
       note: proposal.rationale,
     });
-    if (!recorded.success) throw new Error(recorded.error);
+    // El motivo ya viene para el usuario (y si fue una falla, ya quedó
+    // registrada con la etiqueta de `recordCheckpoint`): pasa tal cual y la
+    // propuesta queda pendiente.
+    if (!recorded.success) throw new ErrorEsperable(recorded.error);
 
     await resolveProposal(proposalId, organizationId, "accepted", profile?.id ?? null);
     revalidatePath(paths.platform.clients.detail(proposal.clientId));
@@ -184,7 +141,7 @@ export async function acceptCheckpointProposalAction(
 export async function rejectCheckpointProposalAction(
   proposalId: string
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[rejectCheckpointProposal]", async () => {
     const organizationId = await requireOrganizationId();
     const profile = await getCurrentProfile();
     await resolveProposal(proposalId, organizationId, "rejected", profile?.id ?? null);
@@ -215,12 +172,17 @@ export type CreateCheckpointProposalInput = z.input<typeof createProposalSchema>
 export async function createCheckpointProposalAction(
   input: CreateCheckpointProposalInput
 ): Promise<MutationResult<{ created: boolean }>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[createCheckpointProposal]", async () => {
     const organizationId = await requireOrganizationId();
 
     const parsed = createProposalSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
+
+    // `createCheckpointProposal` escribe con service role (lo comparten los
+    // crons, que no tienen sesión): la RLS no frena un cliente o un checkpoint
+    // de otra organización. Acá se verifica con la sesión y la org efectiva.
+    await exigirClienteYCheckpointDeLaOrg(organizationId, values.clientId, values.checkpointId);
 
     const result = await createCheckpointProposal({
       organizationId,
@@ -243,6 +205,36 @@ export async function createCheckpointProposalAction(
 
 // ─── Ayudas ─────────────────────────────────────────────────────────────────
 
+/**
+ * El cliente y el checkpoint de una propuesta tienen que ser de la
+ * organización de la sesión (SCRUM-517). Si no, se rechaza con el mismo motivo
+ * que si no existieran: no se confirma que exista algo de otra org.
+ */
+async function exigirClienteYCheckpointDeLaOrg(
+  organizationId: string,
+  clientId: string,
+  checkpointId: string
+) {
+  const supabase = await createClient();
+  const cliente = await supabase
+    .from("clients")
+    .select("id")
+    .eq("id", clientId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (cliente.error) throw new FallaDeLaBase(cliente.error);
+  if (!cliente.data) throw new ErrorEsperable("El cliente no existe");
+
+  const checkpoint = await supabase
+    .from("client_checkpoints")
+    .select("id")
+    .eq("id", checkpointId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (checkpoint.error) throw new FallaDeLaBase(checkpoint.error);
+  if (!checkpoint.data) throw new ErrorEsperable("El checkpoint no existe");
+}
+
 async function resolveProposal(
   proposalId: string,
   organizationId: string,
@@ -260,7 +252,7 @@ async function resolveProposal(
     .eq("id", proposalId)
     .eq("organization_id", organizationId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw new FallaDeLaBase(error);
 }
 
 function rowToCheckpointProposal(row: CheckpointProposalRow): CheckpointProposal {
