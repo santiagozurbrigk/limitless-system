@@ -37,10 +37,12 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { PageHeader } from "@/components/shared/page-header";
 import { useToast } from "@/providers/toast-provider";
 import { useHasAddOn } from "@/providers/permissions-provider";
 import type { MutationResult } from "@/lib/server/action-result";
+import { correrMutacion, leerConMotivo, type Aviso } from "@/lib/client/correr-accion";
 import {
   FIELD_ENTITIES,
   FIELD_SECTION_LABEL,
@@ -57,7 +59,7 @@ import {
 import {
   createFieldDefinitionAction,
   deleteFieldDefinitionAction,
-  listFieldDefinitionsAction,
+  getCustomFieldsPageDataAction,
   reorderFieldDefinitionsAction,
   seedExampleClientGoalFieldAction,
   seedExampleWinFieldAction,
@@ -105,6 +107,54 @@ const SEED: Partial<
   },
 };
 
+/**
+ * Vuelve a leer las columnas después de un cambio (SCRUM-517). Si no se pudo,
+ * avisa el motivo (o el texto fijo si la acción lanzó) y devuelve `null`: la
+ * pantalla se queda con lo que ya mostraba. Antes, una falla dejaba la lista
+ * vacía, como si se hubieran borrado todas.
+ */
+export async function recargarColumnas(
+  avisar: (aviso: Aviso) => void
+): Promise<FieldDefinition[] | null> {
+  const lectura = await leerConMotivo(
+    getCustomFieldsPageDataAction,
+    "[CustomFieldsPage] recargar"
+  );
+  if (!lectura.ok) {
+    avisar({ title: "No se pudieron actualizar las columnas", description: lectura.motivo });
+    return null;
+  }
+  return lectura.data.fields;
+}
+
+/**
+ * Un cambio de las columnas desde un botón (SCRUM-517): el motivo de un
+ * rechazo se avisa con `tituloError`; si la acción lanzó, el texto fijo. Con
+ * éxito, `alExito` con el dato.
+ */
+export function cambiarColumnas<T>(
+  accion: () => Promise<MutationResult<T>>,
+  avisar: (aviso: Aviso) => void,
+  tituloError: string,
+  alExito: (data: T) => void | Promise<void>
+): Promise<void> {
+  return correrMutacion({
+    accion,
+    alExito,
+    avisar,
+    tituloError,
+    etiqueta: "[CustomFieldsPage] cambio",
+  });
+}
+
+/**
+ * Lee el umbral de "sin novedades" (SCRUM-517): el dato o el motivo. Antes una
+ * falla escondía el aviso entero sin decir nada.
+ */
+export function cargarDiasSinNovedades() {
+  return leerConMotivo(getClientSilenceDaysAction, "[CustomFieldsPage] días sin novedades");
+}
+
 export function CustomFieldsPage({
   initialFields,
   canManage,
@@ -128,18 +178,12 @@ export function CustomFieldsPage({
   );
 
   async function refresh() {
-    setFields(await listFieldDefinitionsAction());
+    const next = await recargarColumnas(push);
+    if (next) setFields(next);
   }
 
   function run(operation: () => Promise<MutationResult<unknown>>) {
-    startTransition(async () => {
-      const result = await operation();
-      if (!result.success) {
-        push({ title: "No se pudo guardar", description: result.error });
-        return;
-      }
-      await refresh();
-    });
+    startTransition(() => cambiarColumnas(operation, push, "No se pudo guardar", refresh));
   }
 
   function openCreate() {
@@ -152,25 +196,18 @@ export function CustomFieldsPage({
   function sembrar(
     action: () => Promise<MutationResult<{ created: number; skipped: number }>>
   ) {
-    startTransition(async () => {
-      const result = await action();
-      if (!result.success) {
-        push({ title: "No se pudo cargar", description: result.error });
-        return;
-      }
-      await refresh();
-      push({
-        title:
-          result.data.created === 0
-            ? "Ya estaban todos cargados"
-            : `${result.data.created} campos cargados`,
-        description:
-          result.data.skipped > 0
-            ? `${result.data.skipped} ya existían y se saltearon.`
-            : undefined,
-        variant: "success",
-      });
-    });
+    startTransition(() =>
+      cambiarColumnas(action, push, "No se pudo cargar", async (data) => {
+        await refresh();
+        push({
+          title:
+            data.created === 0 ? "Ya estaban todos cargados" : `${data.created} campos cargados`,
+          description:
+            data.skipped > 0 ? `${data.skipped} ya existían y se saltearon.` : undefined,
+          variant: "success",
+        });
+      })
+    );
   }
 
   function openEdit(field: FieldDefinition) {
@@ -210,16 +247,21 @@ export function CustomFieldsPage({
             : null,
       };
 
-      const result = editing
-        ? await updateFieldDefinitionAction({ id: editing.id, ...payload })
-        : await createFieldDefinitionAction({
-            entity,
-            fieldType: draft.fieldType,
-            ...payload,
-          });
+      // Si la acción lanzó, el diálogo muestra el texto fijo (SCRUM-517).
+      const result = await leerConMotivo(
+        () =>
+          editing
+            ? updateFieldDefinitionAction({ id: editing.id, ...payload })
+            : createFieldDefinitionAction({
+                entity,
+                fieldType: draft.fieldType,
+                ...payload,
+              }),
+        "[CustomFieldsPage] guardar columna"
+      );
 
-      if (!result.success) {
-        setDialogError(result.error);
+      if (!result.ok) {
+        setDialogError(result.motivo);
         return;
       }
 
@@ -557,29 +599,47 @@ function AvisoSinNovedades() {
   const { push } = useToast();
   const [dias, setDias] = useState<string>("");
   const [guardado, setGuardado] = useState<number | null>(null);
+  const [motivo, setMotivo] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    getClientSilenceDaysAction()
-      .then((valor) => {
-        setGuardado(valor);
-        setDias(String(valor));
-      })
-      .catch(() => undefined);
+    let vigente = true;
+    void cargarDiasSinNovedades().then((lectura) => {
+      if (!vigente) return;
+      if (!lectura.ok) {
+        setMotivo(lectura.motivo);
+        return;
+      }
+      setGuardado(lectura.data);
+      setDias(String(lectura.data));
+    });
+    return () => {
+      vigente = false;
+    };
   }, []);
 
+  if (motivo !== null) {
+    return (
+      <AvisoDeLecturaFallida
+        titulo="No se pudo leer el aviso de clientes sin novedades."
+        motivo={motivo}
+      />
+    );
+  }
   if (guardado === null) return null;
 
   const guardar = () =>
-    startTransition(async () => {
-      const result = await setClientSilenceDaysAction(Number(dias));
-      if (!result.success) {
-        push({ title: "No se pudo guardar", description: result.error });
-        return;
-      }
-      setGuardado(result.data);
-      push({ title: "Aviso actualizado", variant: "success" });
-    });
+    startTransition(() =>
+      cambiarColumnas(
+        () => setClientSilenceDaysAction(Number(dias)),
+        push,
+        "No se pudo guardar",
+        (valor) => {
+          setGuardado(valor);
+          push({ title: "Aviso actualizado", variant: "success" });
+        }
+      )
+    );
 
   return (
     <GlassPanel className="flex flex-wrap items-center justify-between gap-3 p-4">

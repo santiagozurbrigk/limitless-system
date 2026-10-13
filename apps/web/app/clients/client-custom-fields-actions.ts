@@ -15,13 +15,18 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { isMissingTableError, requireOrganizationId } from "@/lib/auth/bootstrap";
-import { listFieldDefinitionsAction } from "@/app/clients/custom-field-actions";
+import { leerColumnas } from "@/lib/custom-fields/leer-columnas";
 import {
   activeFields,
   mergeCustomFieldValues,
   validateFieldValues,
 } from "@/lib/custom-fields";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -34,9 +39,19 @@ const updateSchema = z.object({
 
 export type UpdateClientCustomFieldsInput = z.input<typeof updateSchema>;
 
-/** Las columnas configurables de cliente. Archivadas incluidas, como en C0. */
-export async function listClientFieldDefinitionsAction(): Promise<FieldDefinition[]> {
-  return listFieldDefinitionsAction("client");
+/**
+ * Las columnas configurables de cliente. Archivadas incluidas, como en C0.
+ *
+ * SCRUM-517: con un error devuelve el motivo (antes, una lista vacía: la ficha
+ * escondía sus tarjetas como si la organización no tuviera columnas).
+ */
+export async function listClientFieldDefinitionsAction(): Promise<
+  MutationResult<FieldDefinition[]>
+> {
+  return mutacionConErroresEsperables("[listClientFieldDefinitions]", async () => {
+    const organizationId = await requireOrganizationId();
+    return leerColumnas(await createClient(), organizationId, "client");
+  });
 }
 
 /**
@@ -58,11 +73,11 @@ export async function listClientFieldDefinitionsAction(): Promise<FieldDefinitio
 export async function updateClientCustomFieldsAction(
   input: UpdateClientCustomFieldsInput
 ): Promise<MutationResult<CustomFieldValues>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateClientCustomFields]", async () => {
     const organizationId = await requireOrganizationId();
 
     const parsed = updateSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const { clientId, values } = parsed.data;
 
     const supabase = await createClient();
@@ -76,15 +91,17 @@ export async function updateClientCustomFieldsAction(
 
     if (readError) {
       if (isMissingTableError(readError.message)) {
-        throw new Error(
+        throw new ErrorEsperable(
           "La columna de campos configurables todavía no existe en la base. Falta aplicar la migración."
         );
       }
-      throw new Error(readError.message);
+      throw new FallaDeLaBase(readError);
     }
-    if (!current) throw new Error("El cliente no existe");
+    if (!current) throw new ErrorEsperable("El cliente no existe");
 
-    const all = await listFieldDefinitionsAction("client");
+    // Con la lectura que lanza: si las columnas no se pudieran leer, validar
+    // contra ninguna descartaba lo editado y la ficha decía "guardados".
+    const all = await leerColumnas(supabase, organizationId, "client");
     const offered = activeFields(all);
 
     const validation = validateFieldValues(offered, values);
@@ -93,7 +110,7 @@ export async function updateClientCustomFieldsAction(
       // una sola vez: quedarse con uno obliga a apretar Guardar, corregir,
       // apretar de nuevo y recién ahí enterarse del siguiente.
       const mensajes = Object.values(validation.errors);
-      throw new Error(mensajes.join(" · ") || "Datos inválidos");
+      throw new ErrorEsperable(mensajes.join(" · ") || "Datos inválidos");
     }
 
     const loaded = (current.custom ?? {}) as CustomFieldValues;
@@ -105,7 +122,7 @@ export async function updateClientCustomFieldsAction(
       .eq("id", clientId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
     revalidatePath(paths.platform.clients.detail(clientId));
     revalidatePath(paths.platform.clients.root);

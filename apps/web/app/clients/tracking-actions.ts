@@ -13,6 +13,7 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import {
   getCurrentProfile,
@@ -32,9 +33,15 @@ import { ultimoHitoPorCliente } from "@/lib/checkpoints/fecha-del-hito";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { deriveClientCase, groupWinsByClient } from "@/lib/wins";
 import { listClientsAction } from "@/app/clients/actions";
-import { getClientsJourneyStatusAction } from "@/app/clients/checkpoint-derived-actions";
+import { leerEstadosDelRecorrido } from "@/lib/checkpoints/lecturas-del-recorrido";
 import { listClientBaselinesAction, listWinsAction } from "@/app/clients/win-actions";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { lecturaDegradable } from "@/lib/server/lectura-degradable";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -53,34 +60,55 @@ type TrackingRow = {
 
 // ─── Lectura ────────────────────────────────────────────────────────────────
 
-/** El seguimiento de todos los clientes de la organización, indexado por id. */
+/**
+ * El seguimiento de todos los clientes de la organización, indexado por id.
+ *
+ * SCRUM-517: la usa la pantalla de Wins junto con otras lecturas que devuelven
+ * el dato tal cual, así que conserva su tipo; lo que cambia es que una falla
+ * ya no se esconde: `lecturaDegradable` la registra (consola y Sentry, tag
+ * `lectura_degradada`) y recién ahí devuelve `{}`.
+ */
 export async function listClientTrackingAction(): Promise<
   Record<string, ClientTracking>
 > {
   try {
-    const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("clients")
-      .select(
-        "id, goal_text, goal_metric_key, goal_metric_value, goal_metric_unit, exit_date, current_status_note, current_metric_value, current_status_updated_at"
-      )
-      .eq("organization_id", organizationId);
-
-    if (error) {
-      if (isMissingTableError(error.message)) return {};
-      console.error("[listClientTracking]", error.message);
-      return {};
-    }
-
-    const result: Record<string, ClientTracking> = {};
-    for (const row of data as TrackingRow[]) {
-      result[row.id] = rowToTracking(row);
-    }
-    return result;
-  } catch {
+    return await lecturaDegradable(
+      "listClientTracking",
+      async () => leerSeguimiento(await createClient(), await requireOrganizationId()),
+      {}
+    );
+  } catch (error) {
+    // Sólo llegan acá un error interno de Next (se relanza) y la sesión que
+    // falta, que no es una falla: sin sesión no hay seguimiento que mostrar.
+    unstable_rethrow(error);
     return {};
   }
+}
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+async function leerSeguimiento(
+  supabase: Supabase,
+  organizationId: string
+): Promise<Record<string, ClientTracking>> {
+  const { data, error } = await supabase
+    .from("clients")
+    .select(
+      "id, goal_text, goal_metric_key, goal_metric_value, goal_metric_unit, exit_date, current_status_note, current_metric_value, current_status_updated_at"
+    )
+    .eq("organization_id", organizationId);
+
+  if (error) {
+    // Una tabla ausente cuenta como vacía, como antes.
+    if (isMissingTableError(error.message)) return {};
+    throw new FallaDeLaBase(error);
+  }
+
+  const result: Record<string, ClientTracking> = {};
+  for (const row of (data ?? []) as TrackingRow[]) {
+    result[row.id] = rowToTracking(row);
+  }
+  return result;
 }
 
 export type WeeklyReviewPageData = {
@@ -99,53 +127,64 @@ export type WeeklyReviewPageData = {
  * el servidor corre en UTC y de noche en Argentina ya sería mañana, con lo que
  * una cuota que vence hoy salía como atrasada (SCRUM-493).
  */
-export async function getWeeklyReviewAction(): Promise<WeeklyReviewPageData> {
-  const [clients, statuses, wins, baselines, tracking, checkpointEvents, zona] =
-    await Promise.all([
-      listClientsAction(),
-      getClientsJourneyStatusAction(),
-      listWinsAction(),
-      listClientBaselinesAction(),
-      listClientTrackingAction(),
-      listCheckpointEventDates(),
-      organizationTimezone(),
-    ]);
+export async function getWeeklyReviewAction(): Promise<MutationResult<WeeklyReviewPageData>> {
+  return mutacionConErroresEsperables("[getWeeklyReview]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+    /*
+     * SCRUM-517: el recorrido, el seguimiento y las fechas de los hitos se leen
+     * con lecturas que lanzan. Antes cada una devolvía vacío ante una falla y la
+     * revisión decía "Ningún cliente pide atención esta semana" sin poder
+     * saberlo. La zona horaria sigue con su respaldo (la de por defecto, con
+     * aviso en el log), como en el resto de la app.
+     */
+    const [clients, statuses, wins, baselines, tracking, checkpointEvents, zona] =
+      await Promise.all([
+        listClientsAction(),
+        leerEstadosDelRecorrido(supabase, organizationId),
+        listWinsAction(),
+        listClientBaselinesAction(),
+        leerSeguimiento(supabase, organizationId),
+        listCheckpointEventDates(supabase, organizationId),
+        leerZonaHorariaDeLaOrganizacion(supabase, organizationId),
+      ]);
 
-  const winsByClient = groupWinsByClient(wins);
-  const today = fechaDeHoyEnZona(zona);
-  const lastEvents = ultimoHitoPorCliente(checkpointEvents, zona);
+    const winsByClient = groupWinsByClient(wins);
+    const today = fechaDeHoyEnZona(zona);
+    const lastEvents = ultimoHitoPorCliente(checkpointEvents, zona);
 
-  const review = buildWeeklyReview(
-    clients.map((client) => {
-      const clientWins = winsByClient.get(client.id) ?? [];
-      const status: ClientJourneyStatus | undefined = statuses[client.id];
-      const outcome = deriveClientCase(clientWins, baselines[client.id] ?? null);
+    const review = buildWeeklyReview(
+      clients.map((client) => {
+        const clientWins = winsByClient.get(client.id) ?? [];
+        const status: ClientJourneyStatus | undefined = statuses[client.id];
+        const outcome = deriveClientCase(clientWins, baselines[client.id] ?? null);
 
-      // La última señal de vida es lo más reciente entre un win y un hito: las
-      // dos cosas son "algo pasó con este cliente".
-      const lastWinAt = clientWins.reduce<string | null>(
-        (latest, win) => (latest === null || win.winDate > latest ? win.winDate : latest),
-        null
-      );
-      const lastEventAt = lastEvents[client.id] ?? null;
+        // La última señal de vida es lo más reciente entre un win y un hito: las
+        // dos cosas son "algo pasó con este cliente".
+        const lastWinAt = clientWins.reduce<string | null>(
+          (latest, win) => (latest === null || win.winDate > latest ? win.winDate : latest),
+          null
+        );
+        const lastEventAt = lastEvents[client.id] ?? null;
 
-      return {
-        clientId: client.id,
-        name: client.name,
-        stalled: status?.stalled ?? false,
-        overdueDays: status?.overdueDays ?? null,
-        lastWinAt,
-        measuredDelta: outcome.measured ? outcome.delta : null,
-        lastActivityAt: maxDate(lastWinAt, lastEventAt),
-        joinDate: client.joinDate,
-        exitDate: tracking[client.id]?.exitDate ?? null,
-        hasOverduePayment: hasOverduePayment(client.installments, today),
-      };
-    }),
-    today
-  );
+        return {
+          clientId: client.id,
+          name: client.name,
+          stalled: status?.stalled ?? false,
+          overdueDays: status?.overdueDays ?? null,
+          lastWinAt,
+          measuredDelta: outcome.measured ? outcome.delta : null,
+          lastActivityAt: maxDate(lastWinAt, lastEventAt),
+          joinDate: client.joinDate,
+          exitDate: tracking[client.id]?.exitDate ?? null,
+          hasOverduePayment: hasOverduePayment(client.installments, today),
+        };
+      }),
+      today
+    );
 
-  return { review, clients, tracking };
+    return { review, clients, tracking };
+  });
 }
 
 // ─── Escritura ──────────────────────────────────────────────────────────────
@@ -174,10 +213,10 @@ export async function updateClientTrackingAction(
   clientId: string,
   input: ClientTrackingInput
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateClientTracking]", async () => {
     const organizationId = await requireOrganizationId();
     const parsed = trackingSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
     const hasGoalMetric =
@@ -196,7 +235,7 @@ export async function updateClientTrackingAction(
       .eq("id", clientId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate(clientId);
   });
 }
@@ -216,10 +255,10 @@ export async function updateClientCurrentStatusAction(
   clientId: string,
   input: z.input<typeof statusSchema>
 ): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateClientCurrentStatus]", async () => {
     const organizationId = await requireOrganizationId();
     const parsed = statusSchema.safeParse(input);
-    if (!parsed.success) throw new Error(firstZodError(parsed.error));
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
     const values = parsed.data;
 
     const isEmpty = values.note === null && values.metricValue === null;
@@ -236,7 +275,7 @@ export async function updateClientCurrentStatusAction(
       .eq("id", clientId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidate(clientId);
   });
 }
@@ -252,7 +291,7 @@ export async function updateClientNotesAction(
   clientId: string,
   notes: string | null
 ): Promise<MutationResult<{ updatedAt: string | null }>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateClientNotes]", async () => {
     const organizationId = await requireOrganizationId();
 
     const limpio = notes?.trim() ? notes.trim().slice(0, 20000) : null;
@@ -265,7 +304,7 @@ export async function updateClientNotesAction(
       .eq("id", clientId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     revalidatePath(paths.platform.clients.detail(clientId));
     return { updatedAt };
   });
@@ -301,31 +340,21 @@ function toNumber(raw: number | string | null): number | null {
 type CheckpointEventDateRow = { client_id: string; reached_at: string | null };
 
 /** Cuándo se registró cada hito de la organización. */
-async function listCheckpointEventDates(): Promise<CheckpointEventDateRow[]> {
-  try {
-    const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("client_checkpoint_events")
-      .select("client_id, reached_at")
-      .eq("organization_id", organizationId);
+async function listCheckpointEventDates(
+  supabase: Supabase,
+  organizationId: string
+): Promise<CheckpointEventDateRow[]> {
+  const { data, error } = await supabase
+    .from("client_checkpoint_events")
+    .select("client_id, reached_at")
+    .eq("organization_id", organizationId);
 
-    if (error) return [];
-    return (data ?? []) as CheckpointEventDateRow[];
-  } catch {
-    return [];
+  if (error) {
+    // Antes de su migración la tabla no existe: no hay hitos.
+    if (isMissingTableError(error.message)) return [];
+    throw new FallaDeLaBase(error);
   }
-}
-
-/** La zona horaria de la organización (null si no eligió una o no se pudo leer). */
-async function organizationTimezone(): Promise<string | null> {
-  try {
-    const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-    return await leerZonaHorariaDeLaOrganizacion(supabase, organizationId);
-  } catch {
-    return null;
-  }
+  return (data ?? []) as CheckpointEventDateRow[];
 }
 
 function maxDate(a: string | null, b: string | null): string | null {
@@ -351,11 +380,11 @@ export async function updateClientSatisfactionAction(
   clientId: string,
   nivel: string | null
 ): Promise<MutationResult<{ updatedAt: string | null }>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateClientSatisfaction]", async () => {
     const organizationId = await requireOrganizationId();
 
     if (nivel !== null && !esNivelValido(nivel)) {
-      throw new Error("Ese nivel de satisfacción no existe.");
+      throw new ErrorEsperable("Ese nivel de satisfacción no existe.");
     }
 
     const profile = await getCurrentProfile();
@@ -374,7 +403,7 @@ export async function updateClientSatisfactionAction(
       .eq("id", clientId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
     revalidatePath(paths.platform.clients.detail(clientId));
     revalidatePath(paths.platform.clients.root);

@@ -18,7 +18,14 @@ import { createClient } from "@/lib/supabase/server";
 import { loadClientOneOnOneStats } from "@/lib/fathom/one-on-ones";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { summarizeJourneyPosition } from "@/lib/checkpoints/progress";
-import { getClientJourneyAction } from "@/app/clients/checkpoint-event-actions";
+import { leerRecorridoDelCliente } from "@/lib/checkpoints/lecturas-del-recorrido";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { lecturaDegradable } from "@/lib/server/lectura-degradable";
 
 export type ClientOverview = {
   oneOnOne: {
@@ -40,55 +47,73 @@ export type ClientOverview = {
   };
 };
 
-const VACIO: ClientOverview = {
-  oneOnOne: { total: 0, daysSinceLast: null },
-  tasks: { pending: 0, coach: 0 },
-  journey: { configured: false, reached: 0, total: 0, next: null },
-};
+/**
+ * SCRUM-517: devuelve sus errores como valor. Antes lanzaba sin sesión (en
+ * producción, un digest que la franja tragaba) y una falla de la base se veía
+ * como cero sesiones y cero pendientes, o como un cliente que no existe.
+ *
+ * El recorrido es la parte opcional: si no se puede leer, la franja muestra
+ * «—» en esa celda (como antes) y la falla queda registrada
+ * (`lecturaDegradable`); las otras dos no esconden su falla.
+ */
+export async function getClientOverviewAction(
+  clientId: string
+): Promise<MutationResult<ClientOverview>> {
+  return mutacionConErroresEsperables("[getClientOverview]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-export async function getClientOverviewAction(clientId: string): Promise<ClientOverview> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
-
-  // La pertenencia se chequea con la sesión del usuario antes de leer con el
-  // cliente admin, igual que en el resto de las acciones de la ficha.
-  const { data: client } = await supabase
-    .from("clients")
-    .select("id")
-    .eq("id", clientId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
-
-  if (!client) return VACIO;
-
-  const [stats, tareas, journey] = await Promise.all([
-    // La zona de la org, una lectura por pedido: el contador de 1-1 cuenta en ella.
-    leerZonaHorariaDeLaOrganizacion(supabase, organizationId).then((zona) =>
-      loadClientOneOnOneStats(organizationId, clientId, zona)
-    ),
-    supabase
-      .from("client_tasks")
-      .select("owner")
+    // La pertenencia se chequea con la sesión del usuario antes de leer con el
+    // cliente admin, igual que en el resto de las acciones de la ficha.
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("id", clientId)
       .eq("organization_id", organizationId)
-      .eq("client_id", clientId)
-      .eq("status", "pending"),
-    getClientJourneyAction(clientId).catch(() => null),
-  ]);
+      .maybeSingle();
 
-  const pendientes = (tareas.data ?? []) as { owner: string | null }[];
-  const resumen = journey ? summarizeJourneyPosition(journey.progress) : null;
+    if (clientError) throw new FallaDeLaBase(clientError);
+    if (!client) {
+      throw new ErrorEsperable("No se encontró el cliente. Puede que lo hayan eliminado.");
+    }
 
-  return {
-    oneOnOne: { total: stats.totalCalls, daysSinceLast: stats.daysSinceLast },
-    tasks: {
-      pending: pendientes.length,
-      coach: pendientes.filter((t) => t.owner === "coach").length,
-    },
-    journey: {
-      configured: Boolean(journey?.journeyConfigured),
-      reached: resumen?.reached ?? 0,
-      total: resumen?.total ?? 0,
-      next: resumen?.nextCheckpoint?.name ?? null,
-    },
-  };
+    // La consulta armada en el lugar va primera: si `from()` lanzara al
+    // armarse, las lecturas async no quedarían con su rechazo sin atender.
+    const [tareas, stats, journey] = await Promise.all([
+      supabase
+        .from("client_tasks")
+        .select("owner")
+        .eq("organization_id", organizationId)
+        .eq("client_id", clientId)
+        .eq("status", "pending"),
+      // La zona de la org, una lectura por pedido: el contador de 1-1 cuenta en ella.
+      leerZonaHorariaDeLaOrganizacion(supabase, organizationId).then((zona) =>
+        loadClientOneOnOneStats(organizationId, clientId, zona)
+      ),
+      lecturaDegradable(
+        "getClientOverview:recorrido",
+        () => leerRecorridoDelCliente(supabase, organizationId, clientId),
+        null
+      ),
+    ]);
+
+    if (tareas.error) throw new FallaDeLaBase(tareas.error);
+
+    const pendientes = (tareas.data ?? []) as { owner: string | null }[];
+    const resumen = journey ? summarizeJourneyPosition(journey.progress) : null;
+
+    return {
+      oneOnOne: { total: stats.totalCalls, daysSinceLast: stats.daysSinceLast },
+      tasks: {
+        pending: pendientes.length,
+        coach: pendientes.filter((t) => t.owner === "coach").length,
+      },
+      journey: {
+        configured: Boolean(journey?.journeyConfigured),
+        reached: resumen?.reached ?? 0,
+        total: resumen?.total ?? 0,
+        next: resumen?.nextCheckpoint?.name ?? null,
+      },
+    };
+  });
 }

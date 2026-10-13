@@ -37,6 +37,7 @@ import { Trophy } from "lucide-react";
 import { useToast } from "@/providers/toast-provider";
 import { updateClientBaselineAction } from "@/app/clients/win-actions";
 import { updateClientTrackingAction } from "@/app/clients/tracking-actions";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import {
   ClientBaselineDialog,
   type BaselineDraft,
@@ -135,15 +136,20 @@ export function WinsDashboard({
         return;
       }
 
-      const tracked = await updateClientTrackingAction(editing.id, {
-        goalText: draft.goalText.trim() || null,
-        goalMetricKey: goalKey || null,
-        goalMetricValue: goalValue,
-        goalMetricUnit: draft.goalMetricUnit.trim() || null,
-        exitDate: draft.exitDate || null,
-      });
-      if (!tracked.success) {
-        setDialogError(tracked.error);
+      // Si la acción lanzó, el diálogo muestra el texto fijo (SCRUM-517).
+      const tracked = await leerConMotivo(
+        () =>
+          updateClientTrackingAction(editing.id, {
+            goalText: draft.goalText.trim() || null,
+            goalMetricKey: goalKey || null,
+            goalMetricValue: goalValue,
+            goalMetricUnit: draft.goalMetricUnit.trim() || null,
+            exitDate: draft.exitDate || null,
+          }),
+        "[WinsDashboard] objetivo y egreso"
+      );
+      if (!tracked.ok) {
+        setDialogError(tracked.motivo);
         return;
       }
 

@@ -19,7 +19,13 @@
 import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import { leerFasesFijadas } from "@/lib/checkpoints/lecturas-del-recorrido";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import { paths } from "@/routes";
 
 export async function setClientManualStageAction(input: {
@@ -27,19 +33,21 @@ export async function setClientManualStageAction(input: {
   /** `null` vuelve a dejar que los hitos manden. */
   stageId: string | null;
 }): Promise<MutationResult<void>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[setClientManualStage]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
     if (input.stageId) {
       // Una fase de otra organización colgaría el cliente de un recorrido ajeno.
-      const { data: stage } = await supabase
+      // Si la lectura falla es una falla, no "esa fase no existe".
+      const { data: stage, error: stageError } = await supabase
         .from("client_journey_stages")
         .select("id")
         .eq("id", input.stageId)
         .eq("organization_id", organizationId)
         .maybeSingle();
-      if (!stage) throw new Error("Esa fase no existe en tu recorrido.");
+      if (stageError) throw new FallaDeLaBase(stageError);
+      if (!stage) throw new ErrorEsperable("Esa fase no existe en tu recorrido.");
     }
 
     const { error } = await supabase
@@ -56,33 +64,22 @@ export async function setClientManualStageAction(input: {
       .eq("id", input.clientId)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
     revalidatePath(paths.platform.clients.detail(input.clientId));
     revalidatePath(paths.platform.clients.root);
   });
 }
 
-/** La fase fijada a mano de cada cliente, para resolver la efectiva en la tabla. */
-export async function getManualStagesAction(): Promise<Record<string, string>> {
-  try {
+/**
+ * La fase fijada a mano de cada cliente, para resolver la efectiva en la tabla.
+ *
+ * SCRUM-517: con un error devuelve el motivo (antes, `{}`: la tabla mostraba la
+ * fase deducida de los hitos como si nadie hubiera fijado ninguna).
+ */
+export async function getManualStagesAction(): Promise<MutationResult<Record<string, string>>> {
+  return mutacionConErroresEsperables("[getManualStages]", async () => {
     const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-
-    const { data, error } = await supabase
-      .from("clients")
-      .select("id, manual_stage_id")
-      .eq("organization_id", organizationId)
-      .not("manual_stage_id", "is", null);
-
-    if (error) return {};
-
-    const result: Record<string, string> = {};
-    for (const row of (data ?? []) as { id: string; manual_stage_id: string }[]) {
-      result[row.id] = row.manual_stage_id;
-    }
-    return result;
-  } catch {
-    return {};
-  }
+    return leerFasesFijadas(await createClient(), organizationId);
+  });
 }

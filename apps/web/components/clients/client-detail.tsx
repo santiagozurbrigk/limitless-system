@@ -43,7 +43,8 @@ import { ClientDiscordActivity } from "@/components/clients/client-discord-activ
 import { ClientTimeline } from "@/components/clients/client-timeline";
 import { ClientJourneySection } from "@/components/clients/checkpoints";
 import { ClientWinsSection } from "@/components/clients/wins";
-import { listClientFieldDefinitionsAction } from "@/app/clients/client-custom-fields-actions";
+import { cargarColumnasDelCliente } from "@/components/clients/client-custom-fields-section";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { activeFields } from "@/lib/custom-fields";
 import type { FieldDefinition } from "@/types/custom-fields";
 import type { Client, ClientStatus } from "@/types/clients";
@@ -68,16 +69,15 @@ export function ClientDetail({ client: initial }: { client: Client }) {
    * por separado sería el mismo fetch dos veces por ficha abierta.
    */
   const [clientFields, setClientFields] = useState<FieldDefinition[]>([]);
+  /** Si no se pudieron leer, el motivo (SCRUM-517): antes se callaba. */
+  const [motivoColumnas, setMotivoColumnas] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    listClientFieldDefinitionsAction()
-      .then((next) => {
-        if (alive) setClientFields(activeFields(next));
-      })
-      .catch(() => {
-        // Sin campos configurados la ficha funciona igual: las tarjetas que
-        // dependen de ellos no se dibujan.
-      });
+    void cargarColumnasDelCliente().then((lectura) => {
+      if (!alive) return;
+      if (lectura.ok) setClientFields(activeFields(lectura.data));
+      else setMotivoColumnas(lectura.motivo);
+    });
     return () => {
       alive = false;
     };
@@ -137,6 +137,12 @@ export function ClientDetail({ client: initial }: { client: Client }) {
                 cada uno. Va primero porque es el contexto con el que se lee
                 todo lo demás.
               */}
+              {motivoColumnas ? (
+                <AvisoDeLecturaFallida
+                  titulo="No se pudieron cargar las columnas de Marketing, Ventas y Sistemas."
+                  motivo={motivoColumnas}
+                />
+              ) : null}
               <ClientSubClientsCard client={client} fields={clientFields} />
 
               {/* Cuánto factura su negocio: la medida de si esto está funcionando. */}

@@ -21,6 +21,8 @@ import {
   type ClientOverview,
 } from "@/app/clients/overview-actions";
 import { CLIENT_TASKS_CHANGED } from "@/lib/clients/tasks-events";
+import { leerConMotivo } from "@/lib/client/correr-accion";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import {
   ETIQUETAS_DE_SATISFACCION,
   type NivelDeSatisfaccion,
@@ -48,6 +50,17 @@ function antiguedad(dias: number | null): string {
   return `la última hace ${dias} días`;
 }
 
+/**
+ * El resumen del cliente (SCRUM-517): el dato o el motivo. Antes una falla
+ * dejaba la franja en «cargando…» para siempre, sin decir nada.
+ */
+export function cargarResumenDelCliente(clientId: string) {
+  return leerConMotivo(
+    () => getClientOverviewAction(clientId),
+    "[ClientOverviewStrip] resumen"
+  );
+}
+
 export function ClientOverviewStrip({
   clientId,
   satisfaction,
@@ -56,17 +69,21 @@ export function ClientOverviewStrip({
   satisfaction: string | null | undefined;
 }) {
   const [data, setData] = useState<ClientOverview | null>(null);
+  const [motivo, setMotivo] = useState<string | null>(null);
 
   const cargar = useCallback(() => {
     let alive = true;
-    getClientOverviewAction(clientId)
-      .then((next) => {
-        if (alive) setData(next);
-      })
-      .catch(() => {
-        // La franja es un resumen: si no se pudo cargar, queda en «—» y la
-        // ficha sigue funcionando.
-      });
+    // La franja es un resumen: si no se pudo cargar, queda en «—», dice por
+    // qué, y la ficha sigue funcionando.
+    void cargarResumenDelCliente(clientId).then((lectura) => {
+      if (!alive) return;
+      if (lectura.ok) {
+        setData(lectura.data);
+        setMotivo(null);
+      } else {
+        setMotivo(lectura.motivo);
+      }
+    });
     return () => {
       alive = false;
     };
@@ -92,63 +109,74 @@ export function ClientOverviewStrip({
       ? `${journey.reached} de ${journey.total}`
       : "—";
 
+  /** Lo que dice una celda sin dato: cargando, o que no se pudo. */
+  const sinDato = motivo ? "no se pudo cargar" : "cargando…";
+
   const celda =
     "bg-card/60 px-4 py-3.5 dark:bg-white/[0.02] sm:px-5 [&_.metric-stat-value]:text-[1.5rem] [&_.metric-stat-value]:leading-8";
 
   return (
-    <div
-      className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border/60 dark:border-white/[0.08] dark:bg-white/[0.06] lg:grid-cols-4"
-      aria-label="Resumen del cliente"
-    >
-      <div className={celda}>
-        <MetricStat
-          icon={<Phone />}
-          title="Sesiones 1-1"
-          value={data ? data.oneOnOne.total : "—"}
-          subtitle={data ? antiguedad(data.oneOnOne.daysSinceLast) : "cargando…"}
-        />
+    <div className="space-y-2">
+      <div
+        className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border/60 dark:border-white/[0.08] dark:bg-white/[0.06] lg:grid-cols-4"
+        aria-label="Resumen del cliente"
+      >
+        <div className={celda}>
+          <MetricStat
+            icon={<Phone />}
+            title="Sesiones 1-1"
+            value={data ? data.oneOnOne.total : "—"}
+            subtitle={data ? antiguedad(data.oneOnOne.daysSinceLast) : sinDato}
+          />
+        </div>
+        <div className={celda}>
+          <MetricStat
+            icon={<ClipboardList />}
+            title="Tareas pendientes"
+            value={data ? data.tasks.pending : "—"}
+            subtitle={
+              data
+                ? data.tasks.pending === 0
+                  ? "al día"
+                  : data.tasks.coach > 0
+                    ? `${data.tasks.coach} le ${data.tasks.coach === 1 ? "toca" : "tocan"} al coach`
+                    : "todas del cliente"
+                : sinDato
+            }
+          />
+        </div>
+        <div className={celda}>
+          <MetricStat
+            icon={<Flag />}
+            title="Recorrido"
+            value={recorrido}
+            subtitle={
+              journey?.next
+                ? `sigue: ${journey.next}`
+                : journey?.configured && journey.total > 0
+                  ? "completo"
+                  : data
+                    ? "sin recorrido configurado"
+                    : sinDato
+            }
+          />
+        </div>
+        <div className={celda}>
+          <MetricStat
+            icon={<Gauge />}
+            title="Satisfacción"
+            value={nivel ? nivel.label : "—"}
+            subtitle={nivel ? nivel.descripcion : "sin marcar"}
+            className={cn(nivelId && COLOR_DE_SATISFACCION[nivelId])}
+          />
+        </div>
       </div>
-      <div className={celda}>
-        <MetricStat
-          icon={<ClipboardList />}
-          title="Tareas pendientes"
-          value={data ? data.tasks.pending : "—"}
-          subtitle={
-            data
-              ? data.tasks.pending === 0
-                ? "al día"
-                : data.tasks.coach > 0
-                  ? `${data.tasks.coach} le ${data.tasks.coach === 1 ? "toca" : "tocan"} al coach`
-                  : "todas del cliente"
-              : "cargando…"
-          }
+      {motivo ? (
+        <AvisoDeLecturaFallida
+          titulo="No se pudo cargar el resumen del cliente."
+          motivo={motivo}
         />
-      </div>
-      <div className={celda}>
-        <MetricStat
-          icon={<Flag />}
-          title="Recorrido"
-          value={recorrido}
-          subtitle={
-            journey?.next
-              ? `sigue: ${journey.next}`
-              : journey?.configured && journey.total > 0
-                ? "completo"
-                : data
-                  ? "sin recorrido configurado"
-                  : "cargando…"
-          }
-        />
-      </div>
-      <div className={celda}>
-        <MetricStat
-          icon={<Gauge />}
-          title="Satisfacción"
-          value={nivel ? nivel.label : "—"}
-          subtitle={nivel ? nivel.descripcion : "sin marcar"}
-          className={cn(nivelId && COLOR_DE_SATISFACCION[nivelId])}
-        />
-      </div>
+      ) : null}
     </div>
   );
 }

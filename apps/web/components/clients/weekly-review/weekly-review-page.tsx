@@ -18,6 +18,7 @@ import { Button, GlassPanel, Input } from "@ai-coo/ui";
 import { AlertTriangle, CalendarClock, Check, TrendingUp, Timer } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, leerConMotivo, type Aviso } from "@/lib/client/correr-accion";
 import { paths } from "@/routes";
 import type { WeeklyReviewRow } from "@/lib/clients/weekly-review";
 import type { WeeklyReviewPageData } from "@/app/clients/tracking-actions";
@@ -26,15 +27,59 @@ import {
   updateClientCurrentStatusAction,
 } from "@/app/clients/tracking-actions";
 
+/**
+ * Vuelve a armar la revisión después de anotar un estado (SCRUM-517). Si no se
+ * pudo, avisa el motivo (o el texto fijo si la acción lanzó) y devuelve
+ * `null`: la pantalla se queda con lo que ya mostraba.
+ */
+export async function recargarRevision(
+  avisar: (aviso: Aviso) => void
+): Promise<WeeklyReviewPageData | null> {
+  const lectura = await leerConMotivo(getWeeklyReviewAction, "[WeeklyReview] recargar");
+  if (!lectura.ok) {
+    avisar({ title: "No se pudo actualizar la revisión", description: lectura.motivo });
+    return null;
+  }
+  return lectura.data;
+}
+
+/**
+ * Guarda el estado actual de un cliente desde la revisión (SCRUM-517): el
+ * motivo de un rechazo se avisa; si la acción lanzó, el texto fijo.
+ */
+export function guardarEstadoActual(
+  clientId: string,
+  nota: string,
+  avisar: (aviso: Aviso) => void,
+  alGuardar: () => Promise<void>
+): Promise<void> {
+  return correrMutacion({
+    accion: () =>
+      updateClientCurrentStatusAction(clientId, {
+        note: nota.trim() || null,
+        metricValue: null,
+      }),
+    avisar,
+    tituloError: "No se pudo guardar",
+    etiqueta: "[WeeklyReview] estado actual",
+    alExito: async () => {
+      await alGuardar();
+      avisar({ title: "Estado actualizado", variant: "success" });
+    },
+  });
+}
+
 export function WeeklyReviewPage({
   initialData,
 }: {
   initialData: WeeklyReviewPageData;
 }) {
+  const { push } = useToast();
   const [data, setData] = useState(initialData);
 
   async function refresh() {
-    setData(await getWeeklyReviewAction());
+    const next = await recargarRevision(push);
+    if (next) setData(next);
   }
 
   const { review, tracking } = data;
@@ -169,18 +214,7 @@ function ReviewRow({
   const dirty = value.trim() !== note.trim();
 
   function save() {
-    startTransition(async () => {
-      const result = await updateClientCurrentStatusAction(row.clientId, {
-        note: value.trim() || null,
-        metricValue: null,
-      });
-      if (!result.success) {
-        push({ title: "No se pudo guardar", description: result.error });
-        return;
-      }
-      await onSaved();
-      push({ title: "Estado actualizado", variant: "success" });
-    });
+    startTransition(() => guardarEstadoActual(row.clientId, value, push, onSaved));
   }
 
   return (

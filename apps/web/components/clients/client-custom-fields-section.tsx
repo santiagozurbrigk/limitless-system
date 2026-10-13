@@ -17,7 +17,9 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { Button } from "@ai-coo/ui";
 import { ListChecks } from "lucide-react";
 import { FichaCard } from "@/components/clients/ficha-section";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, leerConMotivo, type Aviso } from "@/lib/client/correr-accion";
 import { usePlatformData } from "@/providers";
 import {
   listClientFieldDefinitionsAction,
@@ -29,24 +31,56 @@ import { activeFields, fieldsForValues, hasValue } from "@/lib/custom-fields";
 import type { CustomFieldValues, FieldDefinition } from "@/types/custom-fields";
 import type { Client } from "@/types/clients";
 
+/**
+ * Las columnas configurables de cliente (SCRUM-517): el dato o el motivo. Antes
+ * una falla se veía como "la organización no tiene columnas" y la tarjeta
+ * desaparecía sin decir nada.
+ */
+export function cargarColumnasDelCliente() {
+  return leerConMotivo(listClientFieldDefinitionsAction, "[ClientCustomFields] columnas");
+}
+
+/**
+ * Guarda los campos de un cliente (SCRUM-517): el motivo de un rechazo se
+ * avisa; si la acción lanzó, el texto fijo. Con éxito, `alGuardar` con lo
+ * guardado.
+ */
+export function guardarCamposDelCliente(
+  clientId: string,
+  values: CustomFieldValues,
+  avisar: (aviso: Aviso) => void,
+  alGuardar: (guardado: CustomFieldValues) => Promise<void>
+): Promise<void> {
+  return correrMutacion({
+    accion: () => updateClientCustomFieldsAction({ clientId, values }),
+    avisar,
+    tituloError: "No se pudo guardar",
+    etiqueta: "[ClientCustomFields] guardar",
+    alExito: async (guardado) => {
+      await alGuardar(guardado);
+      avisar({ title: "Datos del cliente guardados", variant: "success" });
+    },
+  });
+}
+
 export function ClientCustomFieldsSection({ client }: { client: Client }) {
   const { push } = useToast();
   const { refreshClients } = usePlatformData();
 
   const [fields, setFields] = useState<FieldDefinition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [motivo, setMotivo] = useState<string | null>(null);
   const [draft, setDraft] = useState<CustomFieldValues>(client.custom ?? {});
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     let alive = true;
-    listClientFieldDefinitionsAction()
-      .then((next) => {
-        if (alive) setFields(next);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+    void cargarColumnasDelCliente().then((lectura) => {
+      if (!alive) return;
+      if (lectura.ok) setFields(lectura.data);
+      else setMotivo(lectura.motivo);
+      setLoading(false);
+    });
     return () => {
       alive = false;
     };
@@ -93,26 +127,22 @@ export function ClientCustomFieldsSection({ client }: { client: Client }) {
     return false;
   }, [client.custom, draft]);
 
+  if (motivo !== null) {
+    return (
+      <AvisoDeLecturaFallida titulo="No se pudieron cargar los datos del cliente." motivo={motivo} />
+    );
+  }
   if (loading || (offered.length === 0 && archivedWithValue.length === 0)) {
     return null;
   }
 
   function save() {
-    startTransition(async () => {
-      const result = await updateClientCustomFieldsAction({
-        clientId: client.id,
-        values: draft,
-      });
-
-      if (!result.success) {
-        push({ title: "No se pudo guardar", description: result.error });
-        return;
-      }
-
-      setDraft(result.data);
-      await refreshClients();
-      push({ title: "Datos del cliente guardados", variant: "success" });
-    });
+    startTransition(() =>
+      guardarCamposDelCliente(client.id, draft, push, async (guardado) => {
+        setDraft(guardado);
+        await refreshClients();
+      })
+    );
   }
 
   return (

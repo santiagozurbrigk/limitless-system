@@ -60,7 +60,8 @@ import {
   Trophy,
 } from "lucide-react";
 import { deleteClientAction } from "@/app/clients/actions";
-import { correrMutacion } from "@/lib/client/correr-accion";
+import { correrMutacion, leerConMotivo } from "@/lib/client/correr-accion";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { toggleClientTaskAction } from "@/app/clients/task-actions";
 import { getClientsDiscordActivityAction } from "@/app/discord/actions";
 import { countPendingFathomCallsAction } from "@/app/fathom/actions";
@@ -198,6 +199,20 @@ function DeleteClientDialog({
 
 // ── Componente principal ───────────────────────────────────────────────────
 
+/**
+ * El tablero (recorrido, columnas, próxima tarea...) y las señales de la
+ * lista, cada uno con su dato o su motivo (SCRUM-517). Antes, sin sesión el
+ * tablero lanzaba (en producción, un digest) y una falla de la base dejaba la
+ * tabla sin etapas ni marcas como si no hubiera nada que mostrar.
+ */
+export function cargarTableroYSenales() {
+  return Promise.all([
+    leerConMotivo(getClientsBoardAction, "[ClientsList] tablero"),
+    // Sin el add-on devuelve vacío: no hace falta preguntar antes.
+    leerConMotivo(getClientSignalsAction, "[ClientsList] señales"),
+  ]);
+}
+
 export function ClientsList({ clients }: { clients: Client[] }) {
   const { refreshClients } = usePlatformData();
   const { push } = useToast();
@@ -227,6 +242,9 @@ export function ClientsList({ clients }: { clients: Client[] }) {
   const [board, setBoard] = useState<ClientsBoardData>(EMPTY_BOARD);
   /** Growth partners: sin novedades y fechas cercanas de sus creadores. */
   const [signals, setSignals] = useState<ClientSignals | null>(null);
+  /** Por qué no se pudieron leer el tablero o las señales (SCRUM-517). */
+  const [motivoTablero, setMotivoTablero] = useState<string | null>(null);
+  const [motivoSenales, setMotivoSenales] = useState<string | null>(null);
   const [, startLoad] = useTransition();
   const [pending, startTransition] = useTransition();
 
@@ -243,15 +261,17 @@ export function ClientsList({ clients }: { clients: Client[] }) {
    */
   useEffect(() => {
     startLoad(async () => {
-      const [boardData, activity, senales] = await Promise.all([
-        getClientsBoardAction(),
+      const [[boardData, senales], activity] = await Promise.all([
+        cargarTableroYSenales(),
         getClientsDiscordActivityAction(),
-        // Sin el add-on devuelve vacío: no hace falta preguntar antes.
-        getClientSignalsAction().catch(() => null),
       ]);
-      setBoard(boardData);
+      // Si el tablero no se pudo leer, la tabla se queda con el último que
+      // tenía y dice por qué.
+      if (boardData.ok) setBoard(boardData.data);
+      setMotivoTablero(boardData.ok ? null : boardData.motivo);
       setDiscordActivity(activity);
-      setSignals(senales);
+      setSignals(senales.ok ? senales.data : null);
+      setMotivoSenales(senales.ok ? null : senales.motivo);
     });
   }, [clients]);
 
@@ -569,6 +589,19 @@ export function ClientsList({ clients }: { clients: Client[] }) {
       */}
       {growthPartners && puedeGestionar ? (
         <ClientOnboardingInbox clients={clients} onAssigned={() => void refreshClients()} />
+      ) : null}
+
+      {motivoTablero ? (
+        <AvisoDeLecturaFallida
+          titulo="No se pudieron cargar el recorrido, las columnas y las tareas de la tabla."
+          motivo={motivoTablero}
+        />
+      ) : null}
+      {motivoSenales ? (
+        <AvisoDeLecturaFallida
+          titulo="No se pudieron cargar los avisos de clientes sin novedades."
+          motivo={motivoSenales}
+        />
       ) : null}
 
       {/* ── Buscar, filtrar, ordenar ─────────────────────────────────────── */}
