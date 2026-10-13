@@ -31,7 +31,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 ### 2026-10-13 — El build compila webpack en un worker para no quedarse sin memoria en Vercel (SCRUM-518)
 
 **Rama:** `fix/SCRUM-518-build-vercel-memoria`
-**Commit(s):** `c90b65ec`: fix(web): el build en Vercel no repite lint ni tipos (revertido por `e571de88`); `fac850f3` (docs); `e571de88`: fix(web): el build compila webpack en un worker y mantiene lint y tipos; `0292f245` (docs); este (docs)
+**Commit(s):** `c90b65ec`: fix(web): el build en Vercel no repite lint ni tipos (revertido por `e571de88`); `fac850f3` (docs); `e571de88`: fix(web): el build compila webpack en un worker y mantiene lint y tipos; `0292f245`, `c1c48e32` (docs); este (docs)
 **Módulo(s) afectado(s):** infraestructura: `apps/web/next.config.ts`; docs `operacion/entorno-y-deploy.md`, `operacion/testing.md`, `PENDIENTES.md`
 
 **Qué se hizo:**
