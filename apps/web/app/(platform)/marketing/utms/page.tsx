@@ -20,17 +20,21 @@ export default async function MarketingUTMsPage() {
         title="UTMs de YouTube"
         description="Generá links trackeables y medí qué videos traen leads, bookings y ventas."
       />
-      {/* La lista de videos devuelve su error como valor (SCRUM-519): con la
-          lectura caída se avisa el motivo en vez de mostrar "sin videos". */}
-      {assets.success ? (
-        <UTMPageContent
-          initialLinks={links}
-          youtubeVideos={assets.data.filter((a) => a.platform === "youtube")}
-          orgWebsiteUrl={orgWebsiteUrl}
+      {/* La lista de videos devuelve su error como valor (SCRUM-519): si falla,
+          se avisa el motivo y los links UTM, que sí se leyeron, se siguen
+          viendo; el generador queda con el título manual. */}
+      {assets.success ? null : (
+        <EmptyState
+          variant="inline"
+          title="No se pudieron cargar los videos de YouTube"
+          description={assets.error}
         />
-      ) : (
-        <EmptyState title="No se pudieron cargar los videos de YouTube" description={assets.error} />
       )}
+      <UTMPageContent
+        initialLinks={links}
+        youtubeVideos={assets.success ? assets.data.filter((a) => a.platform === "youtube") : []}
+        orgWebsiteUrl={orgWebsiteUrl}
+      />
     </div>
   );
 }

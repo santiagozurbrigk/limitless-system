@@ -394,6 +394,11 @@ export async function syncZernioContentAction(): Promise<MutationResult<{ synced
  * Limpia URLs efímeras del CDN de Instagram que quedaron almacenadas en rows existentes.
  * Las URLs CDN de Instagram expiran en ~1-2hs, causando errores 403 en el navegador.
  * Se nulifican en DB → el próximo sync trae URLs frescas y las persiste en Supabase Storage.
+ *
+ * Corre en segundo plano (`maybeSyncZernioContentAction` no la espera): si la
+ * lectura o la escritura fallan, lanza `FallaDeLaBase` y el `.catch` de quien la
+ * llama la registra en la consola y en Sentry (SCRUM-519, AR pasada 1). La
+ * sincronización sigue igual: las miniaturas vencidas se reparan en la próxima.
  */
 async function repairExpiredCdnThumbnails(organizationId: string): Promise<void> {
   const supabase = await createClient();
@@ -404,10 +409,7 @@ async function repairExpiredCdnThumbnails(organizationId: string): Promise<void>
     .eq("organization_id", organizationId)
     .not("thumbnail_url", "is", null);
 
-  if (error) {
-    console.warn("[repairExpiredCdnThumbnails] error fetching rows", { error: error.message });
-    return;
-  }
+  if (error) throw new FallaDeLaBase(error);
 
   const expiredIds = (data ?? [])
     .filter((row) => row.thumbnail_url && isInstagramCdnUrl(row.thumbnail_url as string))
@@ -421,10 +423,7 @@ async function repairExpiredCdnThumbnails(organizationId: string): Promise<void>
     .in("id", expiredIds)
     .eq("organization_id", organizationId);
 
-  if (updateError) {
-    console.warn("[repairExpiredCdnThumbnails] error nulling CDN URLs", { error: updateError.message });
-    return;
-  }
+  if (updateError) throw new FallaDeLaBase(updateError);
 
   console.log("[repairExpiredCdnThumbnails] cleaned up expired CDN URLs", {
     organizationId,

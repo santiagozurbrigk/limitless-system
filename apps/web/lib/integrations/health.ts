@@ -41,6 +41,11 @@ export type IntegrationIssue = {
 export type IntegrationHealth = {
   provider: IntegrationProvider;
   state: IntegrationState;
+  /**
+   * El estado no se pudo leer (`estadoSinLeer`, SCRUM-519): no se sabe si está
+   * conectada. No cuenta como conectada ni como sin conectar.
+   */
+  sinLeer?: boolean;
   /** Cuenta, canal o ubicación conectada, cuando el proveedor lo informa. */
   accountLabel: string | null;
   /**
@@ -139,6 +144,7 @@ export function estadoSinLeer(input: {
   return {
     provider: input.provider,
     state: "error",
+    sinLeer: true,
     accountLabel: null,
     lastSyncAt: null,
     records: null,
@@ -248,11 +254,38 @@ export type IntegrationsSummary = {
   notConnected: number;
 };
 
+/**
+ * ¿Cuenta como conectada? Una integración cuyo estado no se pudo leer no
+ * (SCRUM-519): tampoco cuenta como sin conectar, y su motivo se ve en
+ * "Requieren atención" (estado `error`).
+ */
+export function estaConectada(health: IntegrationHealth): boolean {
+  return health.state !== "not_connected" && !health.sinLeer;
+}
+
+export type FiltroDeIntegraciones = "todas" | "atencion" | "conectadas" | "sin_conectar";
+
+/** El filtro de la pantalla de Integraciones (`integrations-board.tsx`). */
+export function coincideConElFiltro(
+  health: IntegrationHealth,
+  filtro: FiltroDeIntegraciones,
+): boolean {
+  switch (filtro) {
+    case "atencion":
+      return health.state === "attention" || health.state === "error";
+    case "conectadas":
+      return estaConectada(health);
+    case "sin_conectar":
+      return health.state === "not_connected";
+    default:
+      return true;
+  }
+}
+
 export function summarize(healths: IntegrationHealth[]): IntegrationsSummary {
   return {
     total: healths.length,
-    connected: healths.filter((health) => health.state !== "not_connected")
-      .length,
+    connected: healths.filter(estaConectada).length,
     needAttention: healths.filter(
       (health) => health.state === "attention" || health.state === "error",
     ).length,

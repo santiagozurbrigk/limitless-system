@@ -2,8 +2,10 @@ import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import { leerTokenDeGoogle } from "@/lib/google/get-access-token";
 import {
   MOTIVO_DRIVE_ARCHIVO_GRANDE,
+  MOTIVO_DRIVE_BLOQUEADO_POR_EL_DOMINIO,
   MOTIVO_DRIVE_NO_CONECTADO,
   MOTIVO_DRIVE_NO_ENCONTRADO,
+  MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
   MOTIVO_DRIVE_SIN_PERMISOS,
 } from "@/lib/google/motivos-de-drive";
 import { ErrorEsperable } from "@/lib/server/error-esperable";
@@ -74,19 +76,44 @@ async function primerErrorDelCuerpo(
 }
 
 /**
- * Traduce una respuesta de Drive que no es 2xx. Según la guía de errores de la
- * API de Drive (`developers.google.com/workspace/drive/api/guides/handle-errors`,
- * copia en la evidencia de SCRUM-519):
+ * Los `reason` de un 403 que se le explican al usuario, con su texto. Salen de la
+ * guía de errores de la API de Drive
+ * (`developers.google.com/workspace/drive/api/guides/handle-errors`, copia en la
+ * evidencia de SCRUM-519, `fuentes-google/drive-handle-errors.txt`); sólo estos
+ * cuatro dicen que la cuenta de Google no puede leer el archivo y qué tiene que
+ * hacer el usuario:
+ *   - `appNotAuthorizedToFile`: la app no está en el ACL del archivo (la guía:
+ *     que el usuario lo abra con el selector o desde Drive).
+ *   - `insufficientFilePermissions`: la cuenta no tiene permiso sobre el archivo
+ *     (la guía: pedirle acceso al dueño).
+ *   - `teamDriveMembershipRequired`: la cuenta no es miembro de la unidad
+ *     compartida del archivo.
+ *   - `domainPolicy`: el administrador del dominio no deja que apps externas
+ *     usen Drive (la guía: pedirle acceso al administrador).
+ * Reconectar Google no arregla ninguno de los cuatro, así que no muestran el
+ * botón de reconectar.
+ */
+const MOTIVOS_DE_403: Record<string, string> = {
+  appNotAuthorizedToFile: MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
+  insufficientFilePermissions: MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
+  teamDriveMembershipRequired: MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
+  domainPolicy: MOTIVO_DRIVE_BLOQUEADO_POR_EL_DOMINIO,
+};
+
+/**
+ * Traduce una respuesta de Drive que no es 2xx, según la misma guía:
  *   - 401 `authError`: token vencido o inválido, y ya se intentó renovar
  *     (`getGoogleAccessTokenForOrganization` renueva antes de que venza): hay
- *     que reconectar. Motivo.
- *   - 403: "se superó un límite de uso o el usuario no tiene permisos; mirá el
- *     `reason`". Los límites de uso (dominio `usageLimits`:
- *     `userRateLimitExceeded`, `rateLimitExceeded`, `dailyLimitExceeded`) son
- *     una falla nuestra o pasajera: van a Sentry. El resto (`domainPolicy`,
- *     `appNotAuthorizedToFile`, `insufficientFilePermissions`...) es de
- *     permisos: motivo para reconectar, como antes. Un 403 sin cuerpo legible
- *     no se sabe qué es: falla.
+ *     que reconectar. Motivo con el botón de reconectar.
+ *   - 403 con un `reason` de `MOTIVOS_DE_403`: su motivo.
+ *   - Cualquier otro 403 es una falla que va a Sentry con su `reason`: los
+ *     límites de uso (dominio `usageLimits`: `userRateLimitExceeded`,
+ *     `dailyLimitExceeded`, `UrlLeaseLimitExceeded`), los que dicen que pedimos
+ *     mal el archivo (`fileNotDownloadable`: un archivo de Google bajado con
+ *     `alt=media`; `fileNotExportable`: un tipo que no se exporta así), los de
+ *     escrituras que esta app no hace y cualquier `reason` que la guía no
+ *     nombra o un cuerpo que no se puede leer. Antes todos se mostraban como
+ *     "Reconectá" y nadie se enteraba.
  *   - 404 `notFound`: el archivo no existe o la cuenta no lo puede leer. Motivo.
  *   - 429 y 5xx: pasajeros o de Google. Falla.
  */
@@ -94,9 +121,9 @@ export async function errorDeRespuestaDeDrive(res: Response, operacion: string):
   if (res.status === 401) return new ErrorEsperable(MOTIVO_DRIVE_SIN_PERMISOS);
   if (res.status === 404) return new ErrorEsperable(MOTIVO_DRIVE_NO_ENCONTRADO);
   if (res.status === 403) {
-    const { domain, reason } = await primerErrorDelCuerpo(res);
-    const esLimiteDeUso = domain === "usageLimits" || /RateLimitExceeded|dailyLimitExceeded/i.test(reason ?? "");
-    if (reason && !esLimiteDeUso) return new ErrorEsperable(MOTIVO_DRIVE_SIN_PERMISOS);
+    const { reason } = await primerErrorDelCuerpo(res);
+    const motivo = reason && Object.hasOwn(MOTIVOS_DE_403, reason) ? MOTIVOS_DE_403[reason] : null;
+    if (motivo) return new ErrorEsperable(motivo);
     return new FallaDeGoogleDrive(operacion, res.status, reason);
   }
   return new FallaDeGoogleDrive(operacion, res.status, null);

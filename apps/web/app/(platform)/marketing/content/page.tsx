@@ -3,7 +3,7 @@ import { maybeSyncZernioContentAction } from "@/app/marketing/content/sync-actio
 import { ContentPieceGrid } from "@/components/marketing/content-piece-grid";
 import { ContentDraftsLibrary } from "@/components/marketing/content-drafts-library";
 import { ContentTabSwitcher } from "@/components/marketing/content-tab-switcher";
-import { RefreshCw } from "lucide-react";
+import { EstadoDeSincronizacion } from "@/components/marketing/estado-de-sincronizacion";
 
 export default async function MarketingContentPage({
   searchParams,
@@ -17,8 +17,6 @@ export default async function MarketingContentPage({
   // falla, la página se dibuja igual y dice por qué no se sincronizó (antes no
   // decía nada, y una caída de Zernio no se registraba).
   const sincronizacion = await maybeSyncZernioContentAction();
-  const syncedAt = sincronizacion.success ? new Date() : null;
-  const motivoSinSincronizar = sincronizacion.success ? null : sincronizacion.error;
 
   const [pieces, drafts] = await Promise.all([
     getContentPiecesAction({ limit: 50 }),
@@ -45,21 +43,7 @@ export default async function MarketingContentPage({
                     {analyzedCount} analizadas con IA
                   </span>
                 ) : null}
-                {syncedAt ? (
-                  <span className="inline-flex items-center gap-1 text-[11px]">
-                    <RefreshCw className="h-3 w-3" aria-hidden />
-                    Sincronizado{" "}
-                    {syncedAt.toLocaleTimeString("es-AR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                ) : null}
-                {motivoSinSincronizar ? (
-                  <span className="inline-flex items-center gap-1 text-[11px]">
-                    Sin sincronizar: {motivoSinSincronizar}
-                  </span>
-                ) : null}
+                <EstadoDeSincronizacion resultado={sincronizacion} ahora={new Date()} />
               </>
             ) : (
               <span>

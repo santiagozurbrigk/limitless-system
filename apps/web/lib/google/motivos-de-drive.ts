@@ -9,13 +9,21 @@
 export const MOTIVO_DRIVE_NO_CONECTADO =
   "No hay conexión con Google Drive. Conectá tu cuenta de Google primero.";
 
-/**
- * Google rechazó el token (401: vencido o revocado) o la cuenta no tiene
- * permiso sobre el archivo (403 que no es un límite de uso). Se arregla
- * reconectando Google.
- */
+/** Google rechazó el token (401: vencido o revocado). Se arregla reconectando Google. */
 export const MOTIVO_DRIVE_SIN_PERMISOS =
   "Permisos insuficientes. Reconectá tu cuenta de Google con acceso completo a Drive.";
+
+/**
+ * 403 de Drive porque la cuenta de Google no puede leer ese archivo
+ * (`appNotAuthorizedToFile`, `insufficientFilePermissions`,
+ * `teamDriveMembershipRequired`). Reconectar no lo arregla.
+ */
+export const MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO =
+  "Tu cuenta de Google no tiene acceso a ese archivo. Pedile acceso a quien lo comparte o elegí otro.";
+
+/** 403 `domainPolicy`: el administrador del dominio no deja que apps externas usen Drive. */
+export const MOTIVO_DRIVE_BLOQUEADO_POR_EL_DOMINIO =
+  "El administrador de tu cuenta de Google Workspace no permite que otras apps accedan a Drive. Pedile que lo habilite.";
 
 /** 404 de Drive: el archivo no existe o la cuenta de Google no lo puede leer. */
 export const MOTIVO_DRIVE_NO_ENCONTRADO =
