@@ -110,11 +110,35 @@ PlatformDataProvider.listClientsAction()  ← select * de clients (incluye custo
 | Franja de la ficha | `getClientOverviewAction` | `app/clients/overview-actions.ts` |
 | 1-1 por link | `uploadOneOnOneFromShareLinkAction` → `fetchFathomShare` (página pública de Fathom, sin API key) → `finalizeAssociatedCall` | `app/fathom/manual-upload-actions.ts`, `lib/fathom/share-link.ts`. **No corre el clasificador**: el cliente lo eligió una persona |
 | Tareas desde la 1-1 | `lib/fathom/one-on-one-tasks.ts` (Claude) → `lib/clients/client-tasks.ts` | Marca `one_on_one_tasks_extracted_at` sólo si la respuesta se pudo leer. Reintento: `retryOneOnOneTasksAction` (`app/fathom/one-on-one-actions.ts`, botón «Buscar tareas») |
-| Tareas a mano | `create/update/toggle/delete/sendClientTaskToBoardAction` | `app/clients/task-actions.ts`. `sendClientTaskToBoardAction` crea un `workboard_tasks` y guarda `workboard_task_id` (no duplica) |
+| Tareas a mano | `create/update/toggle/delete/sendClientTaskToBoardAction` | `app/clients/task-actions.ts`. `sendClientTaskToBoardAction` crea un `workboard_tasks` y guarda `workboard_task_id` (no duplica); si el tablero no la crea es una falla (texto fijo y Sentry), porque `createWorkboardTasksAction` devuelve el texto crudo de la base |
 | Notas, satisfacción, seguimiento | `updateClientNotesAction`, `updateClientSatisfactionAction`, `updateClientTrackingAction`, `updateClientCurrentStatusAction` | `app/clients/tracking-actions.ts` |
 | Fase manual | `setClientManualStageAction` (valida que la fase sea de la org) | `app/clients/stage-actions.ts`. La UI llama `refreshClients()` después (recarga la lista entera) |
 | Llamadas sin asociar | `listPendingFathomCallsAction`, confirmación y siembra de identidades | `app/fathom/actions.ts`, `lib/fathom/identities.ts`, `lib/fathom/seed-identities.ts` |
 | Propuestas de hitos | cron `/api/cron/daily-signals` (07:20 UTC) | Ver doc de recorrido |
+
+### Errores como valor en carga y negocio (SCRUM-516)
+
+Las acciones de `import-actions.ts`, `onboarding-link-actions.ts`, `win-actions.ts`, `task-actions.ts`,
+`sub-client-actions.ts`, `revenue-actions.ts`, `plan-actions.ts` y `plan-duration-actions.ts` siguen el mismo
+contrato que `actions.ts` (SCRUM-497): corren dentro de `mutacionConErroresEsperables` y devuelven
+`MutationResult`. Vuelven con su motivo la validación, la sesión, el add-on `growth_partners` no habilitado
+(mismo texto que `requireAddOn`, como `ErrorEsperable`), ser founder (duraciones), un archivo que no se puede
+leer como planilla, un recurso inexistente o de otra org (`PGRST116`, `23503`), la tabla que falta y la clave
+de Claude rechazada o sin créditos. Lo demás se registra, va a Sentry (tag `server_action`) y el usuario ve el
+texto fijo.
+
+- Las lecturas que usan los componentes (tareas, clientes del cliente, onboarding, bandeja, facturación,
+  planes, duraciones) devuelven `MutationResult` y la pantalla muestra el motivo con `AvisoDeLecturaFallida`;
+  antes una falla se veía como "sin datos".
+- `listWinsAction`, `listClientBaselinesAction`, `listClientNichesAction` y `getRevenueByClientAction` las
+  componen la revisión semanal, el tablero de Clientes y la pantalla de Wins, que esperan el dato: siguen
+  devolviendo vacío ante una falla, pero la registran con `respaldoDeLectura` (`lib/server/lectura-degradable.ts`,
+  tag `lectura_degradada`). Si fallan las capturas o los usos, los wins se ven sin ellos.
+- Lecturas que antes se ignoraban y ahora cortan antes de escribir: el import de Excel no importa si no puede
+  leer los clientes existentes (duplicaría) o los planes; crear un link de onboarding no crea otro si no puede
+  leer el activo; borrar un win o una captura no borra la fila si Storage no borró el archivo.
+- Una ruta de Storage de otra org al registrar una captura es inesperada (señal de manipulación), como en el
+  Tablero.
 
 ## Integraciones externas
 
