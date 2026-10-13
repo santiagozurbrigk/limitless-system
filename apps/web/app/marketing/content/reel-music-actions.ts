@@ -5,13 +5,21 @@ import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paths } from "@/routes";
 import { soloRutasDeLaOrg } from "@/lib/storage/org-path";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
 
 const STORAGE_BUCKET = "trial-reels";
 const MAX_MUSIC_BYTES = 30 * 1024 * 1024; // 30 MB — más que suficiente para un track de fondo
 
+// Subir y borrar atrapan este rechazo y muestran su texto como antes; la
+// lectura de la ruta (SCRUM-502) lo devuelve como motivo.
 async function requireOrgId(): Promise<string> {
   const profile = await getCurrentProfile();
-  if (!profile?.organization_id) throw new Error("Sesión no válida");
+  if (!profile?.organization_id) throw new ErrorEsperable("Sesión no válida");
   return profile.organization_id;
 }
 
@@ -126,15 +134,19 @@ export async function deleteReelMusicAction(): Promise<ReelMusicDeleteResult> {
 }
 
 /**
- * Retorna el reel_music_path actual de la org.
+ * Retorna el reel_music_path actual de la org. Antes una falla de la lectura
+ * se devolvía como "sin música" (SCRUM-502).
  */
-export async function getReelMusicPathAction(): Promise<string | null> {
-  const organizationId = await requireOrgId();
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("organizations")
-    .select("reel_music_path")
-    .eq("id", organizationId)
-    .maybeSingle();
-  return (data?.reel_music_path as string | null | undefined) ?? null;
+export async function getReelMusicPathAction(): Promise<MutationResult<string | null>> {
+  return mutacionConErroresEsperables("[getReelMusicPath]", async () => {
+    const organizationId = await requireOrgId();
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("organizations")
+      .select("reel_music_path")
+      .eq("id", organizationId)
+      .maybeSingle();
+    if (error) throw new FallaDeLaBase(error);
+    return (data?.reel_music_path as string | null | undefined) ?? null;
+  });
 }
