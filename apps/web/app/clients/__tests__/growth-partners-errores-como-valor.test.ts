@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getRedirectError } from "next/dist/client/components/redirect";
+import { RedirectType } from "next/dist/client/components/redirect-error";
+import { DynamicServerError } from "next/dist/client/components/hooks-server-context";
 
 /**
  * SCRUM-516: los clientes de un cliente, su onboarding y la facturación de su
@@ -29,6 +32,7 @@ vi.mock("@/lib/auth/bootstrap", async () => {
   const { ErrorEsperable } = await import("@/lib/server/error-esperable");
   return {
     requireOrganizationId: async () => {
+      if (base.lanzaEnSesion) throw base.lanzaEnSesion;
       if (!base.sesion) throw new ErrorEsperable("Sesión no válida");
       return ORG;
     },
@@ -918,5 +922,32 @@ describe("⭐ cada consulta lleva el filtro de la organización de la sesión", 
     const r = (await correr()) as { success: boolean };
     expect(r.success).toBe(true);
     expect(base.filtrosDe(tabla, op, n)).toContainEqual(["organization_id", ORG]);
+  });
+});
+
+describe("lecturas con el add-on (MENOR-1 de la AR pasada 2)", () => {
+  it.each([
+    ["getGeneralOnboardingAction", () => getGeneralOnboardingAction(), { success: true, data: { link: null, pending: [] } }, ["client_onboarding_links", "client_onboarding_submissions"]],
+    ["listClientRevenueAction", () => listClientRevenueAction(CLIENTE), { success: true, data: [] }, ["client_revenue_entries"]],
+    ["getRevenueByClientAction", () => getRevenueByClientAction(), {}, ["client_revenue_entries"]],
+  ] as const)("⭐ %s sin el add-on: vacío, sin leer la tabla", async (_n, correr, vacio, tablas) => {
+    base.addOn = false;
+    await expect(correr()).resolves.toEqual(vacio);
+    expect(base.operaciones.filter((o) => (tablas as readonly string[]).includes(o.tabla))).toEqual([]);
+    expect(base.reportes).toEqual([]);
+  });
+});
+
+describe("getRevenueByClientAction, una lectura que no rechaza: lo interno de Next (MENOR-2 de la AR pasada 2)", () => {
+  const erroresDeNext = [
+    ["redirect", () => getRedirectError("/login", RedirectType.replace)],
+    ["ruta dinámica", () => new DynamicServerError("Route usó `cookies`")],
+  ] as const;
+
+  it.each(erroresDeNext)("⭐ el error de Next (%s) se relanza y no se registra", async (_e, crear) => {
+    const error = crear();
+    base.lanzaEnSesion = error;
+    await expect(getRevenueByClientAction()).rejects.toBe(error);
+    expect(base.reportes).toEqual([]);
   });
 });

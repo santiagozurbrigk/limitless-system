@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getRedirectError } from "next/dist/client/components/redirect";
+import { RedirectType } from "next/dist/client/components/redirect-error";
+import { DynamicServerError } from "next/dist/client/components/hooks-server-context";
 
 /**
  * SCRUM-517: las acciones del seguimiento de Clientes (recorrido, columnas
@@ -35,6 +38,7 @@ type Operacion = {
 const sim = vi.hoisted(() => ({
   reportes: [] as Array<{ error: unknown; contexto: unknown }>,
   sesion: true,
+  lanzaEnSesion: null as unknown,
   rol: "founder" as string | null,
   addOn: true,
   tablas: {} as Record<string, Fila[]>,
@@ -63,6 +67,7 @@ vi.mock("@/lib/auth/bootstrap", async () => {
   const isMissingColumnError = (msg: string) => /column\s+.+\s+does not exist/i.test(msg);
   return {
     requireOrganizationId: async () => {
+      if (sim.lanzaEnSesion) throw sim.lanzaEnSesion;
       if (!sim.sesion) throw new ErrorEsperable("Sesión no válida");
       return ORG;
     },
@@ -359,6 +364,7 @@ let aviso: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   sim.reportes = [];
   sim.sesion = true;
+  sim.lanzaEnSesion = null;
   sim.rol = "founder";
   sim.addOn = true;
   sim.errores = {};
@@ -1416,4 +1422,25 @@ describe("⭐ crear una propuesta (service role) exige cliente y checkpoint de l
       expect.objectContaining({ organizationId: ORG, clientId: CLIENTE, checkpointId: CHECKPOINT })
     );
   });
+});
+
+describe("lecturas que no rechazan: lo interno de Next se relanza (MENOR-2 de la AR pasada 2 de SCRUM-516)", () => {
+  const erroresDeNext = [
+    ["redirect", () => getRedirectError("/login", RedirectType.replace)],
+    ["ruta dinámica", () => new DynamicServerError("Route usó `cookies`")],
+  ] as const;
+  const LECTURAS = [
+    ["listFieldDefinitionsAction", () => listFieldDefinitionsAction("client")],
+    ["listClientTrackingAction", () => listClientTrackingAction()],
+  ] as const;
+
+  it.each(LECTURAS.flatMap(([n, correr]) => erroresDeNext.map(([e, crear]) => [n, e, correr, crear] as const)))(
+    "⭐ %s: el error de Next (%s) se relanza y no se registra",
+    async (_n, _e, correr, crear) => {
+      const error = crear();
+      sim.lanzaEnSesion = error;
+      await expect(correr()).rejects.toBe(error);
+      expect(sim.reportes).toEqual([]);
+    }
+  );
 });

@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getRedirectError } from "next/dist/client/components/redirect";
+import { RedirectType } from "next/dist/client/components/redirect-error";
+import { DynamicServerError } from "next/dist/client/components/hooks-server-context";
 
 /**
  * SCRUM-516: los wins devuelven sus errores esperables como valor. Antes, con
@@ -28,6 +31,7 @@ vi.mock("@/lib/auth/bootstrap", async () => {
   const { ErrorEsperable } = await import("@/lib/server/error-esperable");
   return {
     requireOrganizationId: async () => {
+      if (base.lanzaEnSesion) throw base.lanzaEnSesion;
       if (!base.sesion) throw new ErrorEsperable("Sesión no válida");
       return ORG;
     },
@@ -609,4 +613,33 @@ describe("⭐ cada consulta lleva el filtro de la organización de la sesión (M
     await expect(correr()).resolves.toEqual({ success: true, data: undefined });
     expect(base.filtrosDe("win_attachments", op)).toContainEqual(["organization_id", ORG]);
   });
+});
+
+describe("lecturas que no rechazan: sin sesión y lo interno de Next (MENOR-2 de la AR pasada 2)", () => {
+  const LECTURAS = [
+    ["listWinsAction", () => listWinsAction(), []],
+    ["listClientBaselinesAction", () => listClientBaselinesAction(), {}],
+    ["listClientNichesAction", () => listClientNichesAction(), {}],
+  ] as const;
+  const erroresDeNext = [
+    ["redirect", () => getRedirectError("/login", RedirectType.replace)],
+    ["ruta dinámica", () => new DynamicServerError("Route usó `cookies`")],
+  ] as const;
+
+  it.each(LECTURAS)("⭐ %s sin sesión: vacío y sin registrar", async (_n, correr, vacio) => {
+    base.sesion = false;
+    await expect(correr()).resolves.toEqual(vacio);
+    expect(base.reportes).toEqual([]);
+    expect(aviso).not.toHaveBeenCalled();
+  });
+
+  it.each(LECTURAS.flatMap(([n, correr]) => erroresDeNext.map(([e, crear]) => [n, e, correr, crear] as const)))(
+    "⭐ %s: el error de Next (%s) se relanza y no se registra",
+    async (_n, _e, correr, crear) => {
+      const error = crear();
+      base.lanzaEnSesion = error;
+      await expect(correr()).rejects.toBe(error);
+      expect(base.reportes).toEqual([]);
+    }
+  );
 });

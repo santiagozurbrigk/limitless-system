@@ -51,6 +51,8 @@ export const base = {
     borrados: [] as string[],
   },
   sesion: true,
+  /** Si está, `requireOrganizationId` lanza esto (un error interno de Next, por ejemplo). */
+  lanzaEnSesion: null as unknown,
   addOn: true,
   perfil: { id: "yo", role: "founder" } as { id: string; role: string } | null,
   reportes: [] as Array<{ error: unknown; contexto: unknown }>,
@@ -65,6 +67,7 @@ export const base = {
     this.operaciones = [];
     this.storage = { error: null, borrados: [] };
     this.sesion = true;
+    this.lanzaEnSesion = null;
     this.addOn = true;
     this.perfil = { id: "yo", role: "founder" };
     this.reportes = [];
