@@ -242,6 +242,15 @@ describe("getMarketingOverviewContextAction", () => {
     esperarFallaRegistrada("[getMarketingOverviewContext]");
   });
 
+  it("⭐ si falla la audiencia de Instagram, texto fijo (antes eran 0 seguidores)", async () => {
+    base.errores.instagram_integrations = FETCH_FAILED;
+    await expect(getMarketingOverviewContextAction()).resolves.toEqual({
+      success: false,
+      error: TEXTO_FIJO,
+    });
+    esperarFallaRegistrada("[getMarketingOverviewContext]");
+  });
+
   it("si falla el contenido, texto fijo", async () => {
     base.errores.content_assets = FETCH_FAILED;
     await expect(getMarketingOverviewContextAction()).resolves.toEqual({

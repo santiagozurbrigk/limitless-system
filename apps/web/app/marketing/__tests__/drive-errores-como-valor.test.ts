@@ -53,8 +53,10 @@ import {
 } from "@/lib/google/get-access-token";
 import {
   MOTIVO_DRIVE_ARCHIVO_GRANDE,
+  MOTIVO_DRIVE_BLOQUEADO_POR_EL_DOMINIO,
   MOTIVO_DRIVE_NO_CONECTADO,
   MOTIVO_DRIVE_NO_ENCONTRADO,
+  MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
   MOTIVO_DRIVE_SIN_PERMISOS,
 } from "@/lib/google/motivos-de-drive";
 import { GOOGLE_FORMS_DRIVE_SCOPES } from "@/lib/google/scopes";
@@ -208,22 +210,46 @@ describe("listDriveFilesAction y listDriveFilesSafeAction", () => {
     expect(base.reportes).toEqual([]);
   });
 
-  it("un 403 de permisos (insufficientFilePermissions) es el motivo para reconectar", async () => {
+  it.each([
+    ["appNotAuthorizedToFile", MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO],
+    ["insufficientFilePermissions", MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO],
+    ["teamDriveMembershipRequired", MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO],
+    ["domainPolicy", MOTIVO_DRIVE_BLOQUEADO_POR_EL_DOMINIO],
+  ])("⭐ un 403 %s es su motivo (no «Reconectá»), sin registrar", async (reason, motivo) => {
+    sim.respuestas = [errorDeDrive(403, reason)];
+    await expect(listDriveFilesAction()).resolves.toEqual({ success: false, error: motivo });
+    expect(base.reportes).toEqual([]);
+  });
+
+  it("el selector no ofrece reconectar para un archivo sin acceso", async () => {
     sim.respuestas = [errorDeDrive(403, "insufficientFilePermissions")];
-    await expect(listDriveFilesAction()).resolves.toEqual({
-      success: false,
-      error: MOTIVO_DRIVE_SIN_PERMISOS,
+    await expect(listDriveFilesSafeAction()).resolves.toEqual({
+      ok: false,
+      errorCode: "OTHER",
+      message: MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
     });
   });
 
-  it.each(["userRateLimitExceeded", "dailyLimitExceeded"])(
-    "⭐ un 403 por límite de uso (%s) es una falla, no un problema de permisos",
-    async (reason) => {
-      sim.respuestas = [errorDeDrive(403, reason, "usageLimits")];
-      await expect(listDriveFilesAction()).resolves.toEqual({ success: false, error: TEXTO_FIJO });
-      esperarFallaRegistrada("[listDriveFiles]");
-    }
-  );
+  it.each([
+    ["userRateLimitExceeded", "usageLimits"],
+    ["dailyLimitExceeded", "usageLimits"],
+    // Dominio de límite de uso con un `reason` que no dice "RateLimit" (AR1).
+    ["UrlLeaseLimitExceeded", "usageLimits"],
+    // Pedimos mal el archivo, según la guía (MAY-1 de la AR pasada 1).
+    ["fileNotDownloadable", "global"],
+    ["fileNotExportable", "global"],
+    // No están en la guía: un `reason` desconocido no es de permisos (AR2).
+    ["exportSizeLimitExceeded", "global"],
+    ["cannotDownloadAbusiveFile", "global"],
+    ["algoNuevoDeGoogle", "global"],
+  ])("⭐ un 403 %s (%s) es una falla con su reason, no un problema de permisos", async (reason, domain) => {
+    sim.respuestas = [errorDeDrive(403, reason, domain)];
+    await expect(listDriveFilesAction()).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+    esperarFallaRegistrada("[listDriveFiles]");
+    expect((base.reportes[0].error as Error).message).toBe(
+      `Google Drive listar archivos: HTTP 403 (${reason})`
+    );
+  });
 
   it("un 403 sin cuerpo legible es una falla", async () => {
     sim.respuestas = [new Response("<html>", { status: 403 })];
@@ -378,15 +404,24 @@ describe("downloadDriveFileAction y descargarArchivoDeDrive", () => {
     expect(sim.pedidos).toHaveLength(1);
   });
 
-  it("un 403 de permisos en la descarga es el motivo para reconectar", async () => {
+  it("un 403 de acceso en la descarga es su motivo", async () => {
     sim.respuestas = [
       json({ id: "f1", name: "Reel.mp4", mimeType: "video/mp4" }),
       errorDeDrive(403, "appNotAuthorizedToFile"),
     ];
     await expect(downloadDriveFileAction("f1")).resolves.toEqual({
       success: false,
-      error: MOTIVO_DRIVE_SIN_PERMISOS,
+      error: MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
     });
+  });
+
+  it("⭐ un archivo de Google que no se puede bajar así (fileNotDownloadable) es una falla", async () => {
+    sim.respuestas = [
+      json({ id: "g1", name: "Dibujo", mimeType: "application/vnd.google-apps.drawing" }),
+      errorDeDrive(403, "fileNotDownloadable"),
+    ];
+    await expect(downloadDriveFileAction("g1")).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+    esperarFallaRegistrada("[downloadDriveFile]");
   });
 
   it("un 500 en la descarga es una falla", async () => {

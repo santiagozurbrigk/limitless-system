@@ -18,6 +18,8 @@ const sim = vi.hoisted(() => ({
   posts: [] as unknown[],
   falla: null as null | (() => Error),
   fallaSoloLaPrimeraCuenta: false,
+  /** Si está, la falla de cada cuenta (las que no figuran responden bien). */
+  fallaPorCuenta: null as null | Record<string, () => Error>,
   clientes: [] as string[],
 }));
 
@@ -44,6 +46,8 @@ vi.mock("@/lib/zernio/integration", () => ({
 vi.mock("@/lib/zernio/client", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/zernio/client")>();
   const leer = async (accountId: string) => {
+    const propia = sim.fallaPorCuenta?.[accountId];
+    if (propia) throw propia();
     if (sim.falla && (!sim.fallaSoloLaPrimeraCuenta || accountId === "cuenta-1")) throw sim.falla();
     return { posts: sim.posts };
   };
@@ -107,6 +111,7 @@ beforeEach(() => {
   sim.posts = [post("ig-nuevo"), post("ig-existente")];
   sim.falla = null;
   sim.fallaSoloLaPrimeraCuenta = false;
+  sim.fallaPorCuenta = null;
   sim.clientes = [];
   base.tablas.content_pieces = [
     // Una pieza de otra org con el mismo id de plataforma: sin el filtro por
@@ -212,6 +217,18 @@ describe("syncZernioContentAction", () => {
     );
   });
 
+  it("⭐ con una cuenta en 401 y otra en 502, el motivo para reconectar (la clave es de toda la org)", async () => {
+    sim.fallaPorCuenta = {
+      "cuenta-1": () => new ZernioHttpError("Zernio syncExternalPosts: HTTP 401 — invalid key", 401),
+      "cuenta-2": () => new ZernioHttpError("Zernio syncExternalPosts: HTTP 502 — bad gateway", 502),
+    };
+    await expect(syncZernioContentAction()).resolves.toEqual({
+      success: false,
+      error: CLAVE_RECHAZADA,
+    });
+    expect(base.reportes).toEqual([]);
+  });
+
   it("si falla sólo una cuenta, sincroniza lo que llegó (como antes)", async () => {
     sim.falla = () => new TypeError("fetch failed");
     sim.fallaSoloLaPrimeraCuenta = true;
@@ -299,6 +316,39 @@ describe("maybeSyncZernioContentAction", () => {
       ["organization_id", ORG],
       ["not:thumbnail_url", null],
     ]);
+  });
+
+  it.each([
+    ["la escritura", "content_pieces:update"],
+    ["la lectura", "content_pieces:select:filas"],
+  ])("⭐ si falla %s de la reparación de miniaturas, la sync sigue y la falla va a Sentry", async (_caso, clave) => {
+    const CDN = "https://scontent.cdninstagram.com/v/vencida.jpg";
+    base.tablas.content_pieces = [
+      { id: "p", organization_id: ORG, source: "zernio", updated_at: RECIENTE, thumbnail_url: CDN },
+    ];
+    // El conteo y la última pieza no son lecturas `filas` con thumbnail: para
+    // la lectura, el error también pega en la de la última pieza; por eso sólo
+    // se mira que la reparación quede registrada.
+    base.errores[clave] = FETCH_FAILED;
+    await maybeSyncZernioContentAction();
+    await vi.waitFor(() =>
+      expect(base.reportes.map((r) => r.contexto)).toContainEqual({
+        accion: "[maybeSyncZernioContent] reparar miniaturas",
+      })
+    );
+    expect(consola).toHaveBeenCalledWith("[maybeSyncZernioContent] reparar miniaturas", expect.anything());
+  });
+
+  it("si falla la escritura de la reparación, la sync responde igual", async () => {
+    const CDN = "https://scontent.cdninstagram.com/v/vencida.jpg";
+    base.tablas.content_pieces = [
+      { id: "p", organization_id: ORG, source: "zernio", updated_at: RECIENTE, thumbnail_url: CDN },
+    ];
+    base.errores["content_pieces:update"] = FETCH_FAILED;
+    await expect(maybeSyncZernioContentAction()).resolves.toEqual({
+      success: true,
+      data: { sincronizo: false },
+    });
   });
 
   it("sin perfil (sin sesión), el motivo", async () => {

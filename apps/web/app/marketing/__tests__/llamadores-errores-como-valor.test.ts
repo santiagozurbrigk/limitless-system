@@ -13,7 +13,6 @@ const sim = vi.hoisted(() => ({
   distribucion: null as unknown,
   resumen: null as unknown,
   activos: null as unknown,
-  sincronizacion: null as unknown,
   youtube: null as unknown,
 }));
 
@@ -30,22 +29,15 @@ vi.mock("@/components/marketing/marketing-overview", () => ({
   MarketingOverview: (props: unknown) => props,
 }));
 vi.mock("@/app/marketing/utm-actions", () => ({
-  getUTMLinksAction: async () => [],
+  getUTMLinksAction: async () => [{ id: "link-1", utm_campaign: "lanzamiento" }],
   getOrganizationWebsiteAction: async () => null,
 }));
 vi.mock("@/components/marketing/utm-page-content", () => ({
   UTMPageContent: (props: unknown) => props,
 }));
-vi.mock("@/app/marketing/content/sync-actions", () => ({
-  maybeSyncZernioContentAction: async () => sim.sincronizacion,
-}));
-vi.mock("@/app/marketing/content/actions", () => ({
-  getContentPiecesAction: async () => [],
-  getContentDraftsAction: async () => [],
-}));
-vi.mock("@/components/marketing/content-piece-grid", () => ({ ContentPieceGrid: () => null }));
-vi.mock("@/components/marketing/content-drafts-library", () => ({ ContentDraftsLibrary: () => null }));
-vi.mock("@/components/marketing/content-tab-switcher", () => ({ ContentTabSwitcher: () => null }));
+// La página de Contenido no se renderiza acá: también lee las piezas de
+// SCRUM-502, cuyo contrato cambia en paralelo. Se prueba el componente que
+// dibuja el estado de la sincronización (`EstadoDeSincronizacion`).
 vi.mock("@/app/marketing/content/pattern-report-actions", () => ({
   generateContentPatternReportAction: vi.fn(),
   getLatestContentPatternReportAction: vi.fn(),
@@ -103,7 +95,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import MarketingPage from "@/app/(platform)/marketing/page";
 import MarketingUTMsPage from "@/app/(platform)/marketing/utms/page";
-import MarketingContentPage from "@/app/(platform)/marketing/content/page";
+import { EstadoDeSincronizacion } from "@/components/marketing/estado-de-sincronizacion";
 import { EmptyState } from "@/components/shared/empty-state";
 import { getIntegrationsOverviewAction } from "@/app/integrations/actions";
 import { leerInstagramConectado } from "@/providers/marketing-data-provider";
@@ -111,12 +103,16 @@ import { estadoDeLaCarpeta } from "@/components/marketing/drive-admin-view";
 import { leerUltimoReporte } from "@/components/marketing/marketing-sales-connection";
 import { ContentPatternReport } from "@/components/marketing/content-pattern-report";
 import {
+  MOTIVO_DRIVE_BLOQUEADO_POR_EL_DOMINIO,
   MOTIVO_DRIVE_NO_CONECTADO,
   MOTIVO_DRIVE_NO_ENCONTRADO,
+  MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
   MOTIVO_DRIVE_SIN_PERMISOS,
 } from "@/lib/google/motivos-de-drive";
-import { estadoSinLeer } from "@/lib/integrations/health";
+import { coincideConElFiltro as matches, estadoSinLeer } from "@/lib/integrations/health";
 import { ERROR_INESPERADO } from "@/lib/client/correr-accion";
+
+const LINKS = [{ id: "link-1", utm_campaign: "lanzamiento" }];
 
 const DISTRIBUCION = {
   counts: { AUTORIDAD: 0, ATRACCION: 0, NUTRICION: 0, VENTA: 0 },
@@ -130,7 +126,6 @@ beforeEach(() => {
   sim.distribucion = { success: true, data: DISTRIBUCION };
   sim.resumen = { success: true, data: { assets: [] } };
   sim.activos = { success: true, data: [] };
-  sim.sincronizacion = { success: true, data: { sincronizo: true } };
   sim.youtube = { success: true, data: { connected: true, channelName: "Mi canal", lastSyncAt: null } };
   consola = vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -170,40 +165,56 @@ describe("/marketing/utms", () => {
         { id: "b", platform: "instagram" },
       ],
     };
-    const contenido = hijos((await MarketingUTMsPage()) as ReactElement)[1] as ReactElement<{
+    const contenido = hijos((await MarketingUTMsPage()) as ReactElement)[2] as ReactElement<{
       youtubeVideos: Array<{ id: string }>;
     }>;
     expect(contenido.props.youtubeVideos.map((v) => v.id)).toEqual(["a"]);
   });
 
-  it("⭐ si la lista de videos falla, el motivo en vez de «sin videos»", async () => {
-    sim.activos = { success: false, error: "Sesión no válida" };
-    const aviso = hijos((await MarketingUTMsPage()) as ReactElement)[1] as ReactElement<{
-      title: string;
-      description: string;
-    }>;
+  it("con los videos bien, no hay aviso", async () => {
+    expect(hijos((await MarketingUTMsPage()) as ReactElement)[1]).toBeNull();
+  });
+
+  it("⭐ si la lista de videos falla, el aviso con el motivo y los links UTM se siguen viendo", async () => {
+    sim.activos = { success: false, error: ERROR_INESPERADO };
+    const [, aviso, contenido] = hijos((await MarketingUTMsPage()) as ReactElement) as [
+      unknown,
+      ReactElement<{ title: string; description: string }>,
+      ReactElement<{ initialLinks: unknown[]; youtubeVideos: unknown[] }>,
+    ];
     expect(aviso.type).toBe(EmptyState);
-    expect(aviso.props.description).toBe("Sesión no válida");
+    expect(aviso.props).toMatchObject({
+      title: "No se pudieron cargar los videos de YouTube",
+      description: ERROR_INESPERADO,
+    });
+    expect(contenido.props.initialLinks).toEqual(LINKS);
+    expect(contenido.props.youtubeVideos).toEqual([]);
   });
 });
 
-describe("/marketing/content", () => {
-  async function html() {
-    const el = await MarketingContentPage({ searchParams: Promise.resolve({}) });
-    return renderToStaticMarkup(el);
-  }
+describe("/marketing/content: estado de la sincronización", () => {
+  const ahora = new Date("2026-10-13T15:30:00Z");
 
-  it("con la sincronización bien, dice cuándo sincronizó", async () => {
-    const pagina = await html();
-    expect(pagina).toContain("Sincronizado");
-    expect(pagina).not.toContain("Sin sincronizar");
+  it("con la sincronización bien, dice cuándo sincronizó", () => {
+    const html = renderToStaticMarkup(
+      createElement(EstadoDeSincronizacion, {
+        resultado: { success: true, data: { sincronizo: true } },
+        ahora,
+      })
+    );
+    expect(html).toContain("Sincronizado");
+    expect(html).not.toContain("Sin sincronizar");
   });
 
-  it("⭐ si la sincronización devuelve un motivo, la página lo dice", async () => {
-    sim.sincronizacion = { success: false, error: "Zernio no está conectado" };
-    const pagina = await html();
-    expect(pagina).toContain("Sin sincronizar: Zernio no está conectado");
-    expect(pagina).not.toContain("Sincronizado");
+  it("⭐ si la sincronización devuelve un motivo, lo dice y no dice «Sincronizado»", () => {
+    const html = renderToStaticMarkup(
+      createElement(EstadoDeSincronizacion, {
+        resultado: { success: false, error: "Zernio no está conectado" },
+        ahora,
+      })
+    );
+    expect(html).toContain("Sin sincronizar: Zernio no está conectado");
+    expect(html).not.toContain("Sincronizado");
   });
 });
 
@@ -225,6 +236,21 @@ describe("Integraciones: YouTube", () => {
     );
     expect(youtube?.state).toBe("error");
     expect(youtube?.issues[0].message).toContain(ERROR_INESPERADO);
+  });
+
+  it("⭐ YouTube sin leer no suma como conectada ni como sin conectar, y requiere atención", async () => {
+    const conectada = await getIntegrationsOverviewAction();
+    sim.youtube = { success: false, error: ERROR_INESPERADO };
+    const sinLeer = await getIntegrationsOverviewAction();
+    expect(sinLeer.summary.connected).toBe(conectada.summary.connected - 1);
+    expect(sinLeer.summary.notConnected).toBe(conectada.summary.notConnected);
+    expect(sinLeer.summary.needAttention).toBe(conectada.summary.needAttention + 1);
+    const youtube = sinLeer.healths.find((h) => h.provider === "youtube")!;
+    expect(matches(youtube, "conectadas")).toBe(false);
+    expect(matches(youtube, "sin_conectar")).toBe(false);
+    expect(matches(youtube, "atencion")).toBe(true);
+    const youtubeConectado = conectada.healths.find((h) => h.provider === "youtube")!;
+    expect(matches(youtubeConectado, "conectadas")).toBe(true);
   });
 });
 
@@ -282,7 +308,12 @@ describe("Administrar contenido (Drive)", () => {
     });
   });
 
-  it.each([MOTIVO_DRIVE_NO_ENCONTRADO, ERROR_INESPERADO])(
+  it.each([
+    MOTIVO_DRIVE_NO_ENCONTRADO,
+    MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
+    MOTIVO_DRIVE_BLOQUEADO_POR_EL_DOMINIO,
+    ERROR_INESPERADO,
+  ])(
     "otro motivo (%s) se muestra sin botón",
     (motivo) => {
       expect(estadoDeLaCarpeta({ ok: false, motivo })).toMatchObject({
