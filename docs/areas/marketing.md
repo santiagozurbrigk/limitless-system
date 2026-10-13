@@ -304,15 +304,22 @@ como JSON.
   créditos, vuelven con su motivo. Lo demás (la base, la red, Google, Zernio o Claude que fallan) va a la
   consola y a Sentry con la etiqueta de la acción y el usuario ve el texto fijo. Ninguna lectura esconde una
   falla: el contenido ya no es una lista vacía, el estado de YouTube o Instagram ya no es "no conectado" y la
-  audiencia y los turnos del resumen ya no son cero. Las pantallas muestran el motivo: `/marketing` y
-  `/marketing/utms` con un aviso, Integraciones con la tarjeta de YouTube en error ("No se pudo leer el estado
-  de esta integración", `estadoSinLeer` de `lib/integrations/health.ts`), el provider de Marketing deja
+  audiencia y los turnos del resumen ya no son cero. Las pantallas muestran el motivo: `/marketing` con un
+  aviso; `/marketing/utms` con un aviso arriba y los links UTM igual (el generador queda con el título manual);
+  Integraciones con la tarjeta de YouTube en error ("No se pudo leer el estado de esta integración",
+  `estadoSinLeer` de `lib/integrations/health.ts`), que no cuenta como conectada ni como sin conectar
+  (`estaConectada`, `sinLeer`) y aparece en "Requieren atención"; el provider de Marketing deja
   `instagramConnected` en `null` (no se pudo leer), Administrar y el selector de Drive con el motivo y el botón
   que corresponde, la etiqueta, el minuto del CTA y los patrones en su propio aviso.
 - **Drive: qué es motivo y qué es falla.** Según la guía de errores de la API de Drive (copia en la evidencia de
-  SCRUM-519): 401 (token vencido o revocado, ya se intentó renovar) y 403 por permisos (`domainPolicy`,
-  `appNotAuthorizedToFile`, `insufficientFilePermissions`...) son el motivo para reconectar Google; 404 es "no
-  encontramos el archivo"; un 403 por límite de uso (`usageLimits`), 429 y 5xx son fallas. Si falla la lectura
+  SCRUM-519, `fuentes-google/`): 401 (token vencido o revocado, ya se intentó renovar) es el motivo para
+  reconectar Google; un 403 sólo es motivo para los cuatro `reason` de acceso que la guía nombra, cada uno con
+  su texto y sin el botón de reconectar (`appNotAuthorizedToFile`, `insufficientFilePermissions` y
+  `teamDriveMembershipRequired`: "Tu cuenta de Google no tiene acceso a ese archivo…"; `domainPolicy`: el
+  administrador de Google Workspace no lo permite); 404 es "no encontramos el archivo". Todo otro 403 es una
+  falla que va a Sentry con su `reason`: los límites de uso (`usageLimits`), los que dicen que pedimos mal el
+  archivo (`fileNotDownloadable`, `fileNotExportable`) y cualquier `reason` que la guía no nombra; también 429 y
+  5xx. Si falla la lectura
   de `google_forms_integrations`, es una falla y no "no conectado" (`leerTokenDeGoogle`; la de siempre,
   `getGoogleAccessTokenForOrganization`, la sigue usando Contexto del negocio). Lo común está en
   `lib/google/drive-archivos.ts` y los motivos en `lib/google/motivos-de-drive.ts`. El análisis de una pieza
@@ -321,7 +328,9 @@ como JSON.
   (`syncExternalPosts` y `listPublishedPosts` de todas las cuentas), la sync devuelve un error en vez de "0
   piezas": con 401 o 403 (`esErrorDeAcceso`), el motivo para reconectar Zernio; si no, una falla con el status
   y sin el cuerpo de la respuesta. Que falle una parte (una cuenta, las historias) sigue siendo un aviso en el
-  log. Las tareas de fondo (métricas, reparar miniaturas) registran su falla en Sentry.
+  log. Las tareas de fondo no cortan la sincronización y registran su falla en la consola y en Sentry: las
+  métricas (`syncContentMetricsForOrg`) y la reparación de miniaturas vencidas, que lanza `FallaDeLaBase` si
+  falla su lectura o su escritura.
 - **UTM:** `youtube_video_id` debe ser el external id de YouTube; `resolveYoutubeVideoExternalId` convierte el
   UUID de `content_assets` si llega. La atribución de booking/venta es por coincidencia de email o nombre.
 - **Overview y Conexión con Ventas leen fuentes legacy:** los KPIs, funnel y heatmap del Overview salen de

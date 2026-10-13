@@ -1881,22 +1881,28 @@ Fuente: PENDIENTES.md [CALENDLY-TESTS] · Doc del área: docs/areas/ventas.md",C
 *Dónde:* {{apps/web/app/api/utm/{track,click}/route.ts}}, {{apps/web/lib/utm/track-lead.ts}}.
 
 Fuente: PENDIENTES.md [UTM-PUBLICO-ORG-EN-CUERPO] · Doc del área: docs/areas/marketing.md",UTM-PUBLICO-ORG-EN-CUERPO,Marketing,P2,Media,seguridad
-[MKT-VINCULAR-DRIVE-IGNORA-RESULTADO] Vincular un archivo de Drive descarta lo que devuelve la escritura,Bug,Medium,marketing,p2,bug,,,,"*Tipo:* bug
+[MKT-VINCULAR-DRIVE-IGNORA-RESULTADO] Vincular un archivo de Drive descarta lo que devuelve la escritura,Bug,Medium,marketing,p2,sev-media,bug,,,"*Tipo:* bug
 
-*Estado verificado:* {{linkDriveFileToContentAction}} y {{unlinkDriveFileAction}} ({{app/marketing/content/drive-actions.ts}}) esperan {{updateContentPieceAction}} ({{app/marketing/content/actions.ts}}, alcance de SCRUM-502) y no miran lo que devuelve. Hoy esa acción lanza, así que un rechazo llega como el digest de Next y Administrar avisa ""Error al vincular"" con ese texto. Si pasa a {{MutationResult}} sin cambiar estas dos, el {{await}} ignora el {{{ success: false }}} y Administrar avisa ""Archivo vinculado"" sin haber vinculado nada; {{tsc}} no lo marca. Visto al hacer SCRUM-519.
+*Severidad:* Media
 
-*Qué hay que hacer:* al pasar {{updateContentPieceAction}} a {{MutationResult}}, que las dos devuelvan su resultado y que {{drive-admin-view.tsx}} (y el detalle de la pieza) lo corran con {{correrMutacion}}.
+*Estado verificado:* {{linkDriveFileToContentAction}} y {{unlinkDriveFileAction}} ({{app/marketing/content/drive-actions.ts}}, alcance de SCRUM-519) hacen {{await updateContentPieceAction(...)}} ({{app/marketing/content/actions.ts}}, alcance de SCRUM-502) sin mirar lo que devuelve. Hoy {{updateContentPieceAction}} lanza, así que un rechazo llega a Administrar como el digest de Next (""Error al vincular"" con ese texto). SCRUM-502 la pasa a {{MutationResult}}: desde que las dos ramas estén en {{main}}, el {{await}} ignora el {{{ success: false }}} y las dos acciones terminan bien aunque no se guardó nada; {{tsc}} no lo marca. La falla de la base queda registrada en Sentry por {{updateContentPieceAction}} ({{[updateContentPiece]}}), pero el usuario no se entera. SCRUM-502 registró el mismo ítem con este ID: al integrar, queda uno solo.
+
+*Riesgo:* si la base falla al vincular o desvincular un archivo de Drive (o el id no es válido), entonces Administrar avisa ""Archivo vinculado"" (o el detalle de la pieza lo da por desvinculado) aunque no se guardó nada; al refrescar, la pieza sigue como estaba.
+
+*Impacto:* quienes vinculan archivos de Drive desde Administrar o desde el detalle de una pieza, sólo cuando la escritura falla o el id es inválido; no pierde datos ni abre accesos.
+
+*Qué hay que hacer:* que las dos acciones devuelvan el {{MutationResult}} de {{updateContentPieceAction}} y que {{drive-admin-view.tsx}} y {{content-piece-detail.tsx}} las corran con {{correrMutacion}} (motivo o texto fijo, sin ""Archivo vinculado"" si falló), con test de cada una y del aviso. Lo hace la rama que se integre segunda (la de SCRUM-502, que trae el contrato nuevo).
 
 *Dónde:* {{apps/web/app/marketing/content/drive-actions.ts}}, {{apps/web/components/marketing/drive-admin-view.tsx}}, {{apps/web/components/marketing/content-piece-detail.tsx}}.
 
-Fuente: PENDIENTES.md [MKT-VINCULAR-DRIVE-IGNORA-RESULTADO] · Doc del área: docs/areas/marketing.md",MKT-VINCULAR-DRIVE-IGNORA-RESULTADO,Marketing,P2,,bug
+Fuente: PENDIENTES.md [MKT-VINCULAR-DRIVE-IGNORA-RESULTADO] · Doc del área: docs/areas/marketing.md",MKT-VINCULAR-DRIVE-IGNORA-RESULTADO,Marketing,P2,Media,bug
 [MKT-LECTURAS-QUE-ESCONDEN-FALLAS] Lecturas de Marketing fuera del conteo que siguen escondiendo la falla,Bug,Medium,marketing,p2,bug,,,,"*Tipo:* bug
 
-*Estado verificado:* el conteo de {{[ACTIONS-ERRORES-EN-PRODUCCION]}} no ve las lecturas que atrapan todo. En {{app/marketing/actions.ts}}, {{getSalesContentRankAction}} y {{getClosedBuyerJourneysAction}} devuelven {{[]}} ante cualquier error (Conexión con Ventas dice ""Todavía no hay ventas atribuibles a contenido"") y {{getContentPatternsAnalysisAction}} (sin llamadores) también. {{getUTMLinksAction}} ({{utm-actions.ts}}, SCRUM-520) devuelve {{[]}} si la base falla y el resumen de Marketing la usa para la tarjeta de UTMs. {{recomputeContentAssetAttribution}} ({{lib/marketing/content-attribution.ts}}) no mira el error de sus lecturas. {{getRetentionAtCTA}} ({{lib/youtube/analytics.ts}}) cae en la retención estimada ante cualquier error, también una falla de la base o de YouTube. En Integraciones, {{summarize}} ({{lib/integrations/health.ts}}) cuenta como conectada una integración cuyo estado no se pudo leer ({{estadoSinLeer}}, estado {{error}}). Visto al hacer SCRUM-519; no estaba en su alcance.
+*Estado verificado:* el conteo de {{[ACTIONS-ERRORES-EN-PRODUCCION]}} no ve las lecturas que atrapan todo. En {{app/marketing/actions.ts}}, {{getSalesContentRankAction}} y {{getClosedBuyerJourneysAction}} devuelven {{[]}} ante cualquier error (Conexión con Ventas dice ""Todavía no hay ventas atribuibles a contenido"") y {{getContentPatternsAnalysisAction}} (sin llamadores) también. {{getUTMLinksAction}} ({{utm-actions.ts}}, SCRUM-520) devuelve {{[]}} si la base falla y el resumen de Marketing la usa para la tarjeta de UTMs. {{recomputeContentAssetAttribution}} ({{lib/marketing/content-attribution.ts}}) no mira el error de sus lecturas. {{getRetentionAtCTA}} ({{lib/youtube/analytics.ts}}) cae en la retención estimada ante cualquier error, también una falla de la base o de YouTube. Visto al hacer SCRUM-519; no estaba en su alcance.
 
-*Qué hay que hacer:* que esas lecturas devuelvan {{MutationResult}} o lancen {{FallaDeLaBase}} y que sus pantallas muestren el motivo; la retención estimada sólo cuando no hay token o curva, no ante una falla; {{summarize}} con una cuenta aparte para lo que no se pudo leer.
+*Qué hay que hacer:* que esas lecturas devuelvan {{MutationResult}} o lancen {{FallaDeLaBase}} y que sus pantallas muestren el motivo; la retención estimada sólo cuando no hay token o curva, no ante una falla.
 
-*Dónde:* {{apps/web/app/marketing/actions.ts}}, {{apps/web/app/marketing/utm-actions.ts}}, {{apps/web/lib/marketing/content-attribution.ts}}, {{apps/web/lib/youtube/analytics.ts}}, {{apps/web/lib/integrations/health.ts}}, {{apps/web/components/marketing/marketing-sales-connection.tsx}}.
+*Dónde:* {{apps/web/app/marketing/actions.ts}}, {{apps/web/app/marketing/utm-actions.ts}}, {{apps/web/lib/marketing/content-attribution.ts}}, {{apps/web/lib/youtube/analytics.ts}}, {{apps/web/components/marketing/marketing-sales-connection.tsx}}.
 
 Fuente: PENDIENTES.md [MKT-LECTURAS-QUE-ESCONDEN-FALLAS] · Doc del área: docs/areas/marketing.md",MKT-LECTURAS-QUE-ESCONDEN-FALLAS,Marketing,P2,,bug
 [ZERNIO-METRICAS-429] El cron de métricas choca con el límite de pedidos de Zernio todos los días,Bug,Medium,marketing,p2,sev-media,bug,,,"*Tipo:* bug
