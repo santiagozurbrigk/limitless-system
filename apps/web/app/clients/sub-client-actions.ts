@@ -50,16 +50,18 @@ const nameSchema = z
   .min(1, "Poné el nombre del cliente.")
   .max(SUB_CLIENT_NAME_MAX, "Ese nombre es demasiado largo.");
 
+const LINK_LARGO = "El link de Instagram puede tener hasta 500 caracteres.";
+
 const createSchema = z.object({
   clientId: uuidSchema,
   name: nameSchema,
-  instagramUrl: z.string().max(500).nullish(),
+  instagramUrl: z.string().max(500, LINK_LARGO).nullish(),
 });
 
 const updateSchema = z.object({
   id: uuidSchema,
   name: nameSchema,
-  instagramUrl: z.string().max(500).nullish(),
+  instagramUrl: z.string().max(500, LINK_LARGO).nullish(),
 });
 
 const valuesSchema = z.object({

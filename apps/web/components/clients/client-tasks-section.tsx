@@ -120,6 +120,7 @@ function CampoRapido({
           />
           <Input
             value={title}
+            maxLength={120}
             onChange={(event) => setTitle(event.target.value)}
             placeholder="Asignar una tarea y apretar Enter"
             aria-label="Nueva tarea para el cliente"

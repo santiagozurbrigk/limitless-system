@@ -46,12 +46,11 @@ const entrySchema = z.object({
   clientId: uuidSchema,
   amount: z
     .number({ error: "La facturación tiene que ser un número." })
-    .finite()
     .min(0, "La facturación no puede ser negativa.")
     .max(1_000_000_000, "Ese monto es demasiado grande."),
-  currency: z.enum(["USD", "ARS"]).default("USD"),
+  currency: z.enum(["USD", "ARS"], { error: "Elegí la moneda: USD o ARS." }).default("USD"),
   period: z.string().min(4, "Elegí un mes."),
-  note: z.string().trim().max(300).default(""),
+  note: z.string().trim().max(300, "La nota puede tener hasta 300 caracteres.").default(""),
   /**
    * ⭐ El mes que se está corrigiendo, si se entró por «Editar».
    *

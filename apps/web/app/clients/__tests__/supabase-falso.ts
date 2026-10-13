@@ -29,6 +29,12 @@ export const base = {
   tablas: {} as Record<string, Fila[]>,
   /** `tabla` o `tabla:op` → error de supabase-js. */
   errores: {} as Record<string, ErrorDeLaBase>,
+  /**
+   * `tabla:op` → número de llamada (1, 2...) desde la que esa operación devuelve
+   * el error: para simular que falla el segundo lote de un import.
+   */
+  erroresDesdeLaLlamada: {} as Record<string, { desde: number; error: ErrorDeLaBase }>,
+  llamadas: {} as Record<string, number>,
   /** Si está, `from()` lanza esto. */
   lanza: null as unknown,
   operaciones: [] as Operacion[],
@@ -45,6 +51,8 @@ export const base = {
   reiniciar() {
     this.tablas = {};
     this.errores = {};
+    this.erroresDesdeLaLlamada = {};
+    this.llamadas = {};
     this.lanza = null;
     this.operaciones = [];
     this.storage = { error: null, borrados: [] };
@@ -66,11 +74,19 @@ export const base = {
 };
 
 function errorDe(tabla: string, op: Op): ErrorDeLaBase | null {
-  return base.errores[`${tabla}:${op}`] ?? base.errores[tabla] ?? null;
+  const clave = `${tabla}:${op}`;
+  base.llamadas[clave] = (base.llamadas[clave] ?? 0) + 1;
+  const desde = base.erroresDesdeLaLlamada[clave];
+  if (desde && base.llamadas[clave] >= desde.desde) return desde.error;
+  return base.errores[clave] ?? base.errores[tabla] ?? null;
 }
 
 function clienteFalso() {
   return {
+    // La sesión del usuario "yo" (el perfil se lee de la tabla `profiles`).
+    auth: {
+      getUser: async () => ({ data: { user: base.sesion ? { id: "yo" } : null }, error: null }),
+    },
     from(tabla: string) {
       if (base.lanza) throw base.lanza;
       const operacion: Operacion = { tabla, op: "select", filtros: [] };

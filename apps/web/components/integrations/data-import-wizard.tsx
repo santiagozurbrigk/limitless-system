@@ -695,6 +695,7 @@ function StepConfirm({
             skipped={summary.clientsResult.skipped}
             errors={summary.clientsResult.errors.length}
             planMatchCount={summary.clientsResult.planMatchCount}
+            incompleta={summary.clientsResult.incompleta}
           />
         )}
         {summary.salesMetricsResult && (
@@ -762,8 +763,10 @@ function StepConfirm({
   );
 }
 
-function ResultRow({ label, inserted, skipped, errors, planMatchCount }: {
+export function ResultRow({ label, inserted, skipped, errors, planMatchCount, incompleta }: {
   label: string; inserted: number; skipped: number; errors: number; planMatchCount?: number;
+  /** Un lote falló después de guardar otros: cuántos se importaron y qué hacer (SCRUM-516). */
+  incompleta?: string;
 }) {
   return (
     <div className="text-sm">
@@ -776,6 +779,7 @@ function ResultRow({ label, inserted, skipped, errors, planMatchCount }: {
           <span className="text-brand-500">{planMatchCount} con plan asignado</span>
         )}
       </div>
+      {incompleta ? <p className="mt-1 text-xs text-destructive">{incompleta}</p> : null}
     </div>
   );
 }
@@ -1028,11 +1032,16 @@ export function DataImportWizard({ ghlConnected }: { ghlConnected: boolean }) {
       const totalImported =
         (result.clientsResult?.inserted ?? 0) +
         (result.salesMetricsResult?.inserted ?? 0);
-      push({
-        title: "Importación completada",
-        description: `${totalImported} registros importados`,
-        variant: "success",
-      });
+      const incompleta = result.clientsResult?.incompleta;
+      push(
+        incompleta
+          ? { title: "Importación incompleta", description: incompleta }
+          : {
+              title: "Importación completada",
+              description: `${totalImported} registros importados`,
+              variant: "success",
+            }
+      );
 
       setTimeout(() => router.refresh(), 500);
     } catch (e) {

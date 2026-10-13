@@ -144,6 +144,13 @@ describe("createClientTaskAction", () => {
     expect(base.escrituras()).toEqual([]);
   });
 
+  it("⭐ un título de más de 120 caracteres vuelve con el motivo en castellano (antes, el de zod en inglés)", async () => {
+    await expect(
+      createClientTaskAction({ clientId: CLIENTE, title: "x".repeat(121) })
+    ).resolves.toEqual({ success: false, error: "El título puede tener hasta 120 caracteres." });
+    expect(base.escrituras()).toEqual([]);
+  });
+
   it("un cliente que ya no existe (23503) vuelve con el motivo", async () => {
     base.errores["client_tasks:insert"] = {
       code: "23503",

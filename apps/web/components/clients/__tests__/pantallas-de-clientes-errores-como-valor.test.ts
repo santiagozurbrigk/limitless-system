@@ -76,7 +76,7 @@ vi.mock("@/app/clients/import-actions", () => ({
 vi.mock("@/app/clients/custom-field-actions", () => ({ listFieldDefinitionsAction: async () => [] }));
 
 import { cargarEstadoDelOnboarding } from "../sub-client-onboarding";
-import { cargarBandejaDeOnboarding, cargarCreadores } from "../client-onboarding-inbox";
+import { cargarBandejaDeOnboarding, cargarCreadores, sePuedeAsignar } from "../client-onboarding-inbox";
 import { cargarSubClientes, guardarCamposDelSubCliente } from "../client-sub-clients-card";
 import { cargarTareasDelCliente } from "../client-tasks-section";
 import { cargarFacturacion } from "../client-revenue-card";
@@ -84,6 +84,7 @@ import { subirCapturaDeWin } from "../wins/win-form-modal";
 import { cargarPlanes } from "@/components/closing/payment-modal";
 import { cargarPlanesDeCobros } from "@/components/sales/cobros-page";
 import {
+  ResultRow,
   StepMapper,
   importarClientesDelArchivo,
   importarMetricasManuales,
@@ -236,5 +237,38 @@ describe("el paso de mapeo del asistente de importación", () => {
   it("sin motivo, el mapeo de siempre", () => {
     const html = renderToStaticMarkup(createElement(StepMapper, props));
     expect(html).toContain("Mapeo de columnas");
+  });
+});
+
+describe("asignar un envío de la bandeja", () => {
+  const listo = { clientId: "c1", newClientName: "", subClientId: "__nuevo", newSubName: "Nueva", creadoresError: null };
+
+  it("con un cliente existente y sus creadores leídos, se puede asignar", () => {
+    expect(sePuedeAsignar(listo)).toBe(true);
+  });
+
+  it("⭐ si no se pudieron leer los creadores del cliente existente, no se puede (duplicaría al creador)", () => {
+    expect(sePuedeAsignar({ ...listo, creadoresError: ERROR_INESPERADO })).toBe(false);
+  });
+
+  it("con un cliente nuevo no hacen falta los creadores", () => {
+    expect(
+      sePuedeAsignar({ ...listo, clientId: "__nuevo", newClientName: "Nuevo SA", creadoresError: ERROR_INESPERADO })
+    ).toBe(true);
+  });
+});
+
+describe("el resumen del asistente de importación", () => {
+  it("⭐ una importación incompleta muestra cuántos se importaron", () => {
+    const html = renderToStaticMarkup(
+      createElement(ResultRow, {
+        label: "Clientes",
+        inserted: 50,
+        skipped: 0,
+        errors: 0,
+        incompleta: "Se importaron 50 de 60: el resto no se pudo guardar.",
+      })
+    );
+    expect(html).toContain("Se importaron 50 de 60");
   });
 });

@@ -52,11 +52,26 @@ const SOLO_FOUNDER = "Solo el founder puede gestionar duraciones de planes";
 const FALTA_LA_TABLA =
   "Falta la tabla plan_durations. Ejecutá supabase/migrations/20260720100000_clients_offered_product_and_plan_durations.sql";
 
-async function requireFounder() {
-  const profile = await getCurrentProfile();
-  if (profile?.role !== "founder") {
-    throw new ErrorEsperable(SOLO_FOUNDER);
-  }
+/**
+ * Sólo el founder gestiona las duraciones. Antes se preguntaba con
+ * `getCurrentProfile`, que devuelve `null` también cuando la lectura del perfil
+ * falla: el founder veía "Solo el founder..." ante una caída de la base. Ahora
+ * la falla es una `FallaDeLaBase` (texto fijo y registro) y el rechazo queda
+ * sólo para quien no es founder. Se llama después de `requireOrganizationId`,
+ * que ya resolvió la sesión.
+ */
+async function requireFounder(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new ErrorEsperable("Sesión no válida");
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (error) throw new FallaDeLaBase(error);
+  if (data?.role !== "founder") throw new ErrorEsperable(SOLO_FOUNDER);
 }
 
 function errorDeEscritura(error: { message: string; code?: string | null }): Error {
@@ -151,9 +166,9 @@ export async function resolvePlanDurationsAction(
   planNames?: string[]
 ): Promise<MutationResult<{ resolved: number }>> {
   return mutacionConErroresEsperables("[resolvePlanDurations]", async () => {
-    await requireFounder();
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
+    await requireFounder(supabase);
 
     const names =
       planNames?.map((n) => n.trim()).filter(Boolean) ??
@@ -210,9 +225,9 @@ export async function updatePlanDurationAction(
     const parsed = updatePlanDurationSchema.safeParse(input);
     if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
 
-    await requireFounder();
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
+    await requireFounder(supabase);
     const now = new Date().toISOString();
     const { planName, durationDays } = parsed.data;
 

@@ -60,9 +60,13 @@ import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
 
 const metricSchema = z
   .object({
-    key: z.string().trim().min(1).max(60),
-    value: z.number().finite(),
-    unit: z.string().trim().max(20).nullable().default(null),
+    key: z
+      .string()
+      .trim()
+      .min(1, "La medida necesita una clave.")
+      .max(60, "La clave de la medida puede tener hasta 60 caracteres."),
+    value: z.number({ error: "El número de la medida no se entiende." }),
+    unit: z.string().trim().max(20, "La unidad puede tener hasta 20 caracteres.").nullable().default(null),
   })
   .nullable()
   .default(null);
@@ -70,10 +74,14 @@ const metricSchema = z
 const winSchema = z.object({
   clientId: z.string().uuid("Elegí el cliente."),
   winDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha no es válida."),
-  achievement: z.string().trim().min(1, "Escribí qué logró.").max(500),
+  achievement: z
+    .string()
+    .trim()
+    .min(1, "Escribí qué logró.")
+    .max(500, "El logro puede tener hasta 500 caracteres."),
   metric: metricSchema,
   custom: z.record(z.string(), z.unknown()).default({}),
-  notes: z.string().trim().max(2000).nullable().default(null),
+  notes: z.string().trim().max(2000, "Las notas pueden tener hasta 2000 caracteres.").nullable().default(null),
   /** Adjuntos subidos antes de guardar; se enganchan al win recién creado. */
   draftId: uuidSchema.nullable().default(null),
 
@@ -81,12 +89,15 @@ const winSchema = z.object({
    * ⭐ Los permisos del cliente. `not_asked` es el estado honesto por defecto:
    * no preguntamos todavía, así que no se puede usar.
    */
-  consentStatus: z.enum(CONSENT_STATUSES).default("not_asked"),
-  consentDisplay: z.enum(CONSENT_DISPLAYS).nullable().default(null),
-  consentNote: z.string().trim().max(500).nullable().default(null),
+  consentStatus: z.enum(CONSENT_STATUSES, { error: "Elegí el estado del permiso." }).default("not_asked"),
+  consentDisplay: z
+    .enum(CONSENT_DISPLAYS, { error: "Elegí cómo quiere aparecer." })
+    .nullable()
+    .default(null),
+  consentNote: z.string().trim().max(500, "La nota del permiso puede tener hasta 500 caracteres.").nullable().default(null),
 
   /** `used` no se manda: se deriva de los usos cargados. */
-  usageState: z.enum(USAGE_STATES).default("unused"),
+  usageState: z.enum(USAGE_STATES, { error: "Elegí el estado de uso." }).default("unused"),
   needsScreenshot: z.boolean().default(false),
 });
 
@@ -606,11 +617,17 @@ export async function deleteWinAttachmentAction(
 
 const usageSchema = z.object({
   winId: uuidSchema,
-  channel: z.enum(WIN_USAGE_CHANNELS),
-  locationLabel: z.string().trim().max(200).nullable().default(null),
-  url: z.string().trim().url("El link no es válido.").max(500).nullable().default(null),
-  usedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
-  notes: z.string().trim().max(500).nullable().default(null),
+  channel: z.enum(WIN_USAGE_CHANNELS, { error: "Elegí dónde se usó." }),
+  locationLabel: z.string().trim().max(200, "El lugar puede tener hasta 200 caracteres.").nullable().default(null),
+  url: z
+    .string()
+    .trim()
+    .url("El link no es válido.")
+    .max(500, "El link puede tener hasta 500 caracteres.")
+    .nullable()
+    .default(null),
+  usedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha tiene que ser un día del calendario.").nullable().default(null),
+  notes: z.string().trim().max(500, "Las notas pueden tener hasta 500 caracteres.").nullable().default(null),
 });
 
 export type CreateWinUsageInput = z.input<typeof usageSchema>;
@@ -662,11 +679,23 @@ export async function deleteWinUsageAction(id: string): Promise<MutationResult<v
 // ─── Baseline y nicho del cliente ───────────────────────────────────────────
 
 const baselineSchema = z.object({
-  niche: z.string().trim().max(120).nullable().default(null),
-  baselineMetricKey: z.string().trim().max(60).nullable().default(null),
-  baselineMetricValue: z.number().finite().nullable().default(null),
-  baselineMetricUnit: z.string().trim().max(20).nullable().default(null),
-  baselineCapturedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+  niche: z.string().trim().max(120, "El nicho puede tener hasta 120 caracteres.").nullable().default(null),
+  baselineMetricKey: z
+    .string()
+    .trim()
+    .max(60, "La clave del punto de partida puede tener hasta 60 caracteres.")
+    .nullable()
+    .default(null),
+  baselineMetricValue: z
+    .number({ error: "El número del punto de partida no se entiende." })
+    .nullable()
+    .default(null),
+  baselineMetricUnit: z.string().trim().max(20, "La unidad puede tener hasta 20 caracteres.").nullable().default(null),
+  baselineCapturedAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha tiene que ser un día del calendario.")
+    .nullable()
+    .default(null),
 });
 
 export async function updateClientBaselineAction(

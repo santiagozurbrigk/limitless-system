@@ -85,6 +85,28 @@ export function cargarCreadores(clientId: string): Promise<Lectura<SubClient[]>>
   );
 }
 
+/**
+ * Si el botón «Asignar» está habilitado. Con un cliente existente hace falta
+ * haber leído sus creadores (SCRUM-516): si la lectura falló, el envío iría a
+ * un creador nuevo y duplicaría al que ya existe. Con un cliente nuevo no hay
+ * creadores que leer.
+ */
+export function sePuedeAsignar(estado: {
+  clientId: string;
+  newClientName: string;
+  subClientId: string;
+  newSubName: string;
+  creadoresError: string | null;
+}): boolean {
+  const esNuevo = estado.clientId === NUEVO;
+  return (
+    (esNuevo
+      ? estado.newClientName.trim() !== ""
+      : estado.clientId !== "" && estado.creadoresError === null) &&
+    (estado.subClientId !== NUEVO || estado.newSubName.trim() !== "")
+  );
+}
+
 export function ClientOnboardingInbox({
   clients,
   onAssigned,
@@ -331,9 +353,13 @@ function EnvioSinAsignar({
     };
   }, [clientId, envio.creatorName]);
 
-  const puedeAsignar =
-    (esNuevo ? newClientName.trim() !== "" : clientId !== "" && creadoresError === null) &&
-    (subClientId !== NUEVO || newSubName.trim() !== "");
+  const puedeAsignar = sePuedeAsignar({
+    clientId,
+    newClientName,
+    subClientId,
+    newSubName,
+    creadoresError,
+  });
 
   const asignar = async () => {
     setSaving(true);

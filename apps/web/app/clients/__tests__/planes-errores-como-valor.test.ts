@@ -91,6 +91,8 @@ beforeEach(() => {
   sim.extraer = null;
   base.tablas.plans = [planFila(PLAN, ORG), planFila(PLAN_AJENO, OTRA_ORG, "Ajeno")];
   base.tablas.plan_durations = [];
+  // El rol se lee de `profiles` con la sesión (requireFounder, SCRUM-516).
+  base.tablas.profiles = [{ id: "yo", role: "founder" }];
   consola = vi.spyOn(console, "error").mockImplementation(() => {});
   aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -289,7 +291,7 @@ describe("resolvePlanDurationsAction", () => {
   });
 
   it("⭐ quien no es founder recibe el motivo, sin escribir ni reportar", async () => {
-    base.perfil = { id: "yo", role: "member" };
+    base.tablas.profiles = [{ id: "yo", role: "member" }];
     await expect(resolvePlanDurationsAction(["Mentoría"])).resolves.toEqual({
       success: false,
       error: "Solo el founder puede gestionar duraciones de planes",
@@ -297,6 +299,28 @@ describe("resolvePlanDurationsAction", () => {
     expect(base.escrituras()).toEqual([]);
     expect(base.reportes).toEqual([]);
   });
+
+  it.each([
+    ["resolvePlanDurationsAction", () => resolvePlanDurationsAction(["Mentoría"]), "[resolvePlanDurations]"],
+    [
+      "updatePlanDurationAction",
+      () => updatePlanDurationAction({ planName: "Mentoría", durationDays: 60 }),
+      "[updatePlanDuration]",
+    ],
+  ] as const)(
+    "⭐ %s: si no se puede leer el perfil, texto fijo y se reporta (no \"Solo el founder\")",
+    async (_n, correr, etiqueta) => {
+      base.errores.profiles = FETCH_FAILED;
+      await expect(correr()).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+      expect(base.escrituras()).toEqual([]);
+      expect(base.reportes).toEqual([
+        {
+          error: expect.objectContaining({ name: "FallaDeLaBase", message: "TypeError: fetch failed" }),
+          contexto: { accion: etiqueta },
+        },
+      ]);
+    }
+  );
 
   it("sin planes devuelve el motivo", async () => {
     await expect(resolvePlanDurationsAction()).resolves.toEqual({
@@ -366,7 +390,7 @@ describe("updatePlanDurationAction", () => {
   });
 
   it("⭐ quien no es founder recibe el motivo", async () => {
-    base.perfil = { id: "yo", role: "member" };
+    base.tablas.profiles = [{ id: "yo", role: "member" }];
     await expect(
       updatePlanDurationAction({ planName: "Mentoría", durationDays: 60 })
     ).resolves.toEqual({

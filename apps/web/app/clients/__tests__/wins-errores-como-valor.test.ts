@@ -206,6 +206,16 @@ describe("createWinAction", () => {
     expect(base.escrituras()).toEqual([]);
   });
 
+  it.each([
+    [{ achievement: "x".repeat(501) }, "El logro puede tener hasta 500 caracteres."],
+    [{ notes: "x".repeat(2001) }, "Las notas pueden tener hasta 2000 caracteres."],
+    [{ metric: { key: "ventas", value: "diez" as unknown as number } }, "El número de la medida no se entiende."],
+    [{ consentStatus: "quizas" as never }, "Elegí el estado del permiso."],
+  ])("⭐ un dato fuera de rango vuelve con el motivo en castellano, sin escribir", async (cambio, motivo) => {
+    await expect(createWinAction({ ...NUEVO, ...cambio })).resolves.toEqual({ success: false, error: motivo });
+    expect(base.escrituras()).toEqual([]);
+  });
+
   it("un dato inválido vuelve con el mensaje de validación", async () => {
     await expect(createWinAction({ ...NUEVO, achievement: "" })).resolves.toEqual({
       success: false,

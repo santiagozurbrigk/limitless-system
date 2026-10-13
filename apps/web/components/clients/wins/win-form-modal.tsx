@@ -264,6 +264,7 @@ export function WinFormModal({
               id="win-achievement"
               rows={2}
               value={draft.achievement}
+              maxLength={500}
               onChange={(event) => patch({ achievement: event.target.value })}
               placeholder="Facturó 8.500 USD en su primer lanzamiento"
             />
@@ -280,6 +281,7 @@ export function WinFormModal({
               <Input
                 aria-label="Clave de la medida"
                 value={draft.metricKey}
+                maxLength={60}
                 onChange={(event) => patch({ metricKey: event.target.value })}
                 placeholder="facturacion"
               />
@@ -293,6 +295,7 @@ export function WinFormModal({
               <Input
                 aria-label="Unidad"
                 value={draft.metricUnit}
+                maxLength={20}
                 onChange={(event) => patch({ metricUnit: event.target.value })}
                 placeholder="USD"
               />
@@ -431,6 +434,7 @@ export function WinFormModal({
               <Input
                 id="win-consent-note"
                 value={draft.consentNote}
+                maxLength={500}
                 onChange={(event) => patch({ consentNote: event.target.value })}
                 placeholder="Lo autorizó por DM el 3/9"
               />
@@ -468,6 +472,7 @@ export function WinFormModal({
               id="win-notes"
               rows={2}
               value={draft.notes}
+              maxLength={2000}
               onChange={(event) => patch({ notes: event.target.value })}
             />
           </div>

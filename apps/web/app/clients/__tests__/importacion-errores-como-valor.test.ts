@@ -156,6 +156,34 @@ describe("importClientsFromExcelAction", () => {
     expect(base.escrituras()).toEqual([]);
   });
 
+  it("⭐ si falla un lote después de guardar otro, dice cuántos se importaron y registra la falla", async () => {
+    const filas = [["Nombre", "Email"], ...Array.from({ length: 60 }, (_, i) => [`Cliente ${i}`, ""])];
+    base.erroresDesdeLaLlamada["clients:insert"] = { desde: 2, error: FETCH_FAILED };
+    const r = await importClientsFromExcelAction(planilla(filas), MAPEO);
+    expect(r).toMatchObject({
+      success: true,
+      data: {
+        inserted: 50,
+        incompleta:
+          "Se importaron 50 de 60: el resto no se pudo guardar. Volvé a importar el archivo: los que ya se cargaron se saltean.",
+      },
+    });
+    expect(base.reportes).toEqual([
+      {
+        error: expect.objectContaining({ name: "FallaDeLaBase", message: "TypeError: fetch failed" }),
+        contexto: { accion: "[importClientsFromExcel]" },
+      },
+    ]);
+  });
+
+  it("si falla el primer lote no hay nada guardado: texto fijo", async () => {
+    base.erroresDesdeLaLlamada["clients:insert"] = { desde: 1, error: FETCH_FAILED };
+    await expect(importClientsFromExcelAction(CLIENTES, MAPEO)).resolves.toEqual({
+      success: false,
+      error: TEXTO_FIJO,
+    });
+  });
+
   it("los errores por fila siguen viniendo en el dato", async () => {
     const sinNombres = planilla([["Nombre", "Email"], ["", "x@x.com"]]);
     const r = await importClientsFromExcelAction(sinNombres, MAPEO);

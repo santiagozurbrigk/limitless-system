@@ -38,9 +38,13 @@ const SELECT_COLUMNS =
 
 const taskInputSchema = z.object({
   clientId: uuidSchema,
-  title: z.string().trim().min(1, "La tarea necesita un título.").max(120),
-  description: z.string().trim().max(500).default(""),
-  owner: z.enum(["client", "coach"]).default("client"),
+  title: z
+    .string()
+    .trim()
+    .min(1, "La tarea necesita un título.")
+    .max(120, "El título puede tener hasta 120 caracteres."),
+  description: z.string().trim().max(500, "La descripción puede tener hasta 500 caracteres.").default(""),
+  owner: z.enum(["client", "coach"], { error: "Elegí si la tarea es del cliente o del coach." }).default("client"),
   dueDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha tiene que ser un día del calendario.")

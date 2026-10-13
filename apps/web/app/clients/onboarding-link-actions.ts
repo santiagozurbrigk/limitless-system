@@ -351,11 +351,21 @@ const assignSchema = z
     /** Un growth partner que ya existe… */
     clientId: uuidSchema.nullish(),
     /** …o el nombre de uno nuevo. */
-    newClientName: z.string().trim().min(1).max(200).nullish(),
+    newClientName: z
+      .string()
+      .trim()
+      .min(1, "Poné el nombre del cliente nuevo.")
+      .max(200, "El nombre del cliente puede tener hasta 200 caracteres.")
+      .nullish(),
     /** Un creador que ya existe de ese growth partner… */
     subClientId: uuidSchema.nullish(),
     /** …o el nombre de uno nuevo (por defecto, el que escribió en el link). */
-    newSubClientName: z.string().trim().min(1).max(200).nullish(),
+    newSubClientName: z
+      .string()
+      .trim()
+      .min(1, "Poné el nombre del creador.")
+      .max(200, "El nombre del creador puede tener hasta 200 caracteres.")
+      .nullish(),
   })
   .refine((v) => Boolean(v.clientId) !== Boolean(v.newClientName), {
     message: "Elegí un cliente o poné el nombre de uno nuevo.",
@@ -389,109 +399,159 @@ export async function assignOnboardingSubmissionAction(
     const supabase = await createClient();
     const { admin, envio } = await envioPendiente(organizationId, v.submissionId);
 
-    // 1 · El growth partner.
-    let clientId = v.clientId ?? null;
-    let clientName = "";
-    if (clientId) {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name")
-        .eq("id", clientId)
-        .eq("organization_id", organizationId)
-        .maybeSingle();
-      if (error) throw new FallaDeLaBase(error);
-      if (!data) throw new ErrorEsperable(CLIENTE_AJENO);
-      clientName = data.name as string;
-    } else {
-      const { data, error } = await supabase
-        .from("clients")
-        .insert(
-          newClientFromOnboarding(
-            organizationId,
-            v.newClientName!,
-            await fechaDeHoyDeLaOrganizacion(supabase, organizationId)
-          )
-        )
-        .select("id, name")
-        .single();
-      if (error) throw new FallaDeLaBase(error);
-      clientId = data.id as string;
-      clientName = data.name as string;
+    // El nombre del creador nuevo se valida antes de crear nada: si faltara
+    // después de dar de alta el growth partner, éste quedaría huérfano.
+    const nombreDelCreador = v.subClientId
+      ? null
+      : (v.newSubClientName ?? envio.creatorName ?? envio.respondentName);
+    if (!v.subClientId && !nombreDelCreador) {
+      throw new ErrorEsperable("Poné el nombre del creador.");
     }
 
-    // 2 · El creador.
-    let sub: { id: string; name: string; custom: CustomFieldValues };
-    if (v.subClientId) {
-      const { data, error } = await supabase
-        .from("client_sub_clients")
-        .select("id, name, custom")
-        .eq("id", v.subClientId)
-        .eq("client_id", clientId)
-        .eq("organization_id", organizationId)
-        .maybeSingle();
-      if (error) throw new FallaDeLaBase(error);
-      if (!data) throw new ErrorEsperable(`Ese creador no es de ${clientName}.`);
-      sub = rowToSubClient(data as SubClientRow);
-    } else {
-      const nombre = v.newSubClientName ?? envio.creatorName ?? envio.respondentName;
-      if (!nombre) throw new ErrorEsperable("Poné el nombre del creador.");
-      const { data, error } = await supabase
-        .from("client_sub_clients")
-        .insert({
-          organization_id: organizationId,
-          client_id: clientId,
-          name: nombre.slice(0, SUB_CLIENT_NAME_MAX),
-          created_by: profile?.id ?? null,
-        })
-        .select("id, name, custom")
-        .single();
-      if (error) throw new FallaDeLaBase(error);
-      sub = rowToSubClient(data as SubClientRow);
-    }
-
-    // 3 · El envío queda asignado, con lo que se va a pisar. Primero el
-    // historial: si la ficha no se puede escribir, se deshace la asignación y
-    // el envío vuelve a la bandeja.
-    const applied = applyOnboardingAnswers(sub.custom, envio.answers);
-    const { error: assignError } = await admin
-      .from("client_onboarding_submissions")
-      .update({
-        client_id: clientId,
-        sub_client_id: sub.id,
-        replaced: applied.replaced,
-        assigned_at: new Date().toISOString(),
-        assigned_by: profile?.id ?? null,
-      })
-      .eq("id", envio.id)
-      .eq("organization_id", organizationId)
-      .is("sub_client_id", null);
-    if (assignError) throw new FallaDeLaBase(assignError);
-
-    if (applied.changed.length > 0) {
-      const { error } = await supabase
-        .from("client_sub_clients")
-        .update({ custom: applied.custom, updated_at: new Date().toISOString() })
-        .eq("id", sub.id)
-        .eq("organization_id", organizationId);
-      if (error) {
-        const { error: undoError } = await admin
-          .from("client_onboarding_submissions")
-          .update({
-            client_id: null,
-            sub_client_id: null,
-            replaced: {},
-            assigned_at: null,
-            assigned_by: null,
-          })
-          .eq("id", envio.id);
-        if (undoError) {
-          registrarFallaDeAccion(
-            "[assignOnboardingSubmission] deshacer",
-            new FallaDeLaBase(undoError)
-          );
+    /*
+      Lo que esta llamada da de alta. Si un paso posterior falla, se borra
+      (SCRUM-516): sin esto el growth partner o el creador nuevos quedaban
+      creados y un reintento con «nuevo» los duplicaba. Los ids salen de los
+      inserts de esta misma llamada, no del navegador, así que se borran con
+      service role (un miembro sin permiso de borrar clientes también tiene que
+      poder deshacer lo que acaba de crear).
+    */
+    const creados: { clientId: string | null; subClientId: string | null } = {
+      clientId: null,
+      subClientId: null,
+    };
+    const deshacerAltas = async () => {
+      if (creados.subClientId) {
+        const { error } = await admin
+          .from("client_sub_clients")
+          .delete()
+          .eq("id", creados.subClientId)
+          .eq("organization_id", organizationId);
+        if (error) {
+          registrarFallaDeAccion("[assignOnboardingSubmission] deshacer creador", new FallaDeLaBase(error));
         }
-        throw new FallaDeLaBase(error);
       }
+      if (creados.clientId) {
+        const { error } = await admin
+          .from("clients")
+          .delete()
+          .eq("id", creados.clientId)
+          .eq("organization_id", organizationId);
+        if (error) {
+          registrarFallaDeAccion("[assignOnboardingSubmission] deshacer cliente", new FallaDeLaBase(error));
+        }
+      }
+    };
+
+    let clientId: string;
+    let sub: { id: string; name: string; custom: CustomFieldValues };
+    try {
+      // 1 · El growth partner.
+      let clientName = "";
+      if (v.clientId) {
+        const { data, error } = await supabase
+          .from("clients")
+          .select("id, name")
+          .eq("id", v.clientId)
+          .eq("organization_id", organizationId)
+          .maybeSingle();
+        if (error) throw new FallaDeLaBase(error);
+        if (!data) throw new ErrorEsperable(CLIENTE_AJENO);
+        clientId = v.clientId;
+        clientName = data.name as string;
+      } else {
+        const { data, error } = await supabase
+          .from("clients")
+          .insert(
+            newClientFromOnboarding(
+              organizationId,
+              v.newClientName!,
+              await fechaDeHoyDeLaOrganizacion(supabase, organizationId)
+            )
+          )
+          .select("id, name")
+          .single();
+        if (error) throw new FallaDeLaBase(error);
+        clientId = data.id as string;
+        creados.clientId = clientId;
+        clientName = data.name as string;
+      }
+
+      // 2 · El creador.
+      if (v.subClientId) {
+        const { data, error } = await supabase
+          .from("client_sub_clients")
+          .select("id, name, custom")
+          .eq("id", v.subClientId)
+          .eq("client_id", clientId)
+          .eq("organization_id", organizationId)
+          .maybeSingle();
+        if (error) throw new FallaDeLaBase(error);
+        if (!data) throw new ErrorEsperable(`Ese creador no es de ${clientName}.`);
+        sub = rowToSubClient(data as SubClientRow);
+      } else {
+        const { data, error } = await supabase
+          .from("client_sub_clients")
+          .insert({
+            organization_id: organizationId,
+            client_id: clientId,
+            name: nombreDelCreador!.slice(0, SUB_CLIENT_NAME_MAX),
+            created_by: profile?.id ?? null,
+          })
+          .select("id, name, custom")
+          .single();
+        if (error) throw new FallaDeLaBase(error);
+        sub = rowToSubClient(data as SubClientRow);
+        creados.subClientId = sub.id;
+      }
+
+      // 3 · El envío queda asignado, con lo que se va a pisar. Primero el
+      // historial: si la ficha no se puede escribir, se deshace la asignación
+      // y el envío vuelve a la bandeja.
+      const applied = applyOnboardingAnswers(sub.custom, envio.answers);
+      const { error: assignError } = await admin
+        .from("client_onboarding_submissions")
+        .update({
+          client_id: clientId,
+          sub_client_id: sub.id,
+          replaced: applied.replaced,
+          assigned_at: new Date().toISOString(),
+          assigned_by: profile?.id ?? null,
+        })
+        .eq("id", envio.id)
+        .eq("organization_id", organizationId)
+        .is("sub_client_id", null);
+      if (assignError) throw new FallaDeLaBase(assignError);
+
+      if (applied.changed.length > 0) {
+        const { error } = await supabase
+          .from("client_sub_clients")
+          .update({ custom: applied.custom, updated_at: new Date().toISOString() })
+          .eq("id", sub.id)
+          .eq("organization_id", organizationId);
+        if (error) {
+          const { error: undoError } = await admin
+            .from("client_onboarding_submissions")
+            .update({
+              client_id: null,
+              sub_client_id: null,
+              replaced: {},
+              assigned_at: null,
+              assigned_by: null,
+            })
+            .eq("id", envio.id);
+          if (undoError) {
+            registrarFallaDeAccion(
+              "[assignOnboardingSubmission] deshacer",
+              new FallaDeLaBase(undoError)
+            );
+          }
+          throw new FallaDeLaBase(error);
+        }
+      }
+    } catch (error) {
+      await deshacerAltas();
+      throw error;
     }
 
     const { error: timelineError } = await admin.from("client_timeline_entries").insert({

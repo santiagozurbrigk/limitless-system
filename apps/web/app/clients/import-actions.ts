@@ -8,6 +8,7 @@ import {
   ErrorEsperable,
   FallaDeLaBase,
   mutacionConErroresEsperables,
+  registrarFallaDeAccion,
   type MutationResult,
 } from "@/lib/server/action-result";
 import { createClient } from "@/lib/supabase/server";
@@ -57,6 +58,30 @@ function leerPlanilla<T>(leer: () => T): T {
     throw error;
   }
 }
+
+/**
+ * Un lote que falla después de guardar otros (SCRUM-516). Lo guardado no se
+ * deshace: se registra la falla (consola y Sentry) y la importación vuelve con
+ * cuántos se importaron, para que el usuario sepa qué pasó en vez de ver sólo
+ * el texto fijo. Si no se había guardado ningún lote, es una falla común.
+ */
+function importacionIncompleta(
+  etiqueta: string,
+  error: { message: string; code?: string | null },
+  guardadas: number,
+  total: number,
+  reintento: string
+): string {
+  registrarFallaDeAccion(etiqueta, new FallaDeLaBase(error));
+  return `Se importaron ${guardadas} de ${total}: el resto no se pudo guardar. ${reintento}`;
+}
+
+/** Al reintentar, los clientes que ya se cargaron se saltean (por nombre). */
+const REINTENTO_SALTEA = "Volvé a importar el archivo: los que ya se cargaron se saltean.";
+/** Las métricas se guardan por mes: reintentar actualiza los meses ya cargados. */
+const REINTENTO_ACTUALIZA = "Volvé a importar el archivo: los meses ya cargados se actualizan.";
+/** Las llamadas no se deduplican: reintentar las cargaría de nuevo. */
+const REINTENTO_LLAMADAS = "Revisá cuáles faltan antes de volver a importar: las que ya se cargaron se duplicarían.";
 
 // ─── Preview de encabezados y primeras filas ──────────────────────────────────
 
@@ -191,6 +216,11 @@ export type ExcelImportResult = {
   errors: Array<{ row: number; message: string }>;
   /** Cantidad de clientes a los que se asignó un plan automáticamente por match de nombre */
   planMatchCount?: number;
+  /**
+   * Si un lote falló después de guardar otros (SCRUM-516): cuántos se
+   * importaron y qué hacer. Lo guardado queda; la falla se registra.
+   */
+  incompleta?: string;
 };
 
 // ─── Importar clientes desde Excel ───────────────────────────────────────────
@@ -284,23 +314,28 @@ export async function importClientsFromExcelAction(
     });
 
     // Insertar en lotes de 50
+    let incompleta: string | undefined;
     const BATCH = 50;
     let inserted = 0;
     for (let i = 0; i < insertPayload.length; i += BATCH) {
       const batch = insertPayload.slice(i, i + BATCH);
       const { error } = await supabase.from("clients").insert(batch);
-      if (error) throw new FallaDeLaBase(error);
+      if (error) {
+        if (inserted === 0) throw new FallaDeLaBase(error);
+        incompleta = importacionIncompleta("[importClientsFromExcel]", error, inserted, insertPayload.length, REINTENTO_SALTEA);
+        break;
+      }
       inserted += batch.length;
     }
 
-    const planMatchCount = insertPayload.filter((r) => r.plan_id).length;
+    const planMatchCount = insertPayload.slice(0, inserted).filter((r) => r.plan_id).length;
     console.info(`[import-clients-excel] org=${organizationId} inserted=${inserted} skipped=${skipped} planMatchCount=${planMatchCount}`);
 
     // Invalidar caché de Next.js para que /clients muestre los datos recién importados
     revalidatePath("/clients");
     revalidatePath("/dashboard");
 
-    return { inserted, skipped, errors, planMatchCount };
+    return { inserted, skipped, errors, planMatchCount, ...(incompleta ? { incompleta } : {}) };
   });
 }
 
@@ -339,17 +374,22 @@ export async function importClosingCallsFromExcelAction(
       form_answers:    buildClosingFormAnswers(row),
     }));
 
+    let incompleta: string | undefined;
     const BATCH = 50;
     let inserted = 0;
     for (let i = 0; i < insertPayload.length; i += BATCH) {
       const batch = insertPayload.slice(i, i + BATCH);
       const { error } = await supabase.from("closing_calls").insert(batch);
-      if (error) throw new FallaDeLaBase(error);
+      if (error) {
+        if (inserted === 0) throw new FallaDeLaBase(error);
+        incompleta = importacionIncompleta("[importClosingCallsFromExcel]", error, inserted, insertPayload.length, REINTENTO_LLAMADAS);
+        break;
+      }
       inserted += batch.length;
     }
 
     console.info(`[import-closing-excel] org=${organizationId} inserted=${inserted}`);
-    return { inserted, skipped: 0, errors };
+    return { inserted, skipped: 0, errors, ...(incompleta ? { incompleta } : {}) };
   });
 }
 
@@ -386,6 +426,7 @@ export async function importSalesMetricsFromExcelAction(
       };
     }
 
+    let incompleta: string | undefined;
     const BATCH = 50;
     let inserted = 0;
     const skipped = 0;
@@ -400,12 +441,16 @@ export async function importSalesMetricsFromExcelAction(
       const { error, count } = await supabase
         .from("metrics_snapshots")
         .upsert(batch, { onConflict: "organization_id,category,period_start", count: "exact" });
-      if (error) throw new FallaDeLaBase(error);
+      if (error) {
+        if (inserted === 0) throw new FallaDeLaBase(error);
+        incompleta = importacionIncompleta("[importSalesMetricsFromExcel]", error, inserted, rows.length, REINTENTO_ACTUALIZA);
+        break;
+      }
       inserted += count ?? batch.length;
     }
 
     console.info(`[import-sales-metrics] org=${organizationId} inserted=${inserted} skipped=${skipped}`);
-    return { inserted, skipped, errors };
+    return { inserted, skipped, errors, ...(incompleta ? { incompleta } : {}) };
   });
 }
 
@@ -434,6 +479,7 @@ export async function importFinanceMetricsFromExcelAction(
       };
     }
 
+    let incompleta: string | undefined;
     const BATCH = 50;
     let inserted = 0;
     const skipped = 0;
@@ -448,12 +494,16 @@ export async function importFinanceMetricsFromExcelAction(
       const { error, count } = await supabase
         .from("metrics_snapshots")
         .upsert(batch, { onConflict: "organization_id,category,period_start", count: "exact" });
-      if (error) throw new FallaDeLaBase(error);
+      if (error) {
+        if (inserted === 0) throw new FallaDeLaBase(error);
+        incompleta = importacionIncompleta("[importFinanceMetricsFromExcel]", error, inserted, rows.length, REINTENTO_ACTUALIZA);
+        break;
+      }
       inserted += count ?? batch.length;
     }
 
     console.info(`[import-finance-metrics] org=${organizationId} inserted=${inserted} skipped=${skipped}`);
-    return { inserted, skipped, errors };
+    return { inserted, skipped, errors, ...(incompleta ? { incompleta } : {}) };
   });
 }
 
@@ -483,6 +533,7 @@ export async function importSalesMetricsTransposedAction(
       };
     }
 
+    let incompleta: string | undefined;
     const BATCH = 50;
     let inserted = 0;
     const skipped = 0;
@@ -497,12 +548,16 @@ export async function importSalesMetricsTransposedAction(
       const { error, count } = await supabase
         .from("metrics_snapshots")
         .upsert(batch, { onConflict: "organization_id,category,period_start", count: "exact" });
-      if (error) throw new FallaDeLaBase(error);
+      if (error) {
+        if (inserted === 0) throw new FallaDeLaBase(error);
+        incompleta = importacionIncompleta("[importSalesMetricsTransposed]", error, inserted, rows.length, REINTENTO_ACTUALIZA);
+        break;
+      }
       inserted += count ?? batch.length;
     }
 
     console.info(`[import-sales-metrics-transposed] org=${organizationId} inserted=${inserted} skipped=${skipped}`);
-    return { inserted, skipped, errors };
+    return { inserted, skipped, errors, ...(incompleta ? { incompleta } : {}) };
   });
 }
 
@@ -532,6 +587,7 @@ export async function importFinanceMetricsTransposedAction(
       };
     }
 
+    let incompleta: string | undefined;
     const BATCH = 50;
     let inserted = 0;
     const skipped = 0;
@@ -546,12 +602,16 @@ export async function importFinanceMetricsTransposedAction(
       const { error, count } = await supabase
         .from("metrics_snapshots")
         .upsert(batch, { onConflict: "organization_id,category,period_start", count: "exact" });
-      if (error) throw new FallaDeLaBase(error);
+      if (error) {
+        if (inserted === 0) throw new FallaDeLaBase(error);
+        incompleta = importacionIncompleta("[importFinanceMetricsTransposed]", error, inserted, rows.length, REINTENTO_ACTUALIZA);
+        break;
+      }
       inserted += count ?? batch.length;
     }
 
     console.info(`[import-finance-metrics-transposed] org=${organizationId} inserted=${inserted} skipped=${skipped}`);
-    return { inserted, skipped, errors };
+    return { inserted, skipped, errors, ...(incompleta ? { incompleta } : {}) };
   });
 }
 

@@ -418,6 +418,15 @@ describe("createGeneralOnboardingLinkAction", () => {
   });
 });
 
+describe("createGeneralOnboardingLinkAction: lectura del activo", () => {
+  it("⭐ si no se puede saber si hay un link general activo, no crea otro: texto fijo y se reporta", async () => {
+    base.errores["client_onboarding_links:select"] = FETCH_FAILED;
+    await expect(createGeneralOnboardingLinkAction()).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.escrituras()).toEqual([]);
+    expect(base.reportes).toHaveLength(1);
+  });
+});
+
 describe("discardOnboardingSubmissionAction", () => {
   it("descarta el envío", async () => {
     await expect(discardOnboardingSubmissionAction(ENVIO)).resolves.toEqual({ success: true, data: undefined });
@@ -458,6 +467,69 @@ describe("assignOnboardingSubmissionAction", () => {
     await expect(
       assignOnboardingSubmissionAction({ submissionId: ENVIO, clientId: CLIENTE, subClientId: SUB_AJENO })
     ).resolves.toEqual({ success: false, error: "Ese creador no es de Growth SA." });
+  });
+
+  it("⭐ si no se puede leer el cliente elegido: texto fijo y se reporta (no \"No se encontró ese cliente\")", async () => {
+    base.errores["clients:select"] = FETCH_FAILED;
+    await expect(
+      assignOnboardingSubmissionAction({ submissionId: ENVIO, clientId: CLIENTE })
+    ).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+    expect(base.escrituras()).toEqual([]);
+    expect(base.reportes).toHaveLength(1);
+  });
+
+  it("con un cliente nuevo crea el cliente y el creador", async () => {
+    const r = await assignOnboardingSubmissionAction({ submissionId: ENVIO, newClientName: "Nuevo SA" });
+    expect(r.success).toBe(true);
+    expect(base.tablas.clients.map((c) => c.name)).toContain("Nuevo SA");
+    expect(base.tablas.client_sub_clients.map((c) => c.name)).toContain("Nueva");
+  });
+
+  it("⭐ sin nombre de creador no crea el cliente nuevo: motivo y nada guardado", async () => {
+    base.tablas.client_onboarding_submissions[0].creator_name = null;
+    base.tablas.client_onboarding_submissions[0].respondent_name = null;
+    await expect(
+      assignOnboardingSubmissionAction({ submissionId: ENVIO, newClientName: "Nuevo SA" })
+    ).resolves.toEqual({ success: false, error: "Poné el nombre del creador." });
+    expect(base.escrituras()).toEqual([]);
+  });
+
+  it.each([
+    ["el alta del creador", "client_sub_clients:insert"],
+    ["la asignación del envío", "client_onboarding_submissions:update"],
+  ])(
+    "⭐ si falla %s, se borra lo creado en esta llamada: un reintento no duplica",
+    async (_n, clave) => {
+      base.errores[clave] = FETCH_FAILED;
+      const antes = { clientes: base.tablas.clients.length, creadores: base.tablas.client_sub_clients.length };
+      await expect(
+        assignOnboardingSubmissionAction({ submissionId: ENVIO, newClientName: "Nuevo SA" })
+      ).resolves.toEqual({ success: false, error: TEXTO_FIJO });
+      expect(base.tablas.clients).toHaveLength(antes.clientes);
+      expect(base.tablas.client_sub_clients).toHaveLength(antes.creadores);
+      const borrados = base.escrituras().filter((o) => o.op === "delete");
+      expect(borrados.every((o) => o.filtros.some(([c, v]) => c === "organization_id" && v === ORG))).toBe(true);
+      expect(base.reportes.map((r) => (r.contexto as { accion: string }).accion)).toEqual([
+        "[assignOnboardingSubmission]",
+      ]);
+    }
+  );
+
+  it("si deshacer el alta también falla, queda registrado aparte", async () => {
+    base.errores["client_sub_clients:insert"] = FETCH_FAILED;
+    base.errores["clients:delete"] = FETCH_FAILED;
+    await assignOnboardingSubmissionAction({ submissionId: ENVIO, newClientName: "Nuevo SA" });
+    expect(base.reportes.map((r) => (r.contexto as { accion: string }).accion)).toEqual([
+      "[assignOnboardingSubmission] deshacer cliente",
+      "[assignOnboardingSubmission]",
+    ]);
+  });
+
+  it("con un cliente existente no se borra nada al fallar", async () => {
+    base.errores["client_onboarding_submissions:update"] = FETCH_FAILED;
+    await assignOnboardingSubmissionAction({ submissionId: ENVIO, clientId: CLIENTE, subClientId: SUB });
+    expect(base.escrituras().filter((o) => o.op === "delete")).toEqual([]);
+    expect(base.tablas.clients.map((c) => c.id)).toContain(CLIENTE);
   });
 
   it("un pedido inválido vuelve con el mensaje de validación", async () => {
