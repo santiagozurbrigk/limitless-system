@@ -45,7 +45,7 @@ function esErrorComun(error: unknown): error is Error {
 /**
  * Zernio: sin integración, o una respuesta 401/403 (la clave de la org ya no
  * sirve). Cualquier otra respuesta (404, 429, 5xx, tiempo agotado, HTML) es
- * una falla.
+ * una falla, y se registra sin el cuerpo de la respuesta (`sinCuerpoDeZernio`).
  */
 export function rechazoDeZernio(error: unknown): unknown {
   if (esErrorComun(error) && error.message === ZERNIO_NO_CONECTADO) {
@@ -54,6 +54,26 @@ export function rechazoDeZernio(error: unknown): unknown {
   if (error instanceof ZernioHttpError && (error.status === 401 || error.status === 403)) {
     return new ErrorEsperable(ZERNIO_SIN_ACCESO);
   }
+  return sinCuerpoDeZernio(error);
+}
+
+/**
+ * `zernioFetchJson` (`lib/zernio/client.ts`) arma sus errores como
+ * `Zernio <pedido>: <qué pasó>`, un guion largo entre espacios (U+2014) y los
+ * primeros 200 caracteres del cuerpo. El mensaje de una falla viaja a Sentry,
+ * así que se corta antes del cuerpo y se
+ * conserva la clase y el status. Es el formato de nuestro propio cliente, no
+ * un texto del proveedor.
+ */
+const SEPARADOR_DEL_CUERPO = " \u2014 ";
+
+export function sinCuerpoDeZernio(error: unknown): unknown {
+  if (!(error instanceof Error) || !error.message.startsWith("Zernio ")) return error;
+  const corte = error.message.indexOf(SEPARADOR_DEL_CUERPO);
+  if (corte === -1) return error;
+  const mensaje = error.message.slice(0, corte);
+  if (error instanceof ZernioHttpError) return new ZernioHttpError(mensaje, error.status);
+  if (esErrorComun(error)) return new Error(mensaje);
   return error;
 }
 

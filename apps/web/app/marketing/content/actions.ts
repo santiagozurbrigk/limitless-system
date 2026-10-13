@@ -839,8 +839,11 @@ export async function publishVariantAsZernioDraftAction(
         content: trimmedCaption,
         accountId,
       })
+      // `createPost` lanza `ZernioHttpError` con el status y sin el cuerpo de
+      // la respuesta (que puede repetir el caption): una clave rechazada es un
+      // rechazo con motivo y lo demás, una falla.
       .catch((error: unknown) => {
-        throw falloAlCrearElBorrador(error);
+        throw rechazoDeZernio(error);
       });
 
     const post = created.post ?? created;
@@ -878,19 +881,4 @@ export async function publishVariantAsZernioDraftAction(
 
     return { postId, caption: trimmedCaption, platformPostUrl };
   });
-}
-
-/**
- * `createPost` de Zernio lanza `Zernio createPost: <cuerpo de la respuesta>`.
- * Ese cuerpo puede repetir el caption que escribió el usuario, y el mensaje de
- * una falla viaja a Sentry (SCRUM-501): se registra sin el cuerpo. Un rechazo
- * con motivo (sin integración, clave rechazada) sigue siendo esperable.
- */
-function falloAlCrearElBorrador(error: unknown): unknown {
-  const rechazo = rechazoDeZernio(error);
-  if (rechazo !== error) return rechazo;
-  if (error instanceof Error && error.message.startsWith("Zernio createPost:")) {
-    return new Error("Zernio createPost: la respuesta no fue exitosa (cuerpo omitido)");
-  }
-  return error;
 }

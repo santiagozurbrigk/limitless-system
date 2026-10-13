@@ -42,6 +42,10 @@ export type AgentToolHandlerContext = {
   state: AgentToolHandlerState;
 };
 
+/** Sugerencia para el modelo cuando el ranking de contenido no se pudo leer. */
+const SUGERENCIA_TOP_CONTENIDO_CON_ERROR =
+  "Reintentá con type_filter='all' y metric='engagement_total'. Si el error persiste, informá al usuario que no se pudo acceder a las métricas de contenido.";
+
 export function createAgentToolHandler(ctx: AgentToolHandlerContext) {
   return async (
     name: string,
@@ -308,7 +312,11 @@ export function createAgentToolHandler(ctx: AgentToolHandlerContext) {
           typeFilter,
         });
         if (!resultado.success) {
-          return JSON.stringify({ success: false, error: resultado.error });
+          return JSON.stringify({
+            success: false,
+            error: resultado.error,
+            suggestion: SUGERENCIA_TOP_CONTENIDO_CON_ERROR,
+          });
         }
         const { piezas: results, sinMetricas } = resultado.data;
 
@@ -336,8 +344,7 @@ export function createAgentToolHandler(ctx: AgentToolHandlerContext) {
         return JSON.stringify({
           success: false,
           error: err instanceof Error ? err.message : "Error desconocido",
-          suggestion:
-            "Reintentá con type_filter='all' y metric='engagement_total'. Si el error persiste, informá al usuario que no se pudo acceder a las métricas de contenido.",
+          suggestion: SUGERENCIA_TOP_CONTENIDO_CON_ERROR,
         });
       }
     }
