@@ -9,21 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Monorepo root — prevents Next from picking wrong workspace (e.g. user home lockfile). */
 const monorepoRoot = path.join(__dirname, "../..");
 
-/*
- * En Vercel el build no repite lint ni tipos (SCRUM-518): ese paso llevaba la
- * máquina de 8 GB al límite y un deploy de producción murió por falta de
- * memoria. La barrera es el CI, obligatorio para mergear a main: `pnpm
- * typecheck`, `pnpm lint` y el job `web-build`, que corre sin VERCEL y sí
- * chequea todo. Vercel define VERCEL=1 en el build; local y CI no la tienen.
- */
-const buildEnVercel = process.env.VERCEL === "1";
-
 const nextConfig: NextConfig = {
-  typescript: {
-    ignoreBuildErrors: buildEnVercel,
-  },
   eslint: {
-    ignoreDuringBuilds: buildEnVercel,
     // `next lint` sólo revisa app, components, lib, pages y src por defecto.
     // El resto de las carpetas con código también (SCRUM-503: un test de
     // providers/ tenía un error que el lint del CI no veía).
@@ -45,6 +32,11 @@ const nextConfig: NextConfig = {
   },
   transpilePackages: ["@ai-coo/ui", "@ai-coo/types"],
   experimental: {
+    // Compila webpack en un proceso aparte que termina al compilar (SCRUM-518).
+    // Next lo apaga solo si hay un `webpack` propio, y `withSentryConfig` lo
+    // define: sin esto el proceso principal retenía la memoria de la compilación
+    // durante lint y tipos, y un deploy de producción murió sin memoria (8 GB).
+    webpackBuildWorker: true,
     serverActions: {
       // Adjuntos de la bandeja de ventas (Unipile permite hasta 15MB).
       bodySizeLimit: "16mb",
