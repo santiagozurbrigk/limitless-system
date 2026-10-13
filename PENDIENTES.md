@@ -80,12 +80,12 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 30 | 18 |
-| [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 31 | 18 |
+| [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 8 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 19 | 5 |
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
-| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
+| [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 19 | 43 | 13 |
 
@@ -231,6 +231,12 @@ Y no hace falta la cookie: `lib/supabase/middleware.ts:61-65` sólo sobrescribe 
 - **Dónde:** `/team/roles`, sesión de member.
 
 ### Plataforma · P2
+
+#### [ADD-ONS-FALLA-COMO-SIN-ADD-ON] Una falla al leer los add-ons se toma como "la org no los tiene" *(nuevo)*
+- **Tipo:** bug
+- **Estado verificado:** `loadEnabledAddOns` (`apps/web/lib/auth/add-ons.ts`) devuelve `[]` si la lectura de `organizations.enabled_add_ons` falla (sólo `console.error`). Las escrituras del add-on `growth_partners` rechazan con "Esta función no está habilitada para tu organización." y las lecturas (`listSubClientsAction`, `listClientRevenueAction`, `getOnboardingStatusAction`, `getGeneralOnboardingAction`) devuelven vacío. Falla cerrada: no abre nada. Anotado en SCRUM-516.
+- **Qué hay que hacer:** que la falla de la lectura lance una `FallaDeLaBase` (o la registre en Sentry) en vez de devolver `[]`, revisando a todos los llamadores de `orgHasAddOn` y `requireAddOn`.
+- **Dónde:** `apps/web/lib/auth/add-ons.ts` y sus llamadores.
 
 #### [DB-CLAIM-HOLDING-SIN-REVALIDAR] Quien pierde el permiso de holding sigue operando dentro del negocio
 - **Tipo:** seguridad
@@ -500,6 +506,16 @@ Prioridad sugerida P3: sin efecto visible hoy; evita un segundo refresh por requ
 Doc del área: [`docs/areas/clientes.md`](./docs/areas/clientes.md)
 
 ### Clientes · P1
+
+#### [CLIENTES-COLUMNAS-CON-LECTURA-CAIDA] Guardar un win o las secciones de un sub-cliente con la lectura de columnas caída borra o pierde datos *(nuevo)*
+- **Tipo:** bug
+- **Severidad:** Alta
+- **Estado verificado:** `validateCustom` (`apps/web/app/clients/win-actions.ts`, la usan `createWinAction` y `updateWinAction`) y `sectionFields` (`apps/web/app/clients/sub-client-actions.ts`, la usan `updateSubClientFieldsAction` y `moveLegacySectionValuesAction`) validan contra `listFieldDefinitionsAction`, que ante una falla de la base devuelve `[]`. Reproducido en la AR pasada 1 de SCRUM-516 con la base falsa: `updateWinAction` con columnas devuelve éxito y la fila queda con `custom: {}`; `updateSubClientFieldsAction` devuelve éxito y la edición no se guarda; `moveLegacySectionValuesAction` responde "No se pasó ningún dato".
+- **Riesgo:** si la lectura de `field_definitions` falla (la red, un timeout) mientras alguien edita un win o las secciones de un sub-cliente, entonces se borran las columnas del win o se pierde la edición y la pantalla dice que se guardó.
+- **Impacto:** orgs que usan columnas configurables en wins o el add-on `growth_partners`; datos borrados sin aviso, sólo durante una falla de la base.
+- **Qué hay que hacer:** que esas dos lecturas lancen ante una falla (`leerColumnas` de SCRUM-517, `lib/custom-fields/leer-columnas.ts`, o una propia con `FallaDeLaBase`) para que la escritura termine en el texto fijo sin tocar la fila. Queda para la segunda parte de SCRUM-516, después del merge de SCRUM-517.
+- **Criterio de aceptación:** con la lectura de columnas caída, crear o editar un win y guardar las secciones de un sub-cliente devuelven el texto fijo, la fila no cambia y la falla queda en Sentry (`server_action`); hay tests de los cuatro casos.
+- **Dónde:** `apps/web/app/clients/win-actions.ts`, `apps/web/app/clients/sub-client-actions.ts`, `apps/web/app/clients/custom-field-actions.ts`.
 
 #### [PERMISOS-SERVER-ACTIONS/clientes] Los permisos del módulo Clientes no se hacen cumplir en el servidor
 - **Parte de:** `[PERMISOS-SERVER-ACTIONS]` (ítem transversal en Plataforma). Acá, lo específico del área.
@@ -1502,6 +1518,12 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 - **Dónde:** `executive_reports where period='daily'`, `lib/executive-reports/generate-daily.ts`.
 
 ### Agente de negocio e IA · P2
+
+#### [AGENTE-TAREAS-TABLERO-TEXTO-CRUDO] `createWorkboardTasksAction` devuelve el texto crudo de la base *(nuevo)*
+- **Tipo:** bug
+- **Estado verificado:** `apps/web/app/agent/workboard-actions.ts` atrapa todo y devuelve `{ ok: false, error }` con el `message` de PostgREST o de la excepción (en inglés). Desde SCRUM-516, `sendClientTaskToBoardAction` lo trata como falla (texto fijo y Sentry), pero el agente lo sigue mostrando tal cual y una falla no queda registrada.
+- **Qué hay que hacer:** pasarla al contrato de errores como valor (`mutacionConErroresEsperables`) dentro de `[ACTIONS-ERRORES-EN-PRODUCCION]`.
+- **Dónde:** `apps/web/app/agent/workboard-actions.ts` y sus llamadores (tools del agente, `app/clients/task-actions.ts`).
 
 #### [RAG-INGESTA-SIN-REINTENTO] (nuevo) La cola de indexado no reintenta cuando falla la ingesta
 - **Tipo:** bug

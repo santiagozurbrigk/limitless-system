@@ -411,6 +411,23 @@ Fuente: PENDIENTES.md [DISCORD-SIN-PROBAR] · Doc del área: docs/areas/platafor
 *Dónde:* {{/team/roles}}, sesión de member.
 
 Fuente: PENDIENTES.md [PERMISOS-VERIFICAR-SESION] · Doc del área: docs/areas/plataforma.md",PERMISOS-VERIFICAR-SESION,Plataforma,P1,Alta,verificación manual
+[CLIENTES-COLUMNAS-CON-LECTURA-CAIDA] Guardar un win o las secciones de un sub-cliente con la lectura de columnas caída borra o pierde datos *(nuevo)*,Bug,High,clientes,p1,sev-alta,bug,,,"*Tipo:* bug
+
+*Severidad:* Alta
+
+*Estado verificado:* {{validateCustom}} ({{apps/web/app/clients/win-actions.ts}}, la usan {{createWinAction}} y {{updateWinAction}}) y {{sectionFields}} ({{apps/web/app/clients/sub-client-actions.ts}}, la usan {{updateSubClientFieldsAction}} y {{moveLegacySectionValuesAction}}) validan contra {{listFieldDefinitionsAction}}, que ante una falla de la base devuelve {{[]}}. Reproducido en la AR pasada 1 de SCRUM-516 con la base falsa: {{updateWinAction}} con columnas devuelve éxito y la fila queda con {{custom: {}}}; {{updateSubClientFieldsAction}} devuelve éxito y la edición no se guarda; {{moveLegacySectionValuesAction}} responde ""No se pasó ningún dato"".
+
+*Riesgo:* si la lectura de {{field_definitions}} falla (la red, un timeout) mientras alguien edita un win o las secciones de un sub-cliente, entonces se borran las columnas del win o se pierde la edición y la pantalla dice que se guardó.
+
+*Impacto:* orgs que usan columnas configurables en wins o el add-on {{growth_partners}}; datos borrados sin aviso, sólo durante una falla de la base.
+
+*Qué hay que hacer:* que esas dos lecturas lancen ante una falla ({{leerColumnas}} de SCRUM-517, {{lib/custom-fields/leer-columnas.ts}}, o una propia con {{FallaDeLaBase}}) para que la escritura termine en el texto fijo sin tocar la fila. Queda para la segunda parte de SCRUM-516, después del merge de SCRUM-517.
+
+*Criterio de aceptación:* con la lectura de columnas caída, crear o editar un win y guardar las secciones de un sub-cliente devuelven el texto fijo, la fila no cambia y la falla queda en Sentry ({{server_action}}); hay tests de los cuatro casos.
+
+*Dónde:* {{apps/web/app/clients/win-actions.ts}}, {{apps/web/app/clients/sub-client-actions.ts}}, {{apps/web/app/clients/custom-field-actions.ts}}.
+
+Fuente: PENDIENTES.md [CLIENTES-COLUMNAS-CON-LECTURA-CAIDA] · Doc del área: docs/areas/clientes.md",CLIENTES-COLUMNAS-CON-LECTURA-CAIDA,Clientes,P1,Alta,bug
 [PERMISOS-SERVER-ACTIONS/clientes] Los permisos del módulo Clientes no se hacen cumplir en el servidor,Bug,High,clientes,p1,sev-alta,seguridad,permisos-transversal,,"*Tipo:* seguridad
 
 *Severidad:* Alta
@@ -1250,6 +1267,15 @@ Fuente: PENDIENTES.md [T-3] · Doc del área: docs/arquitectura/vision-general.m
 *Dónde:* {{apps/web/lib/utm/}}.
 
 Fuente: PENDIENTES.md [T-5] · Doc del área: docs/arquitectura/vision-general.md",T-5,"Infraestructura, seguridad y tests (transversal)",P1,Baja,tests
+"[ADD-ONS-FALLA-COMO-SIN-ADD-ON] Una falla al leer los add-ons se toma como ""la org no los tiene"" *(nuevo)*",Bug,Medium,plataforma,p2,bug,,,,"*Tipo:* bug
+
+*Estado verificado:* {{loadEnabledAddOns}} ({{apps/web/lib/auth/add-ons.ts}}) devuelve {{[]}} si la lectura de {{organizations.enabled_add_ons}} falla (sólo {{console.error}}). Las escrituras del add-on {{growth_partners}} rechazan con ""Esta función no está habilitada para tu organización."" y las lecturas ({{listSubClientsAction}}, {{listClientRevenueAction}}, {{getOnboardingStatusAction}}, {{getGeneralOnboardingAction}}) devuelven vacío. Falla cerrada: no abre nada. Anotado en SCRUM-516.
+
+*Qué hay que hacer:* que la falla de la lectura lance una {{FallaDeLaBase}} (o la registre en Sentry) en vez de devolver {{[]}}, revisando a todos los llamadores de {{orgHasAddOn}} y {{requireAddOn}}.
+
+*Dónde:* {{apps/web/lib/auth/add-ons.ts}} y sus llamadores.
+
+Fuente: PENDIENTES.md [ADD-ONS-FALLA-COMO-SIN-ADD-ON] · Doc del área: docs/areas/plataforma.md",ADD-ONS-FALLA-COMO-SIN-ADD-ON,Plataforma,P2,,bug
 [DB-CLAIM-HOLDING-SIN-REVALIDAR] Quien pierde el permiso de holding sigue operando dentro del negocio,Bug,Medium,plataforma,p2,sev-critica,seguridad,,,"*Tipo:* seguridad
 
 *Severidad:* Crítica
@@ -2145,6 +2171,15 @@ Fuente: PENDIENTES.md [T-6] · Doc del área: docs/areas/embudos.md",T-6,Embudos
 *Dónde:* {{apps/web/e2e/}}.
 
 Fuente: PENDIENTES.md [T-8] · Doc del área: docs/areas/embudos.md",T-8,Embudos y Lanzamientos,P2,,tests
+[AGENTE-TAREAS-TABLERO-TEXTO-CRUDO] createWorkboardTasksAction devuelve el texto crudo de la base *(nuevo)*,Bug,Medium,agente-ia,p2,bug,,,,"*Tipo:* bug
+
+*Estado verificado:* {{apps/web/app/agent/workboard-actions.ts}} atrapa todo y devuelve {{{ ok: false, error }}} con el {{message}} de PostgREST o de la excepción (en inglés). Desde SCRUM-516, {{sendClientTaskToBoardAction}} lo trata como falla (texto fijo y Sentry), pero el agente lo sigue mostrando tal cual y una falla no queda registrada.
+
+*Qué hay que hacer:* pasarla al contrato de errores como valor ({{mutacionConErroresEsperables}}) dentro de {{[ACTIONS-ERRORES-EN-PRODUCCION]}}.
+
+*Dónde:* {{apps/web/app/agent/workboard-actions.ts}} y sus llamadores (tools del agente, {{app/clients/task-actions.ts}}).
+
+Fuente: PENDIENTES.md [AGENTE-TAREAS-TABLERO-TEXTO-CRUDO] · Doc del área: docs/areas/agente-ia.md",AGENTE-TAREAS-TABLERO-TEXTO-CRUDO,Agente de negocio e IA,P2,,bug
 [RAG-INGESTA-SIN-REINTENTO] (nuevo) La cola de indexado no reintenta cuando falla la ingesta,Bug,Medium,agente-ia,p2,bug,,,,"*Tipo:* bug
 
 *Estado verificado:* {{publishRagIngestionJob}} publica con {{retries: 3}} ({{apps/web/lib/queue/qstash-client.ts:169}}), pero {{processRagIngestion}} ({{lib/queue/processors/rag-ingestion.ts:104-127}}) devuelve {{{ chunkCount: 0, error }}} cuando falla la ingesta (texto vacío, OpenAI caído, verificación de chunks), porque {{indexBusinessContextInRag}} ({{lib/business-context/rag-indexing.ts:176-192}}) atrapa el error. El worker ({{app/api/queue/process-rag-ingestion/route.ts:58}}) responde 200 y QStash no reintenta; sólo un throw inesperado da 500. Un corte transitorio de OpenAI deja el documento en {{error}} para siempre.
