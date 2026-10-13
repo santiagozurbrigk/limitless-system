@@ -87,7 +87,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 17 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 20 | 43 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 43 | 13 |
 
 ---
 
@@ -2157,6 +2157,16 @@ Prioridad sugerida P1: es la base del runbook; sin detección, todas las demás 
 - **Qué hay que hacer:** actualizar `.env.example` y `turbo.json` con la tabla de `docs/operacion/entorno-y-deploy.md`; limpiar Vercel; renombrar `OTC_WEBHOOK_SECRET` → `LIMITLESS_WEBHOOK_SECRET` en Vercel y Railway y después borrar el respaldo.
 - **Criterio de aceptación:** Todas las variables que usa el código (incluidas WORKER_AUTH_SECRET, ZERNIO_WEBHOOK_SECRET, ZERNIO_BASE_URL, CALENDLY_CLOSER_REDIRECT_URI, SUPER_ADMIN_GOOGLE_REDIRECT_URI, *_API_BASE, SENTRY_*, NEXT_PUBLIC_SOP_VIDEO_MAX_MB) figuran en .env.example y turbo.json, coincidiendo con la tabla de docs/operacion/entorno-y-deploy.md, y CRON_SECRET figura como obligatoria; en Vercel no quedan NEXT_PUBLIC_VSL_URL, NEXT_PUBLIC_NAV_STYLE, REDIS_URL, QSTASH_URL, GOOGLE_REDIRECT_URI ni FATHOM_REDIRECT_URI y sí están LIMITLESS_WEBHOOK_SECRET, FATHOM_WEBHOOK_SECRET y NEXT_PUBLIC_UTM_ORGANIZATION_ID; OTC_WEBHOOK_SECRET ya no se usa en código, turbo.json, Vercel ni Railway y el bot de Discord sigue autenticando contra la web
 - **Dónde:** `.env.example`, `turbo.json`, Vercel, Railway, `apps/web/lib/discord/webhook-auth.ts`, `apps/discord-bot/src/lib/limitless-api.ts`.
+
+#### [MAIN-SIN-PROTECCION] `main` no tiene protección: se puede pushear directo y mergear con el CI en rojo
+- **Tipo:** seguridad
+- **Severidad:** Alta
+- **Estado verificado:** el 2026-10-13, `gh api repos/santiagozurbrigk/limitless-system/branches/main` devuelve `"protected": false` y `required_status_checks` vacío; `.../branches/main/protection` da 404 y `.../rulesets` devuelve `[]`. Hubo al menos un push directo a `main` sin PR (`f77a7bc7`, "chore: disparar el deploy de Vercel después de reconectar el repo"). `docs/operacion/entorno-y-deploy.md` § Branch protection describe la configuración desde SCRUM-261, pero nadie la aplicó.
+- **Riesgo:** Si alguien mergea un PR con el CI en rojo o en curso, o pushea directo a `main`, entonces el cambio se despliega en producción: el build de Vercel frena errores de tipos, de lint y de compilación, pero no tests rotos (incluidos los de RLS del job `migrations`) ni un `PENDIENTES.md` inválido.
+- **Impacto:** toda la plataforma: un test de aislamiento entre organizaciones o de permisos en rojo puede llegar a producción sin que nada lo frene.
+- **Qué hay que hacer:** que un admin del repo (hoy santiagozurbrigk) configure la protección de `main` como dice `entorno-y-deploy.md` § Branch protection: PR obligatorio, sin push directo ni force push, y checks requeridos `checks` y `web-build` (y `migrations` y `backlog`) con la rama al día. No se puede hacer desde el repo.
+- **Criterio de aceptación:** gh api repos/santiagozurbrigk/limitless-system/branches/main devuelve "protected": true y en required_status_checks figuran checks y web-build (además de migrations y backlog); un push directo a main es rechazado; un PR con el CI en rojo no se puede mergear; la salida del comando queda citada en entorno-y-deploy.md
+- **Dónde:** configuración del repo en GitHub (Settings → Branches o Rulesets), `docs/operacion/entorno-y-deploy.md`.
 
 #### [TURBO-ENV-BUILD-VERCEL] El build de Vercel no recibe las variables que faltan en `turbo.json`: producción no sube source maps a Sentry
 - **Tipo:** bug

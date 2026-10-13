@@ -1199,6 +1199,23 @@ Fuente: PENDIENTES.md [AUD-CONF-6] · Doc del área: docs/arquitectura/vision-ge
 *Dónde:* {{.env.example}}, {{turbo.json}}, Vercel, Railway, {{apps/web/lib/discord/webhook-auth.ts}}, {{apps/discord-bot/src/lib/limitless-api.ts}}.
 
 Fuente: PENDIENTES.md [ENV-LIMPIEZA] · Doc del área: docs/arquitectura/vision-general.md",ENV-LIMPIEZA,"Infraestructura, seguridad y tests (transversal)",P1,Media,deuda técnica
+[MAIN-SIN-PROTECCION] main no tiene protección: se puede pushear directo y mergear con el CI en rojo,Bug,High,infra,p1,sev-alta,seguridad,,,"*Tipo:* seguridad
+
+*Severidad:* Alta
+
+*Estado verificado:* el 2026-10-13, {{gh api repos/santiagozurbrigk/limitless-system/branches/main}} devuelve {{""protected"": false}} y {{required_status_checks}} vacío; {{.../branches/main/protection}} da 404 y {{.../rulesets}} devuelve {{[]}}. Hubo al menos un push directo a {{main}} sin PR ({{f77a7bc7}}, ""chore: disparar el deploy de Vercel después de reconectar el repo""). {{docs/operacion/entorno-y-deploy.md}} § Branch protection describe la configuración desde SCRUM-261, pero nadie la aplicó.
+
+*Riesgo:* Si alguien mergea un PR con el CI en rojo o en curso, o pushea directo a {{main}}, entonces el cambio se despliega en producción: el build de Vercel frena errores de tipos, de lint y de compilación, pero no tests rotos (incluidos los de RLS del job {{migrations}}) ni un {{PENDIENTES.md}} inválido.
+
+*Impacto:* toda la plataforma: un test de aislamiento entre organizaciones o de permisos en rojo puede llegar a producción sin que nada lo frene.
+
+*Qué hay que hacer:* que un admin del repo (hoy santiagozurbrigk) configure la protección de {{main}} como dice {{entorno-y-deploy.md}} § Branch protection: PR obligatorio, sin push directo ni force push, y checks requeridos {{checks}} y {{web-build}} (y {{migrations}} y {{backlog}}) con la rama al día. No se puede hacer desde el repo.
+
+*Criterio de aceptación:* gh api repos/santiagozurbrigk/limitless-system/branches/main devuelve ""protected"": true y en required_status_checks figuran checks y web-build (además de migrations y backlog); un push directo a main es rechazado; un PR con el CI en rojo no se puede mergear; la salida del comando queda citada en entorno-y-deploy.md
+
+*Dónde:* configuración del repo en GitHub (Settings → Branches o Rulesets), {{docs/operacion/entorno-y-deploy.md}}.
+
+Fuente: PENDIENTES.md [MAIN-SIN-PROTECCION] · Doc del área: docs/arquitectura/vision-general.md",MAIN-SIN-PROTECCION,"Infraestructura, seguridad y tests (transversal)",P1,Alta,seguridad
 [TURBO-ENV-BUILD-VERCEL] El build de Vercel no recibe las variables que faltan en turbo.json: producción no sube source maps a Sentry,Bug,High,infra,p1,sev-media,bug,,,"*Tipo:* bug
 
 *Severidad:* Media
