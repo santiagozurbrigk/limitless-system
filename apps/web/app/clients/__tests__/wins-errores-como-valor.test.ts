@@ -597,3 +597,16 @@ describe("un PGRST002 no es una tabla ausente (SCRUM-516, AR pasada 2)", () => {
     expect(base.reportes).toEqual([]);
   });
 });
+
+describe("⭐ cada consulta lleva el filtro de la organización de la sesión (MAYOR-2 de la AR pasada 2)", () => {
+  // Las rutas de Storage además pasan por `soloRutasDeLaOrg`: una fila ajena no
+  // cambia qué se borra, así que el testigo es el filtro de la consulta.
+  it.each([
+    ["borrar un win: sus capturas", () => deleteWinAction(WIN), "select"],
+    ["borrar una captura: leerla", () => deleteWinAttachmentAction(CAPTURA), "select"],
+    ["borrar una captura: la fila", () => deleteWinAttachmentAction(CAPTURA), "delete"],
+  ] as const)("%s", async (_n, correr, op) => {
+    await expect(correr()).resolves.toEqual({ success: true, data: undefined });
+    expect(base.filtrosDe("win_attachments", op)).toContainEqual(["organization_id", ORG]);
+  });
+});

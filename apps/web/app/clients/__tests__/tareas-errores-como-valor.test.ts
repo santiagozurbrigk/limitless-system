@@ -328,3 +328,15 @@ describe("un PGRST002 no es una tabla ausente (SCRUM-516, AR pasada 2)", () => {
     expect(base.reportes).toHaveLength(1);
   });
 });
+
+describe("⭐ cada consulta lleva el filtro de la organización de la sesión (MAYOR-2 de la AR pasada 2)", () => {
+  it("crear: la última posición se lee en la org", async () => {
+    await expect(createClientTaskAction({ clientId: CLIENTE, title: "Llamar" })).resolves.toMatchObject({ success: true });
+    expect(base.filtrosDe("client_tasks", "select")).toContainEqual(["organization_id", ORG]);
+  });
+
+  it("mandar al tablero: la marca se escribe en la org", async () => {
+    await expect(sendClientTaskToBoardAction({ taskId: TAREA })).resolves.toMatchObject({ success: true });
+    expect(base.filtrosDe("client_tasks", "update")).toContainEqual(["organization_id", ORG]);
+  });
+});

@@ -856,3 +856,67 @@ describe("tabla ausente por código, y un PGRST002 no lo es (SCRUM-516, AR pasad
     expect(base.reportes).toHaveLength(1);
   });
 });
+
+
+// ─── Filtro por organización (MAYOR-2 de la AR pasada 2) ────────────────────
+
+describe("⭐ descartar y asignar con service role no tocan filas de otra org con el mismo id", () => {
+  it("descartar: la fila ajena con el mismo id queda sin descartar", async () => {
+    base.tablas.client_onboarding_submissions.unshift({
+      ...base.tablas.client_onboarding_submissions[0],
+      id: ENVIO,
+      organization_id: OTRA_ORG,
+      respondent_name: "Ajena con el mismo id",
+    });
+    await expect(discardOnboardingSubmissionAction(ENVIO)).resolves.toEqual({ success: true, data: undefined });
+    const [ajena, propia] = base.tablas.client_onboarding_submissions;
+    expect(ajena).toMatchObject({ organization_id: OTRA_ORG, discarded_at: null });
+    expect(propia).toMatchObject({ organization_id: ORG, discarded_at: expect.any(String) });
+    expect(base.filtrosDe("client_onboarding_submissions", "update")).toEqual([
+      ["id", ENVIO],
+      ["organization_id", ORG],
+    ]);
+  });
+
+  it("asignar a un creador existente: lee y escribe el de la org, no el ajeno con el mismo id", async () => {
+    base.tablas.client_sub_clients.unshift({
+      id: SUB,
+      organization_id: OTRA_ORG,
+      client_id: CLIENTE,
+      name: "Ajena con el mismo id",
+      instagram_url: null,
+      custom: { seguidores: 1 },
+      created_at: "2026-10-01",
+    });
+    const r = await assignOnboardingSubmissionAction({ submissionId: ENVIO, clientId: CLIENTE, subClientId: SUB });
+    expect(r).toEqual({ success: true, data: { clientId: CLIENTE, subClientId: SUB } });
+    const [ajena, propia] = base.tablas.client_sub_clients;
+    expect(ajena.custom).toEqual({ seguidores: 1 });
+    expect(propia.custom).toEqual({ seguidores: 500 });
+    expect(base.tablas.client_timeline_entries?.[0]?.title).toBe("Onboarding completado: Creadora");
+  });
+});
+
+describe("⭐ cada consulta lleva el filtro de la organización de la sesión", () => {
+  const CASOS: Array<[string, () => Promise<unknown>, string, "select" | "update" | "delete", number]> = [
+    ["estado del onboarding: link activo", () => getOnboardingStatusAction(SUB), "client_onboarding_links", "select", 0],
+    ["estado del onboarding: envíos", () => getOnboardingStatusAction(SUB), "client_onboarding_submissions", "select", 0],
+    ["crear link: el activo", () => createOnboardingLinkAction(SUB), "client_onboarding_links", "select", 0],
+    ["bandeja: link general", () => getGeneralOnboardingAction(), "client_onboarding_links", "select", 0],
+    ["crear link general: el activo", () => createGeneralOnboardingLinkAction(), "client_onboarding_links", "select", 0],
+    ["descartar un envío", () => discardOnboardingSubmissionAction(ENVIO), "client_onboarding_submissions", "update", 0],
+    ["asignar: el creador existente", () => assignOnboardingSubmissionAction({ submissionId: ENVIO, clientId: CLIENTE, subClientId: SUB }), "client_sub_clients", "select", 0],
+    ["asignar: la ficha del creador", () => assignOnboardingSubmissionAction({ submissionId: ENVIO, clientId: CLIENTE, subClientId: SUB }), "client_sub_clients", "update", 0],
+    ["guardar los campos de un sub-cliente", () => updateSubClientFieldsAction({ id: SUB, values: { seguidores: "2000" } }), "client_sub_clients", "update", 0],
+    ["pasar datos viejos: el sub-cliente", () => moveLegacySectionValuesAction({ clientId: CLIENTE, subClientId: SUB }), "client_sub_clients", "select", 0],
+    ["pasar datos viejos: escribir el sub-cliente", () => moveLegacySectionValuesAction({ clientId: CLIENTE, subClientId: SUB }), "client_sub_clients", "update", 0],
+    ["pasar datos viejos: escribir el growth partner", () => moveLegacySectionValuesAction({ clientId: CLIENTE, subClientId: SUB }), "clients", "update", 0],
+    ["corregir el mes: borrar el reemplazado", () => saveClientRevenueAction({ clientId: CLIENTE, amount: 2000, period: "2026-10", replacesEntryId: MES }), "client_revenue_entries", "delete", 0],
+  ];
+
+  it.each(CASOS)("%s", async (_n, correr, tabla, op, n) => {
+    const r = (await correr()) as { success: boolean };
+    expect(r.success).toBe(true);
+    expect(base.filtrosDe(tabla, op, n)).toContainEqual(["organization_id", ORG]);
+  });
+});

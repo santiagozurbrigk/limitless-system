@@ -311,3 +311,10 @@ describe("lo inesperado (SCRUM-516)", () => {
     expect(base.reportes).toEqual([{ error: falla, contexto: { accion: "[getExcelPreview]" } }]);
   });
 });
+
+describe("⭐ cada consulta lleva el filtro de la organización de la sesión (MAYOR-2 de la AR pasada 2)", () => {
+  it("los planes para el auto-match se leen de la org", async () => {
+    await expect(importClientsFromExcelAction(CLIENTES, MAPEO)).resolves.toMatchObject({ success: true });
+    expect(base.filtrosDe("plans", "select")).toEqual([["organization_id", ORG]]);
+  });
+});

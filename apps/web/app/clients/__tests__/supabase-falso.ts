@@ -71,6 +71,17 @@ export const base = {
     this.secuencia = 0;
   },
 
+  /**
+   * Los filtros de la n-ésima operación `op` sobre `tabla` (0 = la primera).
+   * Para probar que una consulta lleva el filtro de la organización aunque una
+   * fila ajena no cambie el resultado (SCRUM-516, AR pasada 2).
+   */
+  filtrosDe(tabla: string, op: Op, n = 0) {
+    const encontrada = this.operaciones.filter((o) => o.tabla === tabla && o.op === op)[n];
+    if (!encontrada) throw new Error(`no hubo ${op} n.º ${n} sobre ${tabla}`);
+    return encontrada.filtros;
+  },
+
   /** Las operaciones de escritura, en orden. */
   escrituras() {
     return this.operaciones.filter((o) => o.op !== "select");
