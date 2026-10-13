@@ -22,6 +22,7 @@ import {
   type MarketingAdsFilters,
 } from "@/app/marketing/content/ad-actions";
 import { EmptyState } from "@/components/shared/empty-state";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import { FilterPills } from "@/components/marketing/filter-pills";
 import type { ZernioAdMetrics, ZernioAdStatus, ZernioLinkedAd } from "@/lib/zernio/client";
 import {
@@ -722,6 +723,23 @@ function CampaignView({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+/**
+ * Recarga los anuncios con los filtros. La lectura devuelve su error como valor
+ * (SCRUM-502): sin anuncios y con el motivo, que el tablero muestra; si la
+ * acción lanzó, el texto fijo.
+ */
+export async function cargarAnuncios(
+  filtros: MarketingAdsFilters
+): Promise<{ ads: ZernioLinkedAd[]; error: string | null }> {
+  const lectura = await leerConMotivo(
+    () => getMarketingAdsAction(filtros),
+    "[AdsDashboard] recargar"
+  );
+  return lectura.ok
+    ? { ads: lectura.data.ads, error: null }
+    : { ads: [], error: lectura.motivo };
+}
+
 export function AdsDashboard({ initialAds, initialError = null, initialRangeDays = 30 }: Props) {
   const [ads, setAds] = useState(initialAds);
   const [error, setError] = useState<string | null>(initialError);
@@ -820,9 +838,9 @@ export function AdsDashboard({ initialAds, initialError = null, initialRangeDays
   const refetch = useCallback(
     (status: StatusFilter, platform: PlatformFilter, range: RangeDays) => {
       startTransition(async () => {
-        const result = await getMarketingAdsAction(buildFilters(status, platform, range));
+        const result = await cargarAnuncios(buildFilters(status, platform, range));
         setAds(result.ads);
-        setError(result.error ?? null);
+        setError(result.error);
         setExpandedIds(new Set());
         setCampaignFilter("all");
         setAdSetFilter("all");

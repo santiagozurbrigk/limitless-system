@@ -986,7 +986,12 @@ export async function sendAgentMessageAction(input: {
             const { analyzeContentPieceAction } = await import(
               "@/app/marketing/content/actions"
             );
-            const analysis = await analyzeContentPieceAction(contentPieceId);
+            // Devuelve su error como valor (SCRUM-502).
+            const resultado = await analyzeContentPieceAction(contentPieceId);
+            if (!resultado.success) {
+              return JSON.stringify({ success: false, error: resultado.error });
+            }
+            const analysis = resultado.data;
             return JSON.stringify({
               success: true,
               analysis: {
@@ -1020,11 +1025,15 @@ export async function sendAgentMessageAction(input: {
             const { createContentVariantsAction } = await import(
               "@/app/marketing/content/actions"
             );
-            const variantIds = await createContentVariantsAction({
+            const resultado = await createContentVariantsAction({
               sourceContentId,
               count,
               instructions,
             });
+            if (!resultado.success) {
+              return JSON.stringify({ success: false, error: resultado.error });
+            }
+            const variantIds = resultado.data;
 
             return JSON.stringify({
               success: true,
@@ -1049,12 +1058,15 @@ export async function sendAgentMessageAction(input: {
             const { getTopPerformingContentAction } = await import(
               "@/app/marketing/content/actions"
             );
-            const { piezas: results, sinMetricas } =
-              await getTopPerformingContentAction({
-                metric,
-                limit,
-                typeFilter,
-              });
+            const resultado = await getTopPerformingContentAction({
+              metric,
+              limit,
+              typeFilter,
+            });
+            if (!resultado.success) {
+              return JSON.stringify({ success: false, error: resultado.error });
+            }
+            const { piezas: results, sinMetricas } = resultado.data;
 
             return JSON.stringify({
               success: true,

@@ -8,6 +8,7 @@ import {
 } from "@/app/marketing/content/reel-variation-actions";
 import { Badge, Button, Textarea, cn } from "@ai-coo/ui";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
 import {
   Check,
   ChevronDown,
@@ -47,6 +48,30 @@ type Props = {
   onUpdate: (index: number, patch: Partial<ReelVariation>) => void;
 };
 
+// ─── Guardar con su motivo (SCRUM-502) ────────────────────────────────────────
+// `updateReelVariationAction` devuelve su error como valor: se avisa el motivo,
+// o el texto fijo si la acción lanzó. Antes, incluir o excluir una variante que
+// fallaba no avisaba nada.
+
+type CambioDeVariante = Parameters<typeof updateReelVariationAction>[2];
+
+export function guardarCambioDeVariante(opciones: {
+  jobId: string;
+  index: number;
+  cambio: CambioDeVariante;
+  alGuardar: () => void;
+  avisar: (aviso: Aviso) => void;
+  tituloError: string;
+}): Promise<void> {
+  return correrMutacion({
+    accion: () => updateReelVariationAction(opciones.jobId, opciones.index, opciones.cambio),
+    alExito: opciones.alGuardar,
+    avisar: opciones.avisar,
+    tituloError: opciones.tituloError,
+    etiqueta: "[VariationCard] guardar",
+  });
+}
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function VariationCard({ jobId, index, variation, onUpdate }: Props) {
@@ -72,17 +97,16 @@ export function VariationCard({ jobId, index, variation, onUpdate }: Props) {
         .map((h) => (h.startsWith("#") ? h : `#${h}`))
         .filter(Boolean);
 
-      await updateReelVariationAction(jobId, index, {
-        description: localDescription,
-        hashtags,
-      });
-
-      onUpdate(index, { description: localDescription, hashtags });
-      push({ title: "Variante actualizada", variant: "success" });
-    } catch (err) {
-      push({
-        title: "No se pudo guardar",
-        description: err instanceof Error ? err.message : "Error desconocido",
+      await guardarCambioDeVariante({
+        jobId,
+        index,
+        cambio: { description: localDescription, hashtags },
+        alGuardar: () => {
+          onUpdate(index, { description: localDescription, hashtags });
+          push({ title: "Variante actualizada", variant: "success" });
+        },
+        avisar: push,
+        tituloError: "No se pudo guardar",
       });
     } finally {
       setSaving(false);
@@ -127,13 +151,14 @@ export function VariationCard({ jobId, index, variation, onUpdate }: Props) {
 
   const handleToggleIncluded = async () => {
     const next = !variation.included;
-    try {
-      await updateReelVariationAction(jobId, index, { included: next });
-      onUpdate(index, { included: next });
-    } catch {
-      // Revert local optimistic update
-      onUpdate(index, { included: variation.included });
-    }
+    await guardarCambioDeVariante({
+      jobId,
+      index,
+      cambio: { included: next },
+      alGuardar: () => onUpdate(index, { included: next }),
+      avisar: push,
+      tituloError: "No se pudo cambiar la variante",
+    });
   };
 
   const isReady = variation.status === "ready";

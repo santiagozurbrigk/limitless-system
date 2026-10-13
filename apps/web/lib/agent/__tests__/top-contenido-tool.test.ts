@@ -11,7 +11,8 @@ const sim = vi.hoisted(() => ({
 }));
 
 vi.mock("@/app/marketing/content/actions", () => ({
-  getTopPerformingContentAction: async () => sim.respuesta,
+  // Devuelve `MutationResult` (SCRUM-502).
+  getTopPerformingContentAction: async () => ({ success: true, data: sim.respuesta }),
 }));
 
 import { createAgentToolHandler } from "../agent-tool-handler";

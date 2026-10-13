@@ -1,4 +1,4 @@
-import { notFound, unstable_rethrow } from "next/navigation";
+import { notFound } from "next/navigation";
 import { getContentPieceAction, getContentPiecesAction } from "@/app/marketing/content/actions";
 import { listReelVariationJobsForPieceAction } from "@/app/marketing/content/reel-variation-actions";
 
@@ -6,6 +6,8 @@ import { listReelVariationJobsForPieceAction } from "@/app/marketing/content/ree
 // (descarga de video desde Drive + subida a Supabase Storage en archivos grandes).
 export const maxDuration = 300;
 import { MarketingContentDetailPageClient } from "@/components/marketing/marketing-content-detail-page-client";
+import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
+import { EmptyState } from "@/components/shared/empty-state";
 import type { ContentMetrics, ContentPiece } from "@/types/content";
 
 function computeOrgAvgMetrics(pieces: ContentPiece[]): ContentMetrics | null {
@@ -44,35 +46,53 @@ export default async function MarketingContentDetailPage({
 }) {
   const { id } = await params;
 
-  let data: Awaited<ReturnType<typeof getContentPieceAction>>;
-  try {
-    data = await getContentPieceAction(id);
-  } catch (error) {
-    // El error con el que Next marca la ruta como dinámica (y los de redirect o
-    // notFound) no es una falla: se relanza para que Next lo maneje.
-    unstable_rethrow(error);
-    notFound();
+  // Las lecturas devuelven su error como valor (SCRUM-502). Antes cualquier
+  // falla de la base se mostraba como 404; ahora el 404 es sólo para una pieza
+  // que no existe en la organización y una falla muestra el motivo.
+  const resultado = await getContentPieceAction(id);
+  if (!resultado.success) {
+    return (
+      <div className="p-6">
+        <EmptyState title="No se pudo cargar la pieza" description={resultado.error} />
+      </div>
+    );
   }
+  const data = resultado.data;
+  if (!data) notFound();
 
-  // Fetch org pieces y reel jobs en paralelo (no bloqueantes)
-  const [allPieces, initialReelJobs] = await Promise.all([
-    getContentPiecesAction({ limit: 50 }).catch((error: unknown) => {
-      unstable_rethrow(error);
-      return [];
-    }),
-    listReelVariationJobsForPieceAction(id).catch((error: unknown) => {
-      unstable_rethrow(error);
-      return [];
-    }),
+  // Las piezas de la org (para el promedio) y los Trial Reels no bloquean el
+  // detalle, pero si fallan se avisa en vez de mostrar "sin datos". Los Trial
+  // Reels se buscan por el ID interno: `id` puede ser el de la plataforma.
+  const [piezas, trabajos] = await Promise.all([
+    getContentPiecesAction({ limit: 50 }),
+    listReelVariationJobsForPieceAction(data.id),
   ]);
-  const orgAvg = computeOrgAvgMetrics(allPieces);
+  const orgAvg = piezas.success ? computeOrgAvgMetrics(piezas.data) : null;
 
   return (
-    <MarketingContentDetailPageClient
-      piece={data}
-      variants={data.variants ?? []}
-      orgAvg={orgAvg}
-      initialReelJobs={initialReelJobs}
-    />
+    <>
+      {!piezas.success || !trabajos.success ? (
+        <div className="space-y-2 px-6 pt-6">
+          {!piezas.success ? (
+            <AvisoDeLecturaFallida
+              titulo="No se pudo calcular el promedio de la organización."
+              motivo={piezas.error}
+            />
+          ) : null}
+          {!trabajos.success ? (
+            <AvisoDeLecturaFallida
+              titulo="No se pudieron cargar los Trial Reels."
+              motivo={trabajos.error}
+            />
+          ) : null}
+        </div>
+      ) : null}
+      <MarketingContentDetailPageClient
+        piece={data}
+        variants={data.variants ?? []}
+        orgAvg={orgAvg}
+        initialReelJobs={trabajos.success ? trabajos.data : []}
+      />
+    </>
   );
 }

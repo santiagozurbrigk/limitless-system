@@ -69,6 +69,13 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 import { getTopPerformingContentAction } from "@/app/marketing/content/actions";
+import type { MutationResult } from "@/lib/server/action-result";
+
+/** La acción devuelve `MutationResult` (SCRUM-502): estos casos son de éxito. */
+function datos<T>(r: MutationResult<T>): T {
+  if (!r.success) throw new Error(`la acción falló: ${r.error}`);
+  return r.data;
+}
 
 function fila(i: number, metrics: Fila["metrics"]): Fila {
   return {
@@ -94,7 +101,7 @@ describe("getTopPerformingContentAction", () => {
     // La mejor pieza está muy atrás: con 100 piezas cualquiera no aparecía.
     sim.filas.push(fila(1500, { views: 999_999 }));
 
-    const r = await getTopPerformingContentAction({ metric: "views", limit: 3 });
+    const r = datos(await getTopPerformingContentAction({ metric: "views", limit: 3 }));
 
     expect(r.piezas[0]).toMatchObject({ id: "p-01500", title: "Pieza 1500", score: 999_999 });
     expect(r.piezas).toHaveLength(3);
@@ -105,7 +112,7 @@ describe("getTopPerformingContentAction", () => {
   it("⭐ devuelve cuántas piezas quedaron afuera por no tener métricas", async () => {
     sim.filas.push(fila(1, { views: 10 }), fila(2, null), fila(3, null), fila(4, { views: 0 }));
 
-    const r = await getTopPerformingContentAction({ metric: "views" });
+    const r = datos(await getTopPerformingContentAction({ metric: "views" }));
 
     expect(r.piezas.map((p) => p.id)).toEqual(["p-00001", "p-00004"]);
     expect(r.sinMetricas).toBe(2);
@@ -119,7 +126,7 @@ describe("getTopPerformingContentAction", () => {
       { ...fila(4, null), variants_of: "p-00001" }
     );
 
-    const r = await getTopPerformingContentAction({ metric: "views" });
+    const r = datos(await getTopPerformingContentAction({ metric: "views" }));
 
     expect(r.piezas.map((p) => p.id)).toEqual(["p-00001"]);
     expect(r.sinMetricas).toBe(0);
@@ -128,7 +135,7 @@ describe("getTopPerformingContentAction", () => {
   it("si ninguna pieza tiene métricas devuelve la lista vacía con el conteo", async () => {
     sim.filas.push(fila(1, null), fila(2, null));
 
-    const r = await getTopPerformingContentAction({ metric: "likes" });
+    const r = datos(await getTopPerformingContentAction({ metric: "likes" }));
 
     expect(r).toEqual({ piezas: [], sinMetricas: 2 });
     expect(sim.pedidosDeDetalle).toHaveLength(0);
