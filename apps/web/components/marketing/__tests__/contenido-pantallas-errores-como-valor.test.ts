@@ -26,7 +26,8 @@ vi.mock("@/app/marketing/content/actions", () => ({
 }));
 vi.mock("@/app/marketing/content/drive-actions", () => ({
   createDriveFolderAction: responder("x"),
-  linkDriveFileToContentAction: responder("x"),
+  linkDriveFileToContentAction: responder("linkDriveFileToContentAction"),
+  unlinkDriveFileAction: responder("unlinkDriveFileAction"),
   listDriveFilesAction: responder("x"),
 }));
 vi.mock("@/app/marketing/content/ad-actions", () => ({
@@ -47,7 +48,8 @@ vi.mock("@/app/marketing/content/reel-variation-actions", () => ({
 }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
-import { cargarPiezasParaVincular } from "../drive-admin-view";
+import { cargarPiezasParaVincular, vincularArchivoAPieza } from "../drive-admin-view";
+import { cambiarArchivoDeDrive } from "../content-piece-detail";
 import { cargarAnunciosDeLaPieza } from "../zernio-post-ads";
 import { cargarComentariosDeLaPieza } from "../zernio-post-comments";
 import { cargarAnuncios } from "../ads-dashboard";
@@ -194,5 +196,52 @@ describe("Trial Reels: variante", () => {
     await guardarCambioDeVariante({ jobId: JOB, index: 0, cambio: { description: "x" }, alGuardar, avisar, tituloError: "No se pudo guardar" });
     expect(alGuardar).not.toHaveBeenCalled();
     expect(avisos).toEqual([{ title: "No se pudo guardar", description: ERROR_INESPERADO, variant: "default" }]);
+  });
+});
+
+describe("vincular y desvincular un archivo de Drive (SCRUM-502, [MKT-VINCULAR-DRIVE-IGNORA-RESULTADO])", () => {
+  const ARCHIVO = { id: "drive-1", name: "video.mp4", url: "https://drive/1" };
+
+  it("⭐ Administrar: con éxito avisa «vinculado»; con un rechazo o una falla, el motivo y no el éxito", async () => {
+    const alVincular = vi.fn();
+    sim.resultados.linkDriveFileToContentAction = { success: true, data: undefined };
+    await vincularArchivoAPieza({ contentPieceId: JOB, archivo: ARCHIVO, alVincular, avisar });
+    expect(alVincular).toHaveBeenCalledTimes(1);
+    expect(sim.llamadas).toEqual([["linkDriveFileToContentAction", JOB, ARCHIVO]]);
+
+    alVincular.mockClear();
+    sim.resultados.linkDriveFileToContentAction = { success: false, error: ERROR_INESPERADO };
+    await vincularArchivoAPieza({ contentPieceId: JOB, archivo: ARCHIVO, alVincular, avisar });
+    expect(alVincular).not.toHaveBeenCalled();
+    expect(avisos).toEqual([{ title: "Error al vincular", description: ERROR_INESPERADO, variant: "default" }]);
+
+    avisos = [];
+    sim.resultados.linkDriveFileToContentAction = new Error("digest");
+    await vincularArchivoAPieza({ contentPieceId: JOB, archivo: ARCHIVO, alVincular, avisar });
+    expect(alVincular).not.toHaveBeenCalled();
+    expect(avisos).toEqual([{ title: "Error al vincular", description: ERROR_INESPERADO, variant: "default" }]);
+  });
+
+  it("⭐ detalle de la pieza: vincular con un rechazo avisa el motivo y no cierra el selector", async () => {
+    const alTerminar = vi.fn();
+    sim.resultados.linkDriveFileToContentAction = { success: false, error: "ID inválido" };
+    await cambiarArchivoDeDrive({ pieceId: JOB, archivo: ARCHIVO, alTerminar, avisar });
+    expect(alTerminar).not.toHaveBeenCalled();
+    expect(avisos).toEqual([{ title: "No se pudo vincular", description: "ID inválido", variant: "default" }]);
+    expect(sim.llamadas).toEqual([["linkDriveFileToContentAction", JOB, ARCHIVO]]);
+  });
+
+  it("⭐ detalle de la pieza: desvincular llama a la acción de desvincular; con éxito termina y con falla avisa", async () => {
+    const alTerminar = vi.fn();
+    sim.resultados.unlinkDriveFileAction = { success: true, data: undefined };
+    await cambiarArchivoDeDrive({ pieceId: JOB, archivo: null, alTerminar, avisar });
+    expect(alTerminar).toHaveBeenCalledTimes(1);
+    expect(sim.llamadas).toEqual([["unlinkDriveFileAction", JOB]]);
+
+    alTerminar.mockClear();
+    sim.resultados.unlinkDriveFileAction = { success: false, error: ERROR_INESPERADO };
+    await cambiarArchivoDeDrive({ pieceId: JOB, archivo: null, alTerminar, avisar });
+    expect(alTerminar).not.toHaveBeenCalled();
+    expect(avisos).toEqual([{ title: "No se pudo desvincular", description: ERROR_INESPERADO, variant: "default" }]);
   });
 });

@@ -17,7 +17,17 @@ import { analyzeContentSalesPatterns } from "@/lib/marketing/analyze-content-pat
 import { getSocialAudienceStats } from "@/lib/marketing/social-audience";
 import type { ClosedBuyerJourney, MarketingAiInsight } from "@/types/marketing-insights";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  registrarFallaDeAccion,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { lecturaDegradable, valorSiNoEsFalla } from "@/lib/server/lectura-degradable";
+import { rechazoConocidoDeClaude } from "@/lib/ai/rechazo-de-claude";
+import { firstZodError, uuidSchema } from "@/lib/validations";
+import { z } from "zod";
 import type { ContentLabel } from "@/lib/content/label-content";
 import {
   buildDistributionStats,
@@ -152,8 +162,26 @@ function rowToView(row: Record<string, unknown>): ContentAssetView {
   };
 }
 
-export async function listContentAssetsAction(): Promise<ContentAssetView[]> {
-  const organizationId = await requireOrganizationId();
+/*
+ * Errores como valor (SCRUM-519): las acciones de este archivo que estaban en
+ * el conteo de `[ACTIONS-ERRORES-EN-PRODUCCION]` devuelven `MutationResult`
+ * con `mutacionConErroresEsperables`. Sin sesión, un id inválido o un video
+ * que no es de la organización vuelven con su motivo; una falla de la base va
+ * a la consola y a Sentry y vuelve con el texto fijo. Antes, las lecturas
+ * devolvían `[]`, `null` o "no conectado" ante una falla.
+ */
+
+const ID_DE_CONTENIDO_INVALIDO = "ID inválido";
+const CONTENIDO_NO_ENCONTRADO = "No encontramos ese contenido.";
+
+function validarIdDeContenido(assetId: unknown): string {
+  const parsed = uuidSchema.safeParse(assetId);
+  if (!parsed.success) throw new ErrorEsperable(ID_DE_CONTENIDO_INVALIDO);
+  return parsed.data;
+}
+
+/** Los videos y posts de la organización; si la base falla, lanza. */
+async function leerActivosDeContenido(organizationId: string): Promise<ContentAssetView[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("content_assets")
@@ -161,27 +189,35 @@ export async function listContentAssetsAction(): Promise<ContentAssetView[]> {
     .eq("organization_id", organizationId)
     .order("published_at", { ascending: false });
 
-  if (error) {
-    console.error("[listContentAssetsAction]", error.message);
-    return [];
-  }
+  if (error) throw new FallaDeLaBase(error);
   return (data ?? []).map(rowToView);
 }
 
+export async function listContentAssetsAction(): Promise<MutationResult<ContentAssetView[]>> {
+  return mutacionConErroresEsperables("[listContentAssets]", async () =>
+    leerActivosDeContenido(await requireOrganizationId())
+  );
+}
+
+/** El video o post de la organización; `null` si no existe o es de otra. */
 export async function getContentAssetByIdAction(
   assetId: string
-): Promise<ContentAssetView | null> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("content_assets")
-    .select("*")
-    .eq("id", assetId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+): Promise<MutationResult<ContentAssetView | null>> {
+  return mutacionConErroresEsperables("[getContentAssetById]", async () => {
+    const id = validarIdDeContenido(assetId);
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("content_assets")
+      .select("*")
+      .eq("id", id)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
 
-  if (error || !data) return null;
-  return rowToView(data as Record<string, unknown>);
+    if (error) throw new FallaDeLaBase(error);
+    if (!data) return null;
+    return rowToView(data as Record<string, unknown>);
+  });
 }
 
 export type MarketingOverviewContext = {
@@ -201,89 +237,129 @@ export type MarketingOverviewContext = {
   };
 };
 
-export async function getMarketingOverviewContextAction(): Promise<MarketingOverviewContext> {
-  const organizationId = await requireOrganizationId();
+/**
+ * El resumen de Marketing (escondido para el release, SCRUM-490). Si falla la
+ * lectura del contenido, de la audiencia o de los turnos, el resumen entero
+ * vuelve con el texto fijo: antes mostraba ceros como si fueran datos.
+ */
+export async function getMarketingOverviewContextAction(): Promise<
+  MutationResult<MarketingOverviewContext>
+> {
+  return mutacionConErroresEsperables("[getMarketingOverviewContext]", async () => {
+    const organizationId = await requireOrganizationId();
 
-  await recomputeContentAssetAttribution(organizationId).catch((err) => {
-    console.error("[getMarketingOverviewContext] recompute attribution:", err);
+    // El recálculo de la atribución es previo a la lectura: si falla, el resumen
+    // sigue con la atribución que había y la falla se registra (antes, sólo en
+    // la consola).
+    await recomputeContentAssetAttribution(organizationId).catch((err) => {
+      registrarFallaDeAccion("[getMarketingOverviewContext] recálculo de atribución", err);
+    });
+
+    const admin = createAdminClient();
+    // La consulta armada en el lugar va primera: si `from()` lanza al armarse,
+    // las lecturas async de atrás todavía no empezaron (SCRUM-504 y SCRUM-517).
+    const [bookingsCount, assets, utmLinks, socialAudience] = await Promise.all([
+      admin
+        .from("closing_calls")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
+        .then(({ count, error }) => {
+          if (error) throw new FallaDeLaBase(error);
+          return count ?? 0;
+        }),
+      leerActivosDeContenido(organizationId),
+      getUTMLinksAction(),
+      getSocialAudienceStats(organizationId),
+    ]);
+
+    const utmSummary = utmLinks.reduce(
+      (acc, link) => ({
+        totalBookings: acc.totalBookings + link.bookings_attributed,
+        totalSales: acc.totalSales + link.sales_attributed,
+        totalRevenue: acc.totalRevenue + link.revenue_attributed,
+        totalClicks: acc.totalClicks + link.clicks,
+      }),
+      { totalBookings: 0, totalSales: 0, totalRevenue: 0, totalClicks: 0 }
+    );
+
+    const totalBookings = Math.max(utmSummary.totalBookings, bookingsCount);
+
+    const hasUtmAttributions =
+      utmSummary.totalBookings > 0 ||
+      utmSummary.totalSales > 0 ||
+      utmSummary.totalRevenue > 0;
+
+    return {
+      hasContentAssets: assets.length > 0,
+      hasUtmAttributions,
+      assets,
+      utmLinks,
+      utmSummary: { ...utmSummary, totalBookings },
+      socialAudience,
+    };
   });
-
-  const admin = createAdminClient();
-  const [assets, utmLinks, socialAudience, bookingsCount] = await Promise.all([
-    listContentAssetsAction(),
-    getUTMLinksAction(),
-    getSocialAudienceStats(organizationId),
-    admin
-      .from("closing_calls")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organizationId)
-      .then(({ count }) => count ?? 0),
-  ]);
-
-  const utmSummary = utmLinks.reduce(
-    (acc, link) => ({
-      totalBookings: acc.totalBookings + link.bookings_attributed,
-      totalSales: acc.totalSales + link.sales_attributed,
-      totalRevenue: acc.totalRevenue + link.revenue_attributed,
-      totalClicks: acc.totalClicks + link.clicks,
-    }),
-    { totalBookings: 0, totalSales: 0, totalRevenue: 0, totalClicks: 0 }
-  );
-
-  const totalBookings = Math.max(utmSummary.totalBookings, bookingsCount);
-
-  const hasUtmAttributions =
-    utmSummary.totalBookings > 0 ||
-    utmSummary.totalSales > 0 ||
-    utmSummary.totalRevenue > 0;
-
-  return {
-    hasContentAssets: assets.length > 0,
-    hasUtmAttributions,
-    assets,
-    utmLinks,
-    utmSummary: { ...utmSummary, totalBookings },
-    socialAudience,
-  };
 }
 
+const etiquetaSchema = z
+  .enum(["AUTORIDAD", "ATRACCION", "NUTRICION", "VENTA"], { error: "Etiqueta inválida." })
+  .nullable();
+
+/**
+ * Cambia la etiqueta manual de un video o post. Si el id no es de la
+ * organización, no se escribe nada y vuelve el motivo (antes respondía éxito
+ * sin haber cambiado nada).
+ */
 export async function updateContentLabelAction(
   assetId: string,
   label: ContentLabel | null
 ): Promise<MutationResult> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateContentLabel]", async () => {
+    const id = validarIdDeContenido(assetId);
+    const etiqueta = etiquetaSchema.safeParse(label);
+    if (!etiqueta.success) throw new ErrorEsperable(firstZodError(etiqueta.error));
+
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("content_assets")
-      .update({ manual_content_label: label })
-      .eq("id", assetId)
-      .eq("organization_id", organizationId);
+      .update({ manual_content_label: etiqueta.data })
+      .eq("id", id)
+      .eq("organization_id", organizationId)
+      .select("id");
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
+    if (!data?.length) throw new ErrorEsperable(CONTENIDO_NO_ENCONTRADO);
     revalidatePath(paths.platform.marketing.content);
     revalidatePath(paths.platform.marketing.overview);
   });
 }
 
+const segundoDelCtaSchema = z
+  .number({ error: "Indicá en qué segundo ocurre el CTA." })
+  .int("Indicá en qué segundo ocurre el CTA.")
+  .positive("Indicá en qué segundo ocurre el CTA.");
+
 export async function updateCTAMinuteAction(
   assetId: string,
   ctaSecond: number
 ): Promise<MutationResult<{ retentionAtCtaPct: number }>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateCTAMinute]", async () => {
+    const id = validarIdDeContenido(assetId);
+    const segundo = segundoDelCtaSchema.safeParse(ctaSecond);
+    if (!segundo.success) throw new ErrorEsperable(firstZodError(segundo.error));
+
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
     const { data: asset, error: fetchError } = await supabase
       .from("content_assets")
       .select("duration_seconds, platform_metadata, external_id")
-      .eq("id", assetId)
+      .eq("id", id)
       .eq("organization_id", organizationId)
       .maybeSingle();
 
-    if (fetchError || !asset) {
-      throw new Error(fetchError?.message ?? "Video no encontrado");
-    }
+    if (fetchError) throw new FallaDeLaBase(fetchError);
+    if (!asset) throw new ErrorEsperable("Video no encontrado");
 
     const metadata = (asset.platform_metadata ?? {}) as ContentAssetPlatformMetadata;
     const durationSeconds =
@@ -295,23 +371,23 @@ export async function updateCTAMinuteAction(
     const retentionAtCtaPct = await getRetentionAtCTA(
       organizationId,
       videoId,
-      ctaSecond,
+      segundo.data,
       durationSeconds
     );
 
     const { error } = await supabase
       .from("content_assets")
       .update({
-        cta_minute: ctaSecond,
+        cta_minute: segundo.data,
         retention_at_cta_pct: retentionAtCtaPct,
       })
-      .eq("id", assetId)
+      .eq("id", id)
       .eq("organization_id", organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
     revalidatePath(paths.platform.marketing.content);
-    revalidatePath(`${paths.platform.marketing.content}/${assetId}`);
+    revalidatePath(`${paths.platform.marketing.content}/${id}`);
     revalidatePath(paths.platform.marketing.overview);
 
     return { retentionAtCtaPct };
@@ -319,19 +395,21 @@ export async function updateCTAMinuteAction(
 }
 
 export async function getContentLabelDistributionAction(): Promise<
-  Record<ContentLabel, number>
+  MutationResult<Record<ContentLabel, number>>
 > {
-  const assets = await listContentAssetsAction();
-  const base: Record<ContentLabel, number> = {
-    AUTORIDAD: 0,
-    ATRACCION: 0,
-    NUTRICION: 0,
-    VENTA: 0,
-  };
-  for (const a of assets) {
-    if (a.effectiveLabel) base[a.effectiveLabel]++;
-  }
-  return base;
+  return mutacionConErroresEsperables("[getContentLabelDistribution]", async () => {
+    const assets = await leerActivosDeContenido(await requireOrganizationId());
+    const base: Record<ContentLabel, number> = {
+      AUTORIDAD: 0,
+      ATRACCION: 0,
+      NUTRICION: 0,
+      VENTA: 0,
+    };
+    for (const a of assets) {
+      if (a.effectiveLabel) base[a.effectiveLabel]++;
+    }
+    return base;
+  });
 }
 
 /**
@@ -358,100 +436,144 @@ function mapContentPieceAnalysisToLabel(analysis: {
   return null;
 }
 
-export async function getContentDistributionDataAction(): Promise<{
+export type DistribucionDeContenido = {
   counts: Record<ContentLabel, number>;
   total: number;
   insight: string | null;
   hasContentAssets: boolean;
-}> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+};
 
-  // 1. Piezas legacy (content_assets) — ya etiquetadas con ContentLabel
-  const assets = await listContentAssetsAction();
-
-  // 2. Piezas Zernio (content_pieces) — mapear desde analysis.hook_type/cta_type
-  const { data: pieces } = await supabase
-    .from("content_pieces")
-    .select("analysis")
-    .eq("organization_id", organizationId)
-    .not("analysis", "is", null);
-
-  const zernioItems = (pieces ?? [])
-    .map((p) => {
-      const a = p.analysis as { hook_type?: string | null; cta_type?: string | null } | null;
-      if (!a) return null;
-      const effectiveLabel = mapContentPieceAnalysisToLabel(a);
-      return effectiveLabel
-        ? { effectiveLabel, conversationsGenerated: 0, bookingsInfluenced: 0, salesInfluenced: 0 }
-        : null;
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
-
-  // 3. Combinar ambas fuentes para las estadísticas
-  const combined = [...assets, ...zernioItems];
-  const stats = buildDistributionStats(combined);
-  const insight = await generateDistributionInsight({
-    organizationId,
-    stats,
-  });
-
-  return {
-    counts: stats.counts,
-    total: stats.total,
-    insight,
-    hasContentAssets: combined.length > 0,
-  };
+/**
+ * La frase de la IA sobre la distribución es opcional: si Claude falla, el
+ * gráfico sale igual sin ella. Una clave rechazada o sin créditos no se
+ * registra (el usuario ya lo ve en Ajustes); cualquier otra falla se registra
+ * con el tag `lectura_degradada`.
+ */
+function leerInsightDeDistribucion(
+  organizationId: string,
+  stats: ReturnType<typeof buildDistributionStats>
+): Promise<string | null> {
+  return lecturaDegradable(
+    "marketing:insight-de-distribucion",
+    () =>
+      generateDistributionInsight({ organizationId, stats }).catch((error: unknown) => {
+        throw rechazoConocidoDeClaude(error);
+      }),
+    null
+  ).catch((error) => valorSiNoEsFalla(error, null));
 }
 
-export async function getYoutubeIntegrationStatusAction(): Promise<{
+export async function getContentDistributionDataAction(): Promise<
+  MutationResult<DistribucionDeContenido>
+> {
+  return mutacionConErroresEsperables("[getContentDistributionData]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+
+    // 1. Piezas legacy (content_assets) — ya etiquetadas con ContentLabel
+    const assets = await leerActivosDeContenido(organizationId);
+
+    // 2. Piezas Zernio (content_pieces) — mapear desde analysis.hook_type/cta_type
+    const { data: pieces, error } = await supabase
+      .from("content_pieces")
+      .select("analysis")
+      .eq("organization_id", organizationId)
+      .not("analysis", "is", null);
+
+    if (error) throw new FallaDeLaBase(error);
+
+    const zernioItems = (pieces ?? [])
+      .map((p) => {
+        const a = p.analysis as { hook_type?: string | null; cta_type?: string | null } | null;
+        if (!a) return null;
+        const effectiveLabel = mapContentPieceAnalysisToLabel(a);
+        return effectiveLabel
+          ? { effectiveLabel, conversationsGenerated: 0, bookingsInfluenced: 0, salesInfluenced: 0 }
+          : null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+    // 3. Combinar ambas fuentes para las estadísticas
+    const combined = [...assets, ...zernioItems];
+    const stats = buildDistributionStats(combined);
+    const insight = await leerInsightDeDistribucion(organizationId, stats);
+
+    return {
+      counts: stats.counts,
+      total: stats.total,
+      insight,
+      hasContentAssets: combined.length > 0,
+    };
+  });
+}
+
+export type EstadoDeYoutube = {
   connected: boolean;
   channelName: string | null;
   lastSyncAt: string | null;
-}> {
-  const organizationId = await requireOrganizationId();
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("youtube_integrations")
-    .select("status, channel_name, last_sync_at")
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+};
 
-  return {
-    connected: data?.status === "connected",
-    channelName: data?.channel_name ?? null,
-    lastSyncAt: data?.last_sync_at ?? null,
-  };
+/**
+ * Si la lectura falla, el motivo (texto fijo) y no "no conectado": la pantalla
+ * de Integraciones lo muestra como un estado que no se pudo leer (SCRUM-519).
+ */
+export async function getYoutubeIntegrationStatusAction(): Promise<
+  MutationResult<EstadoDeYoutube>
+> {
+  return mutacionConErroresEsperables("[getYoutubeIntegrationStatus]", async () => {
+    const organizationId = await requireOrganizationId();
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("youtube_integrations")
+      .select("status, channel_name, last_sync_at")
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+
+    if (error) throw new FallaDeLaBase(error);
+
+    return {
+      connected: data?.status === "connected",
+      channelName: data?.channel_name ?? null,
+      lastSyncAt: data?.last_sync_at ?? null,
+    };
+  });
 }
 
-
-export async function getInstagramIntegrationStatusAction(): Promise<{
+export type EstadoDeInstagram = {
   connected: boolean;
   username: string | null;
   connectedAt: string | null;
   lastSyncAt: string | null;
   status: "active" | "error" | "disconnected" | null;
-}> {
-  const organizationId = await requireOrganizationId();
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("instagram_integrations")
-    .select(
-      "status, instagram_username, connected_at, last_sync_at"
-    )
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+};
 
-  const status =
-    (data?.status as "active" | "error" | "disconnected" | undefined) ?? null;
+export async function getInstagramIntegrationStatusAction(): Promise<
+  MutationResult<EstadoDeInstagram>
+> {
+  return mutacionConErroresEsperables("[getInstagramIntegrationStatus]", async () => {
+    const organizationId = await requireOrganizationId();
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("instagram_integrations")
+      .select(
+        "status, instagram_username, connected_at, last_sync_at"
+      )
+      .eq("organization_id", organizationId)
+      .maybeSingle();
 
-  return {
-    connected: status === "active",
-    username: data?.instagram_username ?? null,
-    connectedAt: data?.connected_at ?? null,
-    lastSyncAt: data?.last_sync_at ?? null,
-    status,
-  };
+    if (error) throw new FallaDeLaBase(error);
+
+    const status =
+      (data?.status as "active" | "error" | "disconnected" | undefined) ?? null;
+
+    return {
+      connected: status === "active",
+      username: data?.instagram_username ?? null,
+      connectedAt: data?.connected_at ?? null,
+      lastSyncAt: data?.last_sync_at ?? null,
+      status,
+    };
+  });
 }
 
 export async function getSalesContentRankAction(): Promise<
@@ -493,7 +615,7 @@ export async function getContentPatternsAnalysisAction(): Promise<
     const [rank, journeys, assets] = await Promise.all([
       getSalesContentRank(organizationId),
       getClosedBuyerJourneys(organizationId),
-      listContentAssetsAction(),
+      leerActivosDeContenido(organizationId),
     ]);
 
     if (rank.length === 0 && journeys.length === 0) return [];

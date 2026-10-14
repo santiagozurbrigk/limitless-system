@@ -9,6 +9,7 @@ import {
   getSalesContentRankAction,
 } from "@/app/marketing/actions";
 import { getLatestContentPatternReportAction } from "@/app/marketing/content/pattern-report-actions";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import type { SalesContentRankView } from "@/lib/marketing/content-sales-rank";
 import { paths } from "@/routes";
 import { ContentThumbnail } from "@/components/marketing-insights/content-thumbnail";
@@ -18,12 +19,27 @@ import { ContentPatternReport } from "@/components/marketing/content-pattern-rep
 import type { ClosedBuyerJourney } from "@/types/marketing-insights";
 import type { ContentPatternReport as ContentPatternReportType } from "@/app/marketing/content/pattern-report-actions";
 
+/**
+ * Lo que necesita la sección del último reporte (SCRUM-519): el reporte o, si
+ * no se pudo leer, el motivo. Sin el motivo, la falla se veía como "todavía no
+ * hay reporte" y la sección ofrecía generar el primero.
+ */
+export async function leerUltimoReporte(
+  leer: typeof getLatestContentPatternReportAction = getLatestContentPatternReportAction
+): Promise<{ reporte: ContentPatternReportType | null; motivo: string | null }> {
+  const lectura = await leerConMotivo(leer, "[MarketingSalesConnection] último reporte");
+  return lectura.ok
+    ? { reporte: lectura.data, motivo: null }
+    : { reporte: null, motivo: lectura.motivo };
+}
+
 export function MarketingSalesConnection() {
   const [loading, setLoading] = useState(true);
   const [rank, setRank] = useState<SalesContentRankView[]>([]);
   const [journeys, setJourneys] = useState<ClosedBuyerJourney[]>([]);
   const [latestReport, setLatestReport] =
     useState<ContentPatternReportType | null>(null);
+  const [motivoDelReporte, setMotivoDelReporte] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -31,13 +47,14 @@ export function MarketingSalesConnection() {
     Promise.all([
       getSalesContentRankAction(),
       getClosedBuyerJourneysAction(),
-      getLatestContentPatternReportAction(),
+      leerUltimoReporte(),
     ])
-      .then(([rankData, journeyData, reportData]) => {
+      .then(([rankData, journeyData, ultimo]) => {
         if (!active) return;
         setRank(rankData);
         setJourneys(journeyData);
-        setLatestReport(reportData);
+        setLatestReport(ultimo.reporte);
+        setMotivoDelReporte(ultimo.motivo);
       })
       .catch(() => {
         if (!active) return;
@@ -149,7 +166,7 @@ export function MarketingSalesConnection() {
             <SectionLoading />
           </div>
         ) : (
-          <ContentPatternReport initialReport={latestReport} />
+          <ContentPatternReport initialReport={latestReport} errorInicial={motivoDelReporte} />
         )}
       </section>
     </div>

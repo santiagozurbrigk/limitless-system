@@ -11,6 +11,7 @@ import {
   type DriveListResult,
 } from "@/app/marketing/content/drive-actions";
 import { GOOGLE_OAUTH_START_URL } from "@/lib/google/oauth-paths";
+import { falloInesperado } from "@/lib/client/correr-accion";
 import { paths } from "@/routes";
 
 type SelectionFile = { id: string; name: string; url: string; mimeType: string };
@@ -93,6 +94,11 @@ export function DriveFilePicker({
         } else {
           setFiles(result.files);
         }
+      } catch (error) {
+        // La acción devuelve sus rechazos como valor; si lanza, es inesperado
+        // (SCRUM-519): texto fijo en vez de una promesa sin atender.
+        setError(falloInesperado("[DriveFilePicker] listar", error));
+        setFiles([]);
       } finally {
         setLoading(false);
       }

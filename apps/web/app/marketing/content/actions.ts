@@ -34,13 +34,9 @@ import {
   type MutationResult,
 } from "@/lib/server/action-result";
 import { firstZodError, uuidSchema } from "@/lib/validations";
-import {
-  rechazoDeClaude,
-  rechazoDeDrive,
-  rechazoDeZernio,
-  ZERNIO_NO_CONECTADO,
-} from "@/lib/marketing/rechazos-de-contenido";
-import { downloadDriveFileAction } from "./drive-actions";
+import { rechazoConocidoDeClaude } from "@/lib/ai/rechazo-de-claude";
+import { descargarArchivoDeDrive } from "@/lib/google/drive-archivos";
+import { rechazoDeZernio, ZERNIO_NO_CONECTADO } from "@/lib/marketing/rechazos-de-contenido";
 
 /*
  * Errores como valor (SCRUM-502): cada acción exportada corre dentro de
@@ -250,11 +246,10 @@ export async function analyzeContentPieceAction(
       );
     }
 
-    const { buffer, mimeType } = await downloadDriveFileAction(piece.drive_file_id).catch(
-      (error: unknown) => {
-        throw rechazoDeDrive(error);
-      }
-    );
+    // Lanza `ErrorEsperable` para lo que se le explica al usuario (sin
+    // conexión, sin permisos, archivo inexistente o de más de 500 MB) y
+    // cualquier otra cosa para una falla (`lib/google/drive-archivos.ts`, SCRUM-519).
+    const { buffer, mimeType } = await descargarArchivoDeDrive(piece.drive_file_id);
 
     let transcript: string | null = null;
     const visionImages: Array<{
@@ -299,7 +294,7 @@ export async function analyzeContentPieceAction(
       images: visionImages,
       maxTokens: 1500,
     }).catch((error: unknown) => {
-      throw rechazoDeClaude(error);
+      throw rechazoConocidoDeClaude(error);
     });
 
     // `null`: la org no tiene clave de Claude usable o la respuesta no fue JSON.
@@ -422,7 +417,7 @@ Respondé con este JSON exacto:
       user: prompt,
       maxTokens: 3000,
     }).catch((error: unknown) => {
-      throw rechazoDeClaude(error);
+      throw rechazoConocidoDeClaude(error);
     });
 
     if (!result?.variants?.length) {
@@ -749,7 +744,7 @@ Respondé con JSON: { "caption": "..." }`;
       user: prompt,
       maxTokens: 800,
     }).catch((error: unknown) => {
-      throw rechazoDeClaude(error);
+      throw rechazoConocidoDeClaude(error);
     });
 
     const caption = result?.caption?.trim();

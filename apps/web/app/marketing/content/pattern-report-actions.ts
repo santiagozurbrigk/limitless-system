@@ -1,8 +1,17 @@
 "use server";
 
+import { z } from "zod";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
 import { callClaudeText } from "@/lib/ai/anthropic";
+import { rechazoConocidoDeClaude } from "@/lib/ai/rechazo-de-claude";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { firstZodError } from "@/lib/validations";
 import {
   buildPatternPrompt,
   rankItems,
@@ -67,9 +76,47 @@ const CTA_LABELS: Record<ContentCtaType, string> = {
   none: "Sin CTA",
 };
 
+// ─── Validación ────────────────────────────────────────────────────────────────
+
+const RANGO_INVALIDO = "El rango del análisis no es válido.";
+
+const fechaDelRango = z
+  .string({ error: RANGO_INVALIDO })
+  .refine((valor) => !Number.isNaN(Date.parse(valor)), RANGO_INVALIDO);
+
+const parametrosSchema = z.discriminatedUnion(
+  "type",
+  [
+    z.object({
+      type: z.literal("COUNT"),
+      count: z.union([z.literal(30), z.literal(60), z.literal(90), z.literal("all")], {
+        error: RANGO_INVALIDO,
+      }),
+    }),
+    z.object({ type: z.literal("DATE_RANGE"), from: fechaDelRango, to: fechaDelRango }),
+  ],
+  { error: RANGO_INVALIDO }
+);
+
 // ─── Action principal ──────────────────────────────────────────────────────────
 
+/*
+ * Errores como valor (SCRUM-519): las dos acciones devuelven `MutationResult`.
+ * Sin sesión, con un rango inválido, sin piezas publicadas en el rango o con la
+ * clave de Claude rechazada o sin créditos, el motivo; una falla de la base o
+ * de Claude va a la consola y a Sentry y vuelve con el texto fijo.
+ */
 export async function generateContentPatternReportAction(
+  params: GeneratePatternReportParams
+): Promise<MutationResult<ContentPatternReport>> {
+  return mutacionConErroresEsperables("[generateContentPatternReport]", async () => {
+    const validados = parametrosSchema.safeParse(params);
+    if (!validados.success) throw new ErrorEsperable(firstZodError(validados.error));
+    return generarReporte(validados.data);
+  });
+}
+
+async function generarReporte(
   params: GeneratePatternReportParams
 ): Promise<ContentPatternReport> {
   const organizationId = await requireOrganizationId();
@@ -108,12 +155,12 @@ export async function generateContentPatternReportAction(
   }
 
   const { data: pieces, error } = await query;
-  if (error) throw new Error(error.message);
+  if (error) throw new FallaDeLaBase(error);
 
   const typedPieces = (pieces ?? []) as ContentPiece[];
 
   if (typedPieces.length === 0) {
-    throw new Error(
+    throw new ErrorEsperable(
       "No hay piezas publicadas en el rango seleccionado. Probá con un rango más amplio."
     );
   }
@@ -164,6 +211,8 @@ export async function generateContentPatternReportAction(
     feature: "marketing_content",
     messages: [{ role: "user", content: prompt }],
     maxTokens: 1500,
+  }).catch((errorDeClaude: unknown) => {
+    throw rechazoConocidoDeClaude(errorDeClaude);
   });
 
   let summary = "";
@@ -215,7 +264,7 @@ export async function generateContentPatternReportAction(
     .select()
     .single();
 
-  if (insertError) throw new Error(insertError.message);
+  if (insertError) throw new FallaDeLaBase(insertError);
 
   const row = insertedRow as ContentPatternReport & {
     top_formats: PatternRankedItem[];
@@ -239,20 +288,25 @@ export async function generateContentPatternReportAction(
   };
 }
 
-export async function getLatestContentPatternReportAction(): Promise<ContentPatternReport | null> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+/** El último reporte de la organización; `null` si todavía no generó ninguno. */
+export async function getLatestContentPatternReportAction(): Promise<
+  MutationResult<ContentPatternReport | null>
+> {
+  return mutacionConErroresEsperables("[getLatestContentPatternReport]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("content_pattern_reports")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .order("generated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    const { data, error } = await supabase
+      .from("content_pattern_reports")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .order("generated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (error) throw new Error(error.message);
-  if (!data) return null;
+    if (error) throw new FallaDeLaBase(error);
+    if (!data) return null;
 
-  return data as ContentPatternReport;
+    return data as ContentPatternReport;
+  });
 }

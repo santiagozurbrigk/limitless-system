@@ -12,7 +12,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const sim = vi.hoisted(() => ({
-  descarga: null as null | { buffer: Buffer; mimeType: string; name: string } | Error,
+  /** El token de Google de la org (`leerTokenDeGoogle`); null = sin conectar. */
+  tokenGoogle: "token-google" as string | null,
+  orgsGoogle: [] as unknown[],
+  /** Lo que responde la API de Drive (red falsa): metadatos y contenido. */
+  drive: {
+    meta: { status: 200, body: "" },
+    media: { status: 200, body: "png" },
+  },
+  /** Lo que responde la API de Whisper; null = un pedido ahí es un error del test. */
+  whisper: null as null | { status: number; body: string },
+  pedidosRed: [] as string[],
   claude: null as unknown,
   claudeLanza: null as unknown,
   atribucion: new Map<string, unknown>() as Map<string, unknown> | Error,
@@ -67,10 +77,12 @@ vi.mock("@/lib/content/transcribe-whisper", async (importOriginal) => {
 vi.mock("@/lib/content/video-processor", () => ({
   processVideoForAnalysis: async () => ({ audioBuffer: sim.audio, frames: [] }),
 }));
-vi.mock("@/app/marketing/content/drive-actions", () => ({
-  downloadDriveFileAction: async () => {
-    if (sim.descarga instanceof Error) throw sim.descarga;
-    return sim.descarga;
+// La descarga es la real (`descargarArchivoDeDrive`, SCRUM-519) contra una red
+// falsa (`fetch`, en el beforeEach); sólo el token sale de la base.
+vi.mock("@/lib/google/get-access-token", () => ({
+  leerTokenDeGoogle: async (org: unknown) => {
+    sim.orgsGoogle.push(org);
+    return sim.tokenGoogle;
   },
 }));
 vi.mock("@/lib/marketing/content-sales-attribution", () => ({
@@ -107,7 +119,13 @@ import {
   updateSalesAttributionAction,
 } from "../actions";
 import { createZernioClient, ZernioHttpError } from "@/lib/zernio/client";
-import { GoogleIntegrationPermissionError } from "@/lib/google/errors";
+import {
+  MOTIVO_DRIVE_ARCHIVO_GRANDE,
+  MOTIVO_DRIVE_NO_CONECTADO,
+  MOTIVO_DRIVE_NO_ENCONTRADO,
+  MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
+  MOTIVO_DRIVE_SIN_PERMISOS,
+} from "@/lib/google/motivos-de-drive";
 import { AI_KEY_REJECTED_MESSAGE } from "@/lib/ai/anthropic-auth-errors";
 import { base, CACHE_CAIDA, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
 
@@ -185,7 +203,25 @@ let consola: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   base.reiniciar();
   cargarPiezas();
-  sim.descarga = { buffer: Buffer.from("png"), mimeType: "image/png", name: "a.png" };
+  sim.tokenGoogle = "token-google";
+  sim.orgsGoogle = [];
+  driveDevuelve("image/png");
+  sim.whisper = null;
+  sim.pedidosRed = [];
+  // Ningún test sale a la red: Drive y Whisper responden lo que diga `sim`, y
+  // cualquier otro pedido hace fallar el test.
+  vi.stubGlobal("fetch", async (url: unknown) => {
+    const u = String(url);
+    sim.pedidosRed.push(u);
+    if (u.startsWith("https://www.googleapis.com/drive/v3/files/")) {
+      const r = u.includes("alt=media") || u.includes("/export") ? sim.drive.media : sim.drive.meta;
+      return new Response(r.body, { status: r.status, headers: { "content-type": "application/json" } });
+    }
+    if (u.startsWith("https://api.openai.com/") && sim.whisper) {
+      return new Response(sim.whisper.body, { status: sim.whisper.status });
+    }
+    throw new Error(`pedido a la red no esperado: ${u}`);
+  });
   sim.claude = null;
   sim.claudeLanza = null;
   sim.atribucion = new Map();
@@ -220,6 +256,14 @@ function claudeConLaOrg() {
   for (const pedido of sim.pedidosAClaude) {
     expect((pedido as { organizationId: unknown }).organizationId).toBe(ORG);
   }
+}
+
+/** Drive responde los metadatos de un archivo de ese tipo (y tamaño). */
+function driveDevuelve(mimeType: string, size = 3) {
+  sim.drive = {
+    meta: { status: 200, body: JSON.stringify({ id: "drive-1", name: "archivo", mimeType, size: String(size) }) },
+    media: { status: 200, body: "contenido" },
+  };
 }
 
 /** Una falla inesperada vuelve con el texto fijo y queda registrada con su etiqueta. */
@@ -364,21 +408,27 @@ describe("analyzeContentPieceAction", () => {
     claudeConLaOrg();
   });
 
+  it("⭐ la descarga usa el token de Google de la organización y el archivo de la pieza", async () => {
+    sim.claude = ANALISIS;
+    await analyzeContentPieceAction(PIEZA);
+    expect(sim.orgsGoogle).toEqual([ORG]);
+    expect(sim.pedidosRed).toEqual([
+      expect.stringContaining("/drive/v3/files/drive-1?fields="),
+      expect.stringContaining("/drive/v3/files/drive-1?alt=media"),
+    ]);
+  });
+
   it("⭐ un audio de más de 25 MB vuelve con el motivo, sin pedir la transcripción (Whisper real)", async () => {
     sim.whisperReal = true;
     vi.stubEnv("OPENAI_API_KEY", "sk-falsa");
-    const pedidos: string[] = [];
-    vi.stubGlobal("fetch", async (url: unknown) => {
-      pedidos.push(String(url));
-      return new Response("{}", { status: 500 });
-    });
-    sim.descarga = { buffer: Buffer.from("v"), mimeType: "video/mp4", name: "v.mp4" };
+    sim.whisper = { status: 500, body: "{}" };
+    driveDevuelve("video/mp4");
     sim.audio = Buffer.alloc(25 * 1024 * 1024 + 1);
     await expect(analyzeContentPieceAction(PIEZA)).resolves.toEqual({
       success: false,
       error: "El audio del video supera los 25 MB que acepta la transcripción. Probá con un video más corto.",
     });
-    expect(pedidos).toEqual([]);
+    expect(sim.pedidosRed.filter((u) => u.includes("openai"))).toEqual([]);
     expect(sim.pedidosAClaude).toEqual([]);
     sinRegistro();
   });
@@ -386,8 +436,8 @@ describe("analyzeContentPieceAction", () => {
   it("un audio de 25 MB justos se transcribe (Whisper real con fetch falso)", async () => {
     sim.whisperReal = true;
     vi.stubEnv("OPENAI_API_KEY", "sk-falsa");
-    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ text: "hola" }), { status: 200 }));
-    sim.descarga = { buffer: Buffer.from("v"), mimeType: "video/mp4", name: "v.mp4" };
+    sim.whisper = { status: 200, body: JSON.stringify({ text: "hola" }) };
+    driveDevuelve("video/mp4");
     sim.audio = Buffer.alloc(25 * 1024 * 1024);
     sim.claude = ANALISIS;
     await expect(analyzeContentPieceAction(PIEZA)).resolves.toEqual({ success: true, data: ANALISIS });
@@ -397,11 +447,9 @@ describe("analyzeContentPieceAction", () => {
   it("⭐ sin OPENAI_API_KEY la transcripción es una falla (configuración), no un motivo", async () => {
     sim.whisperReal = true;
     vi.stubEnv("OPENAI_API_KEY", "");
-    vi.stubGlobal("fetch", async () => {
-      throw new Error("no debería pedir nada");
-    });
-    sim.descarga = { buffer: Buffer.from("v"), mimeType: "video/mp4", name: "v.mp4" };
+    driveDevuelve("video/mp4");
     await esFallaRegistrada(await analyzeContentPieceAction(PIEZA), "[analyzeContentPiece]");
+    expect(sim.pedidosRed.filter((u) => u.includes("openai"))).toEqual([]);
   });
 
   it("⭐ una pieza que no existe vuelve con el motivo", async () => {
@@ -419,27 +467,48 @@ describe("analyzeContentPieceAction", () => {
     });
   });
 
+  it("⭐ sin Google conectado vuelve con el motivo de SCRUM-519, sin pedir nada a Drive", async () => {
+    sim.tokenGoogle = null;
+    await expect(analyzeContentPieceAction(PIEZA)).resolves.toEqual({ success: false, error: MOTIVO_DRIVE_NO_CONECTADO });
+    expect(sim.pedidosRed).toEqual([]);
+    sinRegistro();
+  });
+
   it.each([
-    ["GOOGLE_NOT_CONNECTED", new Error("GOOGLE_NOT_CONNECTED"), "Conectá Google Drive en Integraciones para usar esta función."],
-    ["GOOGLE_INSUFFICIENT_PERMISSIONS", new Error("GOOGLE_INSUFFICIENT_PERMISSIONS"), "Reconectá tu cuenta de Google para actualizar los permisos"],
-    ["permiso al descargar", new GoogleIntegrationPermissionError(403), "Reconectá tu cuenta de Google para actualizar los permisos"],
-    ["archivo grande", new Error("El archivo supera el límite de 500 MB"), "El archivo supera el límite de 500 MB"],
-  ])("⭐ Drive rechaza (%s): vuelve con el motivo, sin registrarlo", async (_caso, error, motivo) => {
-    sim.descarga = error;
+    ["401 (token rechazado)", 401, "{}", MOTIVO_DRIVE_SIN_PERMISOS],
+    ["404 (archivo borrado o sin acceso)", 404, "{}", MOTIVO_DRIVE_NO_ENCONTRADO],
+    [
+      "403 appNotAuthorizedToFile",
+      403,
+      JSON.stringify({ error: { errors: [{ domain: "global", reason: "appNotAuthorizedToFile" }] } }),
+      MOTIVO_DRIVE_SIN_ACCESO_AL_ARCHIVO,
+    ],
+  ])("⭐ Drive rechaza (%s): vuelve con el motivo, sin registrarlo", async (_caso, status, body, motivo) => {
+    sim.drive.meta = { status, body };
     await expect(analyzeContentPieceAction(PIEZA)).resolves.toEqual({ success: false, error: motivo });
     sinRegistro();
   });
 
-  it("⭐ una caída de Drive es una falla: texto fijo y se registra", async () => {
-    sim.descarga = new Error("Error de Google Drive (500)");
+  it("⭐ un archivo de más de 500 MB vuelve con el motivo, sin descargarlo", async () => {
+    driveDevuelve("video/mp4", 500 * 1024 * 1024 + 1);
+    await expect(analyzeContentPieceAction(PIEZA)).resolves.toEqual({ success: false, error: MOTIVO_DRIVE_ARCHIVO_GRANDE });
+    expect(sim.pedidosRed).toHaveLength(1);
+  });
+
+  it.each([
+    ["500 de Drive", 500, "{}"],
+    ["429 de Drive", 429, "{}"],
+    ["403 por límite de uso", 403, JSON.stringify({ error: { errors: [{ domain: "usageLimits", reason: "userRateLimitExceeded" }] } })],
+  ])("⭐ %s es una falla: texto fijo y se registra", async (_caso, status, body) => {
+    sim.drive.meta = { status, body };
     await esFallaRegistrada(await analyzeContentPieceAction(PIEZA), "[analyzeContentPiece]");
   });
 
   it("un archivo que no es imagen ni video vuelve con el motivo", async () => {
-    sim.descarga = { buffer: Buffer.from("x"), mimeType: "application/pdf", name: "a.pdf" };
+    driveDevuelve("application/zip");
     await expect(analyzeContentPieceAction(PIEZA)).resolves.toEqual({
       success: false,
-      error: "Tipo de archivo no soportado para análisis: application/pdf",
+      error: "Tipo de archivo no soportado para análisis: application/zip",
     });
   });
 

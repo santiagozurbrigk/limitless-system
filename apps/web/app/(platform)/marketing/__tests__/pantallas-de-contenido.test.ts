@@ -35,8 +35,9 @@ vi.mock("@/app/marketing/content/actions", () => ({
 vi.mock("@/app/marketing/content/reel-variation-actions", () => ({
   listReelVariationJobsForPieceAction: responder("listReelVariationJobsForPieceAction"),
 }));
+// La sincronización devuelve `MutationResult` (SCRUM-519).
 vi.mock("@/app/marketing/content/sync-actions", () => ({
-  maybeSyncZernioContentAction: async () => undefined,
+  maybeSyncZernioContentAction: responder("maybeSyncZernioContentAction"),
 }));
 vi.mock("@/app/marketing/content/ad-actions", () => ({
   getMarketingAdsAction: responder("getMarketingAdsAction"),
@@ -71,6 +72,7 @@ const falla = (error: string) => ({ success: false, error });
 beforeEach(() => {
   sim.llamadas = [];
   sim.resultados = {
+    maybeSyncZernioContentAction: ok({ sincronizo: true }),
     getContentPiecesAction: ok([{ id: "p1", type: "reel", analysis: null, metrics: { views: 10 } }]),
     getContentDraftsAction: ok([{ id: "b1" }]),
     getContentPieceAction: ok({ id: PIEZA, variants: [] }),
@@ -102,6 +104,23 @@ describe("/marketing/content", () => {
     expect(html).toContain("No se pudo cargar el contenido");
     expect(html).toContain("Ocurrió un error inesperado. Intentá de nuevo.");
     expect(html).not.toContain("borradores:");
+  });
+});
+
+describe("/marketing/content con la sincronización (SCRUM-519) y las lecturas (SCRUM-502)", () => {
+  it("⭐ si la sincronización falla, la biblioteca se ve igual con el motivo de la sincronización", async () => {
+    sim.resultados.maybeSyncZernioContentAction = falla("Zernio no está conectado");
+    const html = renderToStaticMarkup(await ContenidoPage(busqueda()));
+    expect(html).toContain("grilla:p1");
+    expect(html).toContain("Zernio no está conectado");
+    expect(html).not.toContain("No se pudo cargar el contenido");
+  });
+
+  it("⭐ si fallan las piezas, el motivo de las piezas aunque la sincronización haya salido bien", async () => {
+    sim.resultados.getContentPiecesAction = falla("Ocurrió un error inesperado. Intentá de nuevo.");
+    const html = renderToStaticMarkup(await ContenidoPage(busqueda()));
+    expect(html).toContain("No se pudo cargar el contenido");
+    expect(html).toContain("Ocurrió un error inesperado. Intentá de nuevo.");
   });
 });
 

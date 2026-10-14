@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Pencil } from "lucide-react";
 import { Button, cn } from "@ai-coo/ui";
 import { updateContentLabelAction } from "@/app/marketing/actions";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import type { ContentLabel } from "@/lib/content/label-content";
 
 const LABELS: ContentLabel[] = [
@@ -39,6 +40,7 @@ export function ContentLabelBadge({
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<ContentLabel | null>(effective);
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   if (!effective && !open) {
     return (
@@ -58,11 +60,19 @@ export function ContentLabelBadge({
   }
 
   function handleSave() {
+    setError(null);
     startTransition(async () => {
-      const res = await updateContentLabelAction(assetId, selected);
-      if (res.success) {
+      // Antes, si no se guardaba, el popover quedaba abierto sin decir nada
+      // (SCRUM-519): ahora muestra el motivo o el texto fijo.
+      const res = await leerConMotivo(
+        () => updateContentLabelAction(assetId, selected),
+        "[ContentLabelBadge] guardar etiqueta"
+      );
+      if (res.ok) {
         onLabelChange?.(selected);
         setOpen(false);
+      } else {
+        setError(res.motivo);
       }
     });
   }
@@ -136,6 +146,7 @@ export function ContentLabelBadge({
                 </label>
               ))}
             </div>
+            {error ? <p className="mb-2 text-xs text-destructive">{error}</p> : null}
             <Button size="sm" className="w-full" disabled={pending} onClick={handleSave}>
               {pending ? "Guardando…" : "Guardar"}
             </Button>

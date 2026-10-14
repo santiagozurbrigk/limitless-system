@@ -2,7 +2,7 @@
 
 import { ArrowRight } from "lucide-react";
 import { cn } from "@ai-coo/ui";
-import type { IntegrationHealth } from "@/lib/integrations/health";
+import { estaConectada, type IntegrationHealth } from "@/lib/integrations/health";
 import { getIntegrationDefinition } from "@/lib/integrations/registry";
 import { formatRelativeTime } from "@/lib/format";
 import { IntegrationLogo } from "./integration-logo";
@@ -31,7 +31,7 @@ export function IntegrationTile({
   onOpen: () => void;
 }) {
   const definition = getIntegrationDefinition(health.provider);
-  const isConnected = health.state !== "not_connected";
+  const isConnected = estaConectada(health);
   const blocking = health.issues.filter(
     (issue) => issue.level !== "info",
   ).length;

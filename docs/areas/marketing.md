@@ -23,7 +23,7 @@ notch nav pero la ruta funciona).
 | Ruta | Archivo | Qué muestra | En menú |
 |---|---|---|---|
 | `/marketing` | `marketing/page.tsx` → `components/marketing/marketing-overview.tsx` | KPIs, funnel, heatmap, distribución por etiqueta (AUTORIDAD/ATRACCIÓN/NUTRICIÓN/VENTA) con insight de Haiku, tarjeta UTM | Sí |
-| `/marketing/content` | `marketing/content/page.tsx` | Biblioteca (`content_pieces` con `variants_of IS NULL`, **máx. 50**) y tab `?tab=borradores` (variantes IA). Dispara `maybeSyncZernioContentAction` al cargar | Sí |
+| `/marketing/content` | `marketing/content/page.tsx` | Biblioteca (`content_pieces` con `variants_of IS NULL`, **máx. 50**) y tab `?tab=borradores` (variantes IA). Dispara `maybeSyncZernioContentAction` al cargar; si devuelve un motivo, lo muestra junto al contador ("Sin sincronizar: …") | Sí |
 | `/marketing/content/[id]` | `marketing/content/[id]/page.tsx` → `marketing-content-detail-page-client.tsx` → `content-piece-detail.tsx` | Tabs Métricas, Análisis, Comentarios, Anuncios, Variantes, Trial Reels. `maxDuration = 300` | — |
 | `/marketing/anuncios` | `marketing/anuncios/page.tsx` → `ads-dashboard.tsx` | Anuncios de Meta en vivo desde Zernio (`getMarketingAdsAction`) | Sí |
 | `/marketing/administrar` | `marketing/administrar/page.tsx` → `drive-admin-view.tsx` | Explorador del Google Drive de la org para vincular archivos a piezas | Oculto |
@@ -235,10 +235,12 @@ como JSON.
   de una pieza (`getContentPieceCommentsAction`) devuelven `MutationResult` con `mutacionConErroresEsperables`.
   Vuelven con su motivo: sesión, ID inválido (`uuidSchema`; las que aceptan el ID de la plataforma sólo exigen
   texto), pieza, variante o job inexistente o de otra org, pieza sin Drive o sin post, demora fuera de 0 a 72 horas
-  (el CHECK de la tabla), y los rechazos con motivo de los servicios (`lib/marketing/rechazos-de-contenido.ts`):
-  Zernio sin conectar o con un 401/403 (también al publicar un borrador: `createPost` lanza `ZernioHttpError` con
-  el status), Google sin conectar, sin permisos o un archivo de más de 500 MB, un audio de más de 25 MB para
-  transcribir (`transcribeAudioBuffer` lanza `ErrorEsperable`) y la clave de Claude rechazada o sin créditos.
+  (el CHECK de la tabla), y los rechazos con motivo de los servicios: Zernio sin conectar o con un 401/403
+  (`lib/marketing/rechazos-de-contenido.ts`; también al publicar un borrador: `createPost` lanza `ZernioHttpError`
+  con el status), los de Google Drive que lanza `descargarArchivoDeDrive` (SCRUM-519: sin conectar, token
+  rechazado, sin acceso al archivo, archivo inexistente o de más de 500 MB), un audio de más de 25 MB para
+  transcribir (`transcribeAudioBuffer` lanza `ErrorEsperable`) y la clave de Claude rechazada o sin créditos
+  (`rechazoConocidoDeClaude`, SCRUM-519).
   Cualquier otra respuesta de Zernio (404, 429, 5xx, tiempo agotado), de Drive, de OpenAI o de Claude, y toda
   falla de la base (`FallaDeLaBase`) se registra (consola y Sentry, tag `server_action`) y el usuario ve el texto
   fijo. Las fallas de Zernio se registran con el status y sin el cuerpo de la respuesta (`createPost` no lo pone
@@ -251,8 +253,8 @@ como JSON.
   `/marketing/anuncios` muestran el motivo; el panel de Trial Reels, la tarjeta de variante, Administrar Drive,
   anuncios y comentarios de la pieza lo avisan (`leerConMotivo`, `correrMutacion`). Los Trial Reels del detalle se
   buscan con el ID interno de la pieza (antes, con un ID de plataforma en la URL, la lista salía vacía).
-  Vincular y desvincular Drive (`drive-actions.ts`, SCRUM-519) todavía no miran el resultado
-  `[MKT-VINCULAR-DRIVE-IGNORA-RESULTADO]`.
+  Vincular y desvincular Drive (`drive-actions.ts`) devuelven el resultado de `updateContentPieceAction`:
+  Administrar y el detalle de la pieza avisan el motivo y sólo dicen "Archivo vinculado" si se guardó.
 - **Comentarios y anuncios son live-fetch.** No persistirlos. Excepción única: `ad_metrics_daily`, porque sin
   la foto diaria el histórico de gasto no se puede reconstruir.
 - **Un analytics no reconocido no es un cero.** Ni el cron ni la sync de contenido (`sync-actions.ts`) pisan
@@ -318,8 +320,45 @@ como JSON.
   `capture-ad-metrics` recorre sólo integraciones activas y con key; las actions de inbox y comentarios exigen
   `api_key` además de la fila activa. Tests: `lib/zernio/__tests__/integration.test.ts`,
   `lib/marketing/__tests__/ad-metrics-snapshot-orgs.test.ts`.
-- **Scope Google:** `drive.readonly`; por eso `createDriveFolderAction` es un stub que siempre tira error
-  (el botón "Nueva carpeta" de Administrar falla siempre). Se pide `youtube.upload` y ningún código lo usa.
+- **Scope Google:** `drive.readonly`; por eso `createDriveFolderAction` es un stub que siempre devuelve el motivo
+  "La creación de carpetas no está disponible temporalmente" (el botón "Nueva carpeta" de Administrar está
+  escondido). Se pide `youtube.upload` y ningún código lo usa.
+- **Errores como valor (SCRUM-519).** Las acciones de `app/marketing/actions.ts` (contenido de
+  `content_assets`, resumen, etiqueta, minuto del CTA, distribución, estado de YouTube y de Instagram),
+  `drive-actions.ts`, `sync-actions.ts` y `pattern-report-actions.ts` devuelven `MutationResult` con
+  `mutacionConErroresEsperables`: sin sesión, un id que no es UUID ("ID inválido"), un video de otra org
+  ("No encontramos ese contenido.", "Video no encontrado"), una etiqueta o un segundo de CTA inválidos, un
+  rango de patrones inválido o sin piezas, Zernio o Google sin conectar, la clave de Claude rechazada o sin
+  créditos, vuelven con su motivo. Lo demás (la base, la red, Google, Zernio o Claude que fallan) va a la
+  consola y a Sentry con la etiqueta de la acción y el usuario ve el texto fijo. Ninguna lectura esconde una
+  falla: el contenido ya no es una lista vacía, el estado de YouTube o Instagram ya no es "no conectado" y la
+  audiencia y los turnos del resumen ya no son cero. Las pantallas muestran el motivo: `/marketing` con un
+  aviso; `/marketing/utms` con un aviso arriba y los links UTM igual (el generador queda con el título manual);
+  Integraciones con la tarjeta de YouTube en error ("No se pudo leer el estado de esta integración",
+  `estadoSinLeer` de `lib/integrations/health.ts`), que no cuenta como conectada ni como sin conectar
+  (`estaConectada`, `sinLeer`) y aparece en "Requieren atención"; el provider de Marketing deja
+  `instagramConnected` en `null` (no se pudo leer), Administrar y el selector de Drive con el motivo y el botón
+  que corresponde, la etiqueta, el minuto del CTA y los patrones en su propio aviso.
+- **Drive: qué es motivo y qué es falla.** Según la guía de errores de la API de Drive (copia en la evidencia de
+  SCRUM-519, `fuentes-google/`): 401 (token vencido o revocado, ya se intentó renovar) es el motivo para
+  reconectar Google; un 403 sólo es motivo para los cuatro `reason` de acceso que la guía nombra, cada uno con
+  su texto y sin el botón de reconectar (`appNotAuthorizedToFile`, `insufficientFilePermissions` y
+  `teamDriveMembershipRequired`: "Tu cuenta de Google no tiene acceso a ese archivo…"; `domainPolicy`: el
+  administrador de Google Workspace no lo permite); 404 es "no encontramos el archivo". Todo otro 403 es una
+  falla que va a Sentry con su `reason`: los límites de uso (`usageLimits`), los que dicen que pedimos mal el
+  archivo (`fileNotDownloadable`, `fileNotExportable`) y cualquier `reason` que la guía no nombra; también 429 y
+  5xx. Si falla la lectura
+  de `google_forms_integrations`, es una falla y no "no conectado" (`leerTokenDeGoogle`; la de siempre,
+  `getGoogleAccessTokenForOrganization`, la sigue usando Contexto del negocio). Lo común está en
+  `lib/google/drive-archivos.ts` y los motivos en `lib/google/motivos-de-drive.ts`. El análisis de una pieza
+  descarga con `descargarArchivoDeDrive`, no con la acción.
+- **Sync de contenido: qué es falla.** Si Zernio no respondió **ninguna** lectura de posts
+  (`syncExternalPosts` y `listPublishedPosts` de todas las cuentas), la sync devuelve un error en vez de "0
+  piezas": con 401 o 403 (`esErrorDeAcceso`), el motivo para reconectar Zernio; si no, una falla con el status
+  y sin el cuerpo de la respuesta. Que falle una parte (una cuenta, las historias) sigue siendo un aviso en el
+  log. Las tareas de fondo no cortan la sincronización y registran su falla en la consola y en Sentry: las
+  métricas (`syncContentMetricsForOrg`) y la reparación de miniaturas vencidas, que lanza `FallaDeLaBase` si
+  falla su lectura o su escritura.
 - **UTM:** `youtube_video_id` debe ser el external id de YouTube; `resolveYoutubeVideoExternalId` convierte el
   UUID de `content_assets` si llega. La atribución de booking/venta es por coincidencia de email o nombre.
 - **Overview y Conexión con Ventas leen fuentes legacy:** los KPIs, funnel y heatmap del Overview salen de
@@ -331,7 +370,6 @@ como JSON.
 ## Limitaciones conocidas y deuda
 
 - Content ignora el negocio activo del holding `[MKT-HOLDING-ORG]`.
-- Vincular o desvincular un archivo de Drive avisa éxito aunque la base falle `[MKT-VINCULAR-DRIVE-IGNORA-RESULTADO]`.
 - Música propia de Trial Reels nunca llega al worker (zod la descarta) y no hay pantalla para subirla `[TRIAL-REELS-MUSICA]`, `[TRIAL-4]`.
 - `WORKER_AUTH_SECRET` viaja en la URL de QStash y se loguea `[TRIAL-SECRET-EN-URL]`.
 - Overview y Conexión con Ventas sobre tablas legacy `[MKT-OVERVIEW-LEGACY]`, `[MKT-SALES-CONN-VACIA]`.
@@ -365,6 +403,7 @@ Detalle y prioridades: `PENDIENTES.md` (entregado al integrador del backlog).
 | `/api/content/analyze` pasa el motivo o el texto fijo con 500 (el botón "Analizar") | `apps/web/app/api/content/analyze/__tests__/ruta-de-analisis.test.ts` |
 | Pantallas de contenido, detalle y anuncios con el motivo; avisos de Trial Reels, Drive, anuncios y comentarios | `apps/web/app/(platform)/marketing/__tests__/pantallas-de-contenido.test.ts`, `apps/web/components/marketing/__tests__/contenido-pantallas-errores-como-valor.test.ts` |
 | Triggers de comentarios Zernio (Embudos) | `apps/web/lib/zernio/__tests__/triggers.test.ts` |
+| Errores como valor de resumen, Drive, sincronización y patrones (SCRUM-519): cada acción con su motivo, éxito, falla de la base y excepción; cada filtro por organización con un test que falla si se quita; Google, Zernio y Claude son dobles; las pantallas y componentes que las llaman | `apps/web/app/marketing/__tests__/{resumen,drive,sincronizacion,patrones,llamadores}-errores-como-valor.test.ts` (base falsa en `base-falsa.ts`) |
 | `/api/cron/sync-content-metrics` pasa sin sesión y `/api/content/analyze` exige sesión (`isPublicPath`; `/api/utm/*` no tiene caso de test) | `apps/web/lib/supabase/__tests__/public-paths.test.ts` |
 
 Sin cubrir: `resolve-analytics.ts` `[T-11]`, `lib/utm/*` `[T-5]`, `overview-metrics.ts` `[T-12]`,
