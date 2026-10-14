@@ -202,6 +202,13 @@ describe("Trial Reels: variante", () => {
 describe("vincular y desvincular un archivo de Drive (SCRUM-502, [MKT-VINCULAR-DRIVE-IGNORA-RESULTADO])", () => {
   const ARCHIVO = { id: "drive-1", name: "video.mp4", url: "https://drive/1" };
 
+  // Las dos acciones responden éxito por defecto: si el helper llama a la
+  // equivocada, el rojo sale de la aserción sobre qué se llamó (AR pasada 2).
+  beforeEach(() => {
+    sim.resultados.linkDriveFileToContentAction = { success: true, data: undefined };
+    sim.resultados.unlinkDriveFileAction = { success: true, data: undefined };
+  });
+
   it("⭐ Administrar: con éxito avisa «vinculado»; con un rechazo o una falla, el motivo y no el éxito", async () => {
     const alVincular = vi.fn();
     sim.resultados.linkDriveFileToContentAction = { success: true, data: undefined };

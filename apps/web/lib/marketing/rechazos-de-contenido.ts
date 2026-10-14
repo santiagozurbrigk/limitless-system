@@ -46,6 +46,24 @@ export function rechazoDeZernio(error: unknown): unknown {
 }
 
 /**
+ * El texto que ve el usuario en la tarjeta de una variante de Trial Reels
+ * cuando Zernio rechaza o falla al crear el post (SCRUM-502, AR pasada 2).
+ * Desde la AR pasada 1, `createPost` lanza `ZernioHttpError` con el status y
+ * sin el cuerpo de la respuesta (puede repetir el caption), así que el motivo
+ * se elige por el status. Cualquier otro error devuelve `null` y quien llama
+ * guarda su mensaje como antes.
+ */
+export function motivoDeFallaAlPublicarEnZernio(error: unknown): string | null {
+  if (!(error instanceof ZernioHttpError)) return null;
+  if (error.status === 400 || error.status === 422) {
+    return "Zernio rechazó el contenido del post. Revisá el caption o el video y probá de nuevo.";
+  }
+  if (error.status === 401 || error.status === 403) return ZERNIO_SIN_ACCESO;
+  if (error.status === 429) return "Zernio está limitando los pedidos. Probá de nuevo más tarde.";
+  return "Zernio falló al crear el post. Probá de nuevo.";
+}
+
+/**
  * `zernioFetchJson` (`lib/zernio/client.ts`) arma sus errores como
  * `Zernio <pedido>: <qué pasó>`, un guion largo entre espacios (U+2014) y los
  * primeros 200 caracteres del cuerpo. El mensaje de una falla viaja a Sentry,
