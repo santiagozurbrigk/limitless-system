@@ -25,8 +25,13 @@ export async function POST(req: NextRequest) {
     const { analyzeContentPieceAction } = await import(
       "@/app/marketing/content/actions"
     );
-    const analysis = await analyzeContentPieceAction(contentPieceId);
-    return NextResponse.json({ analysis });
+    // Devuelve su error como valor (SCRUM-502): el motivo, o el texto fijo si
+    // fue una falla (que la acción ya registró). La pantalla muestra `error`.
+    const resultado = await analyzeContentPieceAction(contentPieceId);
+    if (!resultado.success) {
+      return NextResponse.json({ error: resultado.error }, { status: 500 });
+    }
+    return NextResponse.json({ analysis: resultado.data });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Error desconocido";
     console.error("[content/analyze]", message);

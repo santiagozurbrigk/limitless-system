@@ -4,6 +4,15 @@ import { ContentPieceGrid } from "@/components/marketing/content-piece-grid";
 import { ContentDraftsLibrary } from "@/components/marketing/content-drafts-library";
 import { ContentTabSwitcher } from "@/components/marketing/content-tab-switcher";
 import { EstadoDeSincronizacion } from "@/components/marketing/estado-de-sincronizacion";
+import { EmptyState } from "@/components/shared/empty-state";
+
+function ContenidoNoDisponible({ motivo }: { motivo: string }) {
+  return (
+    <div className="p-6">
+      <EmptyState title="No se pudo cargar el contenido" description={motivo} />
+    </div>
+  );
+}
 
 export default async function MarketingContentPage({
   searchParams,
@@ -18,10 +27,16 @@ export default async function MarketingContentPage({
   // decía nada, y una caída de Zernio no se registraba).
   const sincronizacion = await maybeSyncZernioContentAction();
 
-  const [pieces, drafts] = await Promise.all([
+  const [piezas, borradores] = await Promise.all([
     getContentPiecesAction({ limit: 50 }),
     getContentDraftsAction({ limit: 100 }),
   ]);
+  // Las lecturas devuelven su error como valor (SCRUM-502): la pantalla muestra
+  // el motivo en vez de la pantalla de error de Next.
+  if (!piezas.success) return <ContenidoNoDisponible motivo={piezas.error} />;
+  if (!borradores.success) return <ContenidoNoDisponible motivo={borradores.error} />;
+  const pieces = piezas.data;
+  const drafts = borradores.data;
 
   const reelCount = pieces.filter((p) => p.type === "reel").length;
   const analyzedCount = pieces.filter((p) => p.analysis).length;

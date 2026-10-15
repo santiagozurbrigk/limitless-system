@@ -42,6 +42,10 @@ export type AgentToolHandlerContext = {
   state: AgentToolHandlerState;
 };
 
+/** Sugerencia para el modelo cuando el ranking de contenido no se pudo leer. */
+const SUGERENCIA_TOP_CONTENIDO_CON_ERROR =
+  "Reintentá con type_filter='all' y metric='engagement_total'. Si el error persiste, informá al usuario que no se pudo acceder a las métricas de contenido.";
+
 export function createAgentToolHandler(ctx: AgentToolHandlerContext) {
   return async (
     name: string,
@@ -225,7 +229,18 @@ export function createAgentToolHandler(ctx: AgentToolHandlerContext) {
               "Conseguí el id de la pieza con get_top_performing_content (busca por métrica y filtra por tipo) antes de analizarla. No inventes el id.",
           });
         }
-        const analysis = await analyzeContentPieceAction(contentPieceId);
+        // Devuelve su error como valor (SCRUM-502): el motivo, o el texto fijo
+        // si fue una falla (que ya quedó registrada).
+        const resultado = await analyzeContentPieceAction(contentPieceId);
+        if (!resultado.success) {
+          return JSON.stringify({
+            success: false,
+            error: resultado.error,
+            suggestion:
+              "La pieza puede no tener un archivo de Drive vinculado, o el id puede ser incorrecto. Confirmá con get_top_performing_content que el id existe, o avisale al usuario que la pieza necesita un archivo vinculado para analizarse.",
+          });
+        }
+        const analysis = resultado.data;
         return JSON.stringify({
           success: true,
           analysis: {
@@ -258,11 +273,15 @@ export function createAgentToolHandler(ctx: AgentToolHandlerContext) {
         const { createContentVariantsAction } = await import(
           "@/app/marketing/content/actions"
         );
-        const variantIds = await createContentVariantsAction({
+        const resultado = await createContentVariantsAction({
           sourceContentId,
           count,
           instructions,
         });
+        if (!resultado.success) {
+          return JSON.stringify({ success: false, error: resultado.error });
+        }
+        const variantIds = resultado.data;
 
         return JSON.stringify({
           success: true,
@@ -287,12 +306,19 @@ export function createAgentToolHandler(ctx: AgentToolHandlerContext) {
         const { getTopPerformingContentAction } = await import(
           "@/app/marketing/content/actions"
         );
-        const { piezas: results, sinMetricas } =
-          await getTopPerformingContentAction({
-            metric,
-            limit,
-            typeFilter,
+        const resultado = await getTopPerformingContentAction({
+          metric,
+          limit,
+          typeFilter,
+        });
+        if (!resultado.success) {
+          return JSON.stringify({
+            success: false,
+            error: resultado.error,
+            suggestion: SUGERENCIA_TOP_CONTENIDO_CON_ERROR,
           });
+        }
+        const { piezas: results, sinMetricas } = resultado.data;
 
         if (results.length === 0) {
           return JSON.stringify({
@@ -318,8 +344,7 @@ export function createAgentToolHandler(ctx: AgentToolHandlerContext) {
         return JSON.stringify({
           success: false,
           error: err instanceof Error ? err.message : "Error desconocido",
-          suggestion:
-            "Reintentá con type_filter='all' y metric='engagement_total'. Si el error persiste, informá al usuario que no se pudo acceder a las métricas de contenido.",
+          suggestion: SUGERENCIA_TOP_CONTENIDO_CON_ERROR,
         });
       }
     }

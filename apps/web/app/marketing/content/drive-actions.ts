@@ -192,19 +192,26 @@ export async function getDriveFolderPathAction(
   });
 }
 
+/**
+ * Vincular y desvincular devuelven el resultado de `updateContentPieceAction`
+ * (SCRUM-502): ID inválido o sin sesión vuelven con su motivo y una falla de la
+ * base con el texto fijo. Antes el `await` descartaba el resultado y la
+ * pantalla avisaba "Archivo vinculado" sin haber guardado nada
+ * (`[MKT-VINCULAR-DRIVE-IGNORA-RESULTADO]`).
+ */
 export async function linkDriveFileToContentAction(
   contentPieceId: string,
   driveFile: { id: string; name: string; url: string }
-): Promise<void> {
-  await updateContentPieceAction(contentPieceId, {
+): Promise<MutationResult<void>> {
+  return updateContentPieceAction(contentPieceId, {
     drive_file_id: driveFile.id,
     drive_file_name: driveFile.name,
     drive_file_url: driveFile.url,
   });
 }
 
-export async function unlinkDriveFileAction(contentPieceId: string): Promise<void> {
-  await updateContentPieceAction(contentPieceId, {
+export async function unlinkDriveFileAction(contentPieceId: string): Promise<MutationResult<void>> {
+  return updateContentPieceAction(contentPieceId, {
     drive_file_id: null,
     drive_file_name: null,
     drive_file_url: null,

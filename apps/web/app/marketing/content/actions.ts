@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import { callClaudeJson, callClaudeVisionJson } from "@/lib/ai/anthropic";
 import {
@@ -26,14 +27,48 @@ import { computeSalesAttributionForOrg } from "@/lib/marketing/content-sales-att
 import { metricScore, rankearPiezas } from "@/lib/marketing/ranking-de-contenido";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { getZernioClientForOrganization, getZernioIntegrationForOrg } from "@/lib/zernio/integration";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { firstZodError, uuidSchema } from "@/lib/validations";
+import { rechazoConocidoDeClaude } from "@/lib/ai/rechazo-de-claude";
 import { descargarArchivoDeDrive } from "@/lib/google/drive-archivos";
+import { rechazoDeZernio, ZERNIO_NO_CONECTADO } from "@/lib/marketing/rechazos-de-contenido";
+
+/*
+ * Errores como valor (SCRUM-502): cada acción exportada corre dentro de
+ * `mutacionConErroresEsperables` y devuelve `MutationResult`. Los rechazos
+ * conocidos (sesión, ID inválido, pieza o variante inexistente o de otra
+ * organización, pieza sin Drive, integración sin conectar, clave de Claude
+ * rechazada) son `ErrorEsperable` y vuelven con su motivo; un error de la base
+ * es `FallaDeLaBase` y, como cualquier otra falla, se registra en Sentry y
+ * vuelve con el texto fijo.
+ */
+
+const PIEZA_NO_ENCONTRADA =
+  "Pieza no encontrada (se buscó por UUID interno y por ID de plataforma)";
 
 async function requireProfileOrganizationId(): Promise<string> {
   const profile = await getCurrentProfile();
   if (!profile?.organization_id) {
-    throw new Error("Sesión no válida");
+    throw new ErrorEsperable("Sesión no válida");
   }
   return profile.organization_id;
+}
+
+function exigirUuid(id: unknown): string {
+  const parsed = uuidSchema.safeParse(id);
+  if (!parsed.success) throw new ErrorEsperable("ID inválido");
+  return parsed.data;
+}
+
+/** El ID de una pieza puede ser el UUID interno o el de la plataforma. */
+function exigirIdDePieza(id: unknown): string {
+  if (typeof id !== "string") throw new ErrorEsperable("ID inválido");
+  return id;
 }
 
 const UUID_RE =
@@ -58,7 +93,7 @@ async function resolveContentPieceRow(
       .eq("id", trimmed)
       .eq("organization_id", organizationId)
       .maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     if (data) return data as ContentPiece;
   }
 
@@ -69,7 +104,7 @@ async function resolveContentPieceRow(
     .eq("platform_post_id", trimmed)
     .eq("organization_id", organizationId)
     .maybeSingle();
-  if (platformError) throw new Error(platformError.message);
+  if (platformError) throw new FallaDeLaBase(platformError);
   return (byPlatformId as ContentPiece | null) ?? null;
 }
 
@@ -78,54 +113,59 @@ export async function getContentPiecesAction(params?: {
   status?: ContentPieceStatus;
   source?: string;
   limit?: number;
-}): Promise<ContentPiece[]> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
+}): Promise<MutationResult<ContentPiece[]>> {
+  return mutacionConErroresEsperables("[getContentPieces]", async () => {
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
 
-  let query = supabase
-    .from("content_pieces")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .is("variants_of", null)
-    .order("published_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false });
+    let query = supabase
+      .from("content_pieces")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .is("variants_of", null)
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false });
 
-  if (params?.type) query = query.eq("type", params.type);
-  if (params?.status) query = query.eq("status", params.status);
-  if (params?.source) query = query.eq("source", params.source);
-  if (params?.limit) query = query.limit(params.limit);
+    if (params?.type) query = query.eq("type", params.type);
+    if (params?.status) query = query.eq("status", params.status);
+    if (params?.source) query = query.eq("source", params.source);
+    if (params?.limit) query = query.limit(params.limit);
 
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return (data ?? []) as ContentPiece[];
+    const { data, error } = await query;
+    if (error) throw new FallaDeLaBase(error);
+    return (data ?? []) as ContentPiece[];
+  });
 }
 
+/**
+ * La pieza con sus variantes, o `null` si no existe en la organización: la
+ * pantalla del detalle responde 404 con `null` y muestra el motivo con un error.
+ */
 export async function getContentPieceAction(
   id: string
-): Promise<ContentPieceWithVariants> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
+): Promise<MutationResult<ContentPieceWithVariants | null>> {
+  return mutacionConErroresEsperables("[getContentPiece]", async () => {
+    const idDePieza = exigirIdDePieza(id);
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
 
-  const piece = await resolveContentPieceRow(supabase, organizationId, id);
-  if (!piece) {
-    throw new Error(
-      "Pieza no encontrada (se buscó por UUID interno y por ID de plataforma)"
-    );
-  }
+    const piece = await resolveContentPieceRow(supabase, organizationId, idDePieza);
+    if (!piece) return null;
 
-  const { data: variants, error } = await supabase
-    .from("content_pieces")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .eq("variants_of", piece.id)
-    .order("created_at", { ascending: true });
+    const { data: variants, error } = await supabase
+      .from("content_pieces")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("variants_of", piece.id)
+      .order("created_at", { ascending: true });
 
-  if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
 
-  return {
-    ...piece,
-    variants: (variants ?? []) as ContentPiece[],
-  };
+    return {
+      ...piece,
+      variants: (variants ?? []) as ContentPiece[],
+    };
+  });
 }
 
 type ContentPieceUpdateFields = Partial<
@@ -150,129 +190,142 @@ type ContentPieceUpdateFields = Partial<
 export async function updateContentPieceAction(
   id: string,
   updates: ContentPieceUpdateFields
-): Promise<void> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
+): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[updateContentPiece]", async () => {
+    const pieceId = exigirUuid(id);
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("content_pieces")
-    .update(updates)
-    .eq("id", id)
-    .eq("organization_id", organizationId);
+    const { error } = await supabase
+      .from("content_pieces")
+      .update(updates)
+      .eq("id", pieceId)
+      .eq("organization_id", organizationId);
 
-  if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
+  });
 }
 
-export async function deleteContentPieceAction(id: string): Promise<void> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
+export async function deleteContentPieceAction(id: string): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[deleteContentPiece]", async () => {
+    const pieceId = exigirUuid(id);
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("content_pieces")
-    .delete()
-    .eq("id", id)
-    .eq("organization_id", organizationId);
+    const { error } = await supabase
+      .from("content_pieces")
+      .delete()
+      .eq("id", pieceId)
+      .eq("organization_id", organizationId);
 
-  if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
+  });
 }
 
 export async function analyzeContentPieceAction(
   contentPieceId: string
-): Promise<ContentAnalysis> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
+): Promise<MutationResult<ContentAnalysis>> {
+  return mutacionConErroresEsperables("[analyzeContentPiece]", async () => {
+    const idDePieza = exigirIdDePieza(contentPieceId);
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
 
-  const piece = await resolveContentPieceRow(
-    supabase,
-    organizationId,
-    contentPieceId
-  );
-
-  if (!piece) {
-    throw new Error(
-      "Pieza no encontrada (se buscó por UUID interno y por ID de plataforma)"
+    const piece = await resolveContentPieceRow(
+      supabase,
+      organizationId,
+      idDePieza
     );
-  }
 
-  if (!piece.drive_file_id) {
-    throw new Error(
-      "Esta pieza no tiene un video de Drive vinculado. Para analizarla, primero vinculá el archivo de Drive desde el panel de la pieza y luego volvé a intentarlo."
-    );
-  }
+    if (!piece) {
+      throw new ErrorEsperable(PIEZA_NO_ENCONTRADA);
+    }
 
-  const { buffer, mimeType } = await descargarArchivoDeDrive(piece.drive_file_id);
+    if (!piece.drive_file_id) {
+      throw new ErrorEsperable(
+        "Esta pieza no tiene un video de Drive vinculado. Para analizarla, primero vinculá el archivo de Drive desde el panel de la pieza y luego volvé a intentarlo."
+      );
+    }
 
-  let transcript: string | null = null;
-  const visionImages: Array<{
-    base64: string;
-    mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
-  }> = [];
+    // Lanza `ErrorEsperable` para lo que se le explica al usuario (sin
+    // conexión, sin permisos, archivo inexistente o de más de 500 MB) y
+    // cualquier otra cosa para una falla (`lib/google/drive-archivos.ts`, SCRUM-519).
+    const { buffer, mimeType } = await descargarArchivoDeDrive(piece.drive_file_id);
 
-  if (isVideoMimeType(mimeType)) {
-    const { processVideoForAnalysis } = await import("@/lib/content/video-processor");
-    const { audioBuffer, frames } = await processVideoForAnalysis(buffer, mimeType);
-    transcript = await transcribeAudioBuffer(audioBuffer);
-    visionImages.push(
-      ...frames.map((frame) => ({
-        base64: frame.toString("base64"),
-        mediaType: "image/jpeg" as const,
-      }))
-    );
-  } else if (isImageMimeType(mimeType)) {
-    visionImages.push({
-      base64: buffer.toString("base64"),
-      mediaType: toClaudeImageMediaType(mimeType),
+    let transcript: string | null = null;
+    const visionImages: Array<{
+      base64: string;
+      mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+    }> = [];
+
+    if (isVideoMimeType(mimeType)) {
+      const { processVideoForAnalysis } = await import("@/lib/content/video-processor");
+      const { audioBuffer, frames } = await processVideoForAnalysis(buffer, mimeType);
+      transcript = await transcribeAudioBuffer(audioBuffer);
+      visionImages.push(
+        ...frames.map((frame) => ({
+          base64: frame.toString("base64"),
+          mediaType: "image/jpeg" as const,
+        }))
+      );
+    } else if (isImageMimeType(mimeType)) {
+      visionImages.push({
+        base64: buffer.toString("base64"),
+        mediaType: toClaudeImageMediaType(mimeType),
+      });
+    } else {
+      throw new ErrorEsperable(`Tipo de archivo no soportado para análisis: ${mimeType}`);
+    }
+
+    const metrics = piece.metrics as ContentMetrics | null | undefined;
+
+    const analysisPrompt = buildContentAnalysisPrompt({
+      caption: piece.caption,
+      hashtags: piece.hashtags,
+      metrics,
+      transcript,
+      hasImages: visionImages.length > 0,
     });
-  } else {
-    throw new Error(`Tipo de archivo no soportado para análisis: ${mimeType}`);
-  }
 
-  const metrics = piece.metrics as ContentMetrics | null | undefined;
+    const analysis = await callClaudeVisionJson<ContentAnalysis>({
+      organizationId,
+      task: "analyze_content_piece",
+      feature: "marketing_content",
+      text: analysisPrompt,
+      images: visionImages,
+      maxTokens: 1500,
+    }).catch((error: unknown) => {
+      throw rechazoConocidoDeClaude(error);
+    });
 
-  const analysisPrompt = buildContentAnalysisPrompt({
-    caption: piece.caption,
-    hashtags: piece.hashtags,
-    metrics,
-    transcript,
-    hasImages: visionImages.length > 0,
+    // `null`: la org no tiene clave de Claude usable o la respuesta no fue JSON.
+    if (!analysis) {
+      throw new ErrorEsperable("El análisis IA no devolvió resultado");
+    }
+
+    // Extraer campos de clasificación estructurada del JSON devuelto
+    const formatType = analysis.format_type ?? null;
+    const hookType = analysis.hook_type ?? null;
+    const ctaType = analysis.cta_type ?? null;
+
+    const { error: updateError } = await supabase
+      .from("content_pieces")
+      .update({
+        transcript: transcript ?? null,
+        analysis,
+        analysis_generated_at: new Date().toISOString(),
+        format_type: formatType,
+        hook_type: hookType,
+        cta_type: ctaType,
+      })
+      .eq("id", piece.id)
+      .eq("organization_id", organizationId);
+
+    if (updateError) {
+      throw new FallaDeLaBase(updateError);
+    }
+
+    return analysis;
   });
-
-  const analysis = await callClaudeVisionJson<ContentAnalysis>({
-    organizationId,
-    task: "analyze_content_piece",
-    feature: "marketing_content",
-    text: analysisPrompt,
-    images: visionImages,
-    maxTokens: 1500,
-  });
-
-  if (!analysis) {
-    throw new Error("El análisis IA no devolvió resultado");
-  }
-
-  // Extraer campos de clasificación estructurada del JSON devuelto
-  const formatType = analysis.format_type ?? null;
-  const hookType = analysis.hook_type ?? null;
-  const ctaType = analysis.cta_type ?? null;
-
-  const { error: updateError } = await supabase
-    .from("content_pieces")
-    .update({
-      transcript: transcript ?? null,
-      analysis,
-      analysis_generated_at: new Date().toISOString(),
-      format_type: formatType,
-      hook_type: hookType,
-      cta_type: ctaType,
-    })
-    .eq("id", piece.id)
-    .eq("organization_id", organizationId);
-
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
-
-  return analysis;
 }
 
 type GeneratedVariantBrief = Pick<
@@ -288,44 +341,46 @@ export async function createContentVariantsAction({
   sourceContentId: string;
   count: number;
   instructions?: string;
-}): Promise<string[]> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
-  const variantCount = Math.min(Math.max(count, 1), 5);
+}): Promise<MutationResult<string[]>> {
+  return mutacionConErroresEsperables("[createContentVariants]", async () => {
+    const idDePieza = exigirIdDePieza(sourceContentId);
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
+    const variantCount = Math.min(Math.max(count, 1), 5);
 
-  const source = await resolveContentPieceRow(
-    supabase,
-    organizationId,
-    sourceContentId
-  );
-
-  if (!source) {
-    throw new Error(
-      "Pieza fuente no encontrada (se buscó por UUID interno y por ID de plataforma)"
+    const source = await resolveContentPieceRow(
+      supabase,
+      organizationId,
+      idDePieza
     );
-  }
 
-  const sourceAnalysis = source.analysis as ContentAnalysis | null | undefined;
-  const sourceMetrics = source.metrics as ContentMetrics | null | undefined;
+    if (!source) {
+      throw new ErrorEsperable(
+        "Pieza fuente no encontrada (se buscó por UUID interno y por ID de plataforma)"
+      );
+    }
 
-  const sourceContext = [
-    source.caption ? `Caption original: "${source.caption}"` : null,
-    sourceAnalysis
-      ? `Análisis de la pieza original:
+    const sourceAnalysis = source.analysis as ContentAnalysis | null | undefined;
+    const sourceMetrics = source.metrics as ContentMetrics | null | undefined;
+
+    const sourceContext = [
+      source.caption ? `Caption original: "${source.caption}"` : null,
+      sourceAnalysis
+        ? `Análisis de la pieza original:
 - Formato: ${sourceAnalysis.formato.name} — ${sourceAnalysis.formato.description}
 - Dolor: ${sourceAnalysis.dolor.name} — ${sourceAnalysis.dolor.description}
 - Ángulo: ${sourceAnalysis.angulo.name} — ${sourceAnalysis.angulo.description}
 - Por qué funcionó: ${sourceAnalysis.why_it_worked}`
-      : "La pieza no tiene análisis previo.",
-    sourceMetrics
-      ? `Métricas: ${sourceMetrics.likes ?? 0} likes, ${sourceMetrics.comments ?? 0} comentarios, ${sourceMetrics.saves ?? 0} guardados, ${sourceMetrics.reach ?? 0} reach`
-      : null,
-    instructions ? `Instrucciones adicionales del usuario: ${instructions}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+        : "La pieza no tiene análisis previo.",
+      sourceMetrics
+        ? `Métricas: ${sourceMetrics.likes ?? 0} likes, ${sourceMetrics.comments ?? 0} comentarios, ${sourceMetrics.saves ?? 0} guardados, ${sourceMetrics.reach ?? 0} reach`
+        : null,
+      instructions ? `Instrucciones adicionales del usuario: ${instructions}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
-  const prompt = `Sos un estratega de contenido experto. Tenés que crear ${variantCount} variante(s) de una pieza de contenido exitosa.
+    const prompt = `Sos un estratega de contenido experto. Tenés que crear ${variantCount} variante(s) de una pieza de contenido exitosa.
 
 DEFINICIONES:
 - FORMATO: La estructura/forma de grabación (el "cómo se ve"). Ejemplos: "grabación de pantalla con celular", "talking head directo a cámara", "videollamada entre dos personas".
@@ -355,41 +410,44 @@ Respondé con este JSON exacto:
   ]
 }`;
 
-  const result = await callClaudeJson<{ variants: GeneratedVariantBrief[] }>({
-    organizationId,
-    task: "create_content_variants",
-    feature: "marketing_content",
-    user: prompt,
-    maxTokens: 3000,
+    const result = await callClaudeJson<{ variants: GeneratedVariantBrief[] }>({
+      organizationId,
+      task: "create_content_variants",
+      feature: "marketing_content",
+      user: prompt,
+      maxTokens: 3000,
+    }).catch((error: unknown) => {
+      throw rechazoConocidoDeClaude(error);
+    });
+
+    if (!result?.variants?.length) {
+      throw new ErrorEsperable("Respuesta inválida de la IA");
+    }
+
+    const insertRows = result.variants.slice(0, variantCount).map((variant) => ({
+      organization_id: organizationId,
+      type: source.type as ContentPieceType,
+      source: "ai_generated" as const,
+      platform: source.platform,
+      variants_of: source.id,
+      brief: variant as ContentBrief,
+      status: "draft" as const,
+    }));
+
+    const { data: inserted, error: insertError } = await supabase
+      .from("content_pieces")
+      .insert(insertRows)
+      .select("id");
+
+    if (insertError) {
+      throw new FallaDeLaBase(insertError);
+    }
+
+    revalidatePath(paths.platform.marketing.content);
+    revalidatePath(paths.platform.marketing.contentDetail(source.id));
+
+    return (inserted ?? []).map((row) => row.id as string);
   });
-
-  if (!result?.variants?.length) {
-    throw new Error("Respuesta inválida de la IA");
-  }
-
-  const insertRows = result.variants.slice(0, variantCount).map((variant) => ({
-    organization_id: organizationId,
-    type: source.type as ContentPieceType,
-    source: "ai_generated" as const,
-    platform: source.platform,
-    variants_of: source.id,
-    brief: variant as ContentBrief,
-    status: "draft" as const,
-  }));
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("content_pieces")
-    .insert(insertRows)
-    .select("id");
-
-  if (insertError) {
-    throw new Error(insertError.message);
-  }
-
-  revalidatePath(paths.platform.marketing.content);
-  revalidatePath(paths.platform.marketing.contentDetail(source.id));
-
-  return (inserted ?? []).map((row) => row.id as string);
 }
 
 // ─── Borradores de contenido ──────────────────────────────────────────────────
@@ -404,39 +462,43 @@ export type ContentDraftWithParent = ContentPiece & {
  */
 export async function getContentDraftsAction(params?: {
   limit?: number;
-}): Promise<ContentDraftWithParent[]> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
+}): Promise<MutationResult<ContentDraftWithParent[]>> {
+  return mutacionConErroresEsperables("[getContentDrafts]", async () => {
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
 
-  const limit = params?.limit ?? 100;
+    const limit = params?.limit ?? 100;
 
-  const { data: variants, error } = await supabase
-    .from("content_pieces")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .not("variants_of", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    const { data: variants, error } = await supabase
+      .from("content_pieces")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .not("variants_of", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-  if (error) throw new Error(error.message);
-  if (!variants?.length) return [];
+    if (error) throw new FallaDeLaBase(error);
+    if (!variants?.length) return [];
 
-  // Batch-fetch parent pieces
-  const parentIds = [...new Set(variants.map((v) => v.variants_of as string))];
-  const { data: parents } = await supabase
-    .from("content_pieces")
-    .select("id, title, type, caption")
-    .eq("organization_id", organizationId)
-    .in("id", parentIds);
+    // Batch-fetch parent pieces. Si esta lectura falla es una falla, no
+    // "borradores sin pieza original" (antes se ignoraba el error).
+    const parentIds = [...new Set(variants.map((v) => v.variants_of as string))];
+    const { data: parents, error: parentsError } = await supabase
+      .from("content_pieces")
+      .select("id, title, type, caption")
+      .eq("organization_id", organizationId)
+      .in("id", parentIds);
+    if (parentsError) throw new FallaDeLaBase(parentsError);
 
-  const parentMap = Object.fromEntries(
-    (parents ?? []).map((p) => [p.id, p as Pick<ContentPiece, "id" | "title" | "type" | "caption">])
-  );
+    const parentMap = Object.fromEntries(
+      (parents ?? []).map((p) => [p.id, p as Pick<ContentPiece, "id" | "title" | "type" | "caption">])
+    );
 
-  return (variants as ContentPiece[]).map((v) => ({
-    ...v,
-    parent_piece: v.variants_of ? (parentMap[v.variants_of] ?? null) : null,
-  }));
+    return (variants as ContentPiece[]).map((v) => ({
+      ...v,
+      parent_piece: v.variants_of ? (parentMap[v.variants_of] ?? null) : null,
+    }));
+  });
 }
 
 export type TopPerformingContentResult = {
@@ -465,12 +527,26 @@ export type TopPerformingContentResponse = {
   sinMetricas: number;
 };
 
+const idsDePiezasSchema = z.array(uuidSchema, { message: "IDs inválidos" }).optional();
+
 export async function updateSalesAttributionAction(
   contentPieceIds?: string[]
-): Promise<void> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
+): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[updateSalesAttribution]", async () => {
+    const parsed = idsDePiezasSchema.safeParse(contentPieceIds);
+    if (!parsed.success) throw new ErrorEsperable(firstZodError(parsed.error));
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
+    await actualizarAtribucionDeVentas(supabase, organizationId, parsed.data);
+  });
+}
 
+/** Lo que hace `updateSalesAttributionAction`; lanza ante una falla de la base. */
+async function actualizarAtribucionDeVentas(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  contentPieceIds?: string[]
+): Promise<void> {
   const attributionMap = await computeSalesAttributionForOrg(
     supabase,
     organizationId
@@ -492,7 +568,7 @@ export async function updateSalesAttributionAction(
         .eq("id", pieceId)
         .eq("organization_id", organizationId);
 
-      if (error) throw new Error(error.message);
+      if (error) throw new FallaDeLaBase(error);
     })
   );
 }
@@ -505,136 +581,144 @@ export async function getTopPerformingContentAction({
   metric: string;
   limit?: number;
   typeFilter?: string;
-}): Promise<TopPerformingContentResponse> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
+}): Promise<MutationResult<TopPerformingContentResponse>> {
+  return mutacionConErroresEsperables("[getTopPerformingContent]", async () => {
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
 
-  if (metric === "sales") {
-    await updateSalesAttributionAction();
-  }
-
-  // ⭐ El ranking se calcula sobre TODAS las piezas de la org (antes `.limit(100)`
-  // sin orden: 100 piezas cualquiera). Se ordena en JS porque `engagement_total`
-  // pondera varias claves del jsonb y `sales` sale de otra columna; ordenar en
-  // SQL pediría una RPC. Primero se traen sólo las columnas del puntaje,
-  // paginando, y después el detalle de las ganadoras.
-  type PiezaRankeable = {
-    id: string;
-    metrics: ContentMetrics | null;
-    sales_attributed: ContentSalesAttributed | null;
-  };
-
-  const { rows, error } = await fetchAllRows<PiezaRankeable>((from, to) => {
-    let query = supabase
-      .from("content_pieces")
-      .select("id, metrics, sales_attributed")
-      .eq("organization_id", organizationId)
-      .eq("source", "zernio")
-      .is("variants_of", null);
-    if (typeFilter !== "all") {
-      query = query.eq("type", typeFilter);
+    if (metric === "sales") {
+      await actualizarAtribucionDeVentas(supabase, organizationId);
     }
-    return query.order("id", { ascending: true }).range(from, to);
-  });
-  if (error) {
-    throw new Error(error);
-  }
 
-  const ranking = rankearPiezas(rows, metric, limit);
-  if (ranking.piezas.length === 0) {
-    return { piezas: [], sinMetricas: ranking.sinMetricas };
-  }
+    // ⭐ El ranking se calcula sobre TODAS las piezas de la org (antes `.limit(100)`
+    // sin orden: 100 piezas cualquiera). Se ordena en JS porque `engagement_total`
+    // pondera varias claves del jsonb y `sales` sale de otra columna; ordenar en
+    // SQL pediría una RPC. Primero se traen sólo las columnas del puntaje,
+    // paginando, y después el detalle de las ganadoras.
+    type PiezaRankeable = {
+      id: string;
+      metrics: ContentMetrics | null;
+      sales_attributed: ContentSalesAttributed | null;
+    };
 
-  type DetallePieza = {
-    id: string;
-    type: string;
-    title?: string | null;
-    caption?: string | null;
-    platform_post_url?: string | null;
-    published_at?: string | null;
-    analysis?: ContentAnalysis | null;
-  };
+    const { rows, error } = await fetchAllRows<PiezaRankeable>((from, to) => {
+      let query = supabase
+        .from("content_pieces")
+        .select("id, metrics, sales_attributed")
+        .eq("organization_id", organizationId)
+        .eq("source", "zernio")
+        .is("variants_of", null);
+      if (typeFilter !== "all") {
+        query = query.eq("type", typeFilter);
+      }
+      return query.order("id", { ascending: true }).range(from, to);
+    });
+    if (error) {
+      // `fetchAllRows` sólo devuelve el texto del error de la página que falló.
+      throw new FallaDeLaBase({ message: error });
+    }
 
-  const { data: detalles, error: detalleError } = await supabase
-    .from("content_pieces")
-    .select("id, type, title, caption, platform_post_url, published_at, analysis")
-    .eq("organization_id", organizationId)
-    .in(
-      "id",
-      ranking.piezas.map((p) => p.id)
+    const ranking = rankearPiezas(rows, metric, limit);
+    if (ranking.piezas.length === 0) {
+      return { piezas: [], sinMetricas: ranking.sinMetricas };
+    }
+
+    type DetallePieza = {
+      id: string;
+      type: string;
+      title?: string | null;
+      caption?: string | null;
+      platform_post_url?: string | null;
+      published_at?: string | null;
+      analysis?: ContentAnalysis | null;
+    };
+
+    const { data: detalles, error: detalleError } = await supabase
+      .from("content_pieces")
+      .select("id, type, title, caption, platform_post_url, published_at, analysis")
+      .eq("organization_id", organizationId)
+      .in(
+        "id",
+        ranking.piezas.map((p) => p.id)
+      );
+    if (detalleError) {
+      throw new FallaDeLaBase(detalleError);
+    }
+    const detallePorId = new Map(
+      ((detalles ?? []) as DetallePieza[]).map((d) => [d.id, d])
     );
-  if (detalleError) {
-    throw new Error(detalleError.message);
-  }
-  const detallePorId = new Map(
-    ((detalles ?? []) as DetallePieza[]).map((d) => [d.id, d])
-  );
 
-  const piezas = ranking.piezas.flatMap((piece) => {
-    const detalle = detallePorId.get(piece.id);
-    if (!detalle) return [];
-    const metrics = piece.metrics ?? undefined;
-    const analysis = detalle.analysis ?? undefined;
-    const salesAttributed = piece.sales_attributed ?? undefined;
+    const piezas = ranking.piezas.flatMap((piece) => {
+      const detalle = detallePorId.get(piece.id);
+      if (!detalle) return [];
+      const metrics = piece.metrics ?? undefined;
+      const analysis = detalle.analysis ?? undefined;
+      const salesAttributed = piece.sales_attributed ?? undefined;
 
-    return [
-      {
-        id: piece.id,
-        type: detalle.type,
-        title: detalle.title ?? detalle.caption?.slice(0, 60) ?? undefined,
-        platform_post_url: detalle.platform_post_url ?? undefined,
-        published_at: detalle.published_at ?? undefined,
-        metrics,
-        sales_attributed: salesAttributed,
-        analysis_summary: analysis
-          ? {
-              formato: analysis.formato?.name,
-              dolor: analysis.dolor?.name,
-              angulo: analysis.angulo?.name,
-            }
-          : null,
-        score: metricScore(metric, metrics ?? {}, salesAttributed),
-      },
-    ];
+      return [
+        {
+          id: piece.id,
+          type: detalle.type,
+          title: detalle.title ?? detalle.caption?.slice(0, 60) ?? undefined,
+          platform_post_url: detalle.platform_post_url ?? undefined,
+          published_at: detalle.published_at ?? undefined,
+          metrics,
+          sales_attributed: salesAttributed,
+          analysis_summary: analysis
+            ? {
+                formato: analysis.formato?.name,
+                dolor: analysis.dolor?.name,
+                angulo: analysis.angulo?.name,
+              }
+            : null,
+          score: metricScore(metric, metrics ?? {}, salesAttributed),
+        },
+      ];
+    });
+
+    return { piezas, sinMetricas: ranking.sinMetricas };
   });
-
-  return { piezas, sinMetricas: ranking.sinMetricas };
 }
 
 export async function generateVariantCaptionAction(
   variantId: string
-): Promise<string> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
+): Promise<MutationResult<string>> {
+  return mutacionConErroresEsperables("[generateVariantCaption]", async () => {
+    const idDeVariante = exigirUuid(variantId);
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
 
-  const { data: variant, error } = await supabase
-    .from("content_pieces")
-    .select("*")
-    .eq("id", variantId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
-
-  if (error || !variant) {
-    throw new Error("Variante no encontrada");
-  }
-
-  const brief = variant.brief as ContentBrief | null;
-  if (!brief) {
-    throw new Error("La variante no tiene brief");
-  }
-
-  let sourceCaption: string | null = null;
-  if (variant.variants_of) {
-    const { data: sourcePiece } = await supabase
+    const { data: variant, error } = await supabase
       .from("content_pieces")
-      .select("caption")
-      .eq("id", variant.variants_of)
+      .select("*")
+      .eq("id", idDeVariante)
       .eq("organization_id", organizationId)
       .maybeSingle();
-    sourceCaption = (sourcePiece?.caption as string | null) ?? null;
-  }
 
-  const prompt = `Generá un caption para Instagram en español (máximo 150 palabras) a partir de este brief de contenido.
+    // Antes una falla de la base también se mostraba como "Variante no encontrada".
+    if (error) throw new FallaDeLaBase(error);
+    if (!variant) {
+      throw new ErrorEsperable("Variante no encontrada");
+    }
+
+    const brief = variant.brief as ContentBrief | null;
+    if (!brief) {
+      throw new ErrorEsperable("La variante no tiene brief");
+    }
+
+    let sourceCaption: string | null = null;
+    if (variant.variants_of) {
+      const { data: sourcePiece, error: sourceError } = await supabase
+        .from("content_pieces")
+        .select("caption")
+        .eq("id", variant.variants_of)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+      if (sourceError) throw new FallaDeLaBase(sourceError);
+      sourceCaption = (sourcePiece?.caption as string | null) ?? null;
+    }
+
+    const prompt = `Generá un caption para Instagram en español (máximo 150 palabras) a partir de este brief de contenido.
 
 Ángulo (usar como hook): ${brief.angulo.name} — ${brief.angulo.description}
 Dolor: ${brief.dolor.name} — ${brief.dolor.description}
@@ -653,123 +737,143 @@ El caption debe sonar natural, abrir con el ángulo como gancho, desarrollar el 
 
 Respondé con JSON: { "caption": "..." }`;
 
-  const result = await callClaudeJson<{ caption: string }>({
-    organizationId,
-    task: "create_content_variants",
-    feature: "marketing_content",
-    user: prompt,
-    maxTokens: 800,
+    const result = await callClaudeJson<{ caption: string }>({
+      organizationId,
+      task: "create_content_variants",
+      feature: "marketing_content",
+      user: prompt,
+      maxTokens: 800,
+    }).catch((error: unknown) => {
+      throw rechazoConocidoDeClaude(error);
+    });
+
+    const caption = result?.caption?.trim();
+    if (!caption) {
+      throw new ErrorEsperable("No se pudo generar el caption");
+    }
+
+    return caption;
   });
-
-  const caption = result?.caption?.trim();
-  if (!caption) {
-    throw new Error("No se pudo generar el caption");
-  }
-
-  return caption;
 }
 
 export async function publishVariantAsZernioDraftAction(
   variantId: string,
   caption: string
-): Promise<{ postId: string; caption: string; platformPostUrl?: string }> {
-  const organizationId = await requireProfileOrganizationId();
-  const supabase = await createClient();
-  const trimmedCaption = caption.trim();
+): Promise<MutationResult<{ postId: string; caption: string; platformPostUrl?: string }>> {
+  return mutacionConErroresEsperables("[publishVariantAsZernioDraft]", async () => {
+    const idDeVariante = exigirUuid(variantId);
+    const organizationId = await requireProfileOrganizationId();
+    const supabase = await createClient();
+    const trimmedCaption = typeof caption === "string" ? caption.trim() : "";
 
-  if (!trimmedCaption) {
-    throw new Error("El caption no puede estar vacío");
-  }
+    if (!trimmedCaption) {
+      throw new ErrorEsperable("El caption no puede estar vacío");
+    }
 
-  const { data: variant, error } = await supabase
-    .from("content_pieces")
-    .select("*")
-    .eq("id", variantId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+    const { data: variant, error } = await supabase
+      .from("content_pieces")
+      .select("*")
+      .eq("id", idDeVariante)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
 
-  if (error || !variant) {
-    throw new Error("Variante no encontrada");
-  }
+    if (error) throw new FallaDeLaBase(error);
+    if (!variant) {
+      throw new ErrorEsperable("Variante no encontrada");
+    }
 
-  if (!variant.brief) {
-    throw new Error("La variante no tiene brief");
-  }
+    if (!variant.brief) {
+      throw new ErrorEsperable("La variante no tiene brief");
+    }
 
-  if (!variant.variants_of) {
-    throw new Error("Esta pieza no es una variante");
-  }
+    if (!variant.variants_of) {
+      throw new ErrorEsperable("Esta pieza no es una variante");
+    }
 
-  const { data: sourcePiece, error: sourceError } = await supabase
-    .from("content_pieces")
-    .select("platform, type")
-    .eq("id", variant.variants_of)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+    const { data: sourcePiece, error: sourceError } = await supabase
+      .from("content_pieces")
+      .select("platform, type")
+      .eq("id", variant.variants_of)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
 
-  if (sourceError || !sourcePiece) {
-    throw new Error("Pieza fuente no encontrada");
-  }
+    if (sourceError) throw new FallaDeLaBase(sourceError);
+    if (!sourcePiece) {
+      throw new ErrorEsperable("Pieza fuente no encontrada");
+    }
 
-  const integration = await getZernioIntegrationForOrg(organizationId);
-  if (!integration?.connected_accounts.length) {
-    throw new Error("Zernio no está conectado");
-  }
+    const integration = await getZernioIntegrationForOrg(organizationId);
+    if (!integration?.connected_accounts.length) {
+      throw new ErrorEsperable(ZERNIO_NO_CONECTADO);
+    }
 
-  const platform =
-    sourcePiece.platform ??
-    integration.connected_accounts.find((a) => a.platform === "instagram")
-      ?.platform ??
-    integration.connected_accounts[0]?.platform ??
-    "instagram";
+    const platform =
+      sourcePiece.platform ??
+      integration.connected_accounts.find((a) => a.platform === "instagram")
+        ?.platform ??
+      integration.connected_accounts[0]?.platform ??
+      "instagram";
 
-  const accountId =
-    integration.connected_accounts.find(
-      (account) => account.platform === platform
-    )?.accountId ?? integration.connected_accounts[0]?.accountId;
+    const accountId =
+      integration.connected_accounts.find(
+        (account) => account.platform === platform
+      )?.accountId ?? integration.connected_accounts[0]?.accountId;
 
-  const client = await getZernioClientForOrganization(organizationId);
+    const client = await getZernioClientForOrganization(organizationId).catch(
+      (error: unknown) => {
+        throw rechazoDeZernio(error);
+      }
+    );
 
-  const created = await client.createPost({
-    profileId: integration.zernio_profile_id,
-    platform,
-    postType: sourcePiece.type === "reel" ? "reel" : sourcePiece.type,
-    status: "draft",
-    content: trimmedCaption,
-    accountId,
+    const created = await client
+      .createPost({
+        profileId: integration.zernio_profile_id,
+        platform,
+        postType: sourcePiece.type === "reel" ? "reel" : sourcePiece.type,
+        status: "draft",
+        content: trimmedCaption,
+        accountId,
+      })
+      // `createPost` lanza `ZernioHttpError` con el status y sin el cuerpo de
+      // la respuesta (que puede repetir el caption): una clave rechazada es un
+      // rechazo con motivo y lo demás, una falla.
+      .catch((error: unknown) => {
+        throw rechazoDeZernio(error);
+      });
+
+    const post = created.post ?? created;
+    const postId = String(post.id ?? post._id ?? "");
+    if (!postId) {
+      // Una respuesta de Zernio sin ID es una falla del proveedor, no un rechazo.
+      throw new Error("Zernio no devolvió ID del post");
+    }
+
+    const platformPostUrl =
+      post.platformPostUrl ??
+      created.platformPostUrl ??
+      `https://zernio.com/posts/${postId}`;
+
+    const { error: updateError } = await supabase
+      .from("content_pieces")
+      .update({
+        status: "draft",
+        platform,
+        platform_post_id: postId,
+        platform_post_url: platformPostUrl,
+        caption: trimmedCaption,
+      })
+      .eq("id", variantId)
+      .eq("organization_id", organizationId);
+
+    if (updateError) {
+      throw new FallaDeLaBase(updateError);
+    }
+
+    revalidatePath(paths.platform.marketing.content);
+    if (variant.variants_of) {
+      revalidatePath(paths.platform.marketing.contentDetail(variant.variants_of));
+    }
+
+    return { postId, caption: trimmedCaption, platformPostUrl };
   });
-
-  const post = created.post ?? created;
-  const postId = String(post.id ?? post._id ?? "");
-  if (!postId) {
-    throw new Error("Zernio no devolvió ID del post");
-  }
-
-  const platformPostUrl =
-    post.platformPostUrl ??
-    created.platformPostUrl ??
-    `https://zernio.com/posts/${postId}`;
-
-  const { error: updateError } = await supabase
-    .from("content_pieces")
-    .update({
-      status: "draft",
-      platform,
-      platform_post_id: postId,
-      platform_post_url: platformPostUrl,
-      caption: trimmedCaption,
-    })
-    .eq("id", variantId)
-    .eq("organization_id", organizationId);
-
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
-
-  revalidatePath(paths.platform.marketing.content);
-  if (variant.variants_of) {
-    revalidatePath(paths.platform.marketing.contentDetail(variant.variants_of));
-  }
-
-  return { postId, caption: trimmedCaption, platformPostUrl };
 }

@@ -14,13 +14,15 @@ function resolveDefaultDateRange(days = 30) {
 
 export default async function MarketingAnunciosPage() {
   const range = resolveDefaultDateRange(30);
+  // La lectura devuelve su error como valor (SCRUM-502): el tablero muestra
+  // el motivo (antes, el texto crudo de Zernio).
   const result = await getMarketingAdsAction(range);
 
   return (
     <div className="p-6">
       <AdsDashboard
-        initialAds={result.ads}
-        initialError={result.error ?? null}
+        initialAds={result.success ? result.data.ads : []}
+        initialError={result.success ? null : result.error}
         initialRangeDays={30}
       />
     </div>

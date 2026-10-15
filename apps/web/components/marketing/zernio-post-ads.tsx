@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getContentPieceAdsAction } from "@/app/marketing/content/ad-actions";
+import { leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { ZernioAdStatus, ZernioLinkedAd } from "@/lib/zernio/client";
 import { formatCurrency, formatNumber, normalizeAdMetrics } from "@/lib/utils/format-ad-metrics";
@@ -121,6 +122,16 @@ function AdCard({ ad }: { ad: ZernioLinkedAd }) {
   );
 }
 
+/**
+ * Los anuncios de la pieza, o el motivo por el que no se pudieron leer
+ * (SCRUM-502): el que devuelve la acción, o el texto fijo si lanzó.
+ */
+export async function cargarAnunciosDeLaPieza(
+  contentPieceId: string
+): Promise<Lectura<{ ads: ZernioLinkedAd[] }>> {
+  return leerConMotivo(() => getContentPieceAdsAction(contentPieceId), "[ZernioPostAds] cargar");
+}
+
 export function ZernioPostAds({ contentPieceId }: Props) {
   const [ads, setAds] = useState<ZernioLinkedAd[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,18 +143,11 @@ export function ZernioPostAds({ contentPieceId }: Props) {
     setLoading(true);
     setError(null);
 
-    try {
-      const response = await getContentPieceAdsAction(contentPieceId);
-      if (requestId !== requestIdRef.current) return;
-      setAds(response.ads);
-    } catch (err) {
-      if (requestId !== requestIdRef.current) return;
-      setError(err instanceof Error ? err.message : "No se pudieron cargar los anuncios");
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setLoading(false);
-      }
-    }
+    const lectura = await cargarAnunciosDeLaPieza(contentPieceId);
+    if (requestId !== requestIdRef.current) return;
+    if (lectura.ok) setAds(lectura.data.ads);
+    else setError(lectura.motivo);
+    setLoading(false);
   }, [contentPieceId]);
 
   useEffect(() => {

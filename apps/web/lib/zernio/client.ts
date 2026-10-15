@@ -692,7 +692,11 @@ export function createZernioClient(
       });
 
       if (!res.ok) {
-        throw new Error(`Zernio createPost: ${await res.text()}`);
+        // Con el status, para que quien llama distinga una clave rechazada
+        // (401/403) de una falla, y sin el cuerpo de la respuesta: puede repetir
+        // el caption que escribió el usuario y el mensaje viaja a Sentry
+        // (SCRUM-502).
+        throw new ZernioHttpError(`Zernio createPost: HTTP ${res.status}`, res.status);
       }
 
       return res.json() as Promise<{

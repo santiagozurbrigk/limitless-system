@@ -34,7 +34,9 @@ vi.mock("@/lib/google/refresh-token", () => ({
   refreshGoogleAccessToken: async () => ({ access_token: "token-renovado", expires_in: 3600 }),
 }));
 vi.mock("@/app/marketing/content/actions", () => ({
-  updateContentPieceAction: vi.fn(),
+  // Devuelve `MutationResult` (SCRUM-502); vincular y desvincular se prueban en
+  // `content/__tests__/vincular-drive-errores-como-valor.test.ts`.
+  updateContentPieceAction: vi.fn(async () => ({ success: true, data: undefined })),
 }));
 
 import {

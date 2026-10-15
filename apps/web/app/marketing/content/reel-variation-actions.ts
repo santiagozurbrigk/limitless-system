@@ -16,13 +16,29 @@ import type { ReelVariationJob, ReelVariation, ReelVariationType } from "@/types
 import type { ContentPiece } from "@/types/content";
 import { paths } from "@/routes";
 import { isOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { uuidSchema } from "@/lib/validations";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Las acciones que devuelven `{ ok, message }` atrapan este rechazo y muestran
+// su texto como antes; las que devuelven `MutationResult` (SCRUM-502) lo
+// devuelven como motivo sin registrarlo como falla.
 async function requireOrgId(): Promise<string> {
   const profile = await getCurrentProfile();
-  if (!profile?.organization_id) throw new Error("Sesión no válida");
+  if (!profile?.organization_id) throw new ErrorEsperable("Sesión no válida");
   return profile.organization_id;
+}
+
+function exigirUuid(id: unknown): string {
+  const parsed = uuidSchema.safeParse(id);
+  if (!parsed.success) throw new ErrorEsperable("ID inválido");
+  return parsed.data;
 }
 
 // El video ya NO se descarga en Vercel — el worker lo descarga directamente de Drive.
@@ -230,37 +246,43 @@ function getReelWorkerUrl(): string {
 
 export async function getReelVariationJobAction(
   jobId: string
-): Promise<ReelVariationJob | null> {
-  const organizationId = await requireOrgId();
-  const supabase = await createClient();
+): Promise<MutationResult<ReelVariationJob | null>> {
+  return mutacionConErroresEsperables("[getReelVariationJob]", async () => {
+    const idDelJob = exigirUuid(jobId);
+    const organizationId = await requireOrgId();
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("reel_variation_jobs")
-    .select("*")
-    .eq("id", jobId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+    const { data, error } = await supabase
+      .from("reel_variation_jobs")
+      .select("*")
+      .eq("id", idDelJob)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
 
-  if (error) throw new Error(error.message);
-  return data as ReelVariationJob | null;
+    if (error) throw new FallaDeLaBase(error);
+    return data as ReelVariationJob | null;
+  });
 }
 
 export async function listReelVariationJobsForPieceAction(
   contentPieceId: string
-): Promise<ReelVariationJob[]> {
-  const organizationId = await requireOrgId();
-  const supabase = await createClient();
+): Promise<MutationResult<ReelVariationJob[]>> {
+  return mutacionConErroresEsperables("[listReelVariationJobsForPiece]", async () => {
+    const idDePieza = exigirUuid(contentPieceId);
+    const organizationId = await requireOrgId();
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("reel_variation_jobs")
-    .select("*")
-    .eq("source_piece_id", contentPieceId)
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false })
-    .limit(5);
+    const { data, error } = await supabase
+      .from("reel_variation_jobs")
+      .select("*")
+      .eq("source_piece_id", idDePieza)
+      .eq("organization_id", organizationId)
+      .order("created_at", { ascending: false })
+      .limit(5);
 
-  if (error) throw new Error(error.message);
-  return (data ?? []) as ReelVariationJob[];
+    if (error) throw new FallaDeLaBase(error);
+    return (data ?? []) as ReelVariationJob[];
+  });
 }
 
 // ─── Editar variante ──────────────────────────────────────────────────────────
@@ -269,62 +291,84 @@ export async function updateReelVariationAction(
   jobId: string,
   variationIndex: number,
   patch: Partial<Pick<ReelVariation, "description" | "hashtags" | "included">>
-): Promise<void> {
-  const organizationId = await requireOrgId();
-  const supabase = await createClient();
+): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[updateReelVariation]", async () => {
+    const idDelJob = exigirUuid(jobId);
+    const organizationId = await requireOrgId();
+    const supabase = await createClient();
 
-  // Leer variantes actuales
-  const { data: job, error: readErr } = await supabase
-    .from("reel_variation_jobs")
-    .select("variations")
-    .eq("id", jobId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+    // Leer variantes actuales
+    const { data: job, error: readErr } = await supabase
+      .from("reel_variation_jobs")
+      .select("variations")
+      .eq("id", idDelJob)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
 
-  if (readErr) throw new Error(readErr.message);
-  if (!job) throw new Error("Job no encontrado");
+    if (readErr) throw new FallaDeLaBase(readErr);
+    if (!job) throw new ErrorEsperable("Job no encontrado");
 
-  const variations = (job.variations ?? []) as ReelVariation[];
-  if (variationIndex < 0 || variationIndex >= variations.length) {
-    throw new Error("Índice de variante inválido");
-  }
+    const variations = (job.variations ?? []) as ReelVariation[];
+    if (
+      !Number.isInteger(variationIndex) ||
+      variationIndex < 0 ||
+      variationIndex >= variations.length
+    ) {
+      throw new ErrorEsperable("Índice de variante inválido");
+    }
 
-  // Sólo los campos editables: el patch llega del cliente y, esparcido entero,
-  // podía pisar `storage_path` con un archivo de otra org que después se firma
-  // con service role.
-  const safePatch: Partial<Pick<ReelVariation, "description" | "hashtags" | "included">> = {};
-  if (typeof patch?.description === "string") safePatch.description = patch.description.slice(0, 5000);
-  if (Array.isArray(patch?.hashtags)) {
-    safePatch.hashtags = patch.hashtags.filter((h): h is string => typeof h === "string").slice(0, 60);
-  }
-  if (typeof patch?.included === "boolean") safePatch.included = patch.included;
+    // Sólo los campos editables: el patch llega del cliente y, esparcido entero,
+    // podía pisar `storage_path` con un archivo de otra org que después se firma
+    // con service role.
+    const safePatch: Partial<Pick<ReelVariation, "description" | "hashtags" | "included">> = {};
+    if (typeof patch?.description === "string") safePatch.description = patch.description.slice(0, 5000);
+    if (Array.isArray(patch?.hashtags)) {
+      safePatch.hashtags = patch.hashtags.filter((h): h is string => typeof h === "string").slice(0, 60);
+    }
+    if (typeof patch?.included === "boolean") safePatch.included = patch.included;
 
-  variations[variationIndex] = { ...variations[variationIndex], ...safePatch };
+    variations[variationIndex] = { ...variations[variationIndex], ...safePatch };
 
-  const { error: updateErr } = await supabase
-    .from("reel_variation_jobs")
-    .update({ variations })
-    .eq("id", jobId)
-    .eq("organization_id", organizationId);
+    const { error: updateErr } = await supabase
+      .from("reel_variation_jobs")
+      .update({ variations })
+      .eq("id", idDelJob)
+      .eq("organization_id", organizationId);
 
-  if (updateErr) throw new Error(updateErr.message);
+    if (updateErr) throw new FallaDeLaBase(updateErr);
+  });
 }
+
+/** El mismo rango que el CHECK de `reel_variation_jobs.delay_hours` (0 a 72). */
+const DEMORA_MAXIMA_EN_HORAS = 72;
 
 export async function setReelVariationDelayAction(
   jobId: string,
   delayHours: number
-): Promise<void> {
-  const organizationId = await requireOrgId();
-  const supabase = await createClient();
+): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[setReelVariationDelay]", async () => {
+    const idDelJob = exigirUuid(jobId);
+    if (
+      !Number.isInteger(delayHours) ||
+      delayHours < 0 ||
+      delayHours > DEMORA_MAXIMA_EN_HORAS
+    ) {
+      throw new ErrorEsperable(
+        `La demora tiene que ser un número entero de horas entre 0 y ${DEMORA_MAXIMA_EN_HORAS}.`
+      );
+    }
+    const organizationId = await requireOrgId();
+    const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("reel_variation_jobs")
-    .update({ delay_hours: delayHours })
-    .eq("id", jobId)
-    .eq("organization_id", organizationId)
-    .eq("status", "preview_ready"); // Solo si aún no se publicó
+    const { error } = await supabase
+      .from("reel_variation_jobs")
+      .update({ delay_hours: delayHours })
+      .eq("id", idDelJob)
+      .eq("organization_id", organizationId)
+      .eq("status", "preview_ready"); // Solo si aún no se publicó
 
-  if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
+  });
 }
 
 // ─── Publicar variantes ───────────────────────────────────────────────────────
@@ -486,45 +530,52 @@ export async function publishVariationsAction(
  */
 export async function refreshVariationPreviewUrlsAction(
   jobId: string
-): Promise<ReelVariationJob | null> {
-  const organizationId = await requireOrgId();
-  const admin = createAdminClient();
+): Promise<MutationResult<ReelVariationJob | null>> {
+  return mutacionConErroresEsperables("[refreshVariationPreviewUrls]", async () => {
+    const idDelJob = exigirUuid(jobId);
+    const organizationId = await requireOrgId();
+    const admin = createAdminClient();
 
-  const { data: job, error } = await admin
-    .from("reel_variation_jobs")
-    .select("*")
-    .eq("id", jobId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (!job) return null;
-
-  const variations = (job.variations ?? []) as ReelVariation[];
-  let changed = false;
-
-  const updated = await Promise.all(
-    variations.map(async (v) => {
-      if (!v.storage_path || !isOrgStoragePath(v.storage_path, organizationId)) return v;
-      const { data } = await admin.storage
-        .from(STORAGE_BUCKET)
-        .createSignedUrl(v.storage_path, 3600);
-      if (data?.signedUrl && data.signedUrl !== v.preview_url) {
-        changed = true;
-        return { ...v, preview_url: data.signedUrl };
-      }
-      return v;
-    })
-  );
-
-  if (changed) {
-    await admin
+    const { data: job, error } = await admin
       .from("reel_variation_jobs")
-      .update({ variations: updated })
-      .eq("id", jobId);
-  }
+      .select("*")
+      .eq("id", idDelJob)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
 
-  return { ...job, variations: updated } as ReelVariationJob;
+    if (error) throw new FallaDeLaBase(error);
+    if (!job) return null;
+
+    const variations = (job.variations ?? []) as ReelVariation[];
+    let changed = false;
+
+    // Antes un error al firmar o al guardar se ignoraba y la vista previa
+    // seguía con la URL vencida sin que nadie se enterara: ahora es una falla.
+    const updated = await Promise.all(
+      variations.map(async (v) => {
+        if (!v.storage_path || !isOrgStoragePath(v.storage_path, organizationId)) return v;
+        const { data, error: firmaError } = await admin.storage
+          .from(STORAGE_BUCKET)
+          .createSignedUrl(v.storage_path, 3600);
+        if (firmaError) throw new FallaDeLaBase(firmaError);
+        if (data?.signedUrl && data.signedUrl !== v.preview_url) {
+          changed = true;
+          return { ...v, preview_url: data.signedUrl };
+        }
+        return v;
+      })
+    );
+
+    if (changed) {
+      const { error: updateError } = await admin
+        .from("reel_variation_jobs")
+        .update({ variations: updated })
+        .eq("id", idDelJob);
+      if (updateError) throw new FallaDeLaBase(updateError);
+    }
+
+    return { ...job, variations: updated } as ReelVariationJob;
+  });
 }
 
 // ─── Reintentar variante fallida ──────────────────────────────────────────────

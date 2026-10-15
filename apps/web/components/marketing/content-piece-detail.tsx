@@ -29,6 +29,7 @@ import {
   cn,
 } from "@ai-coo/ui";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
 import {
   ArrowLeft,
   Check,
@@ -46,6 +47,31 @@ import { brandColors } from "@/lib/brand";
 import { ESCONDIDO } from "@/lib/release/escondido";
 
 // ─── Types & helpers ────────────────────────────────────────────────────────
+
+/**
+ * Vincula o desvincula el archivo de Drive de la pieza (SCRUM-502). Las
+ * acciones devuelven su resultado: con éxito llama a `alTerminar`; con un
+ * rechazo avisa el motivo y con algo que lanzó, el texto fijo. Antes el aviso
+ * de éxito salía aunque no se hubiera guardado nada.
+ */
+export function cambiarArchivoDeDrive(opciones: {
+  pieceId: string;
+  archivo: { id: string; name: string; url: string } | null;
+  alTerminar: () => void;
+  avisar: (aviso: Aviso) => void;
+}): Promise<void> {
+  const vincular = opciones.archivo !== null;
+  return correrMutacion({
+    accion: () =>
+      opciones.archivo
+        ? linkDriveFileToContentAction(opciones.pieceId, opciones.archivo)
+        : unlinkDriveFileAction(opciones.pieceId),
+    alExito: opciones.alTerminar,
+    avisar: opciones.avisar,
+    tituloError: vincular ? "No se pudo vincular" : "No se pudo desvincular",
+    etiqueta: vincular ? "[ContentPieceDetail] vincular" : "[ContentPieceDetail] desvincular",
+  });
+}
 
 type Props = {
   piece: ContentPieceWithVariants;
@@ -118,32 +144,28 @@ export function ContentPieceDetail({ piece, variants, orgAvg, initialReelJobs = 
     }
   };
 
-  const handleDriveLink = async (file: { id: string; name: string; url: string }) => {
-    try {
-      await linkDriveFileToContentAction(piece.id, file);
-      setShowDrivePicker(false);
-      push({ title: "Archivo vinculado", variant: "success" });
-      router.refresh();
-    } catch (err) {
-      push({
-        title: "No se pudo vincular",
-        description: err instanceof Error ? err.message : "Error desconocido",
-      });
-    }
-  };
+  const handleDriveLink = (file: { id: string; name: string; url: string }) =>
+    cambiarArchivoDeDrive({
+      pieceId: piece.id,
+      archivo: file,
+      alTerminar: () => {
+        setShowDrivePicker(false);
+        push({ title: "Archivo vinculado", variant: "success" });
+        router.refresh();
+      },
+      avisar: push,
+    });
 
-  const handleDriveUnlink = async () => {
-    try {
-      await unlinkDriveFileAction(piece.id);
-      push({ title: "Archivo desvinculado", variant: "success" });
-      router.refresh();
-    } catch (err) {
-      push({
-        title: "No se pudo desvincular",
-        description: err instanceof Error ? err.message : "Error desconocido",
-      });
-    }
-  };
+  const handleDriveUnlink = () =>
+    cambiarArchivoDeDrive({
+      pieceId: piece.id,
+      archivo: null,
+      alTerminar: () => {
+        push({ title: "Archivo desvinculado", variant: "success" });
+        router.refresh();
+      },
+      avisar: push,
+    });
 
   const platformLabel =
     piece.platform === "youtube"

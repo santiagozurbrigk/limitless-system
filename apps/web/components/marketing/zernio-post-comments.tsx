@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Heart, MessageCircle } from "lucide-react";
 import { getContentPieceCommentsAction } from "@/app/marketing/content/comment-actions";
+import { leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatRelativeTime } from "@/lib/format";
 import type {
@@ -102,6 +103,20 @@ function CommentRow({ comment }: { comment: ZernioPostComment }) {
   );
 }
 
+/**
+ * Una página de comentarios de la pieza, o el motivo por el que no se pudo
+ * leer (SCRUM-502): el que devuelve la acción, o el texto fijo si lanzó.
+ */
+export async function cargarComentariosDeLaPieza(
+  contentPieceId: string,
+  cursor?: string
+): Promise<Lectura<ZernioPostCommentsResponse>> {
+  return leerConMotivo(
+    () => getContentPieceCommentsAction(contentPieceId, cursor),
+    "[ZernioPostComments] cargar"
+  );
+}
+
 export function ZernioPostComments({ contentPieceId }: Props) {
   const [comments, setComments] = useState<ZernioPostComment[]>([]);
   const [pagination, setPagination] =
@@ -121,13 +136,11 @@ export function ZernioPostComments({ contentPieceId }: Props) {
       }
       setError(null);
 
-      try {
-        const response = await getContentPieceCommentsAction(
-          contentPieceId,
-          cursor
-        );
-        if (requestId !== requestIdRef.current) return;
+      const lectura = await cargarComentariosDeLaPieza(contentPieceId, cursor);
+      if (requestId !== requestIdRef.current) return;
 
+      if (lectura.ok) {
+        const response = lectura.data;
         setComments((current) => {
           if (!cursor) return response.comments;
           const knownIds = new Set(current.map((comment) => comment.id));
@@ -137,17 +150,11 @@ export function ZernioPostComments({ contentPieceId }: Props) {
           ];
         });
         setPagination(response.pagination);
-      } catch (err) {
-        if (requestId !== requestIdRef.current) return;
-        setError(
-          err instanceof Error ? err.message : "No se pudieron cargar los comentarios"
-        );
-      } finally {
-        if (requestId === requestIdRef.current) {
-          setLoading(false);
-          setLoadingMore(false);
-        }
+      } else {
+        setError(lectura.motivo);
       }
+      setLoading(false);
+      setLoadingMore(false);
     },
     [contentPieceId]
   );

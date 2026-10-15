@@ -28,6 +28,7 @@ import type { ReelVariation } from "@/types/reel-variations";
 import type { ZernioClient, ZernioMediaPresignResponse } from "@/lib/zernio/client";
 import { brand } from "@/lib/brand";
 import { assertOrgStoragePath } from "@/lib/storage/org-path";
+import { motivoDeFallaAlPublicarEnZernio } from "@/lib/marketing/rechazos-de-contenido";
 
 export const runtime = "nodejs";
 // 60s: descarga de Supabase + upload a Zernio + createPost puede tardar 30-50s
@@ -293,10 +294,12 @@ export async function POST(request: Request) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[PublishVariation] failed", { jobId, variationIndex, error: msg });
 
+    // Lo que se guarda se muestra en la tarjeta de la variante: un rechazo o
+    // una falla de Zernio, con un texto en voseo según el status (SCRUM-502).
     updatedVariations[variationIndex] = {
       ...variation,
       status: "failed",
-      error: msg,
+      error: motivoDeFallaAlPublicarEnZernio(err) ?? msg,
     };
   }
 

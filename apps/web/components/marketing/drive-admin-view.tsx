@@ -11,7 +11,7 @@ import {
 } from "@/app/marketing/content/drive-actions";
 import { GOOGLE_OAUTH_START_URL } from "@/lib/google/oauth-paths";
 import { codigoDelMotivoDeDrive } from "@/lib/google/motivos-de-drive";
-import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
+import { correrMutacion, leerConMotivo, type Aviso, type Lectura } from "@/lib/client/correr-accion";
 import { paths } from "@/routes";
 import type { ContentPiece } from "@/types/content";
 import { Button, Input, cn } from "@ai-coo/ui";
@@ -34,6 +34,43 @@ function isFolder(mimeType: string): boolean {
 
 function driveFileUrl(file: DriveFile): string {
   return file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`;
+}
+
+/**
+ * Las piezas para vincular un archivo de Drive. La lectura devuelve su error
+ * como valor (SCRUM-502): si falla, se avisa el motivo y la lista queda vacía
+ * (antes quedaba vacía sin aviso, como si no hubiera piezas).
+ */
+export async function cargarPiezasParaVincular(
+  avisar: (aviso: Aviso) => void
+): Promise<ContentPiece[]> {
+  const lectura = await leerConMotivo(
+    () => getContentPiecesAction({ limit: 50 }),
+    "[DriveAdminView] piezas"
+  );
+  if (lectura.ok) return lectura.data;
+  avisar({ title: "No se pudieron cargar las piezas", description: lectura.motivo });
+  return [];
+}
+
+/**
+ * Vincula el archivo a la pieza (SCRUM-502). La acción devuelve su resultado:
+ * con éxito llama a `alVincular`; con un rechazo avisa el motivo y con algo que
+ * lanzó, el texto fijo. Antes "Archivo vinculado" salía aunque no se guardara.
+ */
+export function vincularArchivoAPieza(opciones: {
+  contentPieceId: string;
+  archivo: { id: string; name: string; url: string };
+  alVincular: () => void;
+  avisar: (aviso: Aviso) => void;
+}): Promise<void> {
+  return correrMutacion({
+    accion: () => linkDriveFileToContentAction(opciones.contentPieceId, opciones.archivo),
+    alExito: opciones.alVincular,
+    avisar: opciones.avisar,
+    tituloError: "Error al vincular",
+    etiqueta: "[DriveAdminView] vincular",
+  });
 }
 
 export type EstadoDeLaCarpeta = {
@@ -157,12 +194,7 @@ export function DriveAdminView() {
     setSelectedFile(file);
     setShowLinkModal(true);
 
-    try {
-      const pieces = await getContentPiecesAction({ limit: 50 });
-      setContentPieces(pieces);
-    } catch {
-      setContentPieces([]);
-    }
+    setContentPieces(await cargarPiezasParaVincular(push));
   };
 
   const handleLinkToContent = async (contentPieceId: string) => {
@@ -170,22 +202,23 @@ export function DriveAdminView() {
 
     setLinkingFile(true);
     try {
-      await linkDriveFileToContentAction(contentPieceId, {
-        id: selectedFile.id,
-        name: selectedFile.name,
-        url: driveFileUrl(selectedFile),
-      });
-      setShowLinkModal(false);
-      setSelectedFile(null);
-      push({
-        title: "Archivo vinculado",
-        description: `"${selectedFile.name}" quedó asociado a la pieza de contenido.`,
-        variant: "success",
-      });
-    } catch (err: unknown) {
-      push({
-        title: "Error al vincular",
-        description: err instanceof Error ? err.message : "Error desconocido",
+      await vincularArchivoAPieza({
+        contentPieceId,
+        archivo: {
+          id: selectedFile.id,
+          name: selectedFile.name,
+          url: driveFileUrl(selectedFile),
+        },
+        alVincular: () => {
+          setShowLinkModal(false);
+          setSelectedFile(null);
+          push({
+            title: "Archivo vinculado",
+            description: `"${selectedFile.name}" quedó asociado a la pieza de contenido.`,
+            variant: "success",
+          });
+        },
+        avisar: push,
       });
     } finally {
       setLinkingFile(false);

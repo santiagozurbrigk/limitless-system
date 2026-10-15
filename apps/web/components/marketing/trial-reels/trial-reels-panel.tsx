@@ -13,6 +13,11 @@ import { Badge, Button, cn } from "@ai-coo/ui";
 import { useToast } from "@/providers/toast-provider";
 import { createClient } from "@/lib/supabase/client";
 import {
+  correrMutacion,
+  leerConMotivo,
+  type Aviso,
+} from "@/lib/client/correr-accion";
+import {
   Clock,
   Loader2,
   RefreshCw,
@@ -60,6 +65,54 @@ function StatusBadge({ status }: { status: ReelJobStatus }) {
       {JOB_STATUS_LABEL[status]}
     </Badge>
   );
+}
+
+// ─── Acciones con su motivo (SCRUM-502) ───────────────────────────────────────
+// Las acciones devuelven su error como valor: se avisa el motivo, o el texto
+// fijo si la acción lanzó. Antes renovar las vistas previas y recargar los jobs
+// ignoraban cualquier falla en silencio.
+
+export function cambiarDemora(opciones: {
+  jobId: string;
+  horas: number;
+  alCambiar: () => void;
+  avisar: (aviso: Aviso) => void;
+}): Promise<void> {
+  return correrMutacion({
+    accion: () => setReelVariationDelayAction(opciones.jobId, opciones.horas),
+    alExito: opciones.alCambiar,
+    avisar: opciones.avisar,
+    tituloError: "No se pudo cambiar el delay",
+    etiqueta: "[TrialReelsPanel] delay",
+  });
+}
+
+/** El job con las URLs renovadas; `null` si no existe o si falló (y se avisó). */
+export async function renovarVistasPrevias(
+  jobId: string,
+  avisar: (aviso: Aviso) => void
+): Promise<ReelVariationJob | null> {
+  const lectura = await leerConMotivo(
+    () => refreshVariationPreviewUrlsAction(jobId),
+    "[TrialReelsPanel] renovar vistas previas"
+  );
+  if (lectura.ok) return lectura.data;
+  avisar({ title: "No se pudieron renovar las vistas previas", description: lectura.motivo });
+  return null;
+}
+
+/** Los jobs de la pieza; `null` si falló (y se avisó): el panel queda como estaba. */
+export async function recargarTrabajos(
+  contentPieceId: string,
+  avisar: (aviso: Aviso) => void
+): Promise<ReelVariationJob[] | null> {
+  const lectura = await leerConMotivo(
+    () => listReelVariationJobsForPieceAction(contentPieceId),
+    "[TrialReelsPanel] recargar"
+  );
+  if (lectura.ok) return lectura.data;
+  avisar({ title: "No se pudieron recargar los Trial Reels", description: lectura.motivo });
+  return null;
 }
 
 // ─── Panel principal ──────────────────────────────────────────────────────────
@@ -151,17 +204,15 @@ export function TrialReelsPanel({ contentPieceId, initialJobs = [] }: Props) {
 
   const handleDelayChange = async (hours: number) => {
     if (!activeJobId) return;
-    try {
-      await setReelVariationDelayAction(activeJobId, hours);
-      setJobs((prev) =>
-        prev.map((j) => (j.id === activeJobId ? { ...j, delay_hours: hours } : j))
-      );
-    } catch (err) {
-      push({
-        title: "No se pudo cambiar el delay",
-        description: err instanceof Error ? err.message : "Error desconocido",
-      });
-    }
+    await cambiarDemora({
+      jobId: activeJobId,
+      horas: hours,
+      alCambiar: () =>
+        setJobs((prev) =>
+          prev.map((j) => (j.id === activeJobId ? { ...j, delay_hours: hours } : j))
+        ),
+      avisar: push,
+    });
   };
 
   // ─── Refresh preview URLs ─────────────────────────────────────────────────
@@ -170,12 +221,10 @@ export function TrialReelsPanel({ contentPieceId, initialJobs = [] }: Props) {
     if (!activeJobId) return;
     setRefreshing(true);
     try {
-      const updated = await refreshVariationPreviewUrlsAction(activeJobId);
+      const updated = await renovarVistasPrevias(activeJobId, push);
       if (updated) {
         setJobs((prev) => prev.map((j) => (j.id === activeJobId ? updated : j)));
       }
-    } catch {
-      // ignorar
     } finally {
       setRefreshing(false);
     }
@@ -213,14 +262,11 @@ export function TrialReelsPanel({ contentPieceId, initialJobs = [] }: Props) {
   // ─── Recargar jobs ────────────────────────────────────────────────────────
 
   const handleReloadJobs = async () => {
-    try {
-      const fresh = await listReelVariationJobsForPieceAction(contentPieceId);
-      setJobs(fresh);
-      if (fresh.length > 0 && !fresh.find((j) => j.id === activeJobId)) {
-        setActiveJobId(fresh[0].id);
-      }
-    } catch {
-      // ignorar
+    const fresh = await recargarTrabajos(contentPieceId, push);
+    if (!fresh) return;
+    setJobs(fresh);
+    if (fresh.length > 0 && !fresh.find((j) => j.id === activeJobId)) {
+      setActiveJobId(fresh[0].id);
     }
   };
 
