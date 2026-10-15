@@ -27,6 +27,7 @@ import { getGHLOpportunitiesStatusAction } from "@/app/ghl/opportunity-actions";
 import { listUnlinkedRecordingsAction } from "@/app/fathom/sales-call-actions";
 import {
   buildHealth,
+  estadoSinLeer,
   lastErrorIssue,
   missingConfigIssue,
   noDataYetIssue,
@@ -388,7 +389,7 @@ export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverv
     ghlStatus.connected ? countGHLAppointments() : 0,
     manychatStatus.connected ? countManyChatConversations() : 0,
     fathomStatus.connected ? countFathomCalls() : 0,
-    youtubeStatus.connected ? countContentAssets("youtube") : 0,
+    youtubeStatus.success && youtubeStatus.data.connected ? countContentAssets("youtube") : 0,
     typeformStatus.connected ? countForms("typeform") : 0,
     googleFormsStatus.connected ? countForms("google_forms") : 0,
     discordStatus?.connected ? diagnoseDiscordContentIntent() : null,
@@ -527,17 +528,21 @@ export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverv
     }),
   );
 
+  // El estado de YouTube devuelve su error como valor (SCRUM-519): si no se
+  // pudo leer, la tarjeta lo dice en vez de mostrar "Sin conectar".
   byProvider.set(
     "youtube",
-    buildHealth({
-      provider: "youtube",
-      connected: youtubeStatus.connected,
-      accountLabel: youtubeStatus.channelName,
-      lastSyncAt: youtubeStatus.lastSyncAt,
-      records: youtubeRecords,
-      recordsLabel: "videos",
-      issues: noDataYetIssue(youtubeRecords, "ningún video del canal"),
-    }),
+    youtubeStatus.success
+      ? buildHealth({
+          provider: "youtube",
+          connected: youtubeStatus.data.connected,
+          accountLabel: youtubeStatus.data.channelName,
+          lastSyncAt: youtubeStatus.data.lastSyncAt,
+          records: youtubeRecords,
+          recordsLabel: "videos",
+          issues: noDataYetIssue(youtubeRecords, "ningún video del canal"),
+        })
+      : estadoSinLeer({ provider: "youtube", recordsLabel: "videos", motivo: youtubeStatus.error }),
   );
 
   byProvider.set(

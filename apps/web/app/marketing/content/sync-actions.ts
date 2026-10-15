@@ -1,11 +1,22 @@
 "use server";
 
 import { getCurrentProfile } from "@/lib/auth/bootstrap";
+import { esErrorDeAcceso } from "@/lib/marketing/cola-de-metricas";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  registrarFallaDeAccion,
+  type MutationResult,
+} from "@/lib/server/action-result";
 import { createClient } from "@/lib/supabase/server";
 import {
+  createZernioClient,
+  ZernioHttpError,
+  type ZernioClient,
   type ZernioPost,
 } from "@/lib/zernio/client";
-import { getZernioClientForOrganization, getZernioIntegrationForOrg } from "@/lib/zernio/integration";
+import { getZernioApiKeyForOrganization, getZernioIntegrationForOrg } from "@/lib/zernio/integration";
 import { resolvePostAnalytics } from "@/lib/zernio/resolve-analytics";
 import {
   cambiosParaActualizar,
@@ -21,6 +32,20 @@ import {
 
 const SYNC_INTERVAL_MS = 30 * 60 * 1000;
 
+/*
+ * Errores como valor (SCRUM-519): las dos acciones devuelven `MutationResult`.
+ * Sin sesión, sin Zernio conectado, sin cuentas de contenido o con la clave de
+ * Zernio rechazada, el motivo; una falla de la base o de Zernio va a la
+ * consola y a Sentry y vuelve con el texto fijo. Antes, si Zernio no respondía
+ * ninguna lectura, la sincronización terminaba "bien" con 0 piezas.
+ */
+const SESION_NO_VALIDA = "Sesión no válida";
+const ZERNIO_NO_CONECTADO = "Zernio no está conectado";
+const SIN_CUENTAS_DE_CONTENIDO = "No hay cuentas de Instagram o YouTube conectadas en Zernio";
+/** 401 o 403 de Zernio: la clave de la org está revocada o sin plan (`esErrorDeAcceso`). */
+const ZERNIO_RECHAZO_LA_CLAVE =
+  "Zernio rechazó la conexión de tu organización. Volvé a conectarlo desde Integraciones.";
+
 function dedupeExternalPosts(posts: ZernioPost[]): ZernioPost[] {
   const seen = new Set<string>();
   const result: ZernioPost[] = [];
@@ -35,20 +60,51 @@ function dedupeExternalPosts(posts: ZernioPost[]): ZernioPost[] {
   return result;
 }
 
-async function requireOrganizationId(): Promise<string> {
+/**
+ * La organización del perfil, como antes (`[MKT-HOLDING-ORG]`). Si la lectura
+ * del perfil falla, `getCurrentProfile` devuelve `null` y se ve como sesión no
+ * válida (`[PERFIL-Y-ADDONS-FALLA-COMO-RECHAZO]`).
+ */
+async function organizacionDelPerfil(): Promise<string> {
   const profile = await getCurrentProfile();
   if (!profile?.organization_id) {
-    throw new Error("Sesión no válida");
+    throw new ErrorEsperable(SESION_NO_VALIDA);
   }
   return profile.organization_id;
 }
 
+/**
+ * Si ninguna lectura de posts de Zernio (`syncExternalPosts` y
+ * `listPublishedPosts`, de todas las cuentas) respondió, la sincronización no
+ * trajo nada y no puede terminar como si no hubiera piezas nuevas. Con la
+ * clave rechazada (401 o 403), el motivo para reconectar; si no, una falla con
+ * el status y sin el cuerpo de la respuesta. Que falle una parte (una cuenta,
+ * las historias) sigue siendo un aviso en el log, como antes.
+ */
+function errorSiZernioNoRespondio(
+  resultados: PromiseSettledResult<ZernioPost[]>[]
+): Error | null {
+  if (resultados.length === 0) return null;
+  const motivos: unknown[] = [];
+  for (const resultado of resultados) {
+    if (resultado.status === "fulfilled") return null;
+    motivos.push(resultado.reason);
+  }
+  if (motivos.some(esErrorDeAcceso)) return new ErrorEsperable(ZERNIO_RECHAZO_LA_CLAVE);
+  const primero = motivos[0];
+  const detalle =
+    primero instanceof ZernioHttpError
+      ? `HTTP ${primero.status}`
+      : primero instanceof Error
+        ? primero.name
+        : "sin detalle";
+  return new Error(`Zernio no respondió ninguna lectura de posts (${detalle})`);
+}
+
 async function fetchExternalPostsViaSync(
-  organizationId: string,
+  client: ZernioClient,
   accountIds: string[]
 ): Promise<ZernioPost[]> {
-  const client = await getZernioClientForOrganization(organizationId);
-
   // El orden de inserción en allPosts importa: dedupeExternalPosts conserva la
   // PRIMERA ocurrencia de cada ID. Las historias deben entrar ANTES que los posts
   // del listado general para que sus versiones con postType="story" ganen el dedup.
@@ -170,17 +226,17 @@ async function fetchExternalPostsViaSync(
     });
   }
 
+  const sinRespuesta = errorSiZernioNoRespondio([...syncResults, ...listResults]);
+  if (sinRespuesta) throw sinRespuesta;
+
   return dedupeExternalPosts(allPosts);
 }
 
-export async function syncZernioContentAction(): Promise<{ synced: number }> {
-  console.log("[syncZernioContent] throttle check", { reason: "running" });
-
-  const organizationId = await requireOrganizationId();
+async function sincronizarContenido(organizationId: string): Promise<{ synced: number }> {
   const integration = await getZernioIntegrationForOrg(organizationId);
 
   if (!integration || integration.connected_accounts.length === 0) {
-    throw new Error("Zernio no está conectado");
+    throw new ErrorEsperable(ZERNIO_NO_CONECTADO);
   }
 
   const contentAccountIds = integration.connected_accounts
@@ -191,12 +247,17 @@ export async function syncZernioContentAction(): Promise<{ synced: number }> {
     .map((account) => account.accountId);
 
   if (contentAccountIds.length === 0) {
-    throw new Error("No hay cuentas de Instagram o YouTube conectadas en Zernio");
+    throw new ErrorEsperable(SIN_CUENTAS_DE_CONTENIDO);
+  }
+
+  const apiKey = await getZernioApiKeyForOrganization(organizationId);
+  if (!apiKey) {
+    throw new ErrorEsperable(ZERNIO_NO_CONECTADO);
   }
 
   let posts: ZernioPost[];
   try {
-    posts = await fetchExternalPostsViaSync(organizationId, contentAccountIds);
+    posts = await fetchExternalPostsViaSync(createZernioClient(apiKey), contentAccountIds);
   } catch (error) {
     console.error("[syncZernioContent] fetchExternalPostsViaSync failed", {
       accountIds: contentAccountIds,
@@ -245,7 +306,7 @@ export async function syncZernioContentAction(): Promise<{ synced: number }> {
     .eq("organization_id", organizationId)
     .in("platform_post_id", platformPostIds);
 
-  if (existingError) throw new Error(existingError.message);
+  if (existingError) throw new FallaDeLaBase(existingError);
 
   const existingByPlatformId = new Map(
     (existingRows ?? []).map((row) => [row.platform_post_id as string, row.id as string])
@@ -292,7 +353,7 @@ export async function syncZernioContentAction(): Promise<{ synced: number }> {
       .from("content_pieces")
       .insert(withPersistedThumbnails);
 
-    if (insertError) throw new Error(insertError.message);
+    if (insertError) throw new FallaDeLaBase(insertError);
   }
 
   await Promise.all(
@@ -310,25 +371,34 @@ export async function syncZernioContentAction(): Promise<{ synced: number }> {
         .eq("id", id)
         .eq("organization_id", organizationId);
 
-      if (error) throw new Error(error.message);
+      if (error) throw new FallaDeLaBase(error);
     })
   );
 
   // Refrescar métricas en background por si algún post quedó sin analytics completos.
   void syncContentMetricsForOrg(organizationId).catch((err) => {
-    console.error("[syncZernioContent] metrics sync failed", {
-      organizationId,
-      error: err instanceof Error ? err.message : err,
-    });
+    registrarFallaDeAccion("[syncZernioContent] métricas en segundo plano", err);
   });
 
   return { synced: upsertRows.length };
+}
+
+export async function syncZernioContentAction(): Promise<MutationResult<{ synced: number }>> {
+  return mutacionConErroresEsperables("[syncZernioContent]", async () => {
+    console.log("[syncZernioContent] throttle check", { reason: "running" });
+    return sincronizarContenido(await organizacionDelPerfil());
+  });
 }
 
 /**
  * Limpia URLs efímeras del CDN de Instagram que quedaron almacenadas en rows existentes.
  * Las URLs CDN de Instagram expiran en ~1-2hs, causando errores 403 en el navegador.
  * Se nulifican en DB → el próximo sync trae URLs frescas y las persiste en Supabase Storage.
+ *
+ * Corre en segundo plano (`maybeSyncZernioContentAction` no la espera): si la
+ * lectura o la escritura fallan, lanza `FallaDeLaBase` y el `.catch` de quien la
+ * llama la registra en la consola y en Sentry (SCRUM-519, AR pasada 1). La
+ * sincronización sigue igual: las miniaturas vencidas se reparan en la próxima.
  */
 async function repairExpiredCdnThumbnails(organizationId: string): Promise<void> {
   const supabase = await createClient();
@@ -339,10 +409,7 @@ async function repairExpiredCdnThumbnails(organizationId: string): Promise<void>
     .eq("organization_id", organizationId)
     .not("thumbnail_url", "is", null);
 
-  if (error) {
-    console.warn("[repairExpiredCdnThumbnails] error fetching rows", { error: error.message });
-    return;
-  }
+  if (error) throw new FallaDeLaBase(error);
 
   const expiredIds = (data ?? [])
     .filter((row) => row.thumbnail_url && isInstagramCdnUrl(row.thumbnail_url as string))
@@ -356,10 +423,7 @@ async function repairExpiredCdnThumbnails(organizationId: string): Promise<void>
     .in("id", expiredIds)
     .eq("organization_id", organizationId);
 
-  if (updateError) {
-    console.warn("[repairExpiredCdnThumbnails] error nulling CDN URLs", { error: updateError.message });
-    return;
-  }
+  if (updateError) throw new FallaDeLaBase(updateError);
 
   console.log("[repairExpiredCdnThumbnails] cleaned up expired CDN URLs", {
     organizationId,
@@ -367,56 +431,63 @@ async function repairExpiredCdnThumbnails(organizationId: string): Promise<void>
   });
 }
 
-export async function maybeSyncZernioContentAction(): Promise<void> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+/**
+ * Sincroniza si no hay piezas de Zernio o si la última tiene más de 30
+ * minutos. Devuelve si sincronizó (`false` si se salteó por el intervalo).
+ */
+export async function maybeSyncZernioContentAction(): Promise<
+  MutationResult<{ sincronizo: boolean }>
+> {
+  return mutacionConErroresEsperables("[maybeSyncZernioContent]", async () => {
+    const organizationId = await organizacionDelPerfil();
+    const supabase = await createClient();
 
-  // Reparar URLs CDN efímeras vencidas en rows existentes (en background, no bloquea el throttle check)
-  void repairExpiredCdnThumbnails(organizationId).catch((err) => {
-    console.warn("[maybeSyncZernioContent] repair thumbnails failed", {
-      error: err instanceof Error ? err.message : err,
+    // Reparar URLs CDN efímeras vencidas en rows existentes (en background, no bloquea el throttle check)
+    void repairExpiredCdnThumbnails(organizationId).catch((err) => {
+      registrarFallaDeAccion("[maybeSyncZernioContent] reparar miniaturas", err);
     });
+
+    const { count, error: countError } = await supabase
+      .from("content_pieces")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("source", "zernio");
+
+    if (countError) throw new FallaDeLaBase(countError);
+
+    const { data: latestRow, error: latestError } = await supabase
+      .from("content_pieces")
+      .select("updated_at")
+      .eq("organization_id", organizationId)
+      .eq("source", "zernio")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestError) throw new FallaDeLaBase(latestError);
+
+    const hasNoData = (count ?? 0) === 0;
+    const lastSyncAt = latestRow?.updated_at
+      ? new Date(latestRow.updated_at as string).getTime()
+      : null;
+    const isStale =
+      lastSyncAt === null || Date.now() - lastSyncAt > SYNC_INTERVAL_MS;
+    const shouldSkip = !hasNoData && !isStale;
+
+    console.log("[syncZernioContent] throttle check", {
+      reason: shouldSkip ? "skipped" : "running",
+      hasNoData,
+      isStale,
+      count: count ?? 0,
+      latestUpdatedAt: latestRow?.updated_at ?? null,
+      lastSyncAtMs: lastSyncAt,
+      ageMs: lastSyncAt !== null ? Date.now() - lastSyncAt : null,
+      syncIntervalMs: SYNC_INTERVAL_MS,
+    });
+
+    if (shouldSkip) return { sincronizo: false };
+
+    await sincronizarContenido(organizationId);
+    return { sincronizo: true };
   });
-
-  const { count, error: countError } = await supabase
-    .from("content_pieces")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", organizationId)
-    .eq("source", "zernio");
-
-  if (countError) throw new Error(countError.message);
-
-  const { data: latestRow, error: latestError } = await supabase
-    .from("content_pieces")
-    .select("updated_at")
-    .eq("organization_id", organizationId)
-    .eq("source", "zernio")
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (latestError) throw new Error(latestError.message);
-
-  const hasNoData = (count ?? 0) === 0;
-  const lastSyncAt = latestRow?.updated_at
-    ? new Date(latestRow.updated_at as string).getTime()
-    : null;
-  const isStale =
-    lastSyncAt === null || Date.now() - lastSyncAt > SYNC_INTERVAL_MS;
-  const shouldSkip = !hasNoData && !isStale;
-
-  console.log("[syncZernioContent] throttle check", {
-    reason: shouldSkip ? "skipped" : "running",
-    hasNoData,
-    isStale,
-    count: count ?? 0,
-    latestUpdatedAt: latestRow?.updated_at ?? null,
-    lastSyncAtMs: lastSyncAt,
-    ageMs: lastSyncAt !== null ? Date.now() - lastSyncAt : null,
-    syncIntervalMs: SYNC_INTERVAL_MS,
-  });
-
-  if (shouldSkip) return;
-
-  await syncZernioContentAction();
 }

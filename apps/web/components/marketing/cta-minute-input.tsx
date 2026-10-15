@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button, Input } from "@ai-coo/ui";
 import { updateCTAMinuteAction } from "@/app/marketing/actions";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 
 export function CTAMinuteInput({
   assetId,
@@ -35,9 +36,14 @@ export function CTAMinuteInput({
 
     setError(null);
     startTransition(async () => {
-      const result = await updateCTAMinuteAction(assetId, totalSeconds);
-      if (!result.success) {
-        setError(result.error);
+      // Si la acción lanza, el texto fijo (SCRUM-519); antes el error quedaba
+      // sin atender dentro de la transición.
+      const result = await leerConMotivo(
+        () => updateCTAMinuteAction(assetId, totalSeconds),
+        "[CTAMinuteInput] guardar"
+      );
+      if (!result.ok) {
+        setError(result.motivo);
         return;
       }
       onSaved?.(totalSeconds, result.data.retentionAtCtaPct);

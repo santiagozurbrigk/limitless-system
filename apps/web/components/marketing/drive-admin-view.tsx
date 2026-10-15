@@ -10,6 +10,8 @@ import {
   type DriveFileListItem,
 } from "@/app/marketing/content/drive-actions";
 import { GOOGLE_OAUTH_START_URL } from "@/lib/google/oauth-paths";
+import { codigoDelMotivoDeDrive } from "@/lib/google/motivos-de-drive";
+import { correrMutacion, leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 import { paths } from "@/routes";
 import type { ContentPiece } from "@/types/content";
 import { Button, Input, cn } from "@ai-coo/ui";
@@ -32,6 +34,32 @@ function isFolder(mimeType: string): boolean {
 
 function driveFileUrl(file: DriveFile): string {
   return file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`;
+}
+
+export type EstadoDeLaCarpeta = {
+  files: DriveFile[];
+  error: string | null;
+  needsConnect: boolean;
+  needsReconnect: boolean;
+};
+
+/**
+ * Qué muestra la vista después de leer una carpeta (SCRUM-519). La acción
+ * devuelve el motivo como valor; el botón (conectar o reconectar Google) sale
+ * del motivo. Una falla muestra el texto fijo y ningún botón: antes, con el
+ * mensaje que lanzaba la acción, en producción se veía el párrafo de Next.
+ */
+export function estadoDeLaCarpeta(lectura: Lectura<DriveFile[]>): EstadoDeLaCarpeta {
+  if (lectura.ok) {
+    return { files: lectura.data, error: null, needsConnect: false, needsReconnect: false };
+  }
+  const codigo = codigoDelMotivoDeDrive(lectura.motivo);
+  return {
+    files: [],
+    error: lectura.motivo,
+    needsConnect: codigo === "GOOGLE_NOT_CONNECTED",
+    needsReconnect: codigo === "GOOGLE_INSUFFICIENT_PERMISSIONS",
+  };
 }
 
 export function DriveAdminView() {
@@ -62,22 +90,13 @@ export function DriveAdminView() {
     setNeedsReconnect(false);
 
     try {
-      const result = await listDriveFilesAction({ folderId });
-      setFiles(result);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Error";
-      if (message === "GOOGLE_NOT_CONNECTED") {
-        setNeedsConnect(true);
-        setError("No hay conexión con Google Drive. Conectá tu cuenta de Google primero.");
-      } else if (message === "GOOGLE_INSUFFICIENT_PERMISSIONS") {
-        setNeedsReconnect(true);
-        setError(
-          "Permisos insuficientes. Reconectá tu cuenta de Google con acceso completo a Drive."
-        );
-      } else {
-        setError(message);
-      }
-      setFiles([]);
+      const estado = estadoDeLaCarpeta(
+        await leerConMotivo(() => listDriveFilesAction({ folderId }), "[DriveAdminView] listar")
+      );
+      setFiles(estado.files);
+      setError(estado.error);
+      setNeedsConnect(estado.needsConnect);
+      setNeedsReconnect(estado.needsReconnect);
     } finally {
       setLoading(false);
     }
@@ -113,17 +132,22 @@ export function DriveAdminView() {
 
     setCreatingFolder(true);
     try {
-      await createDriveFolderAction({
-        name: newFolderName.trim(),
-        parentFolderId: currentFolderId,
+      await correrMutacion({
+        accion: () =>
+          createDriveFolderAction({
+            name: newFolderName.trim(),
+            parentFolderId: currentFolderId,
+          }),
+        alExito: async () => {
+          setNewFolderName("");
+          setShowNewFolderModal(false);
+          push({ title: "Carpeta creada", variant: "success" });
+          await loadFiles(currentFolderId);
+        },
+        avisar: push,
+        tituloError: "No se pudo crear la carpeta",
+        etiqueta: "[DriveAdminView] crear carpeta",
       });
-      setNewFolderName("");
-      setShowNewFolderModal(false);
-      push({ title: "Carpeta creada", variant: "success" });
-      await loadFiles(currentFolderId);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Error al crear carpeta";
-      push({ title: "No se pudo crear la carpeta", description: message });
     } finally {
       setCreatingFolder(false);
     }

@@ -3,9 +3,11 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "@ai-coo/ui";
 import type { IntegrationProvider } from "@/constants/integrations";
-import type {
-  IntegrationHealth,
-  IntegrationsSummary,
+import {
+  coincideConElFiltro,
+  type FiltroDeIntegraciones,
+  type IntegrationHealth,
+  type IntegrationsSummary,
 } from "@/lib/integrations/health";
 import {
   CATEGORY_DESCRIPTIONS,
@@ -15,7 +17,7 @@ import { IntegrationTile } from "./integration-tile";
 import { IntegrationDetail } from "./integration-detail";
 import { IntegrationsOauthToasts } from "./integrations-oauth-toasts";
 
-type Filter = "todas" | "atencion" | "conectadas" | "sin_conectar";
+type Filter = FiltroDeIntegraciones;
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "todas", label: "Todas" },
@@ -24,18 +26,7 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "sin_conectar", label: "Sin conectar" },
 ];
 
-function matches(health: IntegrationHealth, filter: Filter): boolean {
-  switch (filter) {
-    case "atencion":
-      return health.state === "attention" || health.state === "error";
-    case "conectadas":
-      return health.state !== "not_connected";
-    case "sin_conectar":
-      return health.state === "not_connected";
-    default:
-      return true;
-  }
-}
+const matches = coincideConElFiltro;
 
 /**
  * La pantalla de Integraciones, entera.

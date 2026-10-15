@@ -26,7 +26,7 @@ import { computeSalesAttributionForOrg } from "@/lib/marketing/content-sales-att
 import { metricScore, rankearPiezas } from "@/lib/marketing/ranking-de-contenido";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { getZernioClientForOrganization, getZernioIntegrationForOrg } from "@/lib/zernio/integration";
-import { downloadDriveFileAction } from "./drive-actions";
+import { descargarArchivoDeDrive } from "@/lib/google/drive-archivos";
 
 async function requireProfileOrganizationId(): Promise<string> {
   const profile = await getCurrentProfile();
@@ -200,7 +200,7 @@ export async function analyzeContentPieceAction(
     );
   }
 
-  const { buffer, mimeType } = await downloadDriveFileAction(piece.drive_file_id);
+  const { buffer, mimeType } = await descargarArchivoDeDrive(piece.drive_file_id);
 
   let transcript: string | null = null;
   const visionImages: Array<{

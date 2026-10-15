@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ArrowDownLeft, ArrowLeft, ArrowUpRight, FileText } from "lucide-react";
 import { Button, cn } from "@ai-coo/ui";
-import type { IntegrationHealth } from "@/lib/integrations/health";
+import { estaConectada, type IntegrationHealth } from "@/lib/integrations/health";
 import {
   AUTH_LABELS,
   CATEGORY_LABELS,
@@ -40,7 +40,7 @@ export function IntegrationDetail({
   onBack: () => void;
 }) {
   const definition = getIntegrationDefinition(health.provider);
-  const isConnected = health.state !== "not_connected";
+  const isConnected = estaConectada(health);
 
   return (
     <div className="space-y-6">

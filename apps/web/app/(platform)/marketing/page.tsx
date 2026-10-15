@@ -1,11 +1,14 @@
 import { redirect } from "next/navigation";
 import { MarketingOverview } from "@/components/marketing/marketing-overview";
+import { EmptyState } from "@/components/shared/empty-state";
 import {
   getContentDistributionDataAction,
   getMarketingOverviewContextAction,
 } from "@/app/marketing/actions";
 import { ESCONDIDO } from "@/lib/release/escondido";
 import { paths } from "@/routes";
+
+const RESUMEN_SIN_CARGAR = "No se pudo cargar el resumen de Marketing";
 
 export default async function MarketingPage() {
   // El Overview está escondido para el release (SCRUM-490): lee la integración
@@ -17,5 +20,14 @@ export default async function MarketingPage() {
     getMarketingOverviewContextAction(),
   ]);
 
-  return <MarketingOverview distribution={distribution} overview={overview} />;
+  // Las dos lecturas devuelven su error como valor (SCRUM-519): la pantalla
+  // muestra el motivo en vez de un resumen en cero.
+  if (!distribution.success) {
+    return <EmptyState title={RESUMEN_SIN_CARGAR} description={distribution.error} />;
+  }
+  if (!overview.success) {
+    return <EmptyState title={RESUMEN_SIN_CARGAR} description={overview.error} />;
+  }
+
+  return <MarketingOverview distribution={distribution.data} overview={overview.data} />;
 }
