@@ -65,15 +65,22 @@ import { UTMLeadsSheet } from "../utm-leads-sheet";
 import { UTMGenerator, guardarUtmNuevo } from "../utm-generator";
 import { recargarLeadMagnets } from "../lead-magnets/lead-magnets-overview";
 import {
+  LeadsRecientes,
   cambiarEstadoDelLeadMagnet,
   cargarLeadsDelLeadMagnet,
   eliminarLeadMagnet,
 } from "../lead-magnets/lead-magnet-detail-panel";
-import { cargarFlujosDeManyChat, crearLeadMagnet } from "../lead-magnets/lead-magnet-form-modal";
+import {
+  SelectorDeFlujos,
+  cargarFlujosDeManyChat,
+  crearLeadMagnet,
+} from "../lead-magnets/lead-magnet-form-modal";
 
 const LINK = "44444444-4444-4444-8444-444444444444";
 const LM = "77777777-7777-4777-8777-777777777777";
 const MOTIVO = "Sesión no válida";
+const SIN_ACCESO_MANYCHAT =
+  "ManyChat rechazó la API key de tu organización. Volvé a conectarlo desde Integraciones.";
 const UN_LINK = {
   id: LINK,
   utm_campaign: "lanzamiento",
@@ -387,6 +394,29 @@ describe("lead magnets: acciones desde la pantalla", () => {
       ok: true,
       data: [{ id: "f1", name: "Bienvenida" }],
     });
+  });
+});
+
+describe("lead magnets: el motivo en pantalla", () => {
+  it("⭐ los leads recientes muestran el motivo en vez de «Todavía no hay leads»", () => {
+    const salida = html(createElement(LeadsRecientes, { loading: false, motivo: ERROR_INESPERADO, leads: [] }));
+    expect(salida).toContain("No se pudieron cargar los leads");
+    expect(salida).toContain(ERROR_INESPERADO);
+    expect(salida).not.toContain("Todavía no hay leads registrados");
+  });
+
+  it("sin motivo y sin leads, el texto de siempre", () => {
+    const salida = html(createElement(LeadsRecientes, { loading: false, motivo: null, leads: [] }));
+    expect(salida).toContain("Todavía no hay leads registrados para este LM");
+  });
+
+  it("⭐ el selector de flujos muestra el motivo en vez de «Sin flujos disponibles»", () => {
+    const props = { loading: false, flows: [], value: "", onChange: () => {} };
+    const conMotivo = html(createElement(SelectorDeFlujos, { ...props, motivo: SIN_ACCESO_MANYCHAT }));
+    expect(conMotivo).toContain(`No se pudieron cargar los flujos: ${SIN_ACCESO_MANYCHAT}`);
+    expect(conMotivo).not.toContain("Sin flujos disponibles");
+    const sinMotivo = html(createElement(SelectorDeFlujos, { ...props, motivo: null }));
+    expect(sinMotivo).toContain("Sin flujos disponibles");
   });
 });
 

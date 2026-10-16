@@ -120,6 +120,53 @@ function LeadRow({ lead }: { lead: LeadMagnetLead }) {
   );
 }
 
+/**
+ * La lista de leads recientes del panel. Si no se pudieron cargar, el motivo
+ * en vez de "Todavía no hay leads registrados" (SCRUM-520).
+ */
+export function LeadsRecientes({
+  loading,
+  motivo,
+  leads,
+}: {
+  loading: boolean;
+  motivo: string | null;
+  leads: LeadMagnetLead[];
+}) {
+  return (
+    <>
+      {loading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-10 rounded-lg bg-muted/30 animate-pulse" />
+          ))}
+        </div>
+      ) : motivo ? (
+        <div className="flex flex-col items-center gap-1 py-6 text-center">
+          <p className="text-xs font-medium text-foreground">No se pudieron cargar los leads</p>
+          <p className="text-xs text-muted-foreground">{motivo}</p>
+        </div>
+      ) : leads.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-6 text-center">
+          <Clock className="h-5 w-5 text-muted-foreground/50" />
+          <p className="text-xs text-muted-foreground">Todavía no hay leads registrados para este LM</p>
+        </div>
+      ) : (
+        <div className="max-h-64 overflow-y-auto">
+          {leads.slice(0, 20).map((lead) => (
+            <LeadRow key={lead.id} lead={lead} />
+          ))}
+          {leads.length > 20 && (
+            <p className="text-xs text-muted-foreground text-center pt-2">
+              +{leads.length - 20} más
+            </p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function LeadMagnetDetailPanel({
   leadMagnet,
   onUpdated,
@@ -237,34 +284,7 @@ export function LeadMagnetDetailPanel({
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
           Leads recientes
         </h4>
-        {loadingLeads ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-10 rounded-lg bg-muted/30 animate-pulse" />
-            ))}
-          </div>
-        ) : motivoDeLeads ? (
-          <div className="flex flex-col items-center gap-1 py-6 text-center">
-            <p className="text-xs font-medium text-foreground">No se pudieron cargar los leads</p>
-            <p className="text-xs text-muted-foreground">{motivoDeLeads}</p>
-          </div>
-        ) : leads.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-6 text-center">
-            <Clock className="h-5 w-5 text-muted-foreground/50" />
-            <p className="text-xs text-muted-foreground">Todavía no hay leads registrados para este LM</p>
-          </div>
-        ) : (
-          <div className="max-h-64 overflow-y-auto">
-            {leads.slice(0, 20).map((lead) => (
-              <LeadRow key={lead.id} lead={lead} />
-            ))}
-            {leads.length > 20 && (
-              <p className="text-xs text-muted-foreground text-center pt-2">
-                +{leads.length - 20} más
-              </p>
-            )}
-          </div>
-        )}
+        <LeadsRecientes loading={loadingLeads} motivo={motivoDeLeads} leads={leads} />
       </div>
 
       {/* Acciones */}

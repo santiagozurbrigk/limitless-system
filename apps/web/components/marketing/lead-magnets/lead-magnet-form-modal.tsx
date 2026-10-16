@@ -87,6 +87,47 @@ export async function crearLeadMagnet(
   return { creado, leadMagnet };
 }
 
+/**
+ * El selector de flujos de ManyChat. Si no se pudieron cargar, el motivo en vez
+ * de "Sin flujos disponibles" (SCRUM-520).
+ */
+export function SelectorDeFlujos({
+  loading,
+  motivo,
+  flows,
+  value,
+  onChange,
+}: {
+  loading: boolean;
+  motivo: string | null;
+  flows: { id: string; name: string }[];
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+}) {
+  return loading ? (
+    <p className="text-xs text-muted-foreground">Cargando flujos...</p>
+  ) : motivo ? (
+    <p className="text-xs text-muted-foreground">
+      No se pudieron cargar los flujos: {motivo}
+    </p>
+  ) : flows.length > 0 ? (
+    <select
+      value={value}
+      onChange={onChange}
+      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+    >
+      <option value="">Seleccionar flujo</option>
+      {flows.map((f) => (
+        <option key={f.id} value={f.id}>{f.name}</option>
+      ))}
+    </select>
+  ) : (
+    <p className="text-xs text-muted-foreground">
+      Sin flujos disponibles — conectá ManyChat en Integraciones primero.
+    </p>
+  );
+}
+
 export function LeadMagnetFormModal({
   open,
   onOpenChange,
@@ -281,28 +322,13 @@ export function LeadMagnetFormModal({
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     Flujo de ManyChat asociado
                   </label>
-                  {loadingFlows ? (
-                    <p className="text-xs text-muted-foreground">Cargando flujos...</p>
-                  ) : motivoDeFlujos ? (
-                    <p className="text-xs text-muted-foreground">
-                      No se pudieron cargar los flujos: {motivoDeFlujos}
-                    </p>
-                  ) : flows.length > 0 ? (
-                    <select
-                      value={manychatFlowId}
-                      onChange={handleFlowSelect}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    >
-                      <option value="">Seleccionar flujo</option>
-                      {flows.map((f) => (
-                        <option key={f.id} value={f.id}>{f.name}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Sin flujos disponibles — conectá ManyChat en Integraciones primero.
-                    </p>
-                  )}
+                  <SelectorDeFlujos
+                    loading={loadingFlows}
+                    motivo={motivoDeFlujos}
+                    flows={flows}
+                    value={manychatFlowId}
+                    onChange={handleFlowSelect}
+                  />
                 </div>
               )}
 
