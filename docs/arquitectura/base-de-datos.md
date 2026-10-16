@@ -4,13 +4,13 @@
 
 ## Qué es
 
-Una sola base PostgreSQL 17 en Supabase (Auth + Storage + pgvector), multi-tenant por `organization_id`. **El schema se define sólo con las migraciones de `supabase/migrations/`**: no hay `database.types.ts` generado ni ORM; los tipos de fila se escriben a mano en `apps/web/types/` o junto al mapper de cada dominio. Producción tiene 147 tablas en `public`, todas con RLS habilitado. **Producción está en plan Free de Supabase: no hay backups ni PITR** (`[DR-BACKUPS-SUPABASE]`; ver [`../auditoria/backups-y-recuperacion.md`](../auditoria/backups-y-recuperacion.md)).
+Una sola base PostgreSQL 17 en Supabase (Auth + Storage + pgvector), multi-tenant por `organization_id`. **El schema se define sólo con las migraciones de `supabase/migrations/`**: no hay `database.types.ts` generado ni ORM; los tipos de fila se escriben a mano en `apps/web/types/` o junto al mapper de cada dominio. Producción tiene 147 tablas en `public`, todas con RLS habilitado. **Producción está en plan Pro de Supabase** (confirmado por Fernando el 15-oct-2026). Qué backups tiene y cómo se restaura está en [`../operacion/backups-y-restauracion.md`](../operacion/backups-y-restauracion.md); desde este doc no se verificó la retención ni si hay PITR. La auditoría [`../auditoria/backups-y-recuperacion.md`](../auditoria/backups-y-recuperacion.md) es del 2026-09-23, cuando estaba en Free, y sus cupos y conclusiones son de ese plan (`[DR-BACKUPS-SUPABASE]`).
 
 ## Migraciones
 
 ### Cómo están organizadas
 
-- 175 archivos `supabase/migrations/<AAAAMMDDHHMMSS>_<nombre_snake>.sql`, del `20260521000000_phase1_orgs_profiles` al `20260923140000_onboarding_de_clientes`.
+- 194 archivos `supabase/migrations/<AAAAMMDDHHMMSS>_<nombre_snake>.sql`, del `20260521000000_phase1_orgs_profiles` al `20261016120000_webinars_modelo_de_datos` (conteo del 2026-10-16; el invariante de abajo se verificó con 175).
 - Una migración por cambio de feature; las primeras usan nombres en inglés, las de septiembre en español.
 - Idempotentes en lo posible (`if not exists`, `drop policy if exists`), porque parte de producción se armó a mano antes de ordenar el historial.
 - `supabase/scripts/` guarda SQL que **no** es migración: `legacy_RUN_ALL_PHASE1_NO_EJECUTAR.sql` (pisa `get_my_organization_id()`; no correr) y `mark_fathom_business_context_calls.sql`.
@@ -38,7 +38,7 @@ Matices que un dev tiene que saber:
 
 ### Chequeo en CI
 
-El job `migrations` de `.github/workflows/ci.yml` levanta `pgvector/pgvector:pg17`, carga `supabase/ci/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, schemas `auth`/`storage`, `auth.uid()`/`auth.jwt()`, tablas mínimas de storage, publicación de realtime) y corre `supabase/ci/check-migrations.sh`: valida nombres y versiones únicas y aplica las 193 en orden, cada una en su transacción; después corre los tests de RLS de `supabase/ci/tests/` (12 archivos). Si una migración nueva usa otra pieza de la plataforma (otro schema, otra extensión), hay que sumarla a los stubs.
+El job `migrations` de `.github/workflows/ci.yml` levanta `pgvector/pgvector:pg17`, carga `supabase/ci/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, schemas `auth`/`storage`, `auth.uid()`/`auth.jwt()`, tablas mínimas de storage, publicación de realtime) y corre `supabase/ci/check-migrations.sh`: valida nombres y versiones únicas y aplica las 194 en orden, cada una en su transacción; después corre los tests de RLS de `supabase/ci/tests/` (13 archivos). Si una migración nueva usa otra pieza de la plataforma (otro schema, otra extensión), hay que sumarla a los stubs.
 
 ## RLS y acceso
 
@@ -62,7 +62,7 @@ El claim `active_business_org_id` lo agrega el Auth Hook `custom_access_token_ho
 
 Lectura de portfolio del holding: `get_my_holding_business_org_ids()` + policies `holding_reads_*` sobre `organizations`, `clients`, `closing_calls`, `conversations` (`20260630100000_holding_portfolio_rls.sql`). **No miran el rol**: cualquier miembro de la org holding lee esas tablas de todos los negocios (`[HOLDING-PORTFOLIO-ROL]`).
 
-**Casi ninguna policy filtra por rol**: la única excepción en el repo es `Founders update org profiles` (UPDATE de `profiles`, `20260616100000_workboard_time_tracking.sql`), que deja a un `founder`/`admin` editar los perfiles de su org; en prod esa lógica está en la policy consolidada con `current_user_is_founder_or_admin()`. Los permisos por módulo (`team_roles.permissions`) se aplican en el render de `app/(platform)/layout.tsx`, no en la base ni en las actions (`[PERMISOS-SERVER-ACTIONS]`).
+**Casi ninguna policy filtra por rol** (las excepciones nuevas usan `current_user_has_org_role()`: equipo y configuración desde SCRUM-1, `20260929100000`, y la configuración de Limitless Webinars, `20261016120000`). La excepción vieja es `Founders update org profiles` (UPDATE de `profiles`, `20260616100000_workboard_time_tracking.sql`), que deja a un `founder`/`admin` editar los perfiles de su org; en prod esa lógica está en la policy consolidada con `current_user_is_founder_or_admin()`. Los permisos por módulo (`team_roles.permissions`) se aplican en el render de `app/(platform)/layout.tsx`, no en la base ni en las actions (`[PERMISOS-SERVER-ACTIONS]`).
 
 ### Tablas sin lectura para el usuario
 
@@ -74,6 +74,7 @@ Estas tablas se leen sólo con `createAdminClient()` (service role). El cliente 
 | `zernio_integrations` | `api_key` (cifrada) y `webhook_secret` |
 | `instagram_integrations`, `stripe_integrations`, `mercadopago_integrations`, `vturb_integrations`, `webinarjam_integrations`, `hyros_integrations`, `payment_integrations`, `super_admin_google_tokens` | RLS sin policies |
 | `ghl_integrations` | El miembro puede insertar/actualizar/borrar la de su org, pero no leerla |
+| `ingest_keys`, `landing_events` | Hash de las claves de ingesta de la landing y crudos de la landing (Limitless Webinars, `20261016120000`). RLS sin policies y sin grants para `anon` ni `authenticated` (con sesión da error de permisos, no cero filas) |
 | `ai_brain_documents`, `super_admin_users`, `super_admin_deletions`, `platform_ai_credentials`, `fathom_webhook_events`, `fathom_sync_fallas`, `corridas_de_procesos`, `waitlist_leads`, `rate_limits`, `holding_active_sessions` | Sólo service role / plataforma |
 
 Excepciones que **sí** son editables por cualquier miembro: `discord_integrations` y `unipile_integrations` (policy `FOR ALL` por org) y `team_member_integrations` (sólo la fila propia).
@@ -105,7 +106,7 @@ Excepciones que **sí** son editables por cualquier miembro: `discord_integratio
 | `get_current_week_start()` | Semana de weekly inputs | |
 | `set_updated_at()` | Trigger genérico de `updated_at` | trigger |
 
-Vistas: `organization_claude_status` (estado de la key de Claude, filtrada por org) y `workboard_time_by_member`. Ninguna vista de `public` tiene escritura para `anon` ni `authenticated` (`20260928200000_vistas_sin_escritura`): los default privileges del proyecto les dan `GRANT ALL` a las vistas nuevas, así que la migración que crea una vista tiene que revocarles INSERT, UPDATE, DELETE y TRUNCATE. `supabase/ci/check-migrations.sh` falla si alguna queda con escritura. Realtime publicado en `business_context_documents`, `reel_variation_jobs` y `sop_generation_jobs`. Extensión: `vector`.
+Vistas: `organization_claude_status` (estado de la key de Claude, filtrada por org) y `workboard_time_by_member`. Ninguna vista de `public` tiene escritura para `anon` ni `authenticated` (`20260928200000_vistas_sin_escritura`): los default privileges del proyecto les dan `GRANT ALL` a las vistas nuevas, así que la migración que crea una vista tiene que revocarles INSERT, UPDATE, DELETE y TRUNCATE. `supabase/ci/check-migrations.sh` falla si alguna queda con escritura. Realtime publicado en `business_context_documents`, `reel_variation_jobs`, `sop_generation_jobs` y `launch_registrations`. Extensiones: `vector` y `pg_trgm` (en el schema `extensions`, la instala `20261016120000`; en producción entra cuando se aplique esa migración, SCRUM-532).
 
 ## Storage
 
@@ -193,6 +194,28 @@ Propósito de cada una en el doc del área. Las notas del cliente son columnas d
 
 ### Operaciones (`docs/areas/operaciones.md`)
 `workboard_tasks`, `workboard_task_attachments`, `workboard_task_documents`, `sprints` (a lo sumo uno `active` por organización: índice único parcial `sprints_un_activo_por_org`, `20261008120000`), `sops`, `sop_versions`, `sop_attachments`, `sop_generation_jobs`, `weekly_inputs`, `weekly_reports`, `intelligence_snapshots`, `executive_reports`, `launches`, `launch_metrics`.
+
+### Limitless Webinars (`docs/areas/embudos.md`)
+Fase 1 del modelo de datos (SCRUM-526, `20261016120000_webinars_modelo_de_datos`). Sin código de la app todavía: las claves y la ingesta de la landing son SCRUM-527 y SCRUM-528. Las tablas viejas `launches` y `launch_metrics` (Operaciones) no se usan para esto.
+
+| Tabla | Propósito y reglas |
+|---|---|
+| `webinar_launches` | Lanzamiento: `name`, `variant` (`organic`, `paid`, `paid_plus`), `offer_price` y `currency` (3 letras mayúsculas), `capture_starts_on`, `closes_on`, `goal_sales` y `goal_revenue` (opcionales), `status` (`draft`, `active`, `closed`; `closed_at` sólo si está `closed`). `public_id` va en la landing: único en toda la base, 32 hex aleatorios de `gen_random_uuid()`, y ningún usuario lo elige ni lo cambia (grants por columna). Índice `(organization_id, status)` |
+| `webinar_sessions` | Sesiones del lanzamiento: `starts_at`, `zoom_webinar_id`, `offer_offset_seconds`, `report_status` (sus valores se definen con Zoom, Fase 2) |
+| `launch_ad_campaigns` | Campañas de anuncios del lanzamiento. Única `(launch_id, platform, campaign_external_id)` |
+| `launch_products` | Productos del lanzamiento, `role` `main` o `vip`. Única `(launch_id, provider, product_external_id)` |
+| `leads` | La persona: `email`, `email_normalized` (CHECK: en minúsculas y sin espacios en los bordes), `name`, `phone_e164`, `first_seen_at`. Única `(organization_id, email_normalized)`; índices GIN trigram (`pg_trgm`) sobre `name` y `email_normalized` para buscar |
+| `launch_registrations` | Registro de un lead en un lanzamiento con UTM, `fbclid`, `sl`, `ab_variant`, `qualification`, `zoom_join_url` y `raw_event_id` (el crudo). Única `(organization_id, client_registration_id)` (un reintento de la landing no duplica) y `(launch_id, lead_id)`; índice `(launch_id, registered_at)`. Publicada en realtime |
+| `landing_visits` | Visitas: única `(launch_id, visitor_id, day)` |
+| `lead_events` | Eventos del lead, append-only: `kind` (16 tipos, de `registered` a `note`), `source` (`landing`, `zoom`, `ghl`, `calendly`, `whop`, `commas`, `manual`), `source_ref`, `occurred_at`, `actor_user_id`, `data`. Única `(organization_id, source, source_ref, kind)`; índices `(launch_id, kind, lead_id)` y `(lead_id, occurred_at)`. `launch_id` es obligatorio |
+| `ingest_keys` | Hash de la clave de ingesta (`key_hash` único), `label`, `last_used_at`, `revoked_at`. Sólo service role |
+| `landing_events` | Crudo de la landing: `kind` (`registration`, `visit`), `payload`, `received_at`, `status` (`pending`, `processed`, `unmapped`, `error`), `error`. Índice `(status, received_at)`. Sólo service role |
+
+Reglas comunes:
+- **Ninguna fila hija apunta a otra organización**: las FK hacia `webinar_launches`, `leads` y `landing_events` son compuestas con `organization_id` (contra un único `(id, organization_id)` del padre). Vale también para el service role.
+- **Lectura**: miembros de la org (`get_my_organization_id()`) en todas, salvo `ingest_keys` y `landing_events`.
+- **Escritura**: la configuración (`webinar_launches`, `webinar_sessions`, `launch_ad_campaigns`, `launch_products`) sólo founder o admin (`current_user_has_org_role(array['founder','admin'])`, patrón de SCRUM-1; SCRUM-533 la pasa a permisos por módulo). `leads`, `launch_registrations`, `landing_visits` y `lead_events` no tienen grants de escritura para `authenticated`: las escribe la ingesta con el service role. `anon` no tiene ningún grant.
+- Tests: `supabase/ci/tests/97_webinars_modelo_de_datos.sql`.
 
 ### Discord (`docs/areas/discord.md`)
 `discord_integrations`, `discord_client_links`, `discord_messages`, `discord_pending_links` (vacía), `discord_channel_clients`, `discord_team_members`.

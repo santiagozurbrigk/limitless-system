@@ -28,6 +28,31 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-16 — Limitless Webinars: modelo de datos, Fase 1 (SCRUM-526)
+
+**Rama:** `feat/SCRUM-526-webinars-modelo-de-datos` (base `main` `4a542e5e`)
+**Commit(s):** `f83ced3f`: feat(webinars): modelo de datos de Limitless Webinars, Fase 1; este (docs)
+**Módulo(s) afectado(s):** base de datos: `supabase/migrations/20261016120000_webinars_modelo_de_datos.sql` (nueva), `supabase/ci/tests/97_webinars_modelo_de_datos.sql` (nuevo); docs `arquitectura/base-de-datos.md`, `areas/embudos.md`, `operacion/testing.md`
+
+**Qué se hizo:** primera pieza de la épica SCRUM-521. Una migración con las 10 tablas de la Fase 1 de los requerimientos técnicos: `webinar_launches`, `webinar_sessions`, `launch_ad_campaigns`, `launch_products`, `leads`, `launch_registrations`, `landing_visits`, `lead_events`, `ingest_keys` y `landing_events`, con RLS, policies, grants, índices y CHECKs en el mismo archivo. Instala `pg_trgm` en el schema `extensions` (índices GIN trigram sobre `leads.name` y `leads.email_normalized`) y suma `launch_registrations` a `supabase_realtime` de forma idempotente. No hay código de la app: claves e ingesta son SCRUM-527 y SCRUM-528. No se corrió nada en producción: los SQL para SCRUM-532 están en `limitless-auditoria/sql-produccion/scrum-526/`.
+
+**Por qué / finalidad:** Limitless Webinars necesita guardar lanzamientos, leads y lo que manda la landing antes de construir la ingesta y las pantallas.
+
+**Decisiones de diseño relevantes:**
+- Una fila hija no puede apuntar a otra organización: las FK hacia `webinar_launches`, `leads` y `landing_events` son compuestas `(x_id, organization_id)` contra un único `(id, organization_id)` del padre, en vez de un trigger. Vale para el service role (la ingesta), que no pasa por RLS. Mover un lanzamiento con hijas a otra org también falla.
+- Llaves únicas de datos externos con la organización (convención del repo): `(organization_id, client_registration_id)`, `(organization_id, source, source_ref, kind)`, `(organization_id, email_normalized)`. Las que empiezan por `launch_id` ya quedan dentro de una org.
+- `public_id` = 32 hex de `gen_random_uuid()` (122 bits aleatorios, sin depender de `pgcrypto` ni de su schema). Grants por columna en `webinar_launches`: ningún usuario elige ni cambia `public_id`, `id` ni `created_at`, ni mueve `organization_id`.
+- Sin escritura para `authenticated` en `leads`, `launch_registrations`, `landing_visits` y `lead_events` (ni grant ni policy): un intento da error de permisos (42501), no "0 filas". Así `lead_events` es append-only para los usuarios sin un trigger que rompería los borrados en cascada. `anon` no tiene ningún grant en las 10.
+- `ingest_keys` y `landing_events`: RLS sin policies y sin grants para `anon` ni `authenticated`.
+- `lead_events.launch_id` obligatorio (todo evento cuenta para un lanzamiento); relajarlo después es una migración de expansión. `webinar_sessions.report_status` sin CHECK: sus valores se definen con Zoom (Fase 2). `ingest_keys.key_hash` sin formato fijo (hex o base64 lo decide SCRUM-527).
+- Otros CHECKs: moneda `^[A-Z]{3}$`, `closed_at` sólo con `status = 'closed'`, `email_normalized` en minúsculas y sin espacios en los bordes, `phone_e164`, montos y metas no negativos. `goal_sales` y `goal_revenue` opcionales.
+- `updated_at` con `set_updated_at()` en las tablas con filas editables (todas menos `landing_visits` y `lead_events`).
+- `docs/arquitectura/base-de-datos.md`: producción está en plan Pro (confirmado por Fernando el 15-oct-2026); el doc ya no dice que no hay backups y remite a `docs/operacion/backups-y-restauracion.md` sin afirmar retención ni PITR.
+
+**Verificación (evidencia en `limitless-auditoria/evidencia-sprint2/scrum-526/`):** sin Docker: PostgreSQL 17.10 del paquete npm `@embedded-postgres/linux-x64` con pgvector 0.8.7 (paquete de apt.postgresql.org) y `psql` 16.15, todo en `~/.cache/pg17-embedded`, fuera del repo (`entorno-pg.sh`). `check-migrations.sh` en `main` `4a542e5e`: 193 migraciones y 12 archivos de tests en verde (`00_baseline_main_check-migrations.txt`); en `f83ced3f`: 194 migraciones y 13 archivos en verde (`01_check-migrations.txt`). La migración corre dos veces sin error (`02_idempotencia.txt`). 71 mutantes sobre policies, grants, FK, únicos, CHECKs, realtime e índices, cada uno con su marca verificada en el catálogo antes de correr: los 71 mueren por el texto literal de su control (`03_mutantes.txt`, `mutantes.py`). `tsc --noEmit` limpio (`04_tsc.txt`), suite 266 archivos y 4.226 tests (`05_vitest.txt`), los dos `--check` del backlog (`06_backlog-check.txt`). SQL de producción probados sobre una base con las 193 migraciones previas y su historial: precheck, migración, verificación en sesión `read only` con `todo_ok = true`, segunda corrida, y 14 mutaciones que la verificación detecta (`sql-produccion/scrum-526/prueba-local.txt`).
+
+**Riesgos / deuda técnica pendiente:** aplicar en producción es SCRUM-532 (incluye instalar `pg_trgm`). Los permisos de escritura de la configuración pasan a permisos por módulo en SCRUM-533.
+
 ### 2026-10-13 — Marketing, contenido: errores esperables como valor (SCRUM-502)
 
 **Rama:** `fix/SCRUM-502-marketing-contenido-errores` (base `main` `0353ec05`)

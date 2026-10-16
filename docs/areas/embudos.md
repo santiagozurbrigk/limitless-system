@@ -302,6 +302,31 @@ No tiene relación con el motor de embudos (no usa `funnel_instances`) ni con la
 "próximo lanzamiento" del onboarding de clientes, que es un campo configurable del área
 Clientes.
 
+### Limitless Webinars (Fase 1: sólo modelo de datos)
+
+SCRUM-526 (épica SCRUM-521) creó las tablas de los lanzamientos de webinars en
+`supabase/migrations/20261016120000_webinars_modelo_de_datos.sql`: `webinar_launches`,
+`webinar_sessions`, `launch_ad_campaigns`, `launch_products`, `leads`,
+`launch_registrations`, `landing_visits`, `lead_events`, `ingest_keys` y `landing_events`.
+No reutiliza `launches` ni `launch_metrics` (quedan como están). Todavía no hay código de la
+app que las use: las claves de ingesta y el endpoint de la landing son SCRUM-527 y SCRUM-528.
+
+Lo que ya hace cumplir la base:
+- Cada miembro lee sólo lo de su organización; la configuración del lanzamiento (lanzamiento,
+  sesiones, campañas, productos) la escriben founder o admin.
+- Leads, registros, visitas y eventos sólo los escribe el service role (la ingesta). Los
+  eventos del lead son append-only para los usuarios.
+- Las claves de ingesta (sólo el hash) y los crudos de la landing no los ve nadie con sesión.
+- Un reintento de la landing no duplica: `client_registration_id` es único por organización y
+  la llave natural de `lead_events` también.
+- Una fila no puede apuntar a un lanzamiento, un lead o un crudo de otra organización (FK
+  compuestas con `organization_id`).
+- `launch_registrations` está en realtime y `leads` tiene índices trigram para buscar por
+  nombre o email.
+
+Detalle de columnas y reglas: `docs/arquitectura/base-de-datos.md` § Limitless Webinars.
+Tests: `supabase/ci/tests/97_webinars_modelo_de_datos.sql`.
+
 ## Archivos clave
 
 1. `apps/web/lib/funnels/resolve.ts` — de dónde sale cada número
