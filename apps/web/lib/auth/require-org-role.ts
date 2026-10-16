@@ -8,13 +8,19 @@ import { FallaDeLaBase } from "@/lib/server/action-result";
  * Son los mismos que exigen las policies de
  * `20260929100000_roles_equipo_y_config_en_la_base.sql`: equipo y
  * configuración de la org, sólo founder (como `canManageTeam` en
- * app/team/actions.ts); borrar clientes, founder o admin.
+ * app/team/actions.ts); borrar clientes, founder o admin. Las claves de
+ * ingesta de la landing (SCRUM-527), founder o admin: el mismo criterio que la
+ * configuración del lanzamiento en `20261016120000_webinars_modelo_de_datos.sql`
+ * (la tabla `ingest_keys` no tiene policies, así que el chequeo es éste).
  */
 export const ROLES_CONFIG_ORG = ["founder"] as const;
 export const ROLES_BORRAR_CLIENTES = ["founder", "admin"] as const;
+export const ROLES_CLAVES_DE_INGESTA = ["founder", "admin"] as const;
 
 export const SIN_PERMISO_CONFIG_ORG = "Sólo el founder puede cambiar la configuración de la organización.";
 export const SIN_PERMISO_BORRAR_CLIENTES = "Sólo el founder o un admin pueden eliminar clientes.";
+export const SIN_PERMISO_CLAVES_DE_INGESTA =
+  "Sólo el founder o un admin pueden ver, crear o revocar las claves de ingesta.";
 
 /**
  * ⭐ Traduce la respuesta de `current_user_has_org_role` a "pasa" o "no pasa".

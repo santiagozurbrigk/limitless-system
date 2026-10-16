@@ -35,6 +35,10 @@ describe("escondido para el release", () => {
     expect(LISTED_INTEGRATIONS.map((d) => d.provider)).not.toContain("manychat");
   });
 
+  it("el catálogo de integraciones no ofrece la Landing de Webinars (SCRUM-527)", () => {
+    expect(LISTED_INTEGRATIONS.map((d) => d.provider)).not.toContain("landing");
+  });
+
   it("Lead Magnets ofrece sólo los canales que no prometen una captura falsa", () => {
     const canales = ["manychat", "instagram_dm", "typeform", "google_forms", "landing", "manual"].map(
       (value) => ({ value })

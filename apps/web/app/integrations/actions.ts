@@ -43,6 +43,8 @@ import {
   type DiagnosticoIntentContenido,
 } from "@/lib/discord/intent-contenido";
 import { LISTED_INTEGRATIONS } from "@/lib/integrations/registry";
+import { ESCONDIDO } from "@/lib/release/escondido";
+import { leerClavesActivas, saludDeLaLanding } from "@/lib/webinar/claves-de-ingesta";
 import {
   requireOrgRole,
   ROLES_CONFIG_ORG,
@@ -605,6 +607,17 @@ export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverv
       ],
     }),
   );
+
+  // Landing (SCRUM-527): escondida, no se lee nada. Visible, la tarjeta cuenta
+  // las claves de ingesta activas de la organización.
+  if (!ESCONDIDO.ingestaLanding) {
+    byProvider.set(
+      "landing",
+      await saludDeLaLanding(async () =>
+        leerClavesActivas(await requireOrganizationId()),
+      ),
+    );
+  }
 
   byProvider.set(
     "hyros",
