@@ -26,6 +26,7 @@ import {
   type LeadMagnetType,
 } from "@/app/marketing/lead-magnets-actions";
 import { useToast } from "@/providers/toast-provider";
+import { correrMutacion, type Aviso } from "@/lib/client/correr-accion";
 import { LeadMagnetFormModal } from "./lead-magnet-form-modal";
 import { LeadMagnetDetailPanel } from "./lead-magnet-detail-panel";
 import { FunnelChartPanel } from "@/components/charts/platform/funnel-chart-panel";
@@ -163,6 +164,24 @@ function ComingSoonCard({ title, description, icon: Icon }: { title: string; des
 
 // ─── Vista principal ──────────────────────────────────────────────────────────
 
+/**
+ * Recarga la lista. Con un error avisa el motivo (o el texto fijo si la acción
+ * lanzó); antes el error volvía como lista y la pantalla quedaba vacía
+ * (SCRUM-520).
+ */
+export function recargarLeadMagnets(
+  avisar: (aviso: Aviso) => void,
+  alExito: (lista: LeadMagnet[]) => void
+): Promise<void> {
+  return correrMutacion({
+    accion: getLeadMagnetsAction,
+    alExito,
+    avisar,
+    tituloError: "Error al recargar lead magnets",
+    etiqueta: "[LeadMagnetsOverview] recargar",
+  });
+}
+
 export function LeadMagnetsOverview({
   initialLeadMagnets,
 }: {
@@ -178,12 +197,7 @@ export function LeadMagnetsOverview({
 
   function refresh() {
     startRefresh(async () => {
-      try {
-        const fresh = await getLeadMagnetsAction();
-        setLms(fresh);
-      } catch {
-        push({ title: "Error al recargar lead magnets" });
-      }
+      await recargarLeadMagnets(push, setLms);
     });
   }
 

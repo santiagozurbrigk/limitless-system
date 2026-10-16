@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { runMutation, type MutationResult } from "@/lib/server/action-result";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { uuidSchema } from "@/lib/validations";
 import {
   buildLandingUtmUrl,
   buildManychatUrl,
@@ -75,7 +81,11 @@ function rowToUTMLead(row: Record<string, unknown>): UTMLeadCaptureRow {
 const CONTENT_ASSET_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** Si llega el UUID interno del asset, guardar el external_id de YouTube para atribución. */
+/**
+ * Si llega el UUID interno del asset, guardar el external_id de YouTube para
+ * atribución. Si la lectura falla, lanza (SCRUM-520): antes se guardaba el
+ * UUID interno como si fuera el id del video y la atribución se perdía.
+ */
 async function resolveYoutubeVideoExternalId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
@@ -85,7 +95,7 @@ async function resolveYoutubeVideoExternalId(
   const trimmed = videoId.trim();
   if (!CONTENT_ASSET_UUID_RE.test(trimmed)) return trimmed;
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("content_assets")
     .select("external_id")
     .eq("organization_id", organizationId)
@@ -93,7 +103,44 @@ async function resolveYoutubeVideoExternalId(
     .eq("platform", "youtube")
     .maybeSingle();
 
+  if (error) throw new FallaDeLaBase(error);
   return data?.external_id ?? trimmed;
+}
+
+/**
+ * La URL del sitio de la organización. Si la lectura falla, lanza
+ * (SCRUM-520): antes la creación y la edición de un UTM armaban el link con
+ * la URL por defecto como si la organización no tuviera una.
+ */
+async function leerUrlDelSitio(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("website_url")
+    .eq("id", organizationId)
+    .maybeSingle();
+
+  if (error) throw new FallaDeLaBase(error);
+  return (data?.website_url as string | null) ?? null;
+}
+
+const ID_INVALIDO = "ID inválido";
+const UTM_NO_ENCONTRADO = "UTM no encontrado.";
+const CAMPANA_OBLIGATORIA = "La campaña UTM es obligatoria.";
+const CAMPANA_REPETIDA = "Ya existe un UTM con esa campaña.";
+
+function validarId(id: unknown): string {
+  const parsed = uuidSchema.safeParse(id);
+  if (!parsed.success) throw new ErrorEsperable(ID_INVALIDO);
+  return parsed.data;
+}
+
+/** El rechazo de un insert o update de `utm_links`: la campaña repetida es esperable. */
+function rechazoAlGuardar(error: { message: string; code?: string | null }): Error {
+  if (error.code === "23505") return new ErrorEsperable(CAMPANA_REPETIDA);
+  return new FallaDeLaBase(error);
 }
 
 function mapClosingCallEmbed(
@@ -124,55 +171,65 @@ function mapClientEmbed(raw: unknown): UTMSaleAttributionRow["clients"] {
 // ---------------------------------------------------------------------------
 // Acciones exportadas
 // ---------------------------------------------------------------------------
+//
+// Errores como valor (SCRUM-520): un rechazo esperable (sin sesión, id
+// inválido, campaña vacía o repetida, UTM inexistente o de otra organización)
+// vuelve con su mensaje; cualquier otra falla se registra con la etiqueta de la
+// acción y vuelve con el texto fijo.
 
-export async function getOrganizationWebsiteAction(): Promise<string | null> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
-
-  const { data } = await supabase
-    .from("organizations")
-    .select("website_url")
-    .eq("id", organizationId)
-    .maybeSingle();
-
-  return (data?.website_url as string | null) ?? null;
+/** La URL del sitio de la organización; si la lectura falla, el motivo y no `null`. */
+export async function getOrganizationWebsiteAction(): Promise<MutationResult<string | null>> {
+  return mutacionConErroresEsperables("[getOrganizationWebsite]", async () => {
+    const organizationId = await requireOrganizationId();
+    return leerUrlDelSitio(await createClient(), organizationId);
+  });
 }
 
 /** URL base para previews de UTM (org o fallback Limitless). */
-export async function getUtmBaseUrlAction(): Promise<string> {
-  const websiteUrl = await getOrganizationWebsiteAction();
-  return resolveUtmBaseUrl(websiteUrl);
+export async function getUtmBaseUrlAction(): Promise<MutationResult<string>> {
+  return mutacionConErroresEsperables("[getUtmBaseUrl]", async () => {
+    const organizationId = await requireOrganizationId();
+    return resolveUtmBaseUrl(await leerUrlDelSitio(await createClient(), organizationId));
+  });
 }
 
-export async function getUTMLinksAction(): Promise<UTMLinkRow[]> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("utm_links")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
+/**
+ * Los UTMs de la organización. Si la base falla, el motivo y no una lista
+ * vacía (SCRUM-520): antes `/marketing/utms` decía "Todavía no creaste UTMs"
+ * y el resumen de Marketing sumaba ceros.
+ */
+export async function getUTMLinksAction(): Promise<MutationResult<UTMLinkRow[]>> {
+  return mutacionConErroresEsperables("[getUTMLinks]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("utm_links")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .order("created_at", { ascending: false });
 
-  if (error) return [];
-  return (data ?? []).map((row) =>
-    rowToUTMLink(row as Record<string, unknown>)
-  );
+    if (error) throw new FallaDeLaBase(error);
+    return (data ?? []).map((row) =>
+      rowToUTMLink(row as Record<string, unknown>)
+    );
+  });
 }
 
 export async function getUTMLeadsAction(
   utmLinkId: string
 ): Promise<MutationResult<UTMLeadCaptureRow[]>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[getUTMLeads]", async () => {
+    const linkId = validarId(utmLinkId);
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("utm_lead_captures")
       .select("*")
       .eq("organization_id", organizationId)
-      .eq("utm_link_id", utmLinkId)
+      .eq("utm_link_id", linkId)
       .order("captured_at", { ascending: false });
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
     return (data ?? []).map((row) =>
       rowToUTMLead(row as Record<string, unknown>)
     );
@@ -182,7 +239,8 @@ export async function getUTMLeadsAction(
 export async function getUTMFunnelAction(
   utmLinkId: string
 ): Promise<MutationResult<UTMFunnelData>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[getUTMFunnel]", async () => {
+    const linkId = validarId(utmLinkId);
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -191,27 +249,27 @@ export async function getUTMFunnelAction(
         .from("utm_lead_captures")
         .select("*")
         .eq("organization_id", organizationId)
-        .eq("utm_link_id", utmLinkId)
+        .eq("utm_link_id", linkId)
         .order("captured_at", { ascending: false }),
 
       supabase
         .from("utm_booking_attributions")
         .select("id, lead_name, lead_email, booked_at, closing_calls(lead_name, scheduled_at, status)")
         .eq("organization_id", organizationId)
-        .eq("utm_link_id", utmLinkId)
+        .eq("utm_link_id", linkId)
         .order("booked_at", { ascending: false }),
 
       supabase
         .from("utm_sale_attributions")
         .select("id, revenue, sold_at, clients(name, status)")
         .eq("organization_id", organizationId)
-        .eq("utm_link_id", utmLinkId)
+        .eq("utm_link_id", linkId)
         .order("sold_at", { ascending: false }),
     ]);
 
-    if (captures.error) throw new Error(captures.error.message);
-    if (bookings.error) throw new Error(bookings.error.message);
-    if (sales.error) throw new Error(sales.error.message);
+    if (captures.error) throw new FallaDeLaBase(captures.error);
+    if (bookings.error) throw new FallaDeLaBase(bookings.error);
+    if (sales.error) throw new FallaDeLaBase(sales.error);
 
     const salesRows = sales.data ?? [];
 
@@ -248,7 +306,7 @@ export async function createUTMLinkAction(data: {
   instagram_username?: string;
   manychat_page_id?: string;
 }): Promise<MutationResult<UTMLinkRow>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[createUTMLink]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
@@ -259,16 +317,10 @@ export async function createUTMLinkAction(data: {
         : "");
 
     if (!campaign) {
-      throw new Error("La campaña UTM es obligatoria.");
+      throw new ErrorEsperable(CAMPANA_OBLIGATORIA);
     }
 
-    const { data: org } = await supabase
-      .from("organizations")
-      .select("website_url")
-      .eq("id", organizationId)
-      .maybeSingle();
-
-    const baseUrl = resolveUtmBaseUrl(org?.website_url ?? null);
+    const baseUrl = resolveUtmBaseUrl(await leerUrlDelSitio(supabase, organizationId));
     const full_url = buildLandingUtmUrl(
       campaign,
       data.utm_content,
@@ -310,12 +362,7 @@ export async function createUTMLinkAction(data: {
       .select()
       .single();
 
-    if (error) {
-      if (error.code === "23505") {
-        throw new Error("Ya existe un UTM con esa campaña.");
-      }
-      throw new Error(error.message);
-    }
+    if (error) throw rechazoAlGuardar(error);
 
     revalidatePath(paths.platform.marketing.utms);
     return rowToUTMLink(utmLink as Record<string, unknown>);
@@ -333,20 +380,21 @@ export async function updateUTMLinkAction(
     manychat_page_id?: string;
   }
 ): Promise<MutationResult<UTMLinkRow>> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[updateUTMLink]", async () => {
+    const linkId = validarId(id);
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
 
     const { data: existing, error: readError } = await supabase
       .from("utm_links")
       .select("*")
-      .eq("id", id)
+      .eq("id", linkId)
       .eq("organization_id", organizationId)
       .maybeSingle();
 
-    if (readError || !existing) {
-      throw new Error("UTM no encontrado.");
-    }
+    // Antes una falla de la lectura se mostraba como "UTM no encontrado.".
+    if (readError) throw new FallaDeLaBase(readError);
+    if (!existing) throw new ErrorEsperable(UTM_NO_ENCONTRADO);
 
     const campaign =
       data.utm_campaign?.trim() ||
@@ -354,16 +402,10 @@ export async function updateUTMLinkAction(
       "";
 
     if (!campaign) {
-      throw new Error("La campaña UTM es obligatoria.");
+      throw new ErrorEsperable(CAMPANA_OBLIGATORIA);
     }
 
-    const { data: org } = await supabase
-      .from("organizations")
-      .select("website_url")
-      .eq("id", organizationId)
-      .maybeSingle();
-
-    const baseUrl = resolveUtmBaseUrl(org?.website_url ?? null);
+    const baseUrl = resolveUtmBaseUrl(await leerUrlDelSitio(supabase, organizationId));
     const utmContent =
       data.utm_content !== undefined
         ? data.utm_content || null
@@ -412,35 +454,40 @@ export async function updateUTMLinkAction(
         link_type,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", id)
+      .eq("id", linkId)
       .eq("organization_id", organizationId)
       .select()
       .single();
 
-    if (error) {
-      if (error.code === "23505") {
-        throw new Error("Ya existe un UTM con esa campaña.");
-      }
-      throw new Error(error.message);
-    }
+    // PGRST116: el update no encontró la fila (se borró entre la lectura y la
+    // escritura).
+    if (error?.code === "PGRST116") throw new ErrorEsperable(UTM_NO_ENCONTRADO);
+    if (error) throw rechazoAlGuardar(error);
 
     revalidatePath(paths.platform.marketing.utms);
     return rowToUTMLink(updated as Record<string, unknown>);
   });
 }
 
+/**
+ * Borra un UTM de la organización. Si el id no es de la organización, no se
+ * borra nada y vuelve el motivo (antes respondía éxito sin haber borrado).
+ */
 export async function deleteUTMLinkAction(id: string): Promise<MutationResult> {
-  return runMutation(async () => {
+  return mutacionConErroresEsperables("[deleteUTMLink]", async () => {
+    const linkId = validarId(id);
     const organizationId = await requireOrganizationId();
     const admin = createAdminClient();
 
-    const { error } = await admin
+    const { data, error } = await admin
       .from("utm_links")
       .delete()
-      .eq("id", id)
-      .eq("organization_id", organizationId);
+      .eq("id", linkId)
+      .eq("organization_id", organizationId)
+      .select("id");
 
-    if (error) throw new Error(error.message);
+    if (error) throw new FallaDeLaBase(error);
+    if (!data?.length) throw new ErrorEsperable(UTM_NO_ENCONTRADO);
     revalidatePath(paths.platform.marketing.utms);
   });
 }

@@ -13,6 +13,12 @@ import {
 } from "@/app/marketing/lead-magnets-actions";
 import { listAutomationFlowsAction } from "@/app/marketing/automations-actions";
 import { useToast } from "@/providers/toast-provider";
+import {
+  correrMutacion,
+  leerConMotivo,
+  type Aviso,
+  type Lectura,
+} from "@/lib/client/correr-accion";
 import { brand } from "@/lib/brand";
 import { canalesDeLeadMagnetVisibles } from "@/lib/marketing/lead-magnet-canales";
 
@@ -36,6 +42,51 @@ const ALL_CHANNELS: { value: LeadMagnetChannel; label: string; description: stri
 const CHANNELS = canalesDeLeadMagnetVisibles(ALL_CHANNELS);
 const DEFAULT_CHANNEL: LeadMagnetChannel = CHANNELS[0]?.value ?? "manual";
 
+/**
+ * Los flujos de ManyChat para elegir o el motivo para el usuario (SCRUM-520).
+ * Antes un error se tragaba y el selector decía "Sin flujos disponibles".
+ */
+export async function cargarFlujosDeManyChat(): Promise<Lectura<{ id: string; name: string }[]>> {
+  const lectura = await leerConMotivo(listAutomationFlowsAction, "[LeadMagnetFormModal] flujos");
+  if (!lectura.ok) return lectura;
+  return { ok: true, data: lectura.data.flows.map((flow) => ({ id: flow.id, name: flow.name })) };
+}
+
+/**
+ * Crea el lead magnet y recarga la lista para tener el objeto completo, como
+ * antes. Devuelve si se creó y el lead magnet recargado (`null` si la recarga
+ * falló o no lo trajo). Cada error se avisa con su motivo, o con el texto fijo
+ * si la acción lanzó (SCRUM-520).
+ */
+export async function crearLeadMagnet(
+  input: CreateLeadMagnetInput,
+  avisar: (aviso: Aviso) => void
+): Promise<{ creado: boolean; leadMagnet: LeadMagnet | null }> {
+  let creado = false;
+  await correrMutacion({
+    accion: () => createLeadMagnetAction(input),
+    alExito: () => {
+      creado = true;
+    },
+    avisar,
+    tituloError: "Error al crear LM",
+    etiqueta: "[LeadMagnetFormModal] crear",
+  });
+  if (!creado) return { creado, leadMagnet: null };
+
+  let leadMagnet: LeadMagnet | null = null;
+  await correrMutacion({
+    accion: getLeadMagnetsAction,
+    alExito: (todos) => {
+      leadMagnet = todos[0] ?? null; // el más reciente
+    },
+    avisar,
+    tituloError: "El Lead Magnet se creó, pero no se pudo recargar la lista",
+    etiqueta: "[LeadMagnetFormModal] recargar",
+  });
+  return { creado, leadMagnet };
+}
+
 export function LeadMagnetFormModal({
   open,
   onOpenChange,
@@ -57,15 +108,16 @@ export function LeadMagnetFormModal({
   const [flows, setFlows] = useState<{ id: string; name: string }[]>([]);
   const [loadingFlows, setLoadingFlows] = useState(false);
   const [flowsLoaded, setFlowsLoaded] = useState(false);
+  const [motivoDeFlujos, setMotivoDeFlujos] = useState<string | null>(null);
 
   async function loadFlows() {
     if (flowsLoaded) return;
     setLoadingFlows(true);
+    setMotivoDeFlujos(null);
     try {
-      const { flows: f } = await listAutomationFlowsAction();
-      setFlows(f.map((flow) => ({ id: flow.id, name: flow.name })));
-    } catch {
-      // silencioso
+      const lectura = await cargarFlujosDeManyChat();
+      if (lectura.ok) setFlows(lectura.data);
+      else setMotivoDeFlujos(lectura.motivo);
     } finally {
       setLoadingFlows(false);
       setFlowsLoaded(true);
@@ -90,36 +142,31 @@ export function LeadMagnetFormModal({
     if (!name.trim()) return;
 
     startCreate(async () => {
-      try {
-        const input: CreateLeadMagnetInput = {
-          name: name.trim(),
-          description: description.trim() || undefined,
-          type,
-          channel,
-          assetUrl: assetUrl.trim() || undefined,
-          manychatFlowId: channel === "manychat" ? manychatFlowId || undefined : undefined,
-          manychatFlowName: channel === "manychat" ? manychatFlowName || undefined : undefined,
-        };
-        await createLeadMagnetAction(input);
-        // Recargar para obtener el objeto completo con ID
-        const all = await getLeadMagnetsAction();
-        const newLm = all[0]; // el más reciente
-        if (newLm) {
-          onCreated(newLm);
-          push({ title: "Lead Magnet creado", variant: "success" });
-        }
-        // Reset
-        setName("");
-        setDescription("");
-        setType("documento");
-        setChannel(DEFAULT_CHANNEL);
-        setAssetUrl("");
-        setManychatFlowId("");
-        setManychatFlowName("");
-        setFlowsLoaded(false);
-      } catch (err) {
-        push({ title: err instanceof Error ? err.message : "Error al crear LM" });
+      const input: CreateLeadMagnetInput = {
+        name: name.trim(),
+        description: description.trim() || undefined,
+        type,
+        channel,
+        assetUrl: assetUrl.trim() || undefined,
+        manychatFlowId: channel === "manychat" ? manychatFlowId || undefined : undefined,
+        manychatFlowName: channel === "manychat" ? manychatFlowName || undefined : undefined,
+      };
+      // Recargar para obtener el objeto completo con ID
+      const { creado, leadMagnet: newLm } = await crearLeadMagnet(input, push);
+      if (!creado) return;
+      if (newLm) {
+        onCreated(newLm);
+        push({ title: "Lead Magnet creado", variant: "success" });
       }
+      // Reset
+      setName("");
+      setDescription("");
+      setType("documento");
+      setChannel(DEFAULT_CHANNEL);
+      setAssetUrl("");
+      setManychatFlowId("");
+      setManychatFlowName("");
+      setFlowsLoaded(false);
     });
   }
 
@@ -236,6 +283,10 @@ export function LeadMagnetFormModal({
                   </label>
                   {loadingFlows ? (
                     <p className="text-xs text-muted-foreground">Cargando flujos...</p>
+                  ) : motivoDeFlujos ? (
+                    <p className="text-xs text-muted-foreground">
+                      No se pudieron cargar los flujos: {motivoDeFlujos}
+                    </p>
                   ) : flows.length > 0 ? (
                     <select
                       value={manychatFlowId}

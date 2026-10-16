@@ -239,8 +239,9 @@ export type MarketingOverviewContext = {
 
 /**
  * El resumen de Marketing (escondido para el release, SCRUM-490). Si falla la
- * lectura del contenido, de la audiencia o de los turnos, el resumen entero
- * vuelve con el texto fijo: antes mostraba ceros como si fueran datos.
+ * lectura del contenido, de la audiencia, de los turnos o de los UTMs
+ * (SCRUM-520), el resumen entero vuelve con el texto fijo: antes mostraba
+ * ceros como si fueran datos.
  */
 export async function getMarketingOverviewContextAction(): Promise<
   MutationResult<MarketingOverviewContext>
@@ -268,7 +269,13 @@ export async function getMarketingOverviewContextAction(): Promise<
           return count ?? 0;
         }),
       leerActivosDeContenido(organizationId),
-      getUTMLinksAction(),
+      // El motivo ya viene para el usuario (y si fue una falla, ya quedó
+      // registrada con la etiqueta de `getUTMLinks`): pasa tal cual. Antes una
+      // falla de los UTMs sumaba ceros (SCRUM-520).
+      getUTMLinksAction().then((links) => {
+        if (!links.success) throw new ErrorEsperable(links.error);
+        return links.data;
+      }),
       getSocialAudienceStats(organizationId),
     ]);
 

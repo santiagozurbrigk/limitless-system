@@ -10,7 +10,48 @@ import {
 } from "@/app/marketing/utm-actions";
 import type { UTMFunnelData, UTMLinkRow } from "@/types/utm";
 import { UTM_CONTENT_OPTIONS } from "@/types/utm";
+import {
+  correrMutacion,
+  leerConMotivo,
+  type Aviso,
+  type Lectura,
+} from "@/lib/client/correr-accion";
+import { useToast } from "@/providers/toast-provider";
 import { UTMLeadsSheet } from "./utm-leads-sheet";
+
+/**
+ * El funnel de un UTM o el motivo para el usuario (SCRUM-520). Antes, si la
+ * acción fallaba, el panel mostraba el funnel vacío como si no hubiera leads.
+ */
+export function cargarFunnelDelUtm(linkId: string): Promise<Lectura<UTMFunnelData>> {
+  return leerConMotivo(() => getUTMFunnelAction(linkId), "[UTMTable] funnel");
+}
+
+/** Guarda la edición; el motivo, si lo hay, va al formulario (SCRUM-520). */
+export function guardarEdicionDeUtm(
+  linkId: string,
+  datos: Parameters<typeof updateUTMLinkAction>[1]
+): Promise<Lectura<UTMLinkRow>> {
+  return leerConMotivo(() => updateUTMLinkAction(linkId, datos), "[UTMTable] editar UTM");
+}
+
+/**
+ * Borra el UTM y, con éxito, llama a `alExito`. Antes un error se ignoraba:
+ * el link seguía en la tabla sin ningún aviso (SCRUM-520).
+ */
+export function eliminarUtm(
+  linkId: string,
+  avisar: (aviso: Aviso) => void,
+  alExito: () => void
+): Promise<void> {
+  return correrMutacion({
+    accion: () => deleteUTMLinkAction(linkId),
+    alExito,
+    avisar,
+    tituloError: "No se pudo eliminar el UTM",
+    etiqueta: "[UTMTable] eliminar UTM",
+  });
+}
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat("es-AR", {
@@ -23,14 +64,19 @@ function formatMoney(value: number): string {
 export function UTMTable({
   links,
   onLinksChange,
+  motivoDeCarga = null,
 }: {
   links: UTMLinkRow[];
   onLinksChange?: (links: UTMLinkRow[]) => void;
+  /** Si la lectura de los links falló, su motivo (SCRUM-520). */
+  motivoDeCarga?: string | null;
 }) {
+  const { push } = useToast();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeLink, setActiveLink] = useState<UTMLinkRow | null>(null);
   const [funnel, setFunnel] = useState<UTMFunnelData | null>(null);
+  const [motivoDelFunnel, setMotivoDelFunnel] = useState<string | null>(null);
   const [loadingLeads, startLoadLeads] = useTransition();
   const [editingLink, setEditingLink] = useState<UTMLinkRow | null>(null);
   const [editCampaign, setEditCampaign] = useState("");
@@ -48,11 +94,14 @@ export function UTMTable({
     setActiveLink(link);
     setSheetOpen(true);
     setFunnel(null);
+    setMotivoDelFunnel(null);
 
     startLoadLeads(async () => {
-      const result = await getUTMFunnelAction(link.id);
-      if (result.success) {
+      const result = await cargarFunnelDelUtm(link.id);
+      if (result.ok) {
         setFunnel(result.data);
+      } else {
+        setMotivoDelFunnel(result.motivo);
       }
     });
   }
@@ -68,12 +117,12 @@ export function UTMTable({
     if (!editingLink) return;
     setEditError(null);
     startTransition(async () => {
-      const res = await updateUTMLinkAction(editingLink.id, {
+      const res = await guardarEdicionDeUtm(editingLink.id, {
         utm_campaign: editCampaign,
         utm_content: editContent || undefined,
       });
-      if (!res.success) {
-        setEditError(res.error);
+      if (!res.ok) {
+        setEditError(res.motivo);
         return;
       }
       const updated = res.data;
@@ -93,12 +142,22 @@ export function UTMTable({
       return;
     }
     startTransition(async () => {
-      const res = await deleteUTMLinkAction(link.id);
-      if (res.success) {
+      await eliminarUtm(link.id, push, () => {
         onLinksChange?.(links.filter((l) => l.id !== link.id));
-      }
+      });
     });
   }
+
+  const avisoDeCarga = motivoDeCarga ? (
+    <div className="rounded-xl border border-amber-500/20 bg-amber-900/10 px-4 py-3 text-sm">
+      <p className="font-medium text-amber-600 dark:text-amber-400">
+        No se pudieron cargar los UTMs
+      </p>
+      <p className="mt-1 text-muted-foreground">{motivoDeCarga}</p>
+    </div>
+  ) : null;
+
+  if (links.length === 0 && avisoDeCarga) return avisoDeCarga;
 
   if (links.length === 0) {
     return (
@@ -110,6 +169,7 @@ export function UTMTable({
 
   return (
     <>
+      {avisoDeCarga}
       <div className="overflow-hidden rounded-xl border border-border/60 dark:border-glass">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px] text-sm">
@@ -295,6 +355,7 @@ export function UTMTable({
         onOpenChange={setSheetOpen}
         link={activeLink}
         funnel={funnel}
+        motivo={motivoDelFunnel}
         loading={loadingLeads}
       />
     </>

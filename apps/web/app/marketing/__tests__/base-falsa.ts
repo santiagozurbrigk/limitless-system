@@ -185,6 +185,12 @@ function clienteFalso() {
           filtros.push((f) => f[columna] === valor);
           return builder;
         },
+        neq(columna: string, valor: unknown) {
+          // SCRUM-520: los lead magnets se leen sin los archivados.
+          operacion.filtros.push([`neq:${columna}`, valor]);
+          filtros.push((f) => f[columna] !== valor);
+          return builder;
+        },
         is(columna: string, valor: unknown) {
           operacion.filtros.push([`is:${columna}`, valor]);
           filtros.push((f) => (f[columna] ?? null) === valor);

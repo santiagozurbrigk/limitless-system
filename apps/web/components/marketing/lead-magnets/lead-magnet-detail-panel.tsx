@@ -20,6 +20,67 @@ import {
 } from "@/app/marketing/lead-magnets-actions";
 import { useToast } from "@/providers/toast-provider";
 import { formatRelativeTime } from "@/lib/format";
+import {
+  correrMutacion,
+  leerConMotivo,
+  type Aviso,
+  type Lectura,
+} from "@/lib/client/correr-accion";
+
+/**
+ * Los leads del lead magnet o el motivo para el usuario (SCRUM-520). Antes una
+ * falla de la base llegaba como lista vacía: "Todavía no hay leads registrados".
+ */
+export function cargarLeadsDelLeadMagnet(leadMagnetId: string): Promise<Lectura<LeadMagnetLead[]>> {
+  return leerConMotivo(() => getLeadMagnetLeadsAction(leadMagnetId), "[LeadMagnetDetailPanel] leads");
+}
+
+/**
+ * Pausa o activa el lead magnet. Con éxito avisa y llama a `alExito`; con un
+ * error avisa el motivo (antes la acción lanzaba y en producción el aviso era
+ * el párrafo técnico de Next).
+ */
+export function cambiarEstadoDelLeadMagnet(
+  leadMagnetId: string,
+  estado: "active" | "paused",
+  avisar: (aviso: Aviso) => void,
+  alExito: () => void
+): Promise<void> {
+  return correrMutacion({
+    accion: () => updateLeadMagnetAction(leadMagnetId, { status: estado }),
+    alExito: () => {
+      avisar({
+        title: estado === "paused" ? "Lead Magnet pausado" : "Lead Magnet activado",
+        variant: "success",
+      });
+      alExito();
+    },
+    avisar,
+    tituloError: "Error",
+    etiqueta: "[LeadMagnetDetailPanel] pausar o activar",
+  });
+}
+
+/**
+ * Archiva el lead magnet. Antes la acción no miraba el resultado y la pantalla
+ * decía "Lead Magnet eliminado" aunque no se hubiera archivado (SCRUM-520).
+ */
+export function eliminarLeadMagnet(
+  leadMagnetId: string,
+  avisar: (aviso: Aviso) => void,
+  alExito: () => void
+): Promise<void> {
+  return correrMutacion({
+    accion: () => deleteLeadMagnetAction(leadMagnetId),
+    alExito: () => {
+      avisar({ title: "Lead Magnet eliminado", variant: "success" });
+      alExito();
+    },
+    avisar,
+    tituloError: "Error al eliminar",
+    etiqueta: "[LeadMagnetDetailPanel] eliminar",
+  });
+}
 
 function LeadRow({ lead }: { lead: LeadMagnetLead }) {
   return (
@@ -68,42 +129,34 @@ export function LeadMagnetDetailPanel({
 }) {
   const { push } = useToast();
   const [leads, setLeads] = useState<LeadMagnetLead[]>([]);
+  const [motivoDeLeads, setMotivoDeLeads] = useState<string | null>(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [, startAction] = useTransition();
 
   useEffect(() => {
     setLoadingLeads(true);
-    getLeadMagnetLeadsAction(leadMagnet.id)
-      .then(setLeads)
-      .catch(() => push({ title: "Error al cargar leads" }))
+    setMotivoDeLeads(null);
+    void cargarLeadsDelLeadMagnet(leadMagnet.id)
+      .then((lectura) => {
+        if (lectura.ok) setLeads(lectura.data);
+        else {
+          setLeads([]);
+          setMotivoDeLeads(lectura.motivo);
+        }
+      })
       .finally(() => setLoadingLeads(false));
-  }, [leadMagnet.id, push]);
+  }, [leadMagnet.id]);
 
   function handleTogglePause() {
     startAction(async () => {
-      try {
-        const newStatus = leadMagnet.status === "paused" ? "active" : "paused";
-        await updateLeadMagnetAction(leadMagnet.id, { status: newStatus });
-        push({
-          title: newStatus === "paused" ? "Lead Magnet pausado" : "Lead Magnet activado",
-          variant: "success",
-        });
-        onUpdated();
-      } catch (err) {
-        push({ title: err instanceof Error ? err.message : "Error" });
-      }
+      const newStatus = leadMagnet.status === "paused" ? "active" : "paused";
+      await cambiarEstadoDelLeadMagnet(leadMagnet.id, newStatus, push, onUpdated);
     });
   }
 
   function handleDelete() {
     startAction(async () => {
-      try {
-        await deleteLeadMagnetAction(leadMagnet.id);
-        push({ title: "Lead Magnet eliminado", variant: "success" });
-        onUpdated();
-      } catch (err) {
-        push({ title: err instanceof Error ? err.message : "Error al eliminar" });
-      }
+      await eliminarLeadMagnet(leadMagnet.id, push, onUpdated);
     });
   }
 
@@ -189,6 +242,11 @@ export function LeadMagnetDetailPanel({
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-10 rounded-lg bg-muted/30 animate-pulse" />
             ))}
+          </div>
+        ) : motivoDeLeads ? (
+          <div className="flex flex-col items-center gap-1 py-6 text-center">
+            <p className="text-xs font-medium text-foreground">No se pudieron cargar los leads</p>
+            <p className="text-xs text-muted-foreground">{motivoDeLeads}</p>
           </div>
         ) : leads.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">

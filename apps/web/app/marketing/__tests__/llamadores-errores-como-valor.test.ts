@@ -28,9 +28,10 @@ vi.mock("@/app/marketing/actions", () => ({
 vi.mock("@/components/marketing/marketing-overview", () => ({
   MarketingOverview: (props: unknown) => props,
 }));
+// Desde SCRUM-520 las dos lecturas devuelven `MutationResult`.
 vi.mock("@/app/marketing/utm-actions", () => ({
-  getUTMLinksAction: async () => [{ id: "link-1", utm_campaign: "lanzamiento" }],
-  getOrganizationWebsiteAction: async () => null,
+  getUTMLinksAction: async () => ({ success: true, data: [{ id: "link-1", utm_campaign: "lanzamiento" }] }),
+  getOrganizationWebsiteAction: async () => ({ success: true, data: null }),
 }));
 vi.mock("@/components/marketing/utm-page-content", () => ({
   UTMPageContent: (props: unknown) => props,

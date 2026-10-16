@@ -30,10 +30,16 @@ export default async function MarketingUTMsPage() {
           description={assets.error}
         />
       )}
+      {/* Los links y la URL del sitio también (SCRUM-520): si fallan, la tabla
+          y el generador muestran el motivo en su lugar y el resto de la
+          pantalla sigue funcionando. Antes la tabla decía "Todavía no creaste
+          UTMs" y el generador pedía configurar una URL que quizás ya estaba. */}
       <UTMPageContent
-        initialLinks={links}
+        initialLinks={links.success ? links.data : []}
+        motivoDeLinks={links.success ? null : links.error}
         youtubeVideos={assets.success ? assets.data.filter((a) => a.platform === "youtube") : []}
-        orgWebsiteUrl={orgWebsiteUrl}
+        orgWebsiteUrl={orgWebsiteUrl.success ? orgWebsiteUrl.data : null}
+        motivoDeUrlDelSitio={orgWebsiteUrl.success ? null : orgWebsiteUrl.error}
       />
     </div>
   );
