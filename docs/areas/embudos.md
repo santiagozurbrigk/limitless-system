@@ -315,7 +315,9 @@ Lo que ya hace cumplir la base:
 - Cada miembro lee sólo lo de su organización; la configuración del lanzamiento (lanzamiento,
   sesiones, campañas, productos) la escriben founder o admin.
 - Leads, registros, visitas y eventos sólo los escribe el service role (la ingesta). Los
-  eventos del lead son append-only para los usuarios.
+  eventos del lead son append-only para los usuarios, y un lanzamiento con registros,
+  visitas o eventos no se puede borrar (un borrador vacío sí). Archivar en vez de borrar
+  queda para decidir en SCRUM-522.
 - Las claves de ingesta (sólo el hash) y los crudos de la landing no los ve nadie con sesión.
 - Un reintento de la landing no duplica: `client_registration_id` es único por organización y
   la llave natural de `lead_events` también.
@@ -323,6 +325,8 @@ Lo que ya hace cumplir la base:
   compuestas con `organization_id`).
 - `launch_registrations` está en realtime y `leads` tiene índices trigram para buscar por
   nombre o email.
+- `landing_events` tiene las columnas de `lib/webhooks/reclamar.ts` (`status`,
+  `error_message`, `processed_at`), para que la ingesta reutilice ese reclamo y reproceso.
 
 Detalle de columnas y reglas: `docs/arquitectura/base-de-datos.md` § Limitless Webinars.
 Tests: `supabase/ci/tests/97_webinars_modelo_de_datos.sql`.
