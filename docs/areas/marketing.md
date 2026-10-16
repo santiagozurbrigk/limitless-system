@@ -347,10 +347,11 @@ como JSON.
   un UTM inexistente o de otra org ("UTM no encontrado."; también si desaparece entre la lectura y el update,
   `PGRST116`), un lead magnet inexistente o de otra org ("No encontramos ese lead magnet."), un nombre vacío o un
   tipo, canal o estado fuera de los enums de la base (`20260806120000_lead_magnets.sql`), y la API key de
-  ManyChat rechazada (401/403: "ManyChat rechazó la API key de tu organización. Volvé a conectarlo desde
-  Integraciones."). Lo demás (la base, la red, cualquier otra respuesta de ManyChat) va a la consola y a Sentry
-  con la etiqueta de la acción y el usuario ve el texto fijo. Editar o borrar un UTM o un lead magnet de otra
-  org ya no responde éxito sin escribir (la escritura pide las filas que tocó). Ninguna lectura esconde una
+  ManyChat rechazada (401/403: "ManyChat rechazó la API key de tu organización. Hay que volver a conectarlo.";
+  con `ESCONDIDO.integracionManyChat` en `false`, "Volvé a conectarlo desde Integraciones."). Lo demás (la base, la red, cualquier otra respuesta de ManyChat) va a la consola y a Sentry
+  con la etiqueta de la acción y el usuario ve el texto fijo. Borrar un UTM y editar o archivar un lead magnet de
+  otra org ya no responden éxito sin escribir (la escritura pide las filas que tocó; editar un UTM ajeno ya
+  respondía "UTM no encontrado."). Ninguna lectura esconde una
   falla: la URL del sitio ya no es `null`, la lista de UTMs ya no es `[]` (el resumen de Marketing tampoco suma
   ceros), crear o editar un UTM no guarda el UUID interno del video ni la URL por defecto si esas lecturas
   fallan, las métricas de los lead magnets no salen en cero, sus leads no salen vacíos y los flujos de ManyChat
@@ -361,7 +362,9 @@ como JSON.
   panel; borrar un UTM avisa si falla; `/marketing/lead-magnets` y `/marketing/automatizaciones` con un aviso;
   el detalle de un lead magnet en sus leads recientes; recargar, pausar, eliminar y crear avisan el motivo (y
   sólo dicen "Lead Magnet eliminado" o "pausado" si se guardó); el selector de flujos del formulario, con el
-  motivo (el canal ManyChat está escondido por `leadMagnetsCanalesSinCaptura`).
+  motivo (el canal ManyChat está escondido por `leadMagnetsCanalesSinCaptura`). Si `getFlows` responde con
+  error a una cuenta sin página de Facebook, hoy se registra como falla: sin confirmar
+  (`[MKT-MANYCHAT-FLUJOS-SIN-PAGINA-FB]`).
 - **Drive: qué es motivo y qué es falla.** Según la guía de errores de la API de Drive (copia en la evidencia de
   SCRUM-519, `fuentes-google/`): 401 (token vencido o revocado, ya se intentó renovar) es el motivo para
   reconectar Google; un 403 sólo es motivo para los cuatro `reason` de acceso que la guía nombra, cada uno con

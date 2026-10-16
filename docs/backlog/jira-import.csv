@@ -1890,6 +1890,23 @@ Fuente: PENDIENTES.md [UTM-PUBLICO-ORG-EN-CUERPO] · Doc del área: docs/areas/m
 *Dónde:* {{apps/web/app/marketing/actions.ts}}, {{apps/web/lib/marketing/content-attribution.ts}}, {{apps/web/lib/youtube/analytics.ts}}, {{apps/web/components/marketing/marketing-sales-connection.tsx}}.
 
 Fuente: PENDIENTES.md [MKT-LECTURAS-QUE-ESCONDEN-FALLAS] · Doc del área: docs/areas/marketing.md",MKT-LECTURAS-QUE-ESCONDEN-FALLAS,Marketing,P2,,bug
+"[MKT-MANYCHAT-FLUJOS-SIN-PAGINA-FB] Una cuenta de ManyChat sin página de Facebook podría ver ""error inesperado"" en Automatizaciones",Task,Medium,marketing,p2,sev-baja,verificacion,,,"*Tipo:* verificación
+
+*Severidad:* Baja
+
+*Estado verificado:* desde SCRUM-520, {{fetchManyChatFlows}} ({{lib/manychat/client.ts}}) lanza ante cualquier respuesta no ok o con {{status: ""error""}} de {{/fb/page/getFlows}}, y {{listAutomationFlowsAction}} la registra como falla (texto fijo y evento en Sentry) salvo un 401/403. El mismo archivo dice, en {{fetchManyChatPageInfo}}, que una cuenta sólo de Instagram o WhatsApp puede recibir un error en {{/fb/page/*}}, sin fuente. La ayuda pública de ManyChat no dice nada de ese caso y no se llamó a la API para verlo ({{limitless-auditoria/evidencia-sprint2/scrum-520/fuentes-manychat/LEEME.txt}}). ManyChat está escondido en Integraciones ({{ESCONDIDO.integracionManyChat}}), así que sólo afecta a orgs que ya lo tenían conectado. Visto en la AR pasada 1 de SCRUM-520.
+
+*Riesgo:* si ese caso existe, entonces una org con ManyChat conectado sólo a Instagram o WhatsApp ve ""Ocurrió un error inesperado"" en {{/marketing/automatizaciones}} en vez de ""No hay flujos configurados"", y cada visita manda un evento a Sentry.
+
+*Impacto:* las orgs con ManyChat conectado sin página de Facebook (hoy, escondido para conexiones nuevas); ruido en Sentry. No expone datos.
+
+*Qué hay que hacer:* ver en Sentry los eventos {{[listAutomationFlows]}} (o en la referencia de la API, {{api.manychat.com/swagger}}) qué responde {{getFlows}} a una cuenta sin página de Facebook; si es un rechazo reconocible por status o código, tratarlo como lista vacía o con un motivo claro, con test.
+
+*Criterio de aceptación:* existe una fuente guardada (evento de Sentry o doc) con la respuesta de {{getFlows}} para una cuenta sin página de Facebook, y esa respuesta no termina en el texto fijo ni en un evento de Sentry; test con esa respuesta.
+
+*Dónde:* {{apps/web/lib/manychat/client.ts}}, {{apps/web/app/marketing/automations-actions.ts}}.
+
+Fuente: PENDIENTES.md [MKT-MANYCHAT-FLUJOS-SIN-PAGINA-FB] · Doc del área: docs/areas/marketing.md",MKT-MANYCHAT-FLUJOS-SIN-PAGINA-FB,Marketing,P2,Baja,verificación
 [ZERNIO-METRICAS-429] El cron de métricas choca con el límite de pedidos de Zernio todos los días,Bug,Medium,marketing,p2,sev-media,bug,,,"*Tipo:* bug
 
 *Severidad:* Media
