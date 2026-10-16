@@ -236,6 +236,8 @@ describe("getUTMFunnelAction", () => {
       base.errores[tabla] = { message: "relation does not exist", code: "42P01" };
       await expect(getUTMFunnelAction(LINK)).resolves.toEqual({ success: false, error: TEXTO_FIJO });
       esperarFallaRegistrada("[getUTMFunnel]");
+      // Como `FallaDeLaBase`, con el código: Sentry dice qué pasó.
+      expect(base.reportes[0].error).toMatchObject({ name: "FallaDeLaBase", code: "42P01" });
     }
   );
 });
