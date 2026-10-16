@@ -25,6 +25,7 @@ const sim = vi.hoisted(() => ({
   sesion: "ok" as "ok" | "sin_sesion" | "lanza",
   lanzaEnSesion: null as unknown,
   limiteAgotado: false,
+  limiteDeSopsAgotado: false,
 }));
 
 vi.mock("@/lib/observability/reportar-falla", async () => {
@@ -63,7 +64,11 @@ vi.mock("@/lib/rate-limit", async (importOriginal) => {
   return {
     ...real,
     aiRateLimit: async () => ({ allowed: !sim.limiteAgotado, remaining: 0, resetAt: Date.now() + 30_000 }),
-    sopGenerateRateLimit: async () => ({ allowed: true, remaining: 1, resetAt: Date.now() }),
+    sopGenerateRateLimit: async () => ({
+      allowed: !sim.limiteDeSopsAgotado,
+      remaining: 0,
+      resetAt: Date.now() + 30_000,
+    }),
   };
 });
 vi.mock("@/lib/ai/credential-resolver", () => {
@@ -218,6 +223,7 @@ beforeEach(() => {
   sim.sesion = "ok";
   sim.lanzaEnSesion = null;
   sim.limiteAgotado = false;
+  sim.limiteDeSopsAgotado = false;
   // La fila ajena va primero y comparte el ID: sin el filtro de la org la toma a ella.
   base.tablas.agent_conversations = [conversacion(OTRA_ORG), conversacion(ORG)];
   base.tablas.organizations = [
@@ -304,9 +310,12 @@ describe("sendAgentMessageAction", () => {
     expect(base.reportes).toHaveLength(0);
   });
 
-  it("otro error de requireAuthContext es una falla: se registra y no se toma por sesión", async () => {
+  it.each([
+    ["un TypeError de la red", new TypeError("fetch failed")],
+    ["un Error común con otro texto", new Error("supabaseUrl is required.")],
+  ])("otro error de requireAuthContext (%s) es una falla: se registra y no se toma por sesión", async (_n, error) => {
     sim.sesion = "lanza";
-    sim.lanzaEnSesion = new TypeError("fetch failed");
+    sim.lanzaEnSesion = error;
     expect(await enviar()).toEqual({ success: false, error: AGENT_ERROR_REPLY });
     registrada(sim.lanzaEnSesion);
   });
@@ -457,6 +466,46 @@ describe("sendAgentMessageAction", () => {
       (x) => JSON.stringify(x.contexto) === JSON.stringify({ accion: "[sendAgentMessage] message_id de las propuestas" })
     );
     expect(reporte?.error).toBeInstanceOf(FallaDeLaBase);
+  });
+
+  it("⭐ el título de la primera respuesta se guarda sólo en la conversación de la organización", async () => {
+    sim.respuestas = [respuestaDeClaude("Respuesta del agente"), respuestaDeClaude("Plan de ventas")];
+    const r = await enviar();
+    expect(r.success).toBe(true);
+    expect(base.tablas.agent_conversations!.map((c) => [c.organization_id, c.title])).toEqual([
+      [OTRA_ORG, "Ajena"],
+      [ORG, "Plan de ventas"],
+    ]);
+    expect(base.filtrosDe("agent_conversations", "update", 1)).toContainEqual(["organization_id", ORG]);
+  });
+
+  describe("el SOP que pide el agente en su respuesta", () => {
+    const CON_SOP =
+      'Listo [ACTION:CREATE_SOP:{"title":"Onboarding","content":"Paso 1: dar la bienvenida.","goal":"Ordenar el ingreso"}]';
+
+    it("⭐ se crea en la organización y la respuesta lo referencia", async () => {
+      sim.respuestas = [respuestaDeClaude(CON_SOP)];
+      const r = await enviar();
+      expect(r.success).toBe(true);
+      const sop = base.escrituras().find((o) => o.tabla === "sops");
+      expect(sop?.valores).toMatchObject({ organization_id: ORG, title: "Onboarding", status: "draft" });
+      expect(r.success && r.data.messages.at(-1)?.actionType).toBe("created_sop");
+    });
+
+    it("con el límite de SOPs agotado devuelve el motivo, sin registrar una falla", async () => {
+      sim.respuestas = [respuestaDeClaude(CON_SOP)];
+      sim.limiteDeSopsAgotado = true;
+      const r = await enviar();
+      expect(!r.success && r.error).toMatch(/^Demasiadas solicitudes\./);
+      expect(base.reportes).toHaveLength(0);
+    });
+
+    it("si la base no puede guardarlo es una falla registrada (FallaDeLaBase)", async () => {
+      sim.respuestas = [respuestaDeClaude(CON_SOP)];
+      base.errores.sops = { code: "XX000", message: "boom" };
+      expect(await enviar()).toEqual({ success: false, error: AGENT_ERROR_REPLY });
+      expect(registrada()).toBeInstanceOf(FallaDeLaBase);
+    });
   });
 
   it("si no se puede actualizar la fecha de la conversación, el mensaje sale igual y la falla queda registrada", async () => {
