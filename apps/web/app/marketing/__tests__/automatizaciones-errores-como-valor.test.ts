@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const sim = vi.hoisted(() => ({
   configurado: true,
+  manychatEscondido: true,
   respuesta: null as null | (() => Promise<Response>),
   pedidos: [] as Array<{ url: string; autorizacion: string | null }>,
 }));
@@ -23,6 +24,13 @@ vi.mock("@/lib/observability/reportar-falla", async () => {
   };
 });
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => sim.configurado }));
+vi.mock("@/lib/release/escondido", () => ({
+  ESCONDIDO: {
+    get integracionManyChat() {
+      return sim.manychatEscondido;
+    },
+  },
+}));
 vi.mock("@/lib/supabase/admin", async () => {
   const { base } = await import("./base-falsa");
   return { createAdminClient: () => base.cliente() };
@@ -43,7 +51,11 @@ import { listAutomationFlowsAction } from "../automations-actions";
 import { fetchManyChatFlows, ManyChatHttpError } from "@/lib/manychat/client";
 import { base, ORG, OTRA_ORG, TEXTO_FIJO } from "./base-falsa";
 
-const SIN_ACCESO =
+// Con ManyChat escondido en Integraciones (la bandera del release), el motivo
+// no manda a esa pantalla; con la bandera apagada, sí.
+const SIN_ACCESO_ESCONDIDO =
+  "ManyChat rechazó la API key de tu organización. Hay que volver a conectarlo.";
+const SIN_ACCESO_VISIBLE =
   "ManyChat rechazó la API key de tu organización. Volvé a conectarlo desde Integraciones.";
 
 function json(status: number, cuerpo: unknown) {
@@ -55,6 +67,7 @@ let consola: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   base.reiniciar();
   sim.configurado = true;
+  sim.manychatEscondido = true;
   sim.pedidos = [];
   sim.respuesta = json(200, {
     status: "success",
@@ -122,11 +135,17 @@ describe("listAutomationFlowsAction", () => {
     expect(base.operaciones).toEqual([]);
   });
 
-  it.each([401, 403])(
-    "⭐ un %i de ManyChat (la API key ya no sirve) vuelve con el motivo, sin registrar",
-    async (status) => {
+  it.each([
+    [401, true, SIN_ACCESO_ESCONDIDO],
+    [403, true, SIN_ACCESO_ESCONDIDO],
+    [401, false, SIN_ACCESO_VISIBLE],
+    [403, false, SIN_ACCESO_VISIBLE],
+  ])(
+    "⭐ un %i de ManyChat (la API key ya no sirve) con ManyChat escondido=%s vuelve con su motivo, sin registrar",
+    async (status, escondido, motivo) => {
+      sim.manychatEscondido = escondido;
       sim.respuesta = json(status, { status: "error", message: "Wrong token" });
-      await expect(listAutomationFlowsAction()).resolves.toEqual({ success: false, error: SIN_ACCESO });
+      await expect(listAutomationFlowsAction()).resolves.toEqual({ success: false, error: motivo });
       expect(base.reportes).toEqual([]);
     }
   );

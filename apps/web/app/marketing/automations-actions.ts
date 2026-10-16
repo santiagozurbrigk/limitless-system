@@ -4,6 +4,7 @@ import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { fetchManyChatFlows, ManyChatHttpError, type ManyChatFlow } from "@/lib/manychat/client";
 import { getManyChatIntegrationForOrganization } from "@/lib/manychat/integration";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { ESCONDIDO } from "@/lib/release/escondido";
 import {
   ErrorEsperable,
   mutacionConErroresEsperables,
@@ -38,15 +39,24 @@ function manyChatFlowToAutomation(flow: ManyChatFlow): AutomationFlow {
 }
 
 /**
+ * El motivo de una API key rechazada. Mientras ManyChat esté escondido en
+ * Integraciones (`ESCONDIDO.integracionManyChat`, SCRUM-490) no se manda al
+ * usuario a una pantalla donde no la va a encontrar.
+ */
+function motivoDeApiKeyRechazada(): string {
+  return ESCONDIDO.integracionManyChat
+    ? "ManyChat rechazó la API key de tu organización. Hay que volver a conectarlo."
+    : "ManyChat rechazó la API key de tu organización. Volvé a conectarlo desde Integraciones.";
+}
+
+/**
  * Un rechazo de ManyChat con motivo claro: un 401 o 403 dice que la API key de
  * la organización ya no sirve (es lo mismo que mira `fetchManyChatPageInfo` al
  * conectar). Cualquier otra respuesta (429, 5xx, la red) es una falla.
  */
 function rechazoDeManyChat(error: unknown): unknown {
   if (error instanceof ManyChatHttpError && (error.status === 401 || error.status === 403)) {
-    return new ErrorEsperable(
-      "ManyChat rechazó la API key de tu organización. Volvé a conectarlo desde Integraciones."
-    );
+    return new ErrorEsperable(motivoDeApiKeyRechazada());
   }
   return error;
 }

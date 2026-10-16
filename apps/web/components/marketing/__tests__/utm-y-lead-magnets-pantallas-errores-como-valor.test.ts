@@ -80,7 +80,7 @@ const LINK = "44444444-4444-4444-8444-444444444444";
 const LM = "77777777-7777-4777-8777-777777777777";
 const MOTIVO = "Sesión no válida";
 const SIN_ACCESO_MANYCHAT =
-  "ManyChat rechazó la API key de tu organización. Volvé a conectarlo desde Integraciones.";
+  "ManyChat rechazó la API key de tu organización. Hay que volver a conectarlo.";
 const UN_LINK = {
   id: LINK,
   utm_campaign: "lanzamiento",
