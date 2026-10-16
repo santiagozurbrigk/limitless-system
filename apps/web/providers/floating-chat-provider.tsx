@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { sendAgentMessageAction } from "@/app/agent/actions";
+import { leerConMotivo } from "@/lib/client/correr-accion";
 import { useOptionalPageContext } from "@/providers/page-context-provider";
 
 export type AgentChatMessage = {
@@ -49,8 +50,23 @@ function newId() {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-const AGENT_ERROR_REPLY =
-  "No pudimos generar la respuesta. Intentá de nuevo en unos segundos.";
+/**
+ * Envía un mensaje al agente (SCRUM-506). La acción devuelve su error como
+ * valor: el motivo (sin clave de Claude, límite de pedidos, el texto de
+ * siempre del agente ante una falla) llega a `alFallar` para mostrarlo como
+ * respuesta. Si la acción lanza (en producción el cliente sólo recibe un
+ * digest), se registra en la consola y el motivo es el texto fijo.
+ */
+export async function enviarAlAgente(
+  input: Parameters<typeof sendAgentMessageAction>[0],
+  etiqueta: string,
+  alResponder: (conversationId: string) => void,
+  alFallar: (motivo: string) => void
+): Promise<void> {
+  const resultado = await leerConMotivo(() => sendAgentMessageAction(input), etiqueta);
+  if (resultado.ok) alResponder(resultado.data.conversationId);
+  else alFallar(resultado.motivo);
+}
 
 export function FloatingChatProvider({ children }: { children: ReactNode }) {
   const { pageContext } = useOptionalPageContext() ?? { pageContext: null };
@@ -115,11 +131,15 @@ export function FloatingChatProvider({ children }: { children: ReactNode }) {
     try {
       const lastUser = [...messages].reverse().find((m) => m.role === "user");
       if (!lastUser?.content.trim()) return;
-      await sendAgentMessageAction({ content: lastUser.content, pageContext });
-    } catch (error) {
-      console.error("[simulateReply]", error);
-      appendAssistantMessage(AGENT_ERROR_REPLY);
-      setHasNewMessage(true);
+      await enviarAlAgente(
+        { content: lastUser.content, pageContext },
+        "[simulateReply]",
+        () => {},
+        (motivo) => {
+          appendAssistantMessage(motivo);
+          setHasNewMessage(true);
+        }
+      );
     } finally {
       setIsLoading(false);
     }
@@ -141,19 +161,17 @@ export function FloatingChatProvider({ children }: { children: ReactNode }) {
       setIsMinimized(false);
       setIsExpanding(true);
       setPendingConversationId(null);
-      try {
-        const result = await sendAgentMessageAction({
-          content: trimmed,
-          pageContext,
-        });
-        setPendingConversationId(result.conversationId);
-      } catch (error) {
-        console.error("[sendFromFloating]", error);
-        setIsExpanding(false);
-        appendUserMessage(trimmed);
-        appendAssistantMessage(AGENT_ERROR_REPLY);
-        setHasNewMessage(true);
-      }
+      await enviarAlAgente(
+        { content: trimmed, pageContext },
+        "[sendFromFloating]",
+        (conversationId) => setPendingConversationId(conversationId),
+        (motivo) => {
+          setIsExpanding(false);
+          appendUserMessage(trimmed);
+          appendAssistantMessage(motivo);
+          setHasNewMessage(true);
+        }
+      );
     },
     [appendUserMessage, appendAssistantMessage, pageContext]
   );

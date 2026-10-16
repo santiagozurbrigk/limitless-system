@@ -16,12 +16,41 @@ import type { GraphProposal } from "@/types/agent";
 
 type CanvasVersion = { id: string; content: string; timestamp: string };
 
+/**
+ * Qué muestra el área del chat (SCRUM-506): si no se pudieron leer los
+ * mensajes de la conversación, el motivo, no la pantalla vacía con
+ * sugerencias como si no hubiera mensajes.
+ */
+export function queMostrarEnElChat(estado: {
+  isLoading: boolean;
+  cantidadDeMensajes: number;
+  motivoDeCarga: string | null;
+  agenteOcupado: boolean;
+}): "cargando" | "motivo" | "vacio" | "mensajes" {
+  if (estado.isLoading && estado.cantidadDeMensajes === 0) return "cargando";
+  if (estado.motivoDeCarga && estado.cantidadDeMensajes === 0) return "motivo";
+  if (!estado.isLoading && estado.cantidadDeMensajes === 0 && !estado.agenteOcupado) {
+    return "vacio";
+  }
+  return "mensajes";
+}
+
+export function MotivoDeCargaDelChat({ motivo }: { motivo: string }) {
+  return (
+    <div role="alert" className="text-sm text-muted-foreground">
+      <p className="font-medium text-foreground">No se pudo cargar la conversación</p>
+      <p>{motivo}</p>
+    </div>
+  );
+}
+
 export function AgentModule() {
   const {
     conversationId,
     filterStageId,
     workspace,
     messages,
+    motivoDeCarga,
     streamingMessageId,
     streamingDisplayedText,
     activeToolName,
@@ -102,8 +131,12 @@ export function AgentModule() {
     ? `Preguntale sobre "${currentStage.name}"...`
     : "Preguntale algo a tu agente...";
 
-  const showEmptyState =
-    !isLoading && messages.length === 0 && !isAgentBusy(agentStatus);
+  const contenidoDelChat = queMostrarEnElChat({
+    isLoading,
+    cantidadDeMensajes: messages.length,
+    motivoDeCarga,
+    agenteOcupado: isAgentBusy(agentStatus),
+  });
 
   const inputDisabled = isAgentBusy(agentStatus);
 
@@ -135,9 +168,11 @@ export function AgentModule() {
         </div>
 
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto bg-transparent px-6 py-4">
-          {isLoading && messages.length === 0 ? (
+          {contenidoDelChat === "cargando" ? (
             <p className="text-sm text-muted-foreground">Cargando…</p>
-          ) : showEmptyState ? (
+          ) : contenidoDelChat === "motivo" && motivoDeCarga ? (
+            <MotivoDeCargaDelChat motivo={motivoDeCarga} />
+          ) : contenidoDelChat === "vacio" ? (
             <AgentEmptyState onSuggestion={setInputValue} />
           ) : (
             messages.map((msg) => (

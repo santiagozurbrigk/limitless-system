@@ -228,9 +228,11 @@ export async function streamAgentMessage(
   let conversationId = input.conversationId ?? null;
 
   if (!conversationId) {
+    // Las acciones devuelven su error como valor (SCRUM-506); la ruta SSE
+    // manda el mensaje en el evento `error`, como antes.
     const created = await createAgentConversationAction();
-    if (!created) throw new Error("No se pudo crear la conversación");
-    conversationId = created.id;
+    if (!created.success) throw new Error(created.error);
+    conversationId = created.data.id;
   }
 
   const { data: convRow, error: convError } = await supabase
@@ -264,7 +266,9 @@ export async function streamAgentMessage(
     .update({ updated_at: new Date().toISOString() })
     .eq("id", conversationId);
 
-  const history = await listAgentMessagesAction(conversationId);
+  const lecturaDelHistorial = await listAgentMessagesAction(conversationId);
+  if (!lecturaDelHistorial.success) throw new Error(lecturaDelHistorial.error);
+  const history = lecturaDelHistorial.data;
   const recentOrg = await getRecentOrgMessages(
     supabase,
     organizationId,

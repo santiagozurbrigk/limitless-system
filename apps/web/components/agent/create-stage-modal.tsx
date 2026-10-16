@@ -19,7 +19,8 @@ export function CreateStageModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (input: { name: string; description?: string }) => Promise<void>;
+  /** `true` si la etapa se creó; si no, quien la llama ya avisó el motivo. */
+  onSubmit: (input: { name: string; description?: string }) => Promise<boolean>;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -29,7 +30,8 @@ export function CreateStageModal({
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await onSubmit({ name, description });
+      // Con un error el modal queda abierto con lo escrito (SCRUM-506).
+      if (!(await onSubmit({ name, description }))) return;
       setName("");
       setDescription("");
       onOpenChange(false);
