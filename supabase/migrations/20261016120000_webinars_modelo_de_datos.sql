@@ -37,8 +37,9 @@
 --     campañas y productos (configuración) se van en cascada. Borrar la
 --     organización entera sigue borrando todo: NO ACTION se chequea al final
 --     de la sentencia, cuando las filas hijas ya se fueron por su propia FK a
---     organizations. No es RESTRICT a propósito (RESTRICT se chequea en el
---     momento y traba esa cascada). A confirmar en SCRUM-522 si en vez de
+--     organizations. Se usa NO ACTION porque es el default de Postgres;
+--     RESTRICT se comportaría igual en este caso (probado: con RESTRICT borrar
+--     la organización también funciona). A confirmar en SCRUM-522 si en vez de
 --     borrar se quiere archivar.
 --   - Las FK hacia leads quedan en cascada: ningún usuario borra leads (no
 --     tienen grant de DELETE); sólo el service role, por ejemplo para un
