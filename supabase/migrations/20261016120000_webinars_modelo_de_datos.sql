@@ -30,6 +30,19 @@
 --   - lead_events es append-only para los usuarios: authenticated no tiene
 --     UPDATE ni DELETE (ni policy ni grant). El estado actual de venta va a ser
 --     una proyección aparte (lead_sales_state, Fase 3).
+--   - Ningún DELETE de un usuario se lleva historial: las FK de
+--     launch_registrations, landing_visits y lead_events hacia el lanzamiento
+--     son NO ACTION (sin `on delete`). Un lanzamiento con registros, visitas o
+--     eventos no se puede borrar (23503); un borrador vacío sí, y sus sesiones,
+--     campañas y productos (configuración) se van en cascada. Borrar la
+--     organización entera sigue borrando todo: NO ACTION se chequea al final
+--     de la sentencia, cuando las filas hijas ya se fueron por su propia FK a
+--     organizations. No es RESTRICT a propósito (RESTRICT se chequea en el
+--     momento y traba esa cascada). A confirmar en SCRUM-522 si en vez de
+--     borrar se quiere archivar.
+--   - Las FK hacia leads quedan en cascada: ningún usuario borra leads (no
+--     tienen grant de DELETE); sólo el service role, por ejemplo para un
+--     pedido de borrado de datos personales.
 --   - RLS en todas: lectura para los miembros de la organización
 --     (get_my_organization_id()), salvo ingest_keys y landing_events, que no
 --     tienen policies. La escritura de la configuración del lanzamiento es de
@@ -53,9 +66,10 @@ create table if not exists public.webinar_launches (
   currency text not null check (currency ~ '^[A-Z]{3}$'),
   capture_starts_on date,
   closes_on date,
-  -- Metas opcionales: sin meta no hay "porcentaje de la meta" (nunca cero).
-  goal_sales integer check (goal_sales >= 0),
-  goal_revenue numeric(14, 2) check (goal_revenue >= 0),
+  -- Metas opcionales: sin meta es null, nunca cero (el porcentaje de la meta
+  -- divide por ella).
+  goal_sales integer check (goal_sales > 0),
+  goal_revenue numeric(14, 2) check (goal_revenue > 0),
   status text not null default 'draft' check (status in ('draft', 'active', 'closed')),
   public_id text not null default replace(gen_random_uuid()::text, '-', '')
     check (public_id ~ '^[0-9a-f]{32}$'),
@@ -157,6 +171,11 @@ create index if not exists leads_email_normalized_trgm
 -- ─── 6. landing_events (crudo) ───────────────────────────────────────────────
 -- Todo lo que manda la landing se guarda tal cual antes de normalizarlo; si la
 -- normalización falla, queda con su estado y se reprocesa.
+-- Columnas del patrón de reclamo y reproceso de lib/webhooks/reclamar.ts y
+-- reprocesar.ts (las mismas que payment_webhook_events y ghl_webhook_events):
+-- status, error_message, processed_at (marca del reclamo y del cierre) y
+-- received_at. Los requerimientos la llamaban `error`; va `error_message` para
+-- reutilizar ese patrón tal cual.
 create table if not exists public.landing_events (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -164,7 +183,8 @@ create table if not exists public.landing_events (
   payload jsonb not null,
   received_at timestamptz not null default now(),
   status text not null default 'pending' check (status in ('pending', 'processed', 'unmapped', 'error')),
-  error text,
+  error_message text,
+  processed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint landing_events_id_org_key unique (id, organization_id)
@@ -194,8 +214,9 @@ create table if not exists public.launch_registrations (
   raw_event_id uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  -- NO ACTION: un lanzamiento con registros no se borra.
   constraint launch_registrations_launch_fkey foreign key (launch_id, organization_id)
-    references public.webinar_launches (id, organization_id) on delete cascade,
+    references public.webinar_launches (id, organization_id),
   constraint launch_registrations_lead_fkey foreign key (lead_id, organization_id)
     references public.leads (id, organization_id) on delete cascade,
   -- Si se borra el crudo, el registro queda (sólo se limpia raw_event_id).
@@ -222,8 +243,9 @@ create table if not exists public.landing_visits (
   visitor_id text not null check (char_length(btrim(visitor_id)) between 1 and 200),
   day date not null,
   created_at timestamptz not null default now(),
+  -- NO ACTION: un lanzamiento con visitas no se borra.
   constraint landing_visits_launch_fkey foreign key (launch_id, organization_id)
-    references public.webinar_launches (id, organization_id) on delete cascade,
+    references public.webinar_launches (id, organization_id),
   constraint landing_visits_launch_visitor_day_key unique (launch_id, visitor_id, day)
 );
 
@@ -244,15 +266,16 @@ create table if not exists public.lead_events (
     'purchased', 'refunded', 'note'
   )),
   occurred_at timestamptz not null,
-  source text not null check (source in ('landing', 'zoom', 'ghl', 'calendly', 'whop', 'commas', 'manual')),
+  source text not null check (source in ('landing', 'zoom', 'ghl', 'calendly', 'whop', 'fanbasis', 'commas', 'manual')),
   source_ref text not null check (char_length(btrim(source_ref)) between 1 and 200),
   actor_user_id uuid references auth.users(id) on delete set null,
   data jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   constraint lead_events_lead_fkey foreign key (lead_id, organization_id)
     references public.leads (id, organization_id) on delete cascade,
+  -- NO ACTION: un lanzamiento con eventos no se borra.
   constraint lead_events_launch_fkey foreign key (launch_id, organization_id)
-    references public.webinar_launches (id, organization_id) on delete cascade,
+    references public.webinar_launches (id, organization_id),
   -- Llave natural: un reintento del mismo evento externo no lo duplica.
   constraint lead_events_org_source_ref_kind_key unique (organization_id, source, source_ref, kind)
 );

@@ -4,7 +4,11 @@
 -- no los escribe ningún usuario (la ingesta usa el service role); las claves de
 -- ingesta y los crudos de la landing no los ve nadie con sesión. Ninguna fila
 -- hija apunta a un lanzamiento o lead de otra organización, ni siquiera con el
--- service role. lead_events es append-only para los usuarios.
+-- service role. lead_events es append-only para los usuarios y un lanzamiento
+-- con registros, visitas o eventos no se puede borrar (un borrador vacío sí;
+-- borrar la organización borra todo). Las policies de escritura filtran por
+-- organización aun sin WHERE, y valen para el founder de un holding que opera
+-- uno de sus negocios.
 -- Migración: 20261016120000_webinars_modelo_de_datos.
 
 begin;
@@ -12,7 +16,7 @@ begin;
 -- ─── Datos ───────────────────────────────────────────────────────────────────
 -- Org A: founder (FA), admin (AA), member (MA). Org B: founder (FB).
 -- Una fila de cada tabla en cada org (cargadas sin RLS, como la ingesta), más
--- un lead de A sin registro.
+-- un lead de A sin registro y un borrador vacío de A.
 insert into auth.users (id, email) values
   ('97000000-0000-0000-0000-0000000000fa', 'fa@test'),
   ('97000000-0000-0000-0000-0000000000aa', 'aa@test'),
@@ -29,6 +33,9 @@ insert into public.profiles (id, email, organization_id, role, full_name, is_act
 
 insert into public.webinar_launches (id, organization_id, name, variant, currency, status) values
   ('97000000-0000-0000-0000-00000000a001', '97000000-0000-0000-0000-000000000a00', 'Lanzamiento A', 'paid', 'USD', 'active'),
+  -- Borrador vacío: lo que un member intenta borrar (uno con datos no se puede
+  -- borrar por la FK, y el control dejaría de mirar la policy).
+  ('97000000-0000-0000-0000-00000000a002', '97000000-0000-0000-0000-000000000a00', 'Borrador A', 'paid', 'USD', 'draft'),
   ('97000000-0000-0000-0000-00000000b001', '97000000-0000-0000-0000-000000000b00', 'Lanzamiento B', 'organic', 'USD', 'active');
 insert into public.webinar_sessions (organization_id, launch_id, starts_at) values
   ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', now() + interval '7 days'),
@@ -65,7 +72,7 @@ insert into public.ingest_keys (organization_id, key_hash, label) values
 select ci.jwt('97000000-0000-0000-0000-0000000000ba');
 set local role authenticated;
 
-select ci.espera((select count(*) from public.webinar_launches), 1, 'un member lee sólo los lanzamientos de su org');
+select ci.espera((select count(*) from public.webinar_launches), 2, 'un member lee sólo los lanzamientos de su org');
 select ci.espera((select count(*) from public.webinar_sessions), 1, 'un member lee sólo las sesiones de su org');
 select ci.espera((select count(*) from public.launch_ad_campaigns), 1, 'un member lee sólo las campañas de su org');
 select ci.espera((select count(*) from public.launch_products), 1, 'un member lee sólo los productos de su org');
@@ -82,7 +89,7 @@ select ci.rechazado(
   'que un member cree un lanzamiento');
 select ci.espera(ci.filas($$update public.webinar_launches set name = 'hack' where id = '97000000-0000-0000-0000-00000000a001'$$),
   0, 'un member no cambia un lanzamiento');
-select ci.espera(ci.filas($$delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a001'$$),
+select ci.espera(ci.filas($$delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a002'$$),
   0, 'un member no borra un lanzamiento');
 select ci.rechazado(
   $$insert into public.webinar_sessions (organization_id, launch_id, starts_at) values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', now())$$,
@@ -136,6 +143,62 @@ select ci.espera(ci.filas($$update public.webinar_launches set name = 'hack' whe
 select ci.espera(ci.filas($$delete from public.webinar_sessions where organization_id = '97000000-0000-0000-0000-000000000b00'$$),
   0, 'el founder no borra sesiones de otra org');
 
+-- Insertar configuración en otra org, colgada de un lanzamiento de esa org (la
+-- FK compuesta no lo impide: lo impide la policy).
+select ci.rechazado(
+  $$insert into public.webinar_sessions (organization_id, launch_id, starts_at) values ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', now())$$,
+  'que el founder cree una sesión en otra org');
+select ci.rechazado(
+  $$insert into public.launch_ad_campaigns (organization_id, launch_id, platform, campaign_external_id) values ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', 'meta', 'camp-en-b')$$,
+  'que el founder asocie una campaña en otra org');
+select ci.rechazado(
+  $$insert into public.launch_products (organization_id, launch_id, provider, product_external_id, role) values ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', 'whop', 'prod-en-b', 'vip')$$,
+  'que el founder asocie un producto en otra org');
+
+-- UPDATE y DELETE sin WHERE: sólo miran la policy de escritura (con WHERE,
+-- Postgres aplica también la de lectura y eso tapaba una policy de escritura
+-- sin filtro de org). Tocan exactamente las filas de A: 2 lanzamientos (el de
+-- los datos y el borrador) y 2 sesiones, campañas y productos (la de los datos
+-- y la que creó el founder).
+-- Todo en un savepoint que se deshace.
+savepoint sin_where;
+select ci.espera(ci.filas($$update public.webinar_launches set name = 'pisado'$$),
+  2, 'el founder actualiza sin WHERE sólo los lanzamientos de su org');
+select ci.espera(ci.filas($$update public.webinar_sessions set zoom_webinar_id = 'pisado'$$),
+  2, 'el founder actualiza sin WHERE sólo las sesiones de su org');
+select ci.espera(ci.filas($$update public.launch_ad_campaigns set platform = 'pisado'$$),
+  2, 'el founder actualiza sin WHERE sólo las campañas de su org');
+select ci.espera(ci.filas($$update public.launch_products set provider = 'pisado'$$),
+  2, 'el founder actualiza sin WHERE sólo los productos de su org');
+select ci.espera(ci.filas($$delete from public.webinar_sessions$$),
+  2, 'el founder borra sin WHERE sólo las sesiones de su org');
+select ci.espera(ci.filas($$delete from public.launch_ad_campaigns$$),
+  2, 'el founder borra sin WHERE sólo las campañas de su org');
+select ci.espera(ci.filas($$delete from public.launch_products$$),
+  2, 'el founder borra sin WHERE sólo los productos de su org');
+reset role;
+-- Sin registros, visitas ni eventos (en ninguna org), los lanzamientos se
+-- pueden borrar: así un DELETE sin filtro de org llegaría también al de B.
+delete from public.launch_registrations;
+delete from public.landing_visits;
+delete from public.lead_events;
+set local role authenticated;
+select ci.espera(ci.filas($$delete from public.webinar_launches$$),
+  2, 'el founder borra sin WHERE sólo los lanzamientos de su org');
+reset role;
+-- Lo de B quedó igual (visto sin RLS).
+select ci.espera((select count(*) from public.webinar_launches where organization_id = '97000000-0000-0000-0000-000000000b00' and name = 'Lanzamiento B'),
+  1, 'el lanzamiento de B sigue igual después de la escritura sin WHERE de A');
+select ci.espera((select count(*) from public.webinar_sessions where organization_id = '97000000-0000-0000-0000-000000000b00' and zoom_webinar_id is null),
+  1, 'la sesión de B sigue igual después de la escritura sin WHERE de A');
+select ci.espera((select count(*) from public.launch_ad_campaigns where organization_id = '97000000-0000-0000-0000-000000000b00' and platform = 'meta'),
+  1, 'la campaña de B sigue igual después de la escritura sin WHERE de A');
+select ci.espera((select count(*) from public.launch_products where organization_id = '97000000-0000-0000-0000-000000000b00' and provider = 'whop'),
+  1, 'el producto de B sigue igual después de la escritura sin WHERE de A');
+rollback to savepoint sin_where;
+select ci.jwt('97000000-0000-0000-0000-0000000000fa');
+set local role authenticated;
+
 -- Una sesión de su org colgada de un lanzamiento de otra org: la RLS la deja
 -- pasar (la fila es de A); la FK compuesta no.
 do $$
@@ -181,12 +244,54 @@ select ci.rechazado($$select * from public.landing_events$$, 'que el founder lea
 
 reset role;
 
--- ─── Admin de A: también configura ───────────────────────────────────────────
+-- ─── Admin de A: configura, pero no borra historial ──────────────────────────
+-- Un lanzamiento con sólo registros, otro con sólo visitas y otro con sólo
+-- eventos (cada FK se prueba sola), y un borrador vacío.
+insert into public.webinar_launches (id, organization_id, name, variant, currency) values
+  ('97000000-0000-0000-0000-00000000a011', '97000000-0000-0000-0000-000000000a00', 'Con registros', 'paid', 'USD'),
+  ('97000000-0000-0000-0000-00000000a012', '97000000-0000-0000-0000-000000000a00', 'Con visitas', 'paid', 'USD'),
+  ('97000000-0000-0000-0000-00000000a013', '97000000-0000-0000-0000-000000000a00', 'Con eventos', 'paid', 'USD'),
+  ('97000000-0000-0000-0000-00000000a014', '97000000-0000-0000-0000-000000000a00', 'Borrador vacío', 'paid', 'USD');
+insert into public.webinar_sessions (organization_id, launch_id, starts_at) values
+  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a014', now());
+insert into public.launch_registrations (organization_id, launch_id, lead_id, client_registration_id) values
+  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a011', '97000000-0000-0000-0000-00000000a0a1', 'reg-a011');
+insert into public.landing_visits (organization_id, launch_id, visitor_id, day) values
+  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a012', 'v-a012', current_date);
+insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref) values
+  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-00000000a013', 'purchased', now(), 'whop', 'pay-a013');
+
 select ci.jwt('97000000-0000-0000-0000-0000000000aa');
 set local role authenticated;
 select ci.espera(ci.filas($$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000a00', 'Del admin', 'organic', 'EUR')$$),
   1, 'un admin crea un lanzamiento');
+do $$
+begin
+  begin
+    delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a011';
+    raise exception 'FALLA: un admin borró un lanzamiento con registros';
+  exception when foreign_key_violation then null;
+  end;
+  begin
+    delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a012';
+    raise exception 'FALLA: un admin borró un lanzamiento con visitas';
+  exception when foreign_key_violation then null;
+  end;
+  begin
+    delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a013';
+    raise exception 'FALLA: un admin borró un lanzamiento con eventos';
+  exception when foreign_key_violation then null;
+  end;
+end $$;
+select ci.espera(ci.filas($$delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a014'$$),
+  1, 'un admin borra un borrador vacío');
+select ci.espera((select count(*) from public.webinar_sessions where launch_id = '97000000-0000-0000-0000-00000000a014'),
+  0, 'las sesiones del borrador borrado se van con él');
 reset role;
+select ci.espera((select count(*) from public.launch_registrations where launch_id = '97000000-0000-0000-0000-00000000a011')
+               + (select count(*) from public.landing_visits where launch_id = '97000000-0000-0000-0000-00000000a012')
+               + (select count(*) from public.lead_events where launch_id = '97000000-0000-0000-0000-00000000a013'),
+  3, 'los registros, visitas y eventos siguen después de los intentos de borrado');
 
 -- ─── Founder de B: lee sólo lo suyo ──────────────────────────────────────────
 select ci.jwt('97000000-0000-0000-0000-0000000000fb');
@@ -429,11 +534,26 @@ begin
   end;
 end $$;
 
--- Las metas son opcionales.
+-- Las metas son opcionales, pero nunca cero (sin meta es null).
 do $$
 begin
   insert into public.webinar_launches (organization_id, name, variant, currency, goal_sales, goal_revenue)
   values ('97000000-0000-0000-0000-000000000a00', 'Sin metas', 'organic', 'USD', null, null);
+  begin
+    insert into public.webinar_launches (organization_id, name, variant, currency, goal_sales)
+    values ('97000000-0000-0000-0000-000000000a00', 'Meta cero', 'organic', 'USD', 0);
+    raise exception 'FALLA: se aceptó una meta de ventas en cero';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.webinar_launches (organization_id, name, variant, currency, goal_revenue)
+    values ('97000000-0000-0000-0000-000000000a00', 'Meta cero', 'organic', 'USD', 0);
+    raise exception 'FALLA: se aceptó una meta de facturación en cero';
+  exception when check_violation then null;
+  end;
+  -- Fanbasis es proveedor de pagos del repo (payments_whop_fanbasis).
+  insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref)
+  values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-00000000a001', 'purchased', now(), 'fanbasis', 'fb-1');
 end $$;
 
 -- ─── Catálogo: realtime, índices, RLS y grants ───────────────────────────────
@@ -450,15 +570,35 @@ begin
     raise exception 'FALLA: launch_registrations no está en la publicación supabase_realtime';
   end if;
 
-  if not exists (select 1 from pg_indexes
-                  where schemaname = 'public' and tablename = 'leads'
-                    and indexdef ilike '%using gin (name extensions.gin_trgm_ops)%') then
+  -- Por catálogo y no por el texto de pg_indexes: ese texto cambia según el
+  -- search_path (con `extensions` en el path, el opclass sale sin calificar).
+  if not exists (select 1 from pg_index i
+                   join pg_class ix on ix.oid = i.indexrelid
+                   join pg_am am on am.oid = ix.relam
+                   join pg_opclass oc on oc.oid = i.indclass[0]
+                   join pg_attribute a on a.attrelid = i.indrelid and a.attnum = i.indkey[0]
+                  where i.indrelid = 'public.leads'::regclass and i.indnatts = 1 and am.amname = 'gin'
+                    and oc.opcname = 'gin_trgm_ops' and oc.opcnamespace = 'extensions'::regnamespace
+                    and a.attname = 'name') then
     raise exception 'FALLA: falta el índice trigram sobre leads.name';
   end if;
-  if not exists (select 1 from pg_indexes
-                  where schemaname = 'public' and tablename = 'leads'
-                    and indexdef ilike '%using gin (email_normalized extensions.gin_trgm_ops)%') then
+  if not exists (select 1 from pg_index i
+                   join pg_class ix on ix.oid = i.indexrelid
+                   join pg_am am on am.oid = ix.relam
+                   join pg_opclass oc on oc.oid = i.indclass[0]
+                   join pg_attribute a on a.attrelid = i.indrelid and a.attnum = i.indkey[0]
+                  where i.indrelid = 'public.leads'::regclass and i.indnatts = 1 and am.amname = 'gin'
+                    and oc.opcname = 'gin_trgm_ops' and oc.opcnamespace = 'extensions'::regnamespace
+                    and a.attname = 'email_normalized') then
     raise exception 'FALLA: falta el índice trigram sobre leads.email_normalized';
+  end if;
+
+  -- landing_events con las columnas del patrón de lib/webhooks/reclamar.ts y
+  -- reprocesar.ts (las que usa para reclamar y cerrar un evento).
+  if (select count(*) from information_schema.columns
+       where table_schema = 'public' and table_name = 'landing_events'
+         and column_name in ('status', 'error_message', 'processed_at', 'received_at', 'payload')) <> 5 then
+    raise exception 'FALLA: landing_events no tiene las columnas de reclamar.ts (status, error_message, processed_at, received_at, payload)';
   end if;
 
   foreach v_tabla in array v_tablas loop
@@ -495,5 +635,71 @@ begin
     raise exception 'FALLA: leads, registros, visitas o eventos tienen una policy de escritura';
   end if;
 end $$;
+
+-- ─── Holding: el founder del holding operando uno de sus negocios ────────────
+-- Holding H con el negocio C; D es un negocio ajeno. FH es founder del holding
+-- y MH member del holding.
+insert into auth.users (id, email) values
+  ('97000000-0000-0000-0000-0000000000f1', 'fh@test'),
+  ('97000000-0000-0000-0000-0000000000f2', 'mh@test');
+insert into public.organizations (id, name, account_type) values
+  ('97000000-0000-0000-0000-000000000100', 'Holding H', 'holding');
+insert into public.organizations (id, name) values
+  ('97000000-0000-0000-0000-000000000c00', 'Negocio C'),
+  ('97000000-0000-0000-0000-000000000d00', 'Negocio D ajeno');
+insert into public.holding_businesses (holding_org_id, business_org_id, business_name, status) values
+  ('97000000-0000-0000-0000-000000000100', '97000000-0000-0000-0000-000000000c00', 'Negocio C', 'active');
+insert into public.profiles (id, email, organization_id, role, full_name, is_active) values
+  ('97000000-0000-0000-0000-0000000000f1', 'fh@test', '97000000-0000-0000-0000-000000000100', 'founder', 'FH', true),
+  ('97000000-0000-0000-0000-0000000000f2', 'mh@test', '97000000-0000-0000-0000-000000000100', 'member',  'MH', true);
+insert into public.webinar_launches (organization_id, name, variant, currency) values
+  ('97000000-0000-0000-0000-000000000c00', 'De C', 'paid', 'USD'),
+  ('97000000-0000-0000-0000-000000000d00', 'De D', 'paid', 'USD');
+
+select ci.jwt('97000000-0000-0000-0000-0000000000f1', '{"active_business_org_id": "97000000-0000-0000-0000-000000000c00"}');
+set local role authenticated;
+select ci.espera((select count(*) from public.webinar_launches), 1, 'el founder del holding lee sólo los lanzamientos del negocio que opera');
+select ci.espera(ci.filas($$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000c00', 'Nuevo en C', 'paid', 'USD')$$),
+  1, 'el founder del holding crea un lanzamiento en su negocio');
+select ci.espera(ci.filas($$update public.webinar_launches set name = 'C editado'$$),
+  2, 'el founder del holding edita sin WHERE sólo los lanzamientos de su negocio');
+reset role;
+
+-- Un claim hacia un negocio que no es del holding (el hook no lo emitiría): el
+-- rol no vale ahí.
+select ci.jwt('97000000-0000-0000-0000-0000000000f1', '{"active_business_org_id": "97000000-0000-0000-0000-000000000d00"}');
+set local role authenticated;
+select ci.rechazado(
+  $$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000d00', 'En D', 'paid', 'USD')$$,
+  'que el founder del holding cree un lanzamiento en un negocio ajeno');
+reset role;
+
+select ci.jwt('97000000-0000-0000-0000-0000000000f2', '{"active_business_org_id": "97000000-0000-0000-0000-000000000c00"}');
+set local role authenticated;
+select ci.espera((select count(*) from public.webinar_launches), 2, 'un member del holding lee los lanzamientos del negocio que opera');
+select ci.rechazado(
+  $$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000c00', 'De MH', 'paid', 'USD')$$,
+  'que un member del holding cree un lanzamiento');
+reset role;
+
+-- ─── Borrar la organización sigue borrando todo ──────────────────────────────
+-- Las FK de datos hacia el lanzamiento son NO ACTION: se chequean al final de
+-- la sentencia, cuando los registros, visitas y eventos ya se fueron por su
+-- propia FK a organizations.
+delete from public.organizations where id = '97000000-0000-0000-0000-000000000a00';
+select ci.espera(
+  (select count(*) from public.webinar_launches where organization_id = '97000000-0000-0000-0000-000000000a00')
+  + (select count(*) from public.webinar_sessions where organization_id = '97000000-0000-0000-0000-000000000a00')
+  + (select count(*) from public.launch_ad_campaigns where organization_id = '97000000-0000-0000-0000-000000000a00')
+  + (select count(*) from public.launch_products where organization_id = '97000000-0000-0000-0000-000000000a00')
+  + (select count(*) from public.leads where organization_id = '97000000-0000-0000-0000-000000000a00')
+  + (select count(*) from public.launch_registrations where organization_id = '97000000-0000-0000-0000-000000000a00')
+  + (select count(*) from public.landing_visits where organization_id = '97000000-0000-0000-0000-000000000a00')
+  + (select count(*) from public.lead_events where organization_id = '97000000-0000-0000-0000-000000000a00')
+  + (select count(*) from public.ingest_keys where organization_id = '97000000-0000-0000-0000-000000000a00')
+  + (select count(*) from public.landing_events where organization_id = '97000000-0000-0000-0000-000000000a00'),
+  0, 'borrar la organización borra sus filas de las 10 tablas');
+select ci.espera((select count(*) from public.webinar_launches where id = '97000000-0000-0000-0000-00000000b001'),
+  1, 'borrar una organización no toca a otra');
 
 rollback;
