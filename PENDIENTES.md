@@ -1113,7 +1113,7 @@ Doc del área: [`docs/areas/marketing.md`](./docs/areas/marketing.md)
 - **Dónde:** `apps/web/app/marketing/actions.ts`, `apps/web/lib/marketing/content-attribution.ts`, `apps/web/lib/youtube/analytics.ts`, `apps/web/components/marketing/marketing-sales-connection.tsx`.
 
 #### [MKT-MANYCHAT-FLUJOS-SIN-PAGINA-FB] Una cuenta de ManyChat sin página de Facebook podría ver "error inesperado" en Automatizaciones
-- **Tipo:** verificación
+- **Tipo:** investigación
 - **Severidad:** Baja
 - **Estado verificado:** desde SCRUM-520, `fetchManyChatFlows` (`lib/manychat/client.ts`) lanza ante cualquier respuesta no ok o con `status: "error"` de `/fb/page/getFlows`, y `listAutomationFlowsAction` la registra como falla (texto fijo y evento en Sentry) salvo un 401/403. El mismo archivo dice, en `fetchManyChatPageInfo`, que una cuenta sólo de Instagram o WhatsApp puede recibir un error en `/fb/page/*`, sin fuente. La ayuda pública de ManyChat no dice nada de ese caso y no se llamó a la API para verlo (`limitless-auditoria/evidencia-sprint2/scrum-520/fuentes-manychat/LEEME.txt`). ManyChat está escondido en Integraciones (`ESCONDIDO.integracionManyChat`), así que sólo afecta a orgs que ya lo tenían conectado. Visto en la AR pasada 1 de SCRUM-520.
 - **Riesgo:** si ese caso existe, entonces una org con ManyChat conectado sólo a Instagram o WhatsApp ve "Ocurrió un error inesperado" en `/marketing/automatizaciones` en vez de "No hay flujos configurados", y cada visita manda un evento a Sentry.
