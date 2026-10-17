@@ -57,9 +57,21 @@ Qué se guarda cifrado y qué no:
 | Key de Fathom por miembro | `team_member_integrations.encrypted_api_key` | sí (`lib/fathom/member-key.ts`). Hasta el 2026-09-30 la conexión desde Integraciones → Fathom la guardaba **en claro**; las 8 filas de producción se cifraron el 2026-10-02 |
 | Secreto de webhook y API key de Whop/Commas | `payment_integrations.*_encrypted` | sí |
 | Tokens de Mercado Pago | `mercadopago_integrations` | sí (`lib/mercadopago/tokens.ts`) |
+| Claves de ingesta de la landing de Limitless Webinars | `ingest_keys.key_hash` | no se guardan: sólo su sha256 (SCRUM-527, ver abajo) |
 | Tokens OAuth de Calendly, Stripe, Instagram, Typeform, Google/YouTube, Drive de super-admin; `fathom_integrations.api_key`; token de ManyChat | `*_integrations`, `super_admin_google_tokens` | **no** — protegidos sólo por RLS cerrado (`[AUD-SEG-2]`) |
 
 Rotar `ENCRYPTION_MASTER_KEY`: nueva como actual, vieja como `ENCRYPTION_MASTER_KEY_PREVIOUS`, redeploy, `apps/web/scripts/reencrypt-secrets.ts --apply`, sacar la vieja. Procedimiento completo en [`docs/operacion/rotacion-master-key.md`](../operacion/rotacion-master-key.md). Cambiar la clave **sin** cargar la anterior sigue rompiendo todo lo cifrado: la IA de cada org con clave de Claude se frena con la barra roja (no hay clave de respaldo, SCRUM-7), las demás integraciones cifradas tiran al leer y los webhooks de Whop/Commas responden **500** (y GHL, con su secreto de Workflow). Antes de rotar, comprobar que la copia del gestor es la de producción (paso 0 del procedimiento): el 2026-10-02 la copia no era la buena y se perdieron 19 secretos. Pendiente: clave propia para Preview y ensayo de rotación, con `[ENTORNO-STAGING]`.
+
+### Claves de ingesta de Limitless Webinars
+
+SCRUM-527 (`lib/webinar/claves-de-ingesta.ts`, `app/webinar/claves-de-ingesta-actions.ts`). La landing de un lanzamiento se autentica ante `POST /api/ingest/landing` (SCRUM-528) con una clave de la organización:
+
+- `lmt_ing_` más 32 bytes de `crypto.randomBytes` (256 bits) en base64url. El prefijo deja reconocer una clave filtrada.
+- En la base sólo queda el sha256 (`ingest_keys.key_hash`, único). La clave en texto sale del servidor una sola vez, en la respuesta de `crearClaveDeIngestaAction`; la lista nunca trae el hash.
+- `verificarClaveDeIngesta` busca por el sha256 del token (nunca por el token), compara el hash de la fila con `timingSafeEqual` y rechaza las revocadas. El tiempo de la búsqueda depende del sha256 del token, que quien ataca no puede acercar al de una clave real.
+- `ingest_keys` no tiene policies: crear, listar y revocar usan el service role después de exigir founder o admin de la organización activa (`requireOrgRole`) y filtran por `organization_id`.
+- Ni la clave ni el hash van a un log, a Sentry ni al texto de un error: la falla al guardar la clave y la de anotar el último uso usan textos fijos con el código de Postgres.
+- Rotar es crear una nueva, cargarla en la landing y revocar la vieja. Revocar corta en el acto.
 
 ## Crons, colas y bot
 
