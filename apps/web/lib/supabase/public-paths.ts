@@ -53,6 +53,13 @@ export function isPublicPath(pathname: string): boolean {
    * recibe un 307 con el HTML del login.
    */
   if (pathname.startsWith("/api/webhooks/")) return true;
+  /*
+   * Ingesta de la landing de Limitless Webinars (SCRUM-528): la llama la
+   * función serverless de la landing, sin sesión, con su clave de ingesta.
+   * Además el matcher de `middleware.ts` la excluye: el middleware de sesión
+   * ni siquiera corre (ahorra la consulta de sesión en cada registro).
+   */
+  if (pathname === "/api/ingest/landing") return true;
   if (pathname.startsWith("/api/discord/")) return true;
   if (pathname.startsWith("/api/integrations/")) {
     if (
