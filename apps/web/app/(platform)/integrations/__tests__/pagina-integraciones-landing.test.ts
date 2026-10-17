@@ -12,7 +12,19 @@ const sim = vi.hoisted(() => ({
   listar: vi.fn(),
 }));
 
-vi.mock("@/lib/release/escondido", () => ({ ESCONDIDO: sim.escondido }));
+// Parte del objeto real; `ingestaLanding` con getter para que cada test la
+// cambie (la fábrica del mock corre una sola vez).
+vi.mock("@/lib/release/escondido", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/release/escondido")>();
+  return {
+    ESCONDIDO: {
+      ...real.ESCONDIDO,
+      get ingestaLanding() {
+        return sim.escondido.ingestaLanding;
+      },
+    },
+  };
+});
 vi.mock("@/app/webinar/claves-de-ingesta-actions", () => ({
   listarClavesDeIngestaAction: sim.listar,
 }));
