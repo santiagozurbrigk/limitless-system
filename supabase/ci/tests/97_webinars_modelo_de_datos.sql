@@ -532,6 +532,22 @@ begin
     raise exception 'FALLA: se aceptó un email_normalized sin normalizar';
   exception when check_violation then null;
   end;
+  begin
+    insert into public.leads (organization_id, email, email_normalized)
+    values ('97000000-0000-0000-0000-000000000a00', ' borde@test.com', ' borde@test.com');
+    raise exception 'FALLA: se aceptó un email_normalized con espacios en el borde';
+  exception when check_violation then null;
+  end;
+  -- El CHECK no depende de la collation de la base (AR de SCRUM-528): sólo
+  -- juzga A-Z. Una mayúscula fuera de ASCII la normaliza la ingesta; si el
+  -- CHECK usara la collation de la base (en el CI, en_US o C.UTF-8, que pasan
+  -- 'Á' a 'á'; con tr-TR, además 'I' a 'ı'), este valor se rechazaría.
+  begin
+    insert into public.leads (organization_id, email, email_normalized)
+    values ('97000000-0000-0000-0000-000000000a00', 'Ángel@test.com', 'Ángel@test.com');
+  exception when check_violation then
+    raise exception 'FALLA: el CHECK de email_normalized depende de la collation de la base';
+  end;
 end $$;
 
 -- Las metas son opcionales, pero nunca cero (sin meta es null).
