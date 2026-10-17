@@ -210,6 +210,56 @@ describe("el control de los mocks de ESCONDIDO", () => {
     );
   });
 
+  const conReal = (cuerpo: string) =>
+    `vi.mock("@/lib/release/escondido", async (importOriginal) => {\n` +
+    `  const real = await importOriginal<typeof import("@/lib/release/escondido")>();\n` +
+    `  ${cuerpo}\n});`;
+
+  it("G1: la clave ESCONDIDO entre comillas o como template se reconoce", () => {
+    expect(unProblema(conReal(`return { ...real, "ESCONDIDO": { marketingOverview: false } };`)).problema).toBe(
+      "el ESCONDIDO devuelto no parte de ...real.ESCONDIDO",
+    );
+    unProblema(conReal(`return { ...real, 'ESCONDIDO': { marketingOverview: false } };`));
+  });
+
+  it("G2: la clave ESCONDIDO computada con un texto se reconoce; una computada ilegible es problema", () => {
+    unProblema(conReal(`return { ...real, ["ESCONDIDO"]: { marketingOverview: false } };`));
+    unProblema(conReal("return { ...real, [`ESCONDIDO`]: { marketingOverview: false } };"));
+    expect(
+      unProblema(conReal(`const k = "ESCONDIDO";\n  return { ...real, [k]: { marketingOverview: false } };`)).problema,
+    ).toBe("una clave computada del objeto devuelto no se puede leer");
+  });
+
+  it("G1: dos claves ESCONDIDO (la segunda pisa a la primera) se revisan las dos", () => {
+    unProblema(conReal(`return { ESCONDIDO: { ...real.ESCONDIDO }, "ESCONDIDO": { marketingOverview: false } };`));
+  });
+
+  it("un spread de primer nivel que no es el módulo real es problema", () => {
+    expect(
+      unProblema(conReal(`return { ...real, ...{ ESCONDIDO: { marketingOverview: false } } };`)).problema,
+    ).toBe("un spread del objeto devuelto no es del módulo real");
+  });
+
+  it("G3: detecta mock/doMock sacados de vi por desestructuración o asignación", () => {
+    unProblema(`import { vi } from "vitest";\nconst { doMock } = vi;\ndoMock("@/lib/release/escondido", ${PARCIAL});`);
+    unProblema(`import { vi } from "vitest";\nconst { mock: m } = vi;\nm("@/lib/release/escondido", ${PARCIAL});`);
+    unProblema(`import { vi as v } from "vitest";\nconst w = v;\nconst { doMock: d } = w;\nd("@/lib/release/escondido", ${PARCIAL});`);
+    unProblema(`import { vi } from "vitest";\nconst m = vi.mock;\nm("@/lib/release/escondido", ${PARCIAL});`);
+    // Una función con otro nombre sacada de vi no es mock.
+    expect(revisar(`import { vi } from "vitest";\nconst { fn } = vi;\nfn("@/lib/release/escondido");`)).toEqual([]);
+  });
+
+  it("G4: el original tiene que ser un const sin reasignar", () => {
+    const g4 =
+      `vi.mock("@/lib/release/escondido", async (importOriginal) => {\n` +
+      `  let real = await importOriginal<typeof import("@/lib/release/escondido")>();\n` +
+      `  real = { ESCONDIDO: { marketingOverview: false } } as typeof real;\n` +
+      `  return { ESCONDIDO: { ...real.ESCONDIDO } };\n});`;
+    expect(unProblema(g4).problema).toBe("la fábrica no guarda await importOriginal() en una variable");
+    unProblema(g4.replace("  real = { ESCONDIDO: { marketingOverview: false } } as typeof real;\n", ""));
+    unProblema(g4.replace("let real", "const real"));
+  });
+
   it("sin fábrica, o con una fábrica que no recibe importOriginal, es problema", () => {
     unProblema(`vi.mock("@/lib/release/escondido");`);
     unProblema(`vi.mock("@/lib/release/escondido", async () => ({ ESCONDIDO: {} }));`);

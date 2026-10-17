@@ -15,7 +15,9 @@ import * as ts from "typescript";
  *
  * Qué cuenta como mock: una llamada a `mock` o `doMock` sobre `vi` o sobre
  * cualquier nombre que lo traiga de "vitest" (`import { vi as v }`,
- * `import * as V` y `V.vi`, `const v = vi`), con punto o con corchetes.
+ * `import * as V` y `V.vi`, `const v = vi`), con punto o con corchetes, y la
+ * llamada directa a una función sacada de `vi` (`const { mock, doMock: d } = vi`,
+ * `const m = vi.mock`).
  *
  * Qué hace con el primer argumento:
  *   - un texto (comillas, o template sin expresiones) o `import(texto)`: lo
@@ -26,9 +28,13 @@ import * as ts from "typescript";
  *
  * Qué exige de un mock de este módulo: una fábrica (función) cuyo primer
  * parámetro sea el `importOriginal`, que guarde `await importOriginal()` en una
- * variable (`real`), y que TODO objeto que devuelva tenga `ESCONDIDO` igual a
- * un objeto con `...real.ESCONDIDO`, o no tenga `ESCONDIDO` y haga `...real`.
- * No alcanza con nombrar `real.ESCONDIDO` en otro lado de la fábrica.
+ * declaración `const` que no se reasigne (`real`), y que TODO objeto que
+ * devuelva tenga `ESCONDIDO` igual a un objeto con `...real.ESCONDIDO`, o no
+ * tenga `ESCONDIDO` y haga `...real`. La clave `ESCONDIDO` se reconoce también
+ * entre comillas, como template o computada con un texto (`["ESCONDIDO"]`); una
+ * clave computada que no se puede leer es problema, y un spread de primer nivel
+ * que no sea del módulo real también. No alcanza con nombrar `real.ESCONDIDO`
+ * en otro lado de la fábrica.
  */
 
 export type ResultadoDeMock = { especificador: string; ok: boolean; problema: string };
@@ -67,10 +73,18 @@ function apuntaAlModulo(especificador: string, archivo: string, raizWeb: string)
   return relativa === MODULO || relativa === `${MODULO}/index`;
 }
 
-/** Los nombres que valen `vi` de vitest en el archivo, y los namespaces de vitest. */
-function nombresDeVi(archivo: ts.SourceFile): { vis: Set<string>; espacios: Set<string> } {
+type NombresDeVi = { vis: Set<string>; espacios: Set<string>; funciones: Set<string> };
+
+const METODOS_DE_MOCK = new Set(["mock", "doMock"]);
+
+/**
+ * Los nombres que valen `vi` de vitest en el archivo, los namespaces de vitest
+ * y las funciones `mock`/`doMock` sacadas de `vi` a una variable.
+ */
+function nombresDeVi(archivo: ts.SourceFile): NombresDeVi {
   const vis = new Set<string>(["vi"]);
   const espacios = new Set<string>();
+  const funciones = new Set<string>();
   for (const sentencia of archivo.statements) {
     if (!ts.isImportDeclaration(sentencia) || !ts.isStringLiteral(sentencia.moduleSpecifier)) continue;
     if (sentencia.moduleSpecifier.text !== "vitest") continue;
@@ -83,26 +97,39 @@ function nombresDeVi(archivo: ts.SourceFile): { vis: Set<string>; espacios: Set<
       }
     }
   }
-  // `const v = vi` (también encadenado): punto fijo sobre las declaraciones.
+  // `const v = vi` (también encadenado), `const { mock, doMock: d } = vi` y
+  // `const m = vi.mock`: punto fijo sobre las declaraciones.
   let cambio = true;
+  const agregar = (conjunto: Set<string>, nombre: string) => {
+    if (!conjunto.has(nombre)) {
+      conjunto.add(nombre);
+      cambio = true;
+    }
+  };
   while (cambio) {
     cambio = false;
     const visitar = (nodo: ts.Node) => {
-      if (
-        ts.isVariableDeclaration(nodo) &&
-        ts.isIdentifier(nodo.name) &&
-        nodo.initializer &&
-        !vis.has(nodo.name.text) &&
-        esVi(nodo.initializer, vis, espacios)
-      ) {
-        vis.add(nodo.name.text);
-        cambio = true;
+      if (ts.isVariableDeclaration(nodo) && nodo.initializer) {
+        const ini = sinEnvoltorios(nodo.initializer);
+        if (ts.isIdentifier(nodo.name)) {
+          if (esVi(ini, vis, espacios)) agregar(vis, nodo.name.text);
+          else if (esMetodoDeMock(ini, vis, espacios)) agregar(funciones, nodo.name.text);
+        } else if (ts.isObjectBindingPattern(nodo.name) && esVi(ini, vis, espacios)) {
+          for (const e of nodo.name.elements) {
+            const propiedad = e.propertyName ?? e.name;
+            const clave =
+              ts.isIdentifier(propiedad) || ts.isStringLiteral(propiedad) ? propiedad.text : null;
+            if (clave !== null && METODOS_DE_MOCK.has(clave) && ts.isIdentifier(e.name)) {
+              agregar(funciones, e.name.text);
+            }
+          }
+        }
       }
       ts.forEachChild(nodo, visitar);
     };
     visitar(archivo);
   }
-  return { vis, espacios };
+  return { vis, espacios, funciones };
 }
 
 function esVi(nodo: ts.Expression, vis: Set<string>, espacios: Set<string>): boolean {
@@ -114,9 +141,9 @@ function esVi(nodo: ts.Expression, vis: Set<string>, espacios: Set<string>): boo
   return false;
 }
 
-/** `vi.mock(...)` o `vi.doMock(...)` (o `vi["mock"](...)`), sobre cualquier alias de vi. */
-function esLlamadaDeMock(llamada: ts.CallExpression, vis: Set<string>, espacios: Set<string>): boolean {
-  const callee = sinEnvoltorios(llamada.expression);
+/** `vi.mock` o `vi.doMock` (o `vi["mock"]`), sobre cualquier alias de vi, sin llamar. */
+function esMetodoDeMock(nodo: ts.Expression, vis: Set<string>, espacios: Set<string>): boolean {
+  const callee = sinEnvoltorios(nodo);
   let objeto: ts.Expression;
   let metodo: string | null = null;
   if (ts.isPropertyAccessExpression(callee)) {
@@ -129,7 +156,14 @@ function esLlamadaDeMock(llamada: ts.CallExpression, vis: Set<string>, espacios:
   } else {
     return false;
   }
-  return (metodo === "mock" || metodo === "doMock") && esVi(objeto, vis, espacios);
+  return metodo !== null && METODOS_DE_MOCK.has(metodo) && esVi(objeto, vis, espacios);
+}
+
+/** Una llamada a `vi.mock`/`vi.doMock` o a una función sacada de `vi`. */
+function esLlamadaDeMock(llamada: ts.CallExpression, nombres: NombresDeVi): boolean {
+  const callee = sinEnvoltorios(llamada.expression);
+  if (ts.isIdentifier(callee)) return nombres.funciones.has(callee.text);
+  return esMetodoDeMock(callee, nombres.vis, nombres.espacios);
 }
 
 /** Las expresiones que devuelve la función (sin entrar en funciones anidadas). */
@@ -150,6 +184,33 @@ function nombreDeIdentificador(nodo: ts.Expression): string | null {
   return ts.isIdentifier(n) ? n.text : null;
 }
 
+const ILEGIBLE = Symbol("clave ilegible");
+
+/**
+ * El nombre de una propiedad de un objeto literal: identificador, texto entre
+ * comillas, template sin expresiones, número o computada con uno de esos.
+ * Una computada con otra cosa (`[clave]`) es `ILEGIBLE`.
+ */
+function nombreDePropiedad(p: ts.ObjectLiteralElementLike): string | typeof ILEGIBLE | null {
+  const nombre = p.name;
+  if (!nombre) return null;
+  if (ts.isComputedPropertyName(nombre)) {
+    const e = sinEnvoltorios(nombre.expression);
+    if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e) || ts.isNumericLiteral(e)) return e.text;
+    return ILEGIBLE;
+  }
+  if (
+    ts.isIdentifier(nombre) ||
+    ts.isStringLiteral(nombre) ||
+    ts.isNumericLiteral(nombre) ||
+    ts.isNoSubstitutionTemplateLiteral(nombre) ||
+    ts.isPrivateIdentifier(nombre)
+  ) {
+    return nombre.text;
+  }
+  return ILEGIBLE;
+}
+
 function revisarFabrica(fabrica: ts.Expression | undefined): string {
   if (!fabrica) return "sin fábrica: no parte del objeto real";
   const fn = sinEnvoltorios(fabrica);
@@ -160,10 +221,26 @@ function revisarFabrica(fabrica: ts.Expression | undefined): string {
   if (!parametro || !ts.isIdentifier(parametro)) return "la fábrica no recibe importOriginal";
   const importOriginal = parametro.text;
 
-  // Las variables que guardan `await importOriginal(...)`.
+  // Las variables que guardan `await importOriginal(...)`: sólo `const`, y
+  // sin reasignar (aunque tsc lo rechace, el control mira la fuente).
   const originales = new Set<string>();
+  const reasignadas = new Set<string>();
   const buscar = (nodo: ts.Node) => {
-    if (ts.isVariableDeclaration(nodo) && ts.isIdentifier(nodo.name) && nodo.initializer) {
+    if (
+      ts.isBinaryExpression(nodo) &&
+      nodo.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      nodo.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+    ) {
+      const izquierda = nombreDeIdentificador(nodo.left);
+      if (izquierda !== null) reasignadas.add(izquierda);
+    }
+    if (
+      ts.isVariableDeclaration(nodo) &&
+      ts.isIdentifier(nodo.name) &&
+      nodo.initializer &&
+      ts.isVariableDeclarationList(nodo.parent) &&
+      (nodo.parent.flags & ts.NodeFlags.Const) !== 0
+    ) {
       const ini = sinEnvoltorios(nodo.initializer);
       if (ts.isAwaitExpression(ini)) {
         const llamada = sinEnvoltorios(ini.expression);
@@ -175,6 +252,7 @@ function revisarFabrica(fabrica: ts.Expression | undefined): string {
     ts.forEachChild(nodo, buscar);
   };
   buscar(fn.body);
+  for (const nombre of reasignadas) originales.delete(nombre);
   if (originales.size === 0) return "la fábrica no guarda await importOriginal() en una variable";
 
   const esSpreadDe = (p: ts.ObjectLiteralElementLike, propiedad: string | null) => {
@@ -194,19 +272,28 @@ function revisarFabrica(fabrica: ts.Expression | undefined): string {
   for (const r of retornos) {
     const objeto = sinEnvoltorios(r);
     if (!ts.isObjectLiteralExpression(objeto)) return "la fábrica devuelve algo que no es un objeto literal";
-    const escondido = objeto.properties.find(
-      (p) => p.name !== undefined && ts.isIdentifier(p.name) && p.name.text === "ESCONDIDO",
-    );
-    if (!escondido) {
+    const escondidos: ts.ObjectLiteralElementLike[] = [];
+    for (const p of objeto.properties) {
+      if (ts.isSpreadAssignment(p)) {
+        if (!esSpreadDe(p, null)) return "un spread del objeto devuelto no es del módulo real";
+        continue;
+      }
+      const nombre = nombreDePropiedad(p);
+      if (nombre === ILEGIBLE) return "una clave computada del objeto devuelto no se puede leer";
+      if (nombre === "ESCONDIDO") escondidos.push(p);
+    }
+    if (escondidos.length === 0) {
       if (!objeto.properties.some((p) => esSpreadDe(p, null))) {
         return "el objeto devuelto no tiene ESCONDIDO ni parte del módulo real";
       }
       continue;
     }
-    if (!ts.isPropertyAssignment(escondido)) return "ESCONDIDO no es un objeto literal";
-    const valor = sinEnvoltorios(escondido.initializer);
-    if (!ts.isObjectLiteralExpression(valor) || !valor.properties.some((p) => esSpreadDe(p, "ESCONDIDO"))) {
-      return "el ESCONDIDO devuelto no parte de ...real.ESCONDIDO";
+    for (const escondido of escondidos) {
+      if (!ts.isPropertyAssignment(escondido)) return "ESCONDIDO no es un objeto literal";
+      const valor = sinEnvoltorios(escondido.initializer);
+      if (!ts.isObjectLiteralExpression(valor) || !valor.properties.some((p) => esSpreadDe(p, "ESCONDIDO"))) {
+        return "el ESCONDIDO devuelto no parte de ...real.ESCONDIDO";
+      }
     }
   }
   return "";
@@ -216,10 +303,10 @@ function revisarFabrica(fabrica: ts.Expression | undefined): string {
 export function analizarFuente(fuente: string, archivo: string, raizWeb: string): ResultadoDeMock[] {
   const tipo = archivo.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sf = ts.createSourceFile(archivo, fuente, ts.ScriptTarget.Latest, true, tipo);
-  const { vis, espacios } = nombresDeVi(sf);
+  const nombres = nombresDeVi(sf);
   const resultados: ResultadoDeMock[] = [];
   const visitar = (nodo: ts.Node) => {
-    if (ts.isCallExpression(nodo) && esLlamadaDeMock(nodo, vis, espacios)) {
+    if (ts.isCallExpression(nodo) && esLlamadaDeMock(nodo, nombres)) {
       const primero = nodo.arguments[0];
       const especificador = primero ? textoFijo(primero) : null;
       if (especificador === null) {
