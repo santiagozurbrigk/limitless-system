@@ -102,7 +102,7 @@ describe("el control de los mocks de ESCONDIDO", () => {
   it("nombrar importOriginal y ...real.ESCONDIDO en un comentario no alcanza", () => {
     const fuente =
       `${VI}.mock("@/lib/release/escondido", () => ({\n` +
-      `  // parte de importOriginal con ...real.ESCONDIDO\n` +
+      `  // async (importOriginal) => { const real = await importOriginal(); ...real.ESCONDIDO }\n` +
       `  ESCONDIDO: { marketingOverview: false },\n}));`;
     expect(revisar(fuente)[0]?.ok).toBe(false);
   });
