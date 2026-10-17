@@ -28,6 +28,30 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-16 — Limitless Webinars: endpoint de ingesta de la landing y reproceso (SCRUM-528)
+
+**Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (encadenada sobre `feat/SCRUM-527-webinars-claves-de-ingesta` en `bd02ddc4`, PR #144, que va sobre #141; nada mergeado)
+**Commit(s):** `eb4c5a3a`: feat(webinars): normalización pura del evento de la landing e identidad del lead; `9cdb9dca`: feat(webinars): POST /api/ingest/landing con crudo primero, normalización en after y cron de reproceso; `017b2940`: test(webinars): el reclamo condicionado del reproceso y el espacio en el medio del email se ven en la ingesta; `25127f1b`: test(webinars): el registro de corridas y los docs de alertas cuentan 20 crons; y este (docs).
+**Módulo(s) afectado(s):** `apps/web/app/api/ingest/landing/route.ts` (nuevo), `apps/web/app/api/cron/reprocesar-landing/route.ts` (nuevo), `apps/web/lib/webinar/{endpoint-de-ingesta,ingesta-landing,reprocesar-landing,identity}.ts` (nuevos), `apps/web/lib/webinar/normalize/{evento,filas,reproceso}.ts` (nuevos), `apps/web/lib/rate-limit.ts` (`landingIngestRateLimit`), `apps/web/lib/supabase/public-paths.ts`, `apps/web/middleware.ts` (matcher), `apps/web/vercel.json` (cron), tests en `lib/webinar/__tests__/`, `lib/supabase/__tests__/`, `lib/observability/__tests__/cron-monitor.test.ts` y `lib/super-admin/__tests__/estado-de-corridas.test.ts`; docs de embudos, seguridad, jobs, base de datos, testing, alertas y verificación manual.
+
+**Qué se hizo:** tercera pieza de la épica SCRUM-521. `POST /api/ingest/landing` autentica con la clave de ingesta (`verificarClaveDeIngesta` con `after`), aplica un límite por clave, corta cuerpos de más de 16 KB antes de parsear, valida el payload con Zod por tipo, guarda el crudo en `landing_events` y responde `{"ok":true}`. La normalización corre con `after`: lanzamiento por `public_id` dentro de la organización de la clave (desconocido, de otra organización o cerrado queda `unmapped` con motivo), lead por `(organization_id, email_normalized)`, registro y evento `registered` idempotentes, visitas por `(launch_id, visitor_id, día UTC)`, y el crudo pasa a `processed`. Si falla, queda en `error` con texto fijo y lo reprocesa el cron nuevo `/api/cron/reprocesar-landing` (cada 10 minutos, `CRON_SECRET`, monitor de crons), hasta 5 veces; después, error definitivo y aviso a Sentry sin datos personales.
+
+**Por qué / finalidad:** que la landing de un lanzamiento pueda mandar registros y visitas a Limitless sin perder ninguno (crudo primero, P2), sin duplicar (P3) y sin hacer esperar a la landing.
+
+**Decisiones de diseño relevantes:**
+- **Sin migración.** La cuenta de reprocesos va en `landing_events.error_message`, que siempre es un texto fijo armado en `lib/webinar/normalize/reproceso.ts` ("Reproceso n de 5 en curso." al reclamar, "... Reproceso n de 5." si falla, "... no se reintenta más." el definitivo, que el cron filtra con `not like`). Así el número sobrevive a un proceso que se corta a mitad del reproceso y SCRUM-532 no tiene nada nuevo que aplicar.
+- **Reclamo condicionado propio** en vez de `reclamarEvento`: el de `reclamar.ts` pone `error_message` en null y se perdería la cuenta. Se reclama con un UPDATE condicionado al estado, a la marca `processed_at` (como `reclamarEvento`) y además al texto del error leído, así dos corridas no lo procesan dos veces ni cuentan mal.
+- **Límite:** ventana fija de 10 s con 600 pedidos por clave. Con 500 justos (50 por segundo exactos), una ventana que arranca unos milisegundos tarde cortaría a una landing que manda 50 parejos; 600 deja un 20% de margen y admite ráfagas.
+- **Lead:** `insert ... on conflict do nothing` y, si ya existía, sólo se completan nombre o teléfono vacíos (nunca se pisa lo primero que se supo). Teléfono en E.164 sólo si trae código de país; sin una dependencia nueva y sin inventar un país.
+- **Registro:** si el lead ya estaba en el lanzamiento con otro `client_registration_id`, se queda el primero, y el evento `registered` se arma desde el registro guardado, no desde el que llega, para que no haya dos.
+- **Día de la visita en UTC:** la llave tiene que dar lo mismo en cualquier servidor.
+- **Fuera del middleware de sesión:** además de `isPublicPath`, el matcher de `middleware.ts` excluye la ruta exacta, para no pagar la consulta de sesión en cada registro. Comprobado en el `middleware-manifest.json` del build.
+- **Borrador recibe:** sólo desconocido o cerrado quedan `unmapped`; un `draft` sirve para probar la landing antes de abrir.
+
+**Verificación:** suite completa 276 archivos y 4.449 tests (también con `TZ=UTC`, sin unhandled), `tsc` limpio, lint con los mismos 71 avisos que `bd02ddc4`, 17 mutantes muertos por su test, control negativo con la implementación revertida, y `next build` sin "Dynamic server usage". Contra un Supabase local con `next start`: 44 comprobaciones de la cadena completa (incluida una falla forzada con un trigger, el reproceso, el `pending` trabado y el error definitivo) y carga de 50 registros por segundo durante 2 minutos: 6000 respuestas 200, p50 10,9 ms, p95 18,1 ms, p99 27,9 ms, 5700 registros, leads y eventos para 5700 ids distintos, sin duplicados.
+
+**Riesgos / deuda técnica pendiente:** `[WEBINARS-UNMAPPED-SIN-REASIGNAR]` (los `unmapped` no se reprocesan ni se reasignan; nuevo, P2). El alta en Zoom por QStash es la Fase 2. El endpoint no mira `ESCONDIDO.ingestaLanding`: mientras esté escondido la app no deja crear claves. Falta verificar en Vercel con la base real (`docs/operacion/verificacion-manual.md` § Ingesta de la landing, después de SCRUM-532).
+
 ### 2026-10-16 — Limitless Webinars: claves de ingesta de la landing desde Integraciones (SCRUM-527)
 
 **Rama:** `feat/SCRUM-527-webinars-claves-de-ingesta` (encadenada sobre `feat/SCRUM-526-webinars-modelo-de-datos` en `0c669b75`, PR #141 sin mergear)

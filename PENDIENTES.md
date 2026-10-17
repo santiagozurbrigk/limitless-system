@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 16 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 14 |
@@ -1417,6 +1417,12 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Estado verificado:** `apps/web/e2e/` sólo tiene `holding.spec.ts`.
 - **Qué hay que hacer:** flujo crear → detalle → período → fuentes; snapshot de org sin datos sin ningún `0`.
 - **Dónde:** `apps/web/e2e/`.
+
+#### [WEBINARS-UNMAPPED-SIN-REASIGNAR] Los eventos de la landing `unmapped` no se pueden volver a procesar
+- **Tipo:** feature / operación
+- **Estado verificado:** desde SCRUM-528, un registro o una visita con un `launch_public_id` que no es de un lanzamiento de la organización de la clave, o de un lanzamiento cerrado, queda en `landing_events` con `status = 'unmapped'` y el motivo en `error_message` (`lib/webinar/ingesta-landing.ts`). El cron `/api/cron/reprocesar-landing` sólo toma `error` y `pending` trabados, a propósito: reintentar no cambia un lanzamiento desconocido. Si la landing se publicó con un `public_id` equivocado o el lanzamiento se cerró antes de tiempo, esos registros quedan guardados pero fuera de los números, y no hay forma de reasignarlos sin SQL.
+- **Qué hay que hacer:** decidir con SCRUM-522 qué pasa con los registros que llegan a un lanzamiento cerrado (¿cuentan?) y agregar una acción de founder o admin que vuelva a procesar los `unmapped` de un `public_id` (o los reasigne a otro lanzamiento), con el mismo reclamo condicionado del cron.
+- **Dónde:** `apps/web/lib/webinar/reprocesar-landing.ts`, `apps/web/lib/webinar/normalize/filas.ts` (`motivoParaNoAsignar`).
 
 ### Embudos y Lanzamientos · P3
 

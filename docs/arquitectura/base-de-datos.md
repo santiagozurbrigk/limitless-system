@@ -196,7 +196,7 @@ Propósito de cada una en el doc del área. Las notas del cliente son columnas d
 `workboard_tasks`, `workboard_task_attachments`, `workboard_task_documents`, `sprints` (a lo sumo uno `active` por organización: índice único parcial `sprints_un_activo_por_org`, `20261008120000`), `sops`, `sop_versions`, `sop_attachments`, `sop_generation_jobs`, `weekly_inputs`, `weekly_reports`, `intelligence_snapshots`, `executive_reports`, `launches`, `launch_metrics`.
 
 ### Limitless Webinars (`docs/areas/embudos.md`)
-Fase 1 del modelo de datos (SCRUM-526, `20261016120000_webinars_modelo_de_datos`). Sin código de la app todavía: las claves y la ingesta de la landing son SCRUM-527 y SCRUM-528. Las tablas viejas `launches` y `launch_metrics` (Operaciones) no se usan para esto.
+Fase 1 del modelo de datos (SCRUM-526, `20261016120000_webinars_modelo_de_datos`). Las usan las claves de ingesta (SCRUM-527) y la ingesta de la landing (SCRUM-528, `POST /api/ingest/landing` y el cron `/api/cron/reprocesar-landing`, sin migración propia: la cuenta de reprocesos va en `landing_events.error_message`). Las tablas viejas `launches` y `launch_metrics` (Operaciones) no se usan para esto.
 
 | Tabla | Propósito y reglas |
 |---|---|
@@ -209,7 +209,7 @@ Fase 1 del modelo de datos (SCRUM-526, `20261016120000_webinars_modelo_de_datos`
 | `landing_visits` | Visitas: única `(launch_id, visitor_id, day)` |
 | `lead_events` | Eventos del lead, append-only: `kind` (16 tipos, de `registered` a `note`), `source` (`landing`, `zoom`, `ghl`, `calendly`, `whop`, `fanbasis`, `commas`, `manual`), `source_ref`, `occurred_at`, `actor_user_id`, `data`. Única `(organization_id, source, source_ref, kind)`; índices `(launch_id, kind, lead_id)` y `(lead_id, occurred_at)`. `launch_id` es obligatorio |
 | `ingest_keys` | Hash de la clave de ingesta (`key_hash` único), `label`, `last_used_at`, `revoked_at`. Sólo service role |
-| `landing_events` | Crudo de la landing: `kind` (`registration`, `visit`), `payload`, `received_at`, `status` (`pending`, `processed`, `unmapped`, `error`), `error_message`, `processed_at`: las columnas del patrón de reclamo y reproceso de `lib/webhooks/reclamar.ts` (los requerimientos decían `error`). Índice `(status, received_at)`. Sólo service role |
+| `landing_events` | Crudo de la landing: `kind` (`registration`, `visit`), `payload`, `received_at`, `status` (`pending`, `processed`, `unmapped`, `error`), `error_message`, `processed_at`: las columnas del patrón de reclamo y reproceso de `lib/webhooks/reclamar.ts` (los requerimientos decían `error`). Índice `(status, received_at)`. Sólo service role. `error_message` es siempre un texto fijo de `lib/webinar/normalize/reproceso.ts` (motivo del `unmapped`, o paso, SQLSTATE y número de reproceso del `error`), nunca el texto de la base |
 
 Reglas comunes:
 - **Ninguna fila hija apunta a otra organización**: las FK hacia `webinar_launches`, `leads` y `landing_events` son compuestas con `organization_id` (contra un único `(id, organization_id)` del padre). Vale también para el service role.

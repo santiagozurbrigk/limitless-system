@@ -1345,3 +1345,21 @@ Probado con `next start` y Supabase y Sentry falsos (evidencia de SCRUM-516); fa
    WEBP.". Borrar una captura con la red cortada: vuelve a aparecer con el motivo.
 7. Ventas → Cobros y el cierre de venta de Closing: los planes se ven como antes. En Sentry no aparecen eventos con
    `server_action` de estas acciones salvo fallas reales.
+
+## Ingesta de la landing de Limitless Webinars (SCRUM-528)
+
+**Prerrequisitos:** los PR de SCRUM-526, 527 y 528 mergeados y desplegados, y la migración de SCRUM-526 aplicada en
+producción (SCRUM-532; SCRUM-528 no agrega migraciones). Una organización de prueba con un lanzamiento `active` y una
+clave de ingesta (con `ESCONDIDO.ingestaLanding` en `true` hay que crearla con la bandera apagada en un preview o
+como lo defina SCRUM-532). Probado contra un Supabase local con `next start` (evidencia de SCRUM-528); falta en
+Vercel con la base real.
+
+1. ⭐ `curl -X POST "$APP/api/ingest/landing" -H "Authorization: Bearer <clave>" -H "content-type: application/json"
+   -d '{"type":"registration","launch_public_id":"<public_id>","client_registration_id":"prueba-1","email":"<email de prueba>"}'`
+   → `{"ok":true}` en menos de 300 ms. En la base: `landing_events` `processed`, un lead, un registro y un evento
+   `registered`. Repetir el mismo comando: nada se duplica.
+2. Sin el header, con otra clave o con una revocada → 401 `{"ok":false,"error":"No autorizado."}`.
+3. Un `launch_public_id` que no existe → 200 y el crudo `unmapped` con "Lanzamiento desconocido...".
+4. ⭐ Vercel → Settings → Cron Jobs: aparece `/api/cron/reprocesar-landing` cada 10 minutos. Sentry → Crons: el
+   monitor `cron-reprocesar-landing` en verde después de su primera corrida, y Super-admin → Infraestructura lo lista.
+5. Los logs de Vercel de esas llamadas no muestran el email, la clave ni su hash.
