@@ -13,6 +13,7 @@ import {
 } from "@/lib/ai/anthropic-auth-errors";
 import { resolveCredentialForOrg } from "@/lib/ai/credential-resolver";
 import { trackTokenUsage } from "@/lib/track-token-usage";
+import { ErrorEsperable } from "@/lib/server/error-esperable";
 import {
   resolveAgentMaxTokens,
   resolveAgentThinkingBudget,
@@ -225,7 +226,7 @@ export async function streamClaudeAgent(
   // Sin clave propia, no hay IA (SCRUM-7): el usuario ve por qué y qué hacer,
   // en vez del genérico "No pudimos generar la respuesta".
   if (!resolution.client || resolution.source === "none") {
-    throw new Error(NO_AI_CREDENTIALS_MESSAGE);
+    throw new ErrorEsperable(NO_AI_CREDENTIALS_MESSAGE);
   }
 
   try {

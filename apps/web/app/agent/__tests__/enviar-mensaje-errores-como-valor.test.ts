@@ -19,6 +19,8 @@ const sim = vi.hoisted(() => ({
   pedidosAAnthropic: [] as string[],
   /** Sin clave usable (SCRUM-7): el resolvedor no entrega cliente. */
   sinClave: false,
+  /** La base falla al leer la clave (`resolveCredentialForOrg` lanza `FallaDeLaBase`). */
+  falloClave: null as unknown,
   /** Con qué organización se pidió cada servicio. */
   orgsPedidas: [] as Array<[string, unknown]>,
   marcadas: [] as Array<[string, unknown]>,
@@ -88,6 +90,7 @@ vi.mock("@/lib/ai/credential-resolver", () => {
     });
   const resolver = async (org: unknown) => {
     sim.orgsPedidas.push(["clave", org]);
+    if (sim.falloClave) throw sim.falloClave;
     return sim.sinClave
       ? { client: null, source: "none" as const, mode: "unconfigured" }
       : { client: cliente(), source: "api_key" as const, mode: "api_key_active" };
@@ -218,6 +221,7 @@ beforeEach(() => {
   sim.respuestas = [respuestaDeClaude("Respuesta del agente")];
   sim.pedidosAAnthropic = [];
   sim.sinClave = false;
+  sim.falloClave = null;
   sim.orgsPedidas = [];
   sim.marcadas = [];
   sim.sesion = "ok";
@@ -370,6 +374,14 @@ describe("sendAgentMessageAction", () => {
     expect(base.reportes).toHaveLength(0);
   });
 
+  it("⭐ una falla de la base al leer la clave no es \"sin clave\": se registra y vuelve el texto del agente", async () => {
+    const { FallaDeLaBase: Falla } = await import("@/lib/server/action-result");
+    sim.falloClave = new Falla({ code: "XX000", message: "boom" });
+    expect(await enviar()).toEqual({ success: false, error: AGENT_ERROR_REPLY });
+    expect(registrada()).toBe(sim.falloClave);
+    expect(sim.pedidosAAnthropic).toHaveLength(0);
+  });
+
   it("⭐ Anthropic rechaza la clave (401): el motivo de la clave, la org marcada y sin registro de falla", async () => {
     sim.respuestas = [errorDeAnthropic(401, "authentication_error", "invalid x-api-key")];
     expect(await enviar()).toEqual({ success: false, error: AI_KEY_REJECTED_MESSAGE });
@@ -438,11 +450,32 @@ describe("sendAgentMessageAction", () => {
     expect(error.code).toBe("XX000");
   });
 
-  it("⭐ las lecturas secundarias que fallan no cortan el envío pero quedan registradas", async () => {
-    base.errores.organizations = { code: "XX000", message: "boom" };
-    const r = await enviar();
+  // Las lecturas de agent_messages en orden: 1 conteo previo, 2 historial,
+  // 3 recientes de la org, 4 mensajes que vuelven (ver el test de éxito).
+  it.each([
+    ["el nombre de la org", "agente:nombre-de-la-org", () => (base.errores.organizations = { code: "XX000", message: "boom" })],
+    [
+      "la etapa del prompt",
+      "agente:etapa-del-prompt",
+      () => (base.errores["business_stages:select"] = { code: "XX000", message: "boom" }),
+    ],
+    [
+      "el conteo de mensajes previos",
+      "agente:mensajes-previos",
+      () => (base.erroresEnLaLlamada["agent_messages:select"] = { llamada: 1, error: { code: "XX000", message: "boom" } }),
+    ],
+    [
+      "los mensajes recientes de la org",
+      "agente:mensajes-recientes",
+      () => (base.erroresEnLaLlamada["agent_messages:select"] = { llamada: 3, error: { code: "XX000", message: "boom" } }),
+    ],
+  ])("⭐ si falla la lectura secundaria de %s, el envío sale y la falla queda registrada", async (_n, etiqueta, romper) => {
+    romper();
+    const r = await enviar({ contextStageId: ETAPA });
     expect(r.success).toBe(true);
-    expect(base.reportes.map((x) => x.contexto)).toContainEqual({ lectura: "agente:nombre-de-la-org" });
+    const reporte = base.reportes.find((x) => JSON.stringify(x.contexto) === JSON.stringify({ lectura: etiqueta }));
+    expect(reporte?.error).toBeInstanceOf(FallaDeLaBase);
+    expect(base.reportes).toHaveLength(1);
   });
 
   it("⭐ una propuesta del agente se guarda y se engancha a la respuesta dentro de la organización", async () => {

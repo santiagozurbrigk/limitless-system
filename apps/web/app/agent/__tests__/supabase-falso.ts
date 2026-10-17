@@ -46,6 +46,8 @@ export const base = {
    * el error: para simular que falla el segundo lote de un import.
    */
   erroresDesdeLaLlamada: {} as Record<string, { desde: number; error: ErrorDeLaBase }>,
+  /** `tabla:op` → número de llamada (1, 2...) que, sola, devuelve el error (SCRUM-506, AR pasada 1). */
+  erroresEnLaLlamada: {} as Record<string, { llamada: number; error: ErrorDeLaBase }>,
   llamadas: {} as Record<string, number>,
   /** Si está, `from()` lanza esto. */
   lanza: null as unknown,
@@ -63,6 +65,7 @@ export const base = {
     this.tablas = {};
     this.errores = {};
     this.erroresDesdeLaLlamada = {};
+    this.erroresEnLaLlamada = {};
     this.llamadas = {};
     this.lanza = null;
     this.operaciones = [];
@@ -99,6 +102,8 @@ function errorDe(tabla: string, op: Op): ErrorDeLaBase | null {
   base.llamadas[clave] = (base.llamadas[clave] ?? 0) + 1;
   const desde = base.erroresDesdeLaLlamada[clave];
   if (desde && base.llamadas[clave] >= desde.desde) return desde.error;
+  const una = base.erroresEnLaLlamada[clave];
+  if (una && base.llamadas[clave] === una.llamada) return una.error;
   return base.errores[clave] ?? base.errores[tabla] ?? null;
 }
 

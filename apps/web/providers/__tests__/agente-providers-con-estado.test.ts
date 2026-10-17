@@ -73,6 +73,7 @@ const sim = vi.hoisted(() => ({
   acciones: {} as Record<string, (...args: unknown[]) => Promise<unknown>>,
   llamadas: [] as string[],
   pedidos: [] as string[],
+  buffer: "",
   router: {
     push: (ruta: string) => sim.llamadas.push(`router.push ${ruta}`),
     replace: (ruta: string) => sim.llamadas.push(`router.replace ${ruta}`),
@@ -94,7 +95,7 @@ vi.mock("@/lib/agent/use-stream-typewriter", () => {
       waitForCatchUp: async () => {},
       snapToBuffer: nada,
       reset: nada,
-      getTextSnapshot: () => ({ buffered: "" }),
+      getTextSnapshot: () => ({ buffered: sim.buffer }),
     }),
   };
 });
@@ -124,6 +125,7 @@ import { avisoDeEnvioFallido, EnvioRechazado } from "@/lib/agent/motivo-del-envi
 import { formatSseEvent } from "@/lib/agent/sse";
 import { AI_KEY_REJECTED_MESSAGE, NO_AI_CREDENTIALS_MESSAGE } from "@/lib/ai/anthropic-auth-errors";
 import { claudeNoCreditsUserMessage } from "@/lib/ai/anthropic-errors";
+import { AGENT_ERROR_REPLY } from "@/lib/agent/errores-del-agente";
 
 const CONVERSACION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const MENSAJE = { id: "m-1", role: "user", content: "hola" };
@@ -148,6 +150,7 @@ beforeEach(() => {
   hooks.reiniciar();
   sim.avisos = [];
   sim.llamadas = [];
+  sim.buffer = "";
   sim.acciones = {
     listAgentWorkspaceAction: async () => ({ stages: [], conversations: [] }),
     listAgentMessagesAction: async () => ({ success: true, data: [MENSAJE] }),
@@ -250,13 +253,63 @@ describe("AgentDataProvider: envío por /api/agent/send", () => {
     expect(renderPantalla().agentStatus).toBe("error");
   });
 
-  it("⭐ con el texto de una falla el aviso sigue siendo el de conexión", async () => {
-    rutaQueRechaza("boom en la tabla");
+  it("⭐ el texto fijo de una falla que manda la ruta también se muestra tal cual", async () => {
+    rutaQueRechaza(AGENT_ERROR_REPLY);
+    const error = await renderPantalla().sendMessage("hola").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(EnvioRechazado);
+    expect(avisoDeEnvioFallido(error).description).toBe(AGENT_ERROR_REPLY);
+  });
+
+  it("⭐ un stream que se corta sin respuesta ni evento muestra el aviso de conexión", async () => {
+    (globalThis as Record<string, unknown>).fetch = async () => new Response("", { status: 200 });
     const error = await renderPantalla().sendMessage("hola").catch((e: unknown) => e);
     expect(error).not.toBeInstanceOf(EnvioRechazado);
     expect(avisoDeEnvioFallido(error).description).toBe(
       "Revisá tu conexión o la API de Claude e intentá de nuevo."
     );
+  });
+
+  describe("el envío salió pero no se pudieron releer los mensajes (AR pasada 1, M2)", () => {
+    function rutaQueResponde() {
+      (globalThis as Record<string, unknown>).fetch = async () =>
+        new Response(
+          formatSseEvent("delta", { type: "text", content: "Respuesta" }) +
+            formatSseEvent("done", { conversationId: CONVERSACION, messageId: "m-2", openCanvas: false }),
+          { status: 200 }
+        );
+    }
+
+    it("⭐ no saca de la vista ni el mensaje ni la respuesta, no lanza y avisa que no se actualizó", async () => {
+      rutaQueResponde();
+      sim.buffer = "Respuesta";
+      sim.acciones.listAgentMessagesAction = async () => ({
+        success: false,
+        error: "Ocurrió un error inesperado. Intentá de nuevo.",
+      });
+      const resultado = await renderPantalla().sendMessage("hola");
+      expect(resultado.conversationId).toBe(CONVERSACION);
+      const despues = renderPantalla();
+      expect(despues.messages.map((m) => [m.role, m.content])).toEqual([
+        ["user", "hola"],
+        ["assistant", "Respuesta"],
+      ]);
+      expect(despues.agentStatus).not.toBe("error");
+      expect(sim.avisos).toEqual([
+        {
+          title: "No se pudo actualizar la conversación",
+          description: "Ocurrió un error inesperado. Intentá de nuevo.",
+          variant: "default",
+        },
+      ]);
+    });
+
+    it("con la relectura buena muestra los mensajes guardados y no avisa", async () => {
+      rutaQueResponde();
+      const resultado = await renderPantalla().sendMessage("hola");
+      expect(resultado.conversationId).toBe(CONVERSACION);
+      expect(renderPantalla().messages).toEqual([MENSAJE]);
+      expect(sim.avisos).toEqual([]);
+    });
   });
 
   it("si la red falla el aviso es el de conexión", async () => {

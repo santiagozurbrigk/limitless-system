@@ -9,7 +9,12 @@ import {
   requireOrganizationId,
   tryRequireOrganizationId,
 } from "@/lib/auth/bootstrap";
-import { requireAuthContext, type AuthContext } from "@/lib/auth/require-auth";
+import {
+  AGENT_ERROR_REPLY,
+  CONVERSACION_NO_ENCONTRADA,
+  contextoDeSesion,
+  exigirUuid,
+} from "@/lib/agent/errores-del-agente";
 import {
   ErrorEsperable,
   FallaDeLaBase,
@@ -100,8 +105,6 @@ import type {
   GraphProposal,
 } from "@/types/agent";
 
-const AGENT_ERROR_REPLY =
-  "No pudimos generar la respuesta. Intentá de nuevo en unos segundos.";
 
 // ---------------------------------------------------------------------------
 // Document generation tool definition
@@ -393,36 +396,6 @@ function revalidateAgent() {
  * manda el motivo en el evento `error` del stream: ese protocolo no cambia. La
  * acción `sendAgentMessageAction` es la del chat flotante.
  */
-
-const SESION_NO_VALIDA = "Sesión no válida";
-const CONVERSACION_NO_ENCONTRADA = "Conversación no encontrada";
-
-/**
- * `requireAuthContext` lanza un `Error` común "Unauthorized" cuando no hay
- * sesión, la cuenta está desactivada o no tiene organización: es un rechazo
- * esperable y se traduce al mismo texto que `requireOrganizationId`. Lo demás
- * (el redirect de Next al cambio de contraseña, una falla) sigue de largo.
- */
-async function contextoDeSesion(): Promise<AuthContext> {
-  try {
-    return await requireAuthContext();
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.constructor === Error &&
-      error.message === "Unauthorized"
-    ) {
-      throw new ErrorEsperable(SESION_NO_VALIDA);
-    }
-    throw error;
-  }
-}
-
-function exigirUuid(id: unknown): string {
-  const parsed = uuidSchema.safeParse(id);
-  if (!parsed.success) throw new ErrorEsperable("ID inválido");
-  return parsed.data;
-}
 
 type ClienteDeSupabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -1349,12 +1322,13 @@ async function enviarMensajeAlAgente(
       claudeThrew,
       orgClaudeClientAvailable,
     });
+    // La clave rechazada o la cuenta sin créditos vuelven con su motivo
+    // (`rechazoConocidoDeClaude`); cualquier otro error de Claude (también una
+    // falla de la base al leer la clave) es una falla: se registra y el usuario
+    // ve `AGENT_ERROR_REPLY`.
+    if (claudeThrew) throw rechazoConocidoDeClaude(errorDeClaude);
     // Sin clave propia no hay IA (SCRUM-7): decirlo, no el error genérico.
     if (!orgClaudeClientAvailable) throw new ErrorEsperable(NO_AI_CREDENTIALS_MESSAGE);
-    // La clave rechazada o la cuenta sin créditos vuelven con su motivo
-    // (`rechazoConocidoDeClaude`); cualquier otro error de Claude es una falla:
-    // se registra y el usuario ve `AGENT_ERROR_REPLY`.
-    if (claudeThrew) throw rechazoConocidoDeClaude(errorDeClaude);
     throw new Error("Claude no devolvió texto para el agente");
   }
 

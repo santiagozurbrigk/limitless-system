@@ -5,7 +5,10 @@
 import { randomBytes } from "crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ row: null as Record<string, unknown> | null }));
+const state = vi.hoisted(() => ({
+  row: null as Record<string, unknown> | null,
+  error: null as { message: string; code?: string } | null,
+}));
 
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => {
@@ -13,13 +16,14 @@ vi.mock("@/lib/supabase/admin", () => ({
       select: () => query,
       update: () => query,
       eq: () => query,
-      maybeSingle: async () => ({ data: state.row, error: null }),
+      maybeSingle: async () => (state.error ? { data: null, error: state.error } : { data: state.row, error: null }),
     };
     return { from: () => query };
   },
 }));
 
 import { encrypt } from "@/lib/security/encryption";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 import {
   invalidateOrgCredentialCache,
   loadOrgCredentialState,
@@ -46,6 +50,7 @@ beforeEach(() => {
   process.env.ANTHROPIC_API_KEY = "sk-ant-global-de-limitless";
   invalidateOrgCredentialCache(ORG);
   state.row = null;
+  state.error = null;
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -98,5 +103,27 @@ describe("loadOrgCredentialState", () => {
   it("una clave legible no es keyUnreadable", async () => {
     state.row = claveGuardada("valid");
     expect((await loadOrgCredentialState(ORG)).keyUnreadable).toBe(false);
+  });
+});
+
+describe("una falla de la base al leer la clave (SCRUM-506, AR pasada 1)", () => {
+  const CAIDA = { code: "XX000", message: "boom en la tabla" };
+
+  it("⭐ no es \"sin clave\": resolveCredentialForOrg lanza FallaDeLaBase con el código", async () => {
+    state.error = CAIDA;
+    const error = await resolveCredentialForOrg(ORG).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FallaDeLaBase);
+    expect((error as FallaDeLaBase).code).toBe("XX000");
+  });
+
+  it("⭐ el estado de la clave para el aviso de la plataforma también lanza (no dice \"falta la clave\")", async () => {
+    state.error = CAIDA;
+    await expect(loadOrgCredentialState(ORG)).rejects.toBeInstanceOf(FallaDeLaBase);
+  });
+
+  it("sin fila de la organización sigue siendo sin clave, sin lanzar", async () => {
+    state.row = null;
+    expect((await resolveCredentialForOrg(ORG)).source).toBe("none");
+    expect((await loadOrgCredentialState(ORG)).apiKeyStatus).toBe("none");
   });
 });

@@ -12,7 +12,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { resolveAgentFlags } from "@/lib/agent/canvas-intent";
-import { EnvioRechazado, motivoDelEnvio } from "@/lib/agent/motivo-del-envio";
+import { EnvioRechazado, TITULO_SIN_ACTUALIZAR } from "@/lib/agent/motivo-del-envio";
 import { parseSseBuffer } from "@/lib/agent/sse";
 import { useStreamTypewriter } from "@/lib/agent/use-stream-typewriter";
 import type { AgentStatus } from "@/lib/agent/types";
@@ -285,6 +285,8 @@ export function AgentDataProvider({
         await loadConversation(resolvedConversationId);
       } else if (!isSendingRef.current) {
         setMessages([]);
+        // Sin conversación no queda el motivo de una carga anterior (SCRUM-506).
+        setMotivoDeCarga(null);
       }
       if (!cancelled) {
         setIsLoading(false);
@@ -447,10 +449,9 @@ export function AgentDataProvider({
         }
 
         if (streamError) {
-          // Un rechazo conocido (sin clave, clave rechazada, sin saldo, límite)
-          // se muestra con su motivo; cualquier otro, con el aviso de conexión.
-          const motivo = motivoDelEnvio(streamError, trimmed);
-          throw motivo ? new EnvioRechazado(motivo) : new Error(streamError);
+          // La ruta manda un texto para el usuario (el motivo o un texto fijo,
+          // nunca el técnico): se muestra tal cual (SCRUM-506).
+          throw new EnvioRechazado(streamError);
         }
 
         if (!receivedDone) {
@@ -497,8 +498,22 @@ export function AgentDataProvider({
         snapStreamToBuffer();
 
         const lecturaFinal = await leerMensajesDelAgente(resultConversationId);
-        if (!lecturaFinal.ok) throw new Error(lecturaFinal.motivo);
-        setMessages(lecturaFinal.data);
+        if (lecturaFinal.ok) {
+          setMessages(lecturaFinal.data);
+        } else {
+          // El envío salió y la respuesta está guardada: no se saca de la vista
+          // ni se dice "No se pudo enviar" (el usuario reintentaría y se
+          // enviaría y cobraría dos veces). Queda lo que llegó por el stream.
+          const { buffered } = getTextSnapshot();
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === streamingId
+                ? { ...message, content: buffered || message.content }
+                : message
+            )
+          );
+          push({ title: TITULO_SIN_ACTUALIZAR, description: lecturaFinal.motivo, variant: "default" });
+        }
         setStreamingMessageId(null);
         resetStreamTypewriter();
         setActiveToolName(null);
@@ -554,6 +569,7 @@ export function AgentDataProvider({
       resolvedConversationId,
       resolvedFilterStageId,
       pageContext,
+      push,
       refresh,
       router,
       clearCompleteTimer,
