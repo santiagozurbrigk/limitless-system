@@ -9,6 +9,7 @@ import type {
 } from "@/lib/ai/credential-types";
 import { normalizeCredentialMode } from "@/lib/ai/credential-types";
 import { noAiCredentialsError } from "@/lib/ai/anthropic-auth-errors";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 
 /**
  * Resuelve con qué clave de Claude trabaja cada organización.
@@ -121,14 +122,11 @@ async function loadOrgCredentialRow(
     .eq("id", organizationId)
     .maybeSingle();
 
-  if (error) {
-    console.error("[credential-resolver] Error leyendo credenciales de org", {
-      organizationId,
-      message: error.message,
-      code: error.code,
-    });
-    return null;
-  }
+  // Una falla de la base no es "sin clave" (SCRUM-506, AR pasada 1): se lanza
+  // y quien llama la registra (una acción, con su texto fijo; un generador,
+  // como "failed"; el aviso de la plataforma, con `lecturaDegradable`). Antes
+  // volvía null y la org quedaba como sin clave, sin Sentry.
+  if (error) throw new FallaDeLaBase(error);
 
   if (!data) {
     console.warn("[credential-resolver] Org no encontrada", { organizationId });

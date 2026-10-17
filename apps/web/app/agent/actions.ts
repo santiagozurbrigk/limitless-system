@@ -9,7 +9,22 @@ import {
   requireOrganizationId,
   tryRequireOrganizationId,
 } from "@/lib/auth/bootstrap";
-import { requireAuthContext } from "@/lib/auth/require-auth";
+import {
+  AGENT_ERROR_REPLY,
+  CONVERSACION_NO_ENCONTRADA,
+  contextoDeSesion,
+  exigirUuid,
+} from "@/lib/agent/errores-del-agente";
+import {
+  ErrorEsperable,
+  FallaDeLaBase,
+  mutacionConErroresEsperables,
+  registrarFallaDeAccion,
+  type MutationResult,
+} from "@/lib/server/action-result";
+import { lecturaDegradable, valorSiNoEsFalla } from "@/lib/server/lectura-degradable";
+import { esTablaAusente } from "@/lib/server/tabla-ausente";
+import { rechazoConocidoDeClaude } from "@/lib/ai/rechazo-de-claude";
 import {
   aiRateLimit,
   rateLimitErrorMessage,
@@ -22,6 +37,7 @@ import {
   firstZodError,
   textSchema,
   longTextSchema,
+  uuidSchema,
 } from "@/lib/validations";
 import { z } from "zod";
 import {
@@ -89,8 +105,6 @@ import type {
   GraphProposal,
 } from "@/types/agent";
 
-const AGENT_ERROR_REPLY =
-  "No pudimos generar la respuesta. Intentá de nuevo en unos segundos.";
 
 // ---------------------------------------------------------------------------
 // Document generation tool definition
@@ -365,16 +379,49 @@ function revalidateAgent() {
   revalidatePath(paths.platform.agent.root);
 }
 
-async function getOrgName(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  organizationId: string
-) {
-  const { data } = await supabase
+/*
+ * Errores como valor (SCRUM-506): las seis acciones que usa la pantalla del
+ * Agente y el chat flotante (`listAgentMessagesAction`,
+ * `createBusinessStageAction`, `createAgentConversationAction`,
+ * `deleteAgentConversationAction`, `deleteBusinessStageAction` y
+ * `sendAgentMessageAction`) corren dentro de `mutacionConErroresEsperables` y
+ * devuelven `MutationResult`. Los rechazos conocidos (sesión, ID inválido,
+ * conversación inexistente o de otra organización, límite de pedidos, sin
+ * clave de Claude, clave rechazada o cuenta sin créditos) son `ErrorEsperable`
+ * y vuelven con su motivo; un error de la base es `FallaDeLaBase` y, como
+ * cualquier otra falla, se registra en Sentry y vuelve con un texto fijo.
+ *
+ * La pantalla del Agente envía los mensajes por la ruta SSE
+ * `app/api/agent/send/route.ts` (`lib/agent/stream-agent-message.ts`), que
+ * manda el motivo en el evento `error` del stream: ese protocolo no cambia. La
+ * acción `sendAgentMessageAction` es la del chat flotante.
+ */
+
+type ClienteDeSupabase = Awaited<ReturnType<typeof createClient>>;
+
+async function getOrgName(supabase: ClienteDeSupabase, organizationId: string) {
+  const { data, error } = await supabase
     .from("organizations")
     .select("name")
     .eq("id", organizationId)
     .maybeSingle();
+  if (error) throw new FallaDeLaBase(error);
   return data?.name ?? "tu negocio";
+}
+
+async function leerEtapa(
+  supabase: ClienteDeSupabase,
+  organizationId: string,
+  stageId: string
+): Promise<BusinessStage | null> {
+  const { data: stageRow, error } = await supabase
+    .from("business_stages")
+    .select("*")
+    .eq("id", stageId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (error) throw new FallaDeLaBase(error);
+  return stageRow ? rowToStage(stageRow) : null;
 }
 
 export async function listAgentWorkspaceAction(): Promise<AgentWorkspaceData> {
@@ -427,15 +474,17 @@ export async function listAgentWorkspaceAction(): Promise<AgentWorkspaceData> {
   };
 }
 
-export async function listAgentMessagesAction(
+/**
+ * Los mensajes de una conversación de la organización, con sus propuestas de
+ * grafo. Lanza: una falla de la base es `FallaDeLaBase`. Antes de su migración
+ * (tabla ausente, por código) no hay mensajes. Si falla la lectura de las
+ * propuestas, los mensajes se muestran igual y la falla queda registrada.
+ */
+async function leerMensajesDeConversacion(
+  supabase: ClienteDeSupabase,
+  organizationId: string,
   conversationId: string
 ): Promise<AgentMessage[]> {
-  if (!isSupabaseConfigured()) return [];
-
-  const organizationId = await tryRequireOrganizationId();
-  if (!organizationId) return [];
-
-  const supabase = await createClient();
   const { data, error } = await supabase
     .from("agent_messages")
     .select("*")
@@ -444,8 +493,8 @@ export async function listAgentMessagesAction(
     .order("created_at", { ascending: true });
 
   if (error) {
-    if (isMissingTableError(error.message)) return [];
-    throw new Error(error.message);
+    if (esTablaAusente(error)) return [];
+    throw new FallaDeLaBase(error);
   }
 
   const rows = (data ?? []) as AgentMessageRow[];
@@ -455,116 +504,170 @@ export async function listAgentMessagesAction(
     .filter((r) => r.action_type === "graph_proposals")
     .map((r) => r.id);
 
-  const proposalsByMessage: Map<string, GraphProposal[]> = new Map();
-
-  if (graphProposalMessageIds.length > 0) {
-    try {
-      const { data: proposalData } = await supabase
-        .from("agent_graph_proposals")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .in("message_id", graphProposalMessageIds)
-        .order("created_at", { ascending: true });
-
-      for (const row of proposalData ?? []) {
-        const p = rowToProposal(row as GraphProposalRow);
-        if (!p.messageId) continue;
-        const list = proposalsByMessage.get(p.messageId) ?? [];
-        list.push(p);
-        proposalsByMessage.set(p.messageId, list);
-      }
-    } catch {
-      // Non-critical: table may not exist yet
-    }
-  }
+  const proposalsByMessage: Map<string, GraphProposal[]> =
+    graphProposalMessageIds.length > 0
+      ? await lecturaDegradable(
+          "agente:propuestas-de-los-mensajes",
+          () => leerPropuestasPorMensaje(supabase, organizationId, graphProposalMessageIds),
+          new Map<string, GraphProposal[]>()
+        )
+      : new Map();
 
   return rows.map((row) =>
     rowToMessage(row, proposalsByMessage.get(row.id) ?? null)
   );
 }
 
+async function leerPropuestasPorMensaje(
+  supabase: ClienteDeSupabase,
+  organizationId: string,
+  messageIds: string[]
+): Promise<Map<string, GraphProposal[]>> {
+  const proposalsByMessage: Map<string, GraphProposal[]> = new Map();
+  const { data: proposalData, error } = await supabase
+    .from("agent_graph_proposals")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .in("message_id", messageIds)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    // Antes de su migración la tabla no existe: los mensajes van sin propuestas.
+    if (esTablaAusente(error)) return proposalsByMessage;
+    throw new FallaDeLaBase(error);
+  }
+
+  for (const row of proposalData ?? []) {
+    const p = rowToProposal(row as GraphProposalRow);
+    if (!p.messageId) continue;
+    const list = proposalsByMessage.get(p.messageId) ?? [];
+    list.push(p);
+    proposalsByMessage.set(p.messageId, list);
+  }
+  return proposalsByMessage;
+}
+
+export async function listAgentMessagesAction(
+  conversationId: string
+): Promise<MutationResult<AgentMessage[]>> {
+  return mutacionConErroresEsperables("[listAgentMessages]", async () => {
+    if (!isSupabaseConfigured()) return [];
+    const id = exigirUuid(conversationId);
+
+    // Sin sesión la lectura siempre devolvió vacío; una falla al resolver la
+    // organización ya no se esconde: se registra y vuelve con el texto fijo.
+    const organizationId = await requireOrganizationId().catch((error: unknown) =>
+      valorSiNoEsFalla<string | null>(error, null)
+    );
+    if (!organizationId) return [];
+
+    const supabase = await createClient();
+    return leerMensajesDeConversacion(supabase, organizationId, id);
+  });
+}
+
 export async function createBusinessStageAction(input: {
   name: string;
   description?: string;
-}): Promise<BusinessStage | null> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+}): Promise<MutationResult<BusinessStage>> {
+  return mutacionConErroresEsperables("[createBusinessStage]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { count } = await supabase
-    .from("business_stages")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", organizationId);
+    const { count, error: countError } = await supabase
+      .from("business_stages")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId);
+    if (countError) throw new FallaDeLaBase(countError);
 
-  const { data, error } = await supabase
-    .from("business_stages")
-    .insert({
-      organization_id: organizationId,
-      name: input.name.trim(),
-      description: input.description?.trim() || null,
-      order_index: count ?? 0,
-      is_active: true,
-    })
-    .select("*")
-    .single();
+    const { data, error } = await supabase
+      .from("business_stages")
+      .insert({
+        organization_id: organizationId,
+        name: input.name.trim(),
+        description: input.description?.trim() || null,
+        order_index: count ?? 0,
+        is_active: true,
+      })
+      .select("*")
+      .single();
 
-  if (error) throw new Error(error.message);
-  revalidateAgent();
-  return rowToStage(data);
+    if (error) throw new FallaDeLaBase(error);
+    revalidateAgent();
+    return rowToStage(data);
+  });
 }
 
-export async function createAgentConversationAction(opts?: {
-  title?: string | null;
-}): Promise<AgentConversation | null> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
-
+/** Crea una conversación de la organización. Lanza `FallaDeLaBase` si la base falla. */
+async function crearConversacion(
+  supabase: ClienteDeSupabase,
+  organizationId: string,
+  title: string | null
+): Promise<AgentConversation> {
   const { data, error } = await supabase
     .from("agent_conversations")
     .insert({
       organization_id: organizationId,
       project_id: null,
       stage_id: null,
-      title: opts?.title ?? null,
+      title,
     })
     .select("*")
     .single();
 
-  if (error || !data) {
-    throw new Error(error?.message ?? "No se pudo crear la conversación");
-  }
+  if (error) throw new FallaDeLaBase(error);
+  if (!data) throw new Error("La base no devolvió la conversación creada");
 
   revalidateAgent();
   return rowToConversation(data as AgentConversationRow);
 }
 
-export async function deleteAgentConversationAction(
-  conversationId: string
-): Promise<void> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
-
-  const { error } = await supabase
-    .from("agent_conversations")
-    .delete()
-    .eq("id", conversationId)
-    .eq("organization_id", organizationId);
-
-  if (error) throw new Error(error.message);
-  revalidateAgent();
+export async function createAgentConversationAction(opts?: {
+  title?: string | null;
+}): Promise<MutationResult<AgentConversation>> {
+  return mutacionConErroresEsperables("[createAgentConversation]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+    return crearConversacion(supabase, organizationId, opts?.title ?? null);
+  });
 }
 
-export async function deleteBusinessStageAction(stageId: string): Promise<void> {
-  const organizationId = await requireOrganizationId();
-  const supabase = await createClient();
+export async function deleteAgentConversationAction(
+  conversationId: string
+): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[deleteAgentConversation]", async () => {
+    const id = exigirUuid(conversationId);
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("business_stages")
-    .delete()
-    .eq("id", stageId)
-    .eq("organization_id", organizationId);
+    const { error } = await supabase
+      .from("agent_conversations")
+      .delete()
+      .eq("id", id)
+      .eq("organization_id", organizationId);
 
-  if (error) throw new Error(error.message);
-  revalidateAgent();
+    if (error) throw new FallaDeLaBase(error);
+    revalidateAgent();
+  });
+}
+
+export async function deleteBusinessStageAction(
+  stageId: string
+): Promise<MutationResult<void>> {
+  return mutacionConErroresEsperables("[deleteBusinessStage]", async () => {
+    const id = exigirUuid(stageId);
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+
+    const { error } = await supabase
+      .from("business_stages")
+      .delete()
+      .eq("id", id)
+      .eq("organization_id", organizationId);
+
+    if (error) throw new FallaDeLaBase(error);
+    revalidateAgent();
+  });
 }
 
 async function generateConversationTitle(
@@ -609,17 +712,18 @@ async function generateConversationTitle(
 }
 
 async function getRecentOrgMessages(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ClienteDeSupabase,
   organizationId: string,
   excludeConversationId: string
 ): Promise<AgentMessage[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("agent_messages")
     .select("*")
     .eq("organization_id", organizationId)
     .neq("conversation_id", excludeConversationId)
     .order("created_at", { ascending: false })
     .limit(20);
+  if (error) throw new FallaDeLaBase(error);
 
   return (data ?? [])
     .reverse()
@@ -635,7 +739,7 @@ async function executeAgentActions(
     if (action.type === "CREATE_SOP") {
       const { allowed, resetAt } = await sopGenerateRateLimit(organizationId);
       if (!allowed) {
-        throw new Error(rateLimitErrorMessage(resetAt));
+        throw new ErrorEsperable(rateLimitErrorMessage(resetAt));
       }
 
       const parsed = z
@@ -652,7 +756,7 @@ async function executeAgentActions(
           goal: action.data.goal ?? action.data.title ?? "SOP sin título",
         });
       if (!parsed.success) {
-        throw new Error(firstZodError(parsed.error));
+        throw new ErrorEsperable(firstZodError(parsed.error));
       }
 
       const { title, department, content, goal } = parsed.data;
@@ -671,7 +775,7 @@ async function executeAgentActions(
         .select("id")
         .single();
 
-      if (error) throw new Error(error.message);
+      if (error) throw new FallaDeLaBase(error);
       revalidatePath(paths.platform.sops.root);
       return { actionType: "created_sop", actionRefId: data.id };
     }
@@ -679,7 +783,7 @@ async function executeAgentActions(
   return null;
 }
 
-export async function sendAgentMessageAction(input: {
+type SendAgentMessageInput = {
   conversationId?: string | null;
   content: string;
   /** Contexto de etapa solo para el prompt; no se persiste en la conversación. */
@@ -687,33 +791,58 @@ export async function sendAgentMessageAction(input: {
   /** Contexto de la página actual (content piece, lead, etc.). */
   pageContext?: PageContextState | null;
   flags?: AgentFlags;
-}): Promise<{
+};
+
+type SendAgentMessageResult = {
   conversationId: string;
   messages: AgentMessage[];
   openCanvas: boolean;
-}> {
-  const { user, orgId: organizationId } = await requireAuthContext();
+};
+
+/**
+ * El chat flotante (`providers/floating-chat-provider.tsx`). Un rechazo
+ * conocido vuelve con su motivo: sin sesión, límite de pedidos, el texto
+ * inválido, conversación inexistente o de otra organización, sin clave de
+ * Claude (no hay clave global de respaldo, SCRUM-7), la clave rechazada por
+ * Anthropic o la cuenta sin créditos o con el límite de gasto alcanzado
+ * (`rechazoConocidoDeClaude`). Cualquier otra falla (la base, la red, un
+ * error de Anthropic que no es de la clave ni del saldo, una respuesta vacía)
+ * se registra y vuelve con el texto de siempre del agente, `AGENT_ERROR_REPLY`.
+ */
+export async function sendAgentMessageAction(
+  input: SendAgentMessageInput
+): Promise<MutationResult<SendAgentMessageResult>> {
+  return mutacionConErroresEsperables(
+    "[sendAgentMessage]",
+    () => enviarMensajeAlAgente(input),
+    AGENT_ERROR_REPLY
+  );
+}
+
+async function enviarMensajeAlAgente(
+  input: SendAgentMessageInput
+): Promise<SendAgentMessageResult> {
+  const { user, orgId: organizationId } = await contextoDeSesion();
 
   const { allowed, resetAt } = await aiRateLimit(user.id);
   if (!allowed) {
-    throw new Error(rateLimitErrorMessage(resetAt));
+    throw new ErrorEsperable(rateLimitErrorMessage(resetAt));
   }
 
   const parsedContent = aiPromptSchema.safeParse(input.content);
   if (!parsedContent.success) {
-    throw new Error(firstZodError(parsedContent.error));
+    throw new ErrorEsperable(firstZodError(parsedContent.error));
   }
+  const conversacionPedida = input.conversationId
+    ? exigirUuid(input.conversationId)
+    : null;
 
   const supabase = await createClient();
   const trimmed = sanitizeText(parsedContent.data);
 
-  let conversationId = input.conversationId ?? null;
-
-  if (!conversationId) {
-    const created = await createAgentConversationAction();
-    if (!created) throw new Error("No se pudo crear la conversación");
-    conversationId = created.id;
-  }
+  const conversationId =
+    conversacionPedida ??
+    (await crearConversacion(supabase, organizationId, null)).id;
 
   const { data: convRow, error: convError } = await supabase
     .from("agent_conversations")
@@ -722,13 +851,27 @@ export async function sendAgentMessageAction(input: {
     .eq("organization_id", organizationId)
     .single();
 
-  if (convError) throw new Error(convError.message);
-  if (!convRow) throw new Error("Conversación no encontrada");
+  if (convError) {
+    // PGRST116: `.single()` sin filas (no existe o es de otra organización).
+    if (convError.code === "PGRST116") throw new ErrorEsperable(CONVERSACION_NO_ENCONTRADA);
+    throw new FallaDeLaBase(convError);
+  }
+  if (!convRow) throw new ErrorEsperable(CONVERSACION_NO_ENCONTRADA);
 
-  const { count: priorCount } = await supabase
-    .from("agent_messages")
-    .select("id", { count: "exact", head: true })
-    .eq("conversation_id", conversationId);
+  // Si falla, se sigue como antes (sin el conteo, el título se genera) y la
+  // falla queda registrada.
+  const priorCount = await lecturaDegradable(
+    "agente:mensajes-previos",
+    async () => {
+      const { count, error } = await supabase
+        .from("agent_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("conversation_id", conversationId);
+      if (error) throw new FallaDeLaBase(error);
+      return count;
+    },
+    null
+  );
 
   const { error: userErr } = await supabase
     .from("agent_messages")
@@ -741,32 +884,44 @@ export async function sendAgentMessageAction(input: {
     .select("*")
     .single();
 
-  if (userErr) throw new Error(userErr.message);
+  if (userErr) throw new FallaDeLaBase(userErr);
 
-  await supabase
+  const { error: fechaErr } = await supabase
     .from("agent_conversations")
     .update({ updated_at: new Date().toISOString() })
     .eq("id", conversationId);
+  // No corta el envío (sólo ordena el historial), pero no se esconde.
+  if (fechaErr) {
+    registrarFallaDeAccion("[sendAgentMessage] updated_at", new FallaDeLaBase(fechaErr));
+  }
 
-  const history = await listAgentMessagesAction(conversationId);
-  const recentOrg = await getRecentOrgMessages(
+  const history = await leerMensajesDeConversacion(
     supabase,
     organizationId,
     conversationId
   );
+  const recentOrg = await lecturaDegradable(
+    "agente:mensajes-recientes",
+    () => getRecentOrgMessages(supabase, organizationId, conversationId),
+    []
+  );
 
-  let stageForPrompt: BusinessStage | null = null;
-  if (input.contextStageId) {
-    const { data: stageRow } = await supabase
-      .from("business_stages")
-      .select("*")
-      .eq("id", input.contextStageId)
-      .eq("organization_id", organizationId)
-      .maybeSingle();
-    if (stageRow) stageForPrompt = rowToStage(stageRow);
-  }
+  // Una etapa con un ID que no es UUID se ignora, como antes (la consulta
+  // fallaba y no se usaba la etapa).
+  const etapaPedida = uuidSchema.safeParse(input.contextStageId);
+  const stageForPrompt: BusinessStage | null = etapaPedida.success
+    ? await lecturaDegradable(
+        "agente:etapa-del-prompt",
+        () => leerEtapa(supabase, organizationId, etapaPedida.data),
+        null
+      )
+    : null;
 
-  const orgName = await getOrgName(supabase, organizationId);
+  const orgName = await lecturaDegradable(
+    "agente:nombre-de-la-org",
+    () => getOrgName(supabase, organizationId),
+    "tu negocio"
+  );
   const orgContext = await getOrgContext(organizationId);
   const orgContextText = buildOrgContextText(orgContext);
 
@@ -841,6 +996,7 @@ export async function sendAgentMessageAction(input: {
 
   let agentResult: { text: string; thinkingContent: string | null; toolCall: { name: string; input: Record<string, unknown> } | null; toolCalls: { name: string; input: Record<string, unknown> }[] } | null = null;
   let claudeThrew = false;
+  let errorDeClaude: unknown = null;
 
   // Accumulated proposals created during tool-use loop
   const createdProposals: GraphProposal[] = [];
@@ -1148,6 +1304,7 @@ export async function sendAgentMessageAction(input: {
     });
   } catch (claudeErr) {
     claudeThrew = true;
+    errorDeClaude = claudeErr;
     console.error("[Agent:Claude] callClaudeAgent threw", {
       organizationId,
       err: claudeErr,
@@ -1165,8 +1322,14 @@ export async function sendAgentMessageAction(input: {
       claudeThrew,
       orgClaudeClientAvailable,
     });
+    // La clave rechazada o la cuenta sin créditos vuelven con su motivo
+    // (`rechazoConocidoDeClaude`); cualquier otro error de Claude (también una
+    // falla de la base al leer la clave) es una falla: se registra y el usuario
+    // ve `AGENT_ERROR_REPLY`.
+    if (claudeThrew) throw rechazoConocidoDeClaude(errorDeClaude);
     // Sin clave propia no hay IA (SCRUM-7): decirlo, no el error genérico.
-    throw new Error(orgClaudeClientAvailable ? AGENT_ERROR_REPLY : NO_AI_CREDENTIALS_MESSAGE);
+    if (!orgClaudeClientAvailable) throw new ErrorEsperable(NO_AI_CREDENTIALS_MESSAGE);
+    throw new Error("Claude no devolvió texto para el agente");
   }
 
   // Build document attachments if a document was generated via tool call
@@ -1230,16 +1393,23 @@ export async function sendAgentMessageAction(input: {
     .select("id")
     .single();
 
-  if (assistantErr) throw new Error(assistantErr.message);
+  if (assistantErr) throw new FallaDeLaBase(assistantErr);
 
   // Back-fill message_id on created proposals so the UI can load them per message
   if (createdProposals.length > 0 && assistantMsgData?.id) {
     const proposalIds = createdProposals.map((p) => p.id);
-    await supabase
+    const { error: propuestasErr } = await supabase
       .from("agent_graph_proposals")
       .update({ message_id: assistantMsgData.id })
       .in("id", proposalIds)
       .eq("organization_id", organizationId);
+    // La respuesta ya está guardada: no se corta, pero no se esconde.
+    if (propuestasErr) {
+      registrarFallaDeAccion(
+        "[sendAgentMessage] message_id de las propuestas",
+        new FallaDeLaBase(propuestasErr)
+      );
+    }
   }
 
   // Se hace await (no fire-and-forget): en serverless el runtime congela el
@@ -1259,7 +1429,11 @@ export async function sendAgentMessageAction(input: {
 
   revalidateAgent();
 
-  const messages = await listAgentMessagesAction(conversationId);
+  const messages = await leerMensajesDeConversacion(
+    supabase,
+    organizationId,
+    conversationId
+  );
   return { conversationId, messages, openCanvas: flags.useCanvas };
 }
 

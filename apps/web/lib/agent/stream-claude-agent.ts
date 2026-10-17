@@ -13,6 +13,7 @@ import {
 } from "@/lib/ai/anthropic-auth-errors";
 import { resolveCredentialForOrg } from "@/lib/ai/credential-resolver";
 import { trackTokenUsage } from "@/lib/track-token-usage";
+import { ErrorEsperable } from "@/lib/server/error-esperable";
 import {
   resolveAgentMaxTokens,
   resolveAgentThinkingBudget,
@@ -225,7 +226,7 @@ export async function streamClaudeAgent(
   // Sin clave propia, no hay IA (SCRUM-7): el usuario ve por qué y qué hacer,
   // en vez del genérico "No pudimos generar la respuesta".
   if (!resolution.client || resolution.source === "none") {
-    throw new Error(NO_AI_CREDENTIALS_MESSAGE);
+    throw new ErrorEsperable(NO_AI_CREDENTIALS_MESSAGE);
   }
 
   try {
@@ -323,10 +324,12 @@ export async function streamClaudeAgent(
           tb.input as Record<string, unknown>
         );
 
+        // Al navegador sólo el nombre de la tool (SCRUM-506, AR pasada 2): el
+        // resultado puede traer el texto crudo de la base y la pantalla no lo
+        // usa. El modelo lo sigue recibiendo entero en el tool_result.
         req.emitter.emit("tool_end", {
           type: "tool_end",
           toolName: tb.name,
-          result: resultStr.slice(0, 200),
         });
 
         toolResults.push({

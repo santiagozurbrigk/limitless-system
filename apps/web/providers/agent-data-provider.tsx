@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { resolveAgentFlags } from "@/lib/agent/canvas-intent";
+import { EnvioRechazado, TITULO_SIN_ACTUALIZAR } from "@/lib/agent/motivo-del-envio";
 import { parseSseBuffer } from "@/lib/agent/sse";
 import { useStreamTypewriter } from "@/lib/agent/use-stream-typewriter";
 import type { AgentStatus } from "@/lib/agent/types";
@@ -23,7 +24,15 @@ import {
   listAgentMessagesAction,
   listAgentWorkspaceAction,
 } from "@/app/agent/actions";
+import {
+  correrMutacion,
+  leerConMotivo,
+  type Aviso,
+  type Lectura,
+} from "@/lib/client/correr-accion";
+import type { MutationResult } from "@/lib/server/action-result";
 import { useOptionalPageContext } from "@/providers/page-context-provider";
+import { useToast } from "@/providers/toast-provider";
 import { paths } from "@/routes/paths";
 import type {
   AgentConversation,
@@ -43,6 +52,8 @@ type AgentDataContextValue = {
   filterStageId: string | null;
   workspace: AgentWorkspaceData;
   messages: AgentMessage[];
+  /** Por qué no se pudieron leer los mensajes de la conversación (SCRUM-506). */
+  motivoDeCarga: string | null;
   streamingMessageId: string | null;
   streamingDisplayedText: string;
   activeToolName: string | null;
@@ -59,13 +70,83 @@ type AgentDataContextValue = {
   ) => Promise<SendMessageResult>;
   cancelSend: () => void;
   retryLastMessage: () => Promise<void>;
-  createStage: (input: { name: string; description?: string }) => Promise<void>;
+  /** `true` si la etapa se creó; si no, ya se avisó el motivo. */
+  createStage: (input: { name: string; description?: string }) => Promise<boolean>;
   deleteConversation: (id: string) => Promise<void>;
   deleteStage: (id: string) => Promise<void>;
   startNewConversation: () => void;
 };
 
 const AgentDataCtx = createContext<AgentDataContextValue | null>(null);
+
+/*
+ * Las acciones del Agente devuelven sus errores esperables como valor
+ * (SCRUM-506). Estas funciones son la parte del provider que las llama: se
+ * exportan para probarlas sin montar el provider.
+ */
+
+/** Los mensajes de una conversación o el motivo para mostrar en el chat. */
+export function leerMensajesDelAgente(
+  conversationId: string
+): Promise<Lectura<AgentMessage[]>> {
+  return leerConMotivo(
+    () => listAgentMessagesAction(conversationId),
+    "[Agente] leer mensajes"
+  );
+}
+
+/** Corre una mutación del Agente; con un error avisa el motivo. `true` si salió bien. */
+async function mutacionDelAgente(opciones: {
+  accion: () => Promise<MutationResult<unknown>>;
+  avisar: (aviso: Aviso) => void;
+  tituloError: string;
+  etiqueta: string;
+}): Promise<boolean> {
+  let salioBien = false;
+  await correrMutacion({
+    ...opciones,
+    alExito: () => {
+      salioBien = true;
+    },
+  });
+  return salioBien;
+}
+
+export function crearEtapaDelAgente(
+  input: { name: string; description?: string },
+  avisar: (aviso: Aviso) => void
+): Promise<boolean> {
+  return mutacionDelAgente({
+    accion: () => createBusinessStageAction(input),
+    avisar,
+    tituloError: "No se pudo crear la etapa",
+    etiqueta: "[Agente] crear etapa",
+  });
+}
+
+export function eliminarConversacionDelAgente(
+  id: string,
+  avisar: (aviso: Aviso) => void
+): Promise<boolean> {
+  return mutacionDelAgente({
+    accion: () => deleteAgentConversationAction(id),
+    avisar,
+    tituloError: "No se pudo eliminar la conversación",
+    etiqueta: "[Agente] eliminar conversación",
+  });
+}
+
+export function eliminarEtapaDelAgente(
+  id: string,
+  avisar: (aviso: Aviso) => void
+): Promise<boolean> {
+  return mutacionDelAgente({
+    accion: () => deleteBusinessStageAction(id),
+    avisar,
+    tituloError: "No se pudo eliminar la etapa",
+    etiqueta: "[Agente] eliminar etapa",
+  });
+}
 
 function buildOptimisticAssistantMessage(
   id: string,
@@ -117,6 +198,7 @@ export function AgentDataProvider({
   filterStageId?: string | null;
 }) {
   const router = useRouter();
+  const { push } = useToast();
   const reducedMotion = usePrefersReducedMotion();
   const pageContext = useOptionalPageContext()?.pageContext ?? null;
   const resolvedConversationId = conversationId ?? null;
@@ -146,6 +228,7 @@ export function AgentDataProvider({
     conversations: [],
   });
   const [messages, setMessages] = useState<AgentMessage[]>([]);
+  const [motivoDeCarga, setMotivoDeCarga] = useState<string | null>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [activeToolName, setActiveToolName] = useState<string | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("idle");
@@ -168,12 +251,19 @@ export function AgentDataProvider({
   const loadConversation = useCallback(async (id: string | null) => {
     if (!id) {
       setMessages([]);
+      setMotivoDeCarga(null);
       setStreamingMessageId(null);
       setActiveToolName(null);
       return;
     }
-    const rows = await listAgentMessagesAction(id);
-    setMessages(rows);
+    const lectura = await leerMensajesDelAgente(id);
+    if (lectura.ok) {
+      setMessages(lectura.data);
+      setMotivoDeCarga(null);
+    } else {
+      setMessages([]);
+      setMotivoDeCarga(lectura.motivo);
+    }
     setStreamingMessageId(null);
     setActiveToolName(null);
   }, []);
@@ -195,6 +285,8 @@ export function AgentDataProvider({
         await loadConversation(resolvedConversationId);
       } else if (!isSendingRef.current) {
         setMessages([]);
+        // Sin conversación no queda el motivo de una carga anterior (SCRUM-506).
+        setMotivoDeCarga(null);
       }
       if (!cancelled) {
         setIsLoading(false);
@@ -357,7 +449,9 @@ export function AgentDataProvider({
         }
 
         if (streamError) {
-          throw new Error(streamError);
+          // La ruta manda un texto para el usuario (el motivo o un texto fijo,
+          // nunca el técnico): se muestra tal cual (SCRUM-506).
+          throw new EnvioRechazado(streamError);
         }
 
         if (!receivedDone) {
@@ -403,8 +497,23 @@ export function AgentDataProvider({
         await waitForStreamCatchUp();
         snapStreamToBuffer();
 
-        const finalMessages = await listAgentMessagesAction(resultConversationId);
-        setMessages(finalMessages);
+        const lecturaFinal = await leerMensajesDelAgente(resultConversationId);
+        if (lecturaFinal.ok) {
+          setMessages(lecturaFinal.data);
+        } else {
+          // El envío salió y la respuesta está guardada: no se saca de la vista
+          // ni se dice "No se pudo enviar" (el usuario reintentaría y se
+          // enviaría y cobraría dos veces). Queda lo que llegó por el stream.
+          const { buffered } = getTextSnapshot();
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === streamingId
+                ? { ...message, content: buffered || message.content }
+                : message
+            )
+          );
+          push({ title: TITULO_SIN_ACTUALIZAR, description: lecturaFinal.motivo, variant: "default" });
+        }
         setStreamingMessageId(null);
         resetStreamTypewriter();
         setActiveToolName(null);
@@ -460,6 +569,7 @@ export function AgentDataProvider({
       resolvedConversationId,
       resolvedFilterStageId,
       pageContext,
+      push,
       refresh,
       router,
       clearCompleteTimer,
@@ -486,16 +596,18 @@ export function AgentDataProvider({
 
   const createStage = useCallback(
     async (input: { name: string; description?: string }) => {
-      await createBusinessStageAction(input);
+      const creada = await crearEtapaDelAgente(input, push);
+      if (!creada) return false;
       await refresh();
       router.refresh();
+      return true;
     },
-    [refresh, router]
+    [push, refresh, router]
   );
 
   const deleteConversation = useCallback(
     async (id: string) => {
-      await deleteAgentConversationAction(id);
+      if (!(await eliminarConversacionDelAgente(id, push))) return;
       await refresh();
       if (resolvedConversationId === id) {
         router.push(
@@ -505,19 +617,19 @@ export function AgentDataProvider({
         );
       }
     },
-    [resolvedConversationId, resolvedFilterStageId, refresh, router]
+    [push, resolvedConversationId, resolvedFilterStageId, refresh, router]
   );
 
   const deleteStage = useCallback(
     async (id: string) => {
-      await deleteBusinessStageAction(id);
+      if (!(await eliminarEtapaDelAgente(id, push))) return;
       await refresh();
       router.refresh();
       if (resolvedFilterStageId === id) {
         router.push(paths.platform.agent.root);
       }
     },
-    [resolvedFilterStageId, refresh, router]
+    [push, resolvedFilterStageId, refresh, router]
   );
 
   const startNewConversation = useCallback(() => {
@@ -528,6 +640,7 @@ export function AgentDataProvider({
         : paths.platform.agent.root
     );
     setMessages([]);
+    setMotivoDeCarga(null);
     setStreamingMessageId(null);
     setActiveToolName(null);
     setAgentStatus("idle");
@@ -541,6 +654,7 @@ export function AgentDataProvider({
       filterStageId: resolvedFilterStageId,
       workspace,
       messages,
+      motivoDeCarga,
       streamingMessageId,
       streamingDisplayedText: streamingDisplayedText,
       activeToolName,
@@ -564,6 +678,7 @@ export function AgentDataProvider({
       resolvedFilterStageId,
       workspace,
       messages,
+      motivoDeCarga,
       streamingMessageId,
       streamingDisplayedText,
       activeToolName,

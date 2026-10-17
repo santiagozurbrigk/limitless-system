@@ -4,7 +4,15 @@ import {
   createAgentConversationAction,
   listAgentMessagesAction,
 } from "@/app/agent/actions";
-import { requireAuthContext } from "@/lib/auth/require-auth";
+import {
+  AGENT_ERROR_REPLY,
+  CONVERSACION_NO_ENCONTRADA,
+  contextoDeSesion,
+  errorDeLaAccion,
+  exigirUuid,
+} from "@/lib/agent/errores-del-agente";
+import { rechazoConocidoDeClaude } from "@/lib/ai/rechazo-de-claude";
+import { ErrorEsperable, FallaDeLaBase } from "@/lib/server/action-result";
 import {
   aiRateLimit,
   rateLimitErrorMessage,
@@ -60,8 +68,6 @@ import {
 import type { AgentSseEmitter } from "@/lib/agent/sse";
 import { streamClaudeAgent } from "@/lib/agent/stream-claude-agent";
 
-const AGENT_ERROR_REPLY =
-  "No pudimos generar la respuesta. Intentá de nuevo en unos segundos.";
 
 const CANVAS_HEADING_RE = /^#{1,3} /m;
 const CANVAS_CODE_RE = /```[\s\S]{100}/;
@@ -119,7 +125,7 @@ async function executeAgentActions(
     if (action.type === "CREATE_SOP") {
       const { allowed, resetAt } = await sopGenerateRateLimit(organizationId);
       if (!allowed) {
-        throw new Error(rateLimitErrorMessage(resetAt));
+        throw new ErrorEsperable(rateLimitErrorMessage(resetAt));
       }
 
       const parsed = z
@@ -136,7 +142,7 @@ async function executeAgentActions(
           goal: action.data.goal ?? action.data.title ?? "SOP sin título",
         });
       if (!parsed.success) {
-        throw new Error(firstZodError(parsed.error));
+        throw new ErrorEsperable(firstZodError(parsed.error));
       }
 
       const { title, department, content, goal } = parsed.data;
@@ -155,7 +161,7 @@ async function executeAgentActions(
         .select("id")
         .single();
 
-      if (error) throw new Error(error.message);
+      if (error) throw new FallaDeLaBase(error);
       revalidatePath(paths.platform.sops.root);
       return { actionType: "created_sop", actionRefId: data.id };
     }
@@ -203,20 +209,33 @@ export type StreamAgentMessageInput = {
   signal?: AbortSignal;
 };
 
+/**
+ * Errores (SCRUM-506): un rechazo esperable (sesión, límite, texto inválido, ID
+ * inválido, conversación inexistente o de otra organización, sin clave de
+ * Claude, clave rechazada o sin créditos) se lanza como `ErrorEsperable` y la
+ * ruta `/api/agent/send` manda su motivo en el evento `error`, sin Sentry. Lo
+ * demás es una falla: la ruta la reporta y manda un texto fijo. Una falla que ya
+ * registró una acción se relanza como `FallaYaRegistrada`, para no reportarla
+ * dos veces.
+ */
 export async function streamAgentMessage(
   input: StreamAgentMessageInput
 ): Promise<void> {
-  const { user, orgId: organizationId } = await requireAuthContext();
+  const { user, orgId: organizationId } = await contextoDeSesion();
 
   const { allowed, resetAt } = await aiRateLimit(user.id);
   if (!allowed) {
-    throw new Error(rateLimitErrorMessage(resetAt));
+    throw new ErrorEsperable(rateLimitErrorMessage(resetAt));
   }
 
   const parsedContent = aiPromptSchema.safeParse(input.content);
   if (!parsedContent.success) {
-    throw new Error(firstZodError(parsedContent.error));
+    throw new ErrorEsperable(firstZodError(parsedContent.error));
   }
+  // El ID se valida antes de ir a la base (antes volvía el texto de Postgres).
+  const conversacionPedida = input.conversationId
+    ? exigirUuid(input.conversationId)
+    : null;
 
   if (input.signal?.aborted) {
     throw new DOMException("Cancelled", "AbortError");
@@ -225,12 +244,12 @@ export async function streamAgentMessage(
   const supabase = await createClient();
   const trimmed = sanitizeText(parsedContent.data);
 
-  let conversationId = input.conversationId ?? null;
+  let conversationId = conversacionPedida;
 
   if (!conversationId) {
     const created = await createAgentConversationAction();
-    if (!created) throw new Error("No se pudo crear la conversación");
-    conversationId = created.id;
+    if (!created.success) throw errorDeLaAccion(created.error);
+    conversationId = created.data.id;
   }
 
   const { data: convRow, error: convError } = await supabase
@@ -240,8 +259,12 @@ export async function streamAgentMessage(
     .eq("organization_id", organizationId)
     .single();
 
-  if (convError) throw new Error(convError.message);
-  if (!convRow) throw new Error("Conversación no encontrada");
+  if (convError) {
+    // PGRST116: `.single()` sin filas (no existe o es de otra organización).
+    if (convError.code === "PGRST116") throw new ErrorEsperable(CONVERSACION_NO_ENCONTRADA);
+    throw new FallaDeLaBase(convError);
+  }
+  if (!convRow) throw new ErrorEsperable(CONVERSACION_NO_ENCONTRADA);
 
   const { count: priorCount } = await supabase
     .from("agent_messages")
@@ -257,14 +280,16 @@ export async function streamAgentMessage(
       content: trimmed,
     });
 
-  if (userErr) throw new Error(userErr.message);
+  if (userErr) throw new FallaDeLaBase(userErr);
 
   await supabase
     .from("agent_conversations")
     .update({ updated_at: new Date().toISOString() })
     .eq("id", conversationId);
 
-  const history = await listAgentMessagesAction(conversationId);
+  const lecturaDelHistorial = await listAgentMessagesAction(conversationId);
+  if (!lecturaDelHistorial.success) throw errorDeLaAccion(lecturaDelHistorial.error);
+  const history = lecturaDelHistorial.data;
   const recentOrg = await getRecentOrgMessages(
     supabase,
     organizationId,
@@ -316,10 +341,13 @@ export async function streamAgentMessage(
     role: m.role,
     content: m.content,
   }));
+  // La compactación llama a Claude: la clave rechazada o sin créditos es un motivo.
   const messagesForClaude = await compactConversationMessages(
     organizationId,
     claudeMessages
-  );
+  ).catch((error: unknown) => {
+    throw rechazoConocidoDeClaude(error);
+  });
 
   const agentTask = detectAgentComplexity(trimmed, hasRagContext);
   const flags = resolveAgentFlags(trimmed, input.flags ?? {});
@@ -366,7 +394,9 @@ export async function streamAgentMessage(
       err: claudeErr,
       message: claudeErr instanceof Error ? claudeErr.message : String(claudeErr),
     });
-    throw claudeErr;
+    // Clave rechazada o sin créditos: su motivo. Sin clave, `streamClaudeAgent`
+    // ya lanza `ErrorEsperable`. Lo demás es una falla.
+    throw rechazoConocidoDeClaude(claudeErr);
   }
 
   const rawAssistant = agentResult?.text ?? null;
@@ -436,7 +466,7 @@ export async function streamAgentMessage(
     .select("id")
     .single();
 
-  if (assistantErr) throw new Error(assistantErr.message);
+  if (assistantErr) throw new FallaDeLaBase(assistantErr);
 
   if (toolState.createdProposals.length > 0 && assistantMsgData?.id) {
     const proposalIds = toolState.createdProposals.map((p) => p.id);

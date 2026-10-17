@@ -107,6 +107,8 @@ import * as workerSnapshot from "@/app/api/queue/process-cron-intelligence-snaps
 import * as workerReporte from "@/app/api/queue/process-cron-executive-report/route";
 import * as workerTono from "@/app/api/queue/process-cron-founder-tone/route";
 
+import { FallaDeLaBase } from "@/lib/server/action-result";
+
 const GENERADORES = [
   ["inteligencia", generateAndSaveIntelligenceSnapshot],
   ["tono del founder", generateAndSaveFounderTone],
@@ -204,6 +206,11 @@ describe.each(GENERADORES)("generador de %s", (_nombre, generar) => {
     conStatus("paused", "holding");
     await expect(generar(ORG)).resolves.toBe("skipped");
     expect(ia.getClientForOrg).not.toHaveBeenCalled();
+  });
+
+  it("⭐ si la base falla al leer la clave de Claude, el generador da \"failed\", no \"skipped\" (SCRUM-506)", async () => {
+    ia.getClientForOrg.mockRejectedValueOnce(new FallaDeLaBase({ code: "XX000", message: "boom" }) as never);
+    await expect(generar(ORG)).resolves.toBe("failed");
   });
 
   it("⭐ si la base falla al comprobar, lanza y no procesa la org", async () => {

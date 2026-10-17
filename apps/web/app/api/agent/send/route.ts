@@ -2,6 +2,13 @@ import * as Sentry from "@sentry/nextjs";
 import { streamAgentMessage } from "@/lib/agent/stream-agent-message";
 import { createSseEmitter, formatSseEvent } from "@/lib/agent/sse";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  AGENT_ERROR_REPLY,
+  FallaYaRegistrada,
+  SESION_NO_VALIDA,
+} from "@/lib/agent/errores-del-agente";
+import { esErrorEsperable } from "@/lib/server/error-esperable";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import type { AgentFlags } from "@/types/agent";
 import type { PageContextState } from "@/lib/agent/page-context";
 
@@ -19,7 +26,18 @@ export async function POST(req: Request) {
   let organizationId: string;
   try {
     organizationId = await requireOrganizationId();
-  } catch {
+  } catch (error) {
+    // Sin sesión o cuenta desactivada: rechazo esperable, sin Sentry. Una falla
+    // al resolver la organización se reporta y no se toma por "no autenticado".
+    if (!esErrorEsperable(error)) {
+      Sentry.captureException(error, {
+        tags: { feature: "agent", route: "api/agent/send" },
+      });
+      return new Response(formatSseEvent("error", { message: AGENT_ERROR_REPLY }), {
+        status: 500,
+        headers: SSE_HEADERS,
+      });
+    }
     return new Response(formatSseEvent("error", { message: "No autenticado" }), {
       status: 401,
       headers: SSE_HEADERS,
@@ -83,17 +101,23 @@ export async function POST(req: Request) {
         .catch((error) => {
           if (req.signal.aborted) {
             emitter.emit("error", { message: "Cancelled" });
+          } else if (esErrorEsperable(error)) {
+            // Rechazo esperable (SCRUM-506): su motivo, sin Sentry.
+            emitter.emit("error", { message: error.message });
+          } else if (isRedirectError(error)) {
+            // `requireAuthContext` redirige al cambio de contraseña: en un stream
+            // no se puede navegar, y no es una falla (SCRUM-506, AR pasada 2).
+            emitter.emit("error", { message: SESION_NO_VALIDA });
           } else {
-            const message =
-              error instanceof Error ? error.message : "Error desconocido";
-
-            // Capturar en Sentry con contexto del agente.
-            Sentry.captureException(error, {
-              tags: { feature: "agent", route: "api/agent/send" },
-              extra: { organizationId, conversationId: body.conversationId },
-            });
-
-            emitter.emit("error", { message });
+            // Falla: a Sentry (salvo que ya la haya registrado una acción) y un
+            // texto fijo; nunca el texto de la base ni de Anthropic.
+            if (!(error instanceof FallaYaRegistrada)) {
+              Sentry.captureException(error, {
+                tags: { feature: "agent", route: "api/agent/send" },
+                extra: { organizationId, conversationId: body.conversationId },
+              });
+            }
+            emitter.emit("error", { message: AGENT_ERROR_REPLY });
           }
           controller.close();
         });
