@@ -360,7 +360,8 @@ describe("POST /api/ingest/landing: idempotencia", () => {
   it("⭐ el mismo email (escrito distinto) con otro client_registration_id: se queda el primer registro", async () => {
     await enviar(registro({ phone: null }));
     await enviar(
-      registro({ client_registration_id: "reg-2", email: " persona.prueba@ejemplo.test ", phone: TELEFONO }),
+      // Otro caso, espacios a los costados y uno en el medio (un autocompletado).
+      registro({ client_registration_id: "reg-2", email: " PERSONA.prueba @Ejemplo.test ", phone: TELEFONO }),
     );
     await correrTareas();
 
@@ -663,6 +664,10 @@ describe("reproceso de la landing (cron)", () => {
     expect(a.procesados + b.procesados).toBe(1);
     expect(a.omitidos + b.omitidos).toBe(1);
     expect(base.filas("launch_registrations")).toHaveLength(1);
+    // La segunda corrida ni siquiera lo normaliza: el reclamo condicionado se
+    // lo impide. Sin él, la idempotencia y el cierre condicionado esconderían
+    // el doble proceso, pero la cuenta de reprocesos quedaría mal.
+    expect(base.consultas.filter((c) => c.tabla === "webinar_launches")).toHaveLength(1);
   });
 
   it("no toca unmapped ni processed", async () => {
