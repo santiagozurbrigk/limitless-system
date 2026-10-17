@@ -87,6 +87,16 @@ Eventos SSE (`lib/agent/sse.ts`): `delta`, `tool_start`, `tool_end`, `done`, `er
 
 `max_tokens` (`lib/agent/max-tokens.ts`): 8192 normal, 6144 con thinking, 12288 con canvas (canvas manda aunque haya thinking); budget de thinking 4000. El thinking sólo va en el primer turno; los turnos posteriores a una tool van sin thinking y sin prompt caching.
 
+### Errores de las acciones del Agente (SCRUM-506)
+
+Las seis acciones de `app/agent/actions.ts` que usan la pantalla y el chat flotante devuelven `MutationResult` con `mutacionConErroresEsperables` (`[ACTIONS-ERRORES-EN-PRODUCCION]`): `listAgentMessagesAction`, `createBusinessStageAction`, `createAgentConversationAction`, `deleteAgentConversationAction`, `deleteBusinessStageAction` y `sendAgentMessageAction`.
+
+- **Rechazos con motivo** (`ErrorEsperable`): sin sesión ("Sesión no válida"; `requireAuthContext` lanza un `Error` común "Unauthorized" y la acción lo traduce, el redirect al cambio de contraseña sigue de largo), ID que no es UUID ("ID inválido", con `uuidSchema`), conversación inexistente o de otra organización ("Conversación no encontrada", el `PGRST116` de `.single()`), límite de pedidos de IA o de SOPs, texto del mensaje inválido, sin clave de Claude (`NO_AI_CREDENTIALS_MESSAGE`: no hay clave global de respaldo, SCRUM-7, y eso no cambia), clave rechazada por Anthropic y cuenta sin créditos o con el límite de gasto alcanzado (`rechazoConocidoDeClaude` de `lib/ai/rechazo-de-claude.ts`, el mismo traductor que Marketing).
+- **Fallas** (se registran en la consola y en Sentry con el tag `server_action`): un error de la base es `FallaDeLaBase` con su código; otro error de Anthropic (un 429 por exceso de pedidos, un 5xx), una respuesta vacía del modelo o la red. Las cinco acciones de la pantalla vuelven con el texto fijo de la interfaz; `sendAgentMessageAction` vuelve con el texto de siempre del agente, "No pudimos generar la respuesta. Intentá de nuevo en unos segundos.".
+- **Lo que ya no se esconde:** la tabla de mensajes ausente se decide por código (`esTablaAusente`), no por el texto (la caída de la caché de PostgREST, `PGRST002`, era "sin mensajes"); sin sesión la lectura de mensajes sigue devolviendo vacío, pero una falla al resolver la organización ya no; si falla la lectura de las propuestas, los mensajes se muestran sin ellas y la falla queda registrada (`lecturaDegradable`); crear una etapa no la guarda con un orden inventado si falla el conteo. En el envío, las lecturas secundarias (nombre de la org, etapa del prompt, mensajes recientes de la org, conteo de mensajes previos) siguen con su valor por defecto y la falla queda registrada; la fecha de la conversación y el vínculo de las propuestas con la respuesta tampoco cortan el envío, pero se registran.
+- **Llamadores:** la pantalla (`AgentDataProvider`) muestra el motivo en el chat si no se pudieron leer los mensajes ("No se pudo cargar la conversación"; antes quedaba en "Cargando…"), avisa el motivo al crear o borrar una etapa o una conversación (el modal de etapa queda abierto si falla) y, si la relectura después de un envío falla, sigue como antes (el aviso de "No se pudo enviar el mensaje"). El chat flotante muestra el motivo como respuesta del agente; si la acción lanza, el texto fijo.
+- **Qué cubre la acción y qué la ruta:** la pantalla envía por `POST /api/agent/send` (SSE, `lib/agent/stream-agent-message.ts`), que no cambia: usa `createAgentConversationAction` y `listAgentMessagesAction` y, si devuelven un error, lo lanza con ese motivo, que la ruta manda en el evento `error` como cualquier otro error. Lo que lanza el stream (sesión, límite, Claude) sigue el camino de la ruta, que lo captura en Sentry; esa ruta no forma parte del conteo. `sendAgentMessageAction` es sólo del chat flotante (`[AGENTE-CAMINO-LEGACY]`).
+
 ### Tools del agente (`AGENT_CHAT_TOOLS`, 20)
 
 | Grupo | Tools | Handler |
@@ -258,6 +268,8 @@ Detalle y prioridades en `PENDIENTES.md` § Agente de negocio e IA.
 |---|---|
 | Cadencias, `isStale`, `isReportPeriod` | `apps/web/lib/executive-reports/__tests__/cadences.test.ts` |
 | `/api/agent/send` excluida de redirects públicos | `apps/web/lib/supabase/__tests__/public-paths.test.ts` |
+| Las seis acciones del Agente devuelven sus errores como valor, filtran por organización y registran lo inesperado (Claude con el SDK real y una red falsa) | `apps/web/app/agent/__tests__/acciones-del-agente-errores-como-valor.test.ts`, `enviar-mensaje-errores-como-valor.test.ts` |
+| La pantalla, el chat flotante y el envío por streaming usan el resultado como valor | `apps/web/providers/agente-providers-errores.test.ts`, `apps/web/components/agent/__tests__/chat-del-agente-motivo.test.ts`, `apps/web/lib/agent/__tests__/stream-con-acciones-como-valor.test.ts` |
 | Agente accesible dentro del negocio activo del holding (sólo navegación) | `apps/web/e2e/holding.spec.ts` |
 | Scripts manuales de ingesta (no Vitest) | `apps/web/scripts/test-ingest-throws-on-failure.ts`, `apps/web/scripts/verify-business-context-rag.ts` |
 
