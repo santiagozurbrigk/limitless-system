@@ -15,8 +15,8 @@ import {
  *
  * Toma los eventos en `error` y los trabados en `pending` (llegaron hace más
  * de `MINUTOS_PENDIENTE_TRABADO` y nadie los cerró: la función se cortó antes
- * o durante la normalización), filtrando por columnas (índice parcial
- * `landing_events_a_reprocesar`). Cada uno se reclama con un UPDATE
+ * o durante la normalización), filtrando por columnas (condición exacta sobre
+ * el índice `landing_events_status_received`). Cada uno se reclama con un UPDATE
  * condicionado a lo que se leyó (estado, `reprocess_attempts` y, en un
  * `pending`, la marca `processed_at`) que suma uno a `reprocess_attempts`: dos
  * corridas a la vez no lo procesan dos veces ni cuentan mal.

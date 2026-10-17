@@ -18,9 +18,12 @@ import { esEmailValido } from "@/lib/webinar/identity";
  * El resto es opcional y puede venir en `null`. Las claves que no están en el
  * contrato se ignoran para normalizar, pero el crudo las guarda (por eso pasan
  * por el mismo control de texto que el resto). `occurred_at`, si viene, es
- * una fecha ISO 8601 con zona dentro de la ventana de `VENTANA_HACIA_ATRAS_MS`
- * y `VENTANA_HACIA_ADELANTE_MS` alrededor de la hora en que llegó; si no
- * viene, vale la hora en que llegó.
+ * una fecha ISO 8601 con zona. Se usa sólo si cae dentro de la ventana de
+ * `VENTANA_HACIA_ATRAS_MS` y `VENTANA_HACIA_ADELANTE_MS` alrededor de la hora
+ * en que llegó; fuera de ella (un reloj de navegador adelantado, un año 0 o
+ * 10000 que no entra en un `timestamptz`, un 1900 que movería las métricas)
+ * se ignora y vale la hora en que llegó, igual que si no viniera (AR pasada
+ * 2: rechazarlo perdía el registro). El crudo guarda el valor original.
  *
  * Qué se rechaza antes de guardar nada (el endpoint responde 400), para que lo
  * que pasa se pueda guardar siempre como jsonb y normalizar (AR pasada 1):
@@ -29,8 +32,9 @@ import { esEmailValido } from "@/lib/webinar/identity";
  *   - estructuras de más de `PROFUNDIDAD_MAXIMA` niveles (`JSON.stringify` de
  *     supabase-js revienta con miles);
  *   - textos más largos que lo que acepta su columna;
- *   - un `occurred_at` fuera de la ventana (un año 0 o 10000 no entra en un
- *     `timestamptz`, y un 1900 o un 2999 movería las métricas por fecha).
+ *   - lo que no cumple el contrato (un `occurred_at` que no es una fecha ISO
+ *     con zona, por ejemplo). Un `occurred_at` bien escrito pero fuera de la
+ *     ventana NO se rechaza: se ignora (ver arriba).
  */
 
 /** Cuerpo máximo que acepta el endpoint: 16 KB. */
@@ -72,17 +76,13 @@ export function esJsonGuardable(valor: unknown, nivel: number = 0): boolean {
 }
 
 /** Si `occurred_at` cae dentro de la ventana alrededor de `referencia`. */
-export function estaEnLaVentana(
-  occurredAt: string,
-  referencia: Date,
-  holguraMs: number = 0,
-): boolean {
+export function estaEnLaVentana(occurredAt: string, referencia: Date): boolean {
   const momento = Date.parse(occurredAt);
   if (Number.isNaN(momento)) return false;
   const base = referencia.getTime();
   return (
-    momento >= base - VENTANA_HACIA_ATRAS_MS - holguraMs &&
-    momento <= base + VENTANA_HACIA_ADELANTE_MS + holguraMs
+    momento >= base - VENTANA_HACIA_ATRAS_MS &&
+    momento <= base + VENTANA_HACIA_ADELANTE_MS
   );
 }
 
@@ -143,22 +143,22 @@ export type EventoDeLanding = z.output<typeof esquemaDelEventoDeLanding>;
 export type RegistroDeLanding = Extract<EventoDeLanding, { type: "registration" }>;
 export type VisitaDeLanding = Extract<EventoDeLanding, { type: "visit" }>;
 
-/**
- * El evento validado, o `null` si no cumple el contrato. No devuelve el
- * motivo a propósito: los mensajes de Zod repiten valores del payload (datos
- * personales), y la respuesta del endpoint es un motivo genérico.
- */
 export type OpcionesDeValidacion = {
-  /** Contra qué hora se mide la ventana de `occurred_at`: la de llegada. */
-  referencia: Date;
   /**
-   * Margen extra de la ventana. Al revalidar un crudo guardado se mide contra
-   * `received_at`, que es unos milisegundos posterior a la hora que usó el
-   * endpoint: con un minuto de holgura, lo que entró no queda afuera después.
+   * Contra qué hora se mide la ventana de `occurred_at`: la de llegada. La
+   * normalización pasa `received_at`, así la decisión es la misma en el
+   * intento del endpoint y en cualquier reproceso.
    */
-  holguraMs?: number;
+  referencia: Date;
 };
 
+/**
+ * El evento validado, o `null` si no se puede guardar o no cumple el
+ * contrato. Un `occurred_at` fuera de la ventana vuelve en `null` (se usa la
+ * hora de llegada). No devuelve el motivo a propósito: los mensajes de Zod
+ * repiten valores del payload (datos personales), y la respuesta del
+ * endpoint es un motivo genérico.
+ */
 export function validarEventoDeLanding(
   json: unknown,
   opciones: OpcionesDeValidacion,
@@ -167,8 +167,8 @@ export function validarEventoDeLanding(
   const resultado = esquemaDelEventoDeLanding.safeParse(json);
   if (!resultado.success) return null;
   const { occurred_at } = resultado.data;
-  if (occurred_at !== null && !estaEnLaVentana(occurred_at, opciones.referencia, opciones.holguraMs)) {
-    return null;
+  if (occurred_at !== null && !estaEnLaVentana(occurred_at, opciones.referencia)) {
+    return { ...resultado.data, occurred_at: null };
   }
   return resultado.data;
 }

@@ -374,11 +374,29 @@ describe("POST /api/ingest/landing: cuerpo y contrato", () => {
     ["2999", "2999-01-01T00:00:00Z"],
     ["31 días antes", "2026-09-16T05:59:59Z"],
     ["6 minutos después", "2026-10-17T06:06:00Z"],
-  ])("⭐ AR p1 MAYOR-2, occurred_at %s: 400 en registro y en visita, sin crudo", async (_caso, occurred_at) => {
-    expect((await enviar(registro({ occurred_at }))).status).toBe(400);
-    expect((await enviar(visita({ occurred_at }))).status).toBe(400);
+    ["60 minutos después", "2026-10-17T07:00:00Z"],
+  ])(
+    "⭐ AR p2 MAYOR-4, occurred_at %s: 200, se ignora y vale received_at; el crudo guarda el original",
+    async (_caso, occurred_at) => {
+      expect((await enviar(registro({ occurred_at }))).status).toBe(200);
+      expect((await enviar(visita({ occurred_at }))).status).toBe(200);
+      await correrTareas();
+      expect(crudos().map((c) => c.status)).toEqual(["processed", "processed"]);
+      expect(crudos().map((c) => (c.payload as { occurred_at: string }).occurred_at)).toEqual([occurred_at, occurred_at]);
+      const recibido = crudos()[0].received_at as string;
+      expect(recibido).toBe(AHORA.toISOString());
+      expect(base.filas("launch_registrations")[0].registered_at).toBe(recibido);
+      expect(base.filas("lead_events")[0].occurred_at).toBe(recibido);
+      expect(base.filas("leads")[0].first_seen_at).toBe(recibido);
+      expect(base.filas("landing_visits")[0].day).toBe(crudos()[1].received_at!.toString().slice(0, 10));
+      expect(sim.reportes).toHaveLength(0);
+    },
+  );
+
+  it("⭐ un occurred_at que no es una fecha ISO con zona sigue siendo 400", async () => {
+    expect((await enviar(registro({ occurred_at: "ayer" }))).status).toBe(400);
+    expect((await enviar(visita({ occurred_at: "2026-10-17T06:00:00" }))).status).toBe(400);
     expect(crudos()).toHaveLength(0);
-    expect(sim.reportes).toHaveLength(0);
   });
 
   it("occurred_at dentro de la ventana (hace 29 días, dentro de 4 minutos) pasa y queda con esa fecha", async () => {

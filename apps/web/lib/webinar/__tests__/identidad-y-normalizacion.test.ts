@@ -299,7 +299,7 @@ describe("⭐ lo que pasa la validación se puede guardar (AR pasada 1, MAYOR-1)
   });
 });
 
-describe("⭐ ventana de occurred_at (AR pasada 1, MAYOR-2)", () => {
+describe("⭐ ventana de occurred_at (AR pasadas 1 y 2: fuera de ella se ignora, no se rechaza)", () => {
   const llegada = LLEGADA.getTime();
   const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -310,8 +310,7 @@ describe("⭐ ventana de occurred_at (AR pasada 1, MAYOR-2)", () => {
     expect(estaEnLaVentana(iso(llegada - VENTANA_HACIA_ATRAS_MS - 1), LLEGADA)).toBe(false);
     expect(estaEnLaVentana(iso(llegada + VENTANA_HACIA_ADELANTE_MS), LLEGADA)).toBe(true);
     expect(estaEnLaVentana(iso(llegada + VENTANA_HACIA_ADELANTE_MS + 1), LLEGADA)).toBe(false);
-    // La holgura de la revalidación amplía los dos bordes.
-    expect(estaEnLaVentana(iso(llegada - VENTANA_HACIA_ATRAS_MS - 1), LLEGADA, 60_000)).toBe(true);
+    expect(estaEnLaVentana("no es fecha", LLEGADA)).toBe(false);
   });
 
   it.each([
@@ -320,14 +319,32 @@ describe("⭐ ventana de occurred_at (AR pasada 1, MAYOR-2)", () => {
     ["1900", "1900-01-01T00:00:00Z"],
     ["2999", "2999-01-01T00:00:00Z"],
     ["31 días antes", "2026-09-16T02:59:59Z"],
-    ["10 minutos después", "2026-10-17T03:10:00Z"],
-  ])("⭐ rechaza un registro y una visita con occurred_at %s", (_caso, occurred_at) => {
-    expect(validarEventoDeLanding({ ...REGISTRO, occurred_at })).toBeNull();
+    ["6 minutos después", "2026-10-17T03:06:00Z"],
+    ["60 minutos después", "2026-10-17T04:00:00Z"],
+  ])("⭐ acepta un registro y una visita con occurred_at %s, pero sin la fecha (vale la llegada)", (_caso, occurred_at) => {
+    const registro = validarEventoDeLanding({ ...REGISTRO, occurred_at }) as RegistroDeLanding;
+    const visita = validarEventoDeLanding({ ...VISITA, occurred_at }) as VisitaDeLanding;
+    expect(registro).not.toBeNull();
+    expect(visita).not.toBeNull();
+    expect(registro.occurred_at).toBeNull();
+    expect(visita.occurred_at).toBeNull();
+    expect(momentoDelEvento(registro, LLEGADA.toISOString())).toBe(LLEGADA.toISOString());
+    expect(filaDeLaVisita(visita, { organizationId: "o", launchId: "l", recibidoEn: LLEGADA.toISOString() }).day).toBe(
+      "2026-10-17",
+    );
+  });
+
+  it.each([
+    ["que no es fecha", "ayer"],
+    ["sin zona", "2026-10-17T03:00:00"],
+  ])("un occurred_at %s sigue siendo un payload fuera de contrato (400)", (_caso, occurred_at) => {
     expect(validarEventoDeLanding({ ...VISITA, occurred_at })).toBeNull();
   });
 
-  it("acepta uno de ayer, con otra zona, y uno sin occurred_at", () => {
-    expect(validarEventoDeLanding({ ...REGISTRO, occurred_at: "2026-10-16T00:00:00-03:00" })).not.toBeNull();
+  it("acepta uno de ayer, con otra zona, y lo conserva; y uno sin occurred_at", () => {
+    expect(validarEventoDeLanding({ ...REGISTRO, occurred_at: "2026-10-16T00:00:00-03:00" })?.occurred_at).toBe(
+      "2026-10-16T00:00:00-03:00",
+    );
     expect(validarEventoDeLanding({ ...VISITA, occurred_at: null })).not.toBeNull();
   });
 });

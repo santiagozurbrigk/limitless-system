@@ -89,11 +89,6 @@ export type ResultadoDeNormalizacion =
   | { estado: "processed"; nota?: string }
   | { estado: "unmapped"; motivo: string };
 
-/**
- * Al revalidar un crudo guardado, la ventana de `occurred_at` se mide contra
- * `received_at` con un minuto de holgura (ver `OpcionesDeValidacion`).
- */
-const HOLGURA_AL_REVALIDAR_MS = 60_000;
 
 /**
  * ⭐ Normaliza un evento guardado: escribe el lead, el registro y su evento
@@ -109,10 +104,9 @@ export async function normalizarEventoCrudo(
   admin: SupabaseClient,
   crudo: EventoCrudo,
 ): Promise<ResultadoDeNormalizacion> {
-  const evento = validarEventoDeLanding(crudo.payload, {
-    referencia: new Date(crudo.received_at),
-    holguraMs: HOLGURA_AL_REVALIDAR_MS,
-  });
+  // La ventana de occurred_at se mide contra received_at: la misma decisión en
+  // el intento del endpoint y en cualquier reproceso.
+  const evento = validarEventoDeLanding(crudo.payload, { referencia: new Date(crudo.received_at) });
   if (!evento) return { estado: "unmapped", motivo: MOTIVO_PAYLOAD_FUERA_DE_CONTRATO };
 
   const organizationId = crudo.organization_id;

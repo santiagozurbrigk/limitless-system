@@ -1,9 +1,8 @@
 -- SCRUM-528 · Estado del reproceso de landing_events en columnas propias
 -- (AR pasada 1, MAYOR-3). reprocess_attempts nace en 0 y nunca es negativo;
 -- status acepta 'failed' (error definitivo) además de los de SCRUM-526 y nada
--- más; el índice parcial landing_events_a_reprocesar cubre exactamente lo que
--- lee el cron ('error' y 'pending', por received_at); revivir un failed es
--- volverlo a 'error' con reprocess_attempts = 0; y la tabla sigue sin acceso
+-- más; no hay índice propio (el cron usa landing_events_status_received de
+-- SCRUM-526); revivir un failed es volverlo a 'error' con reprocess_attempts = 0; y la tabla sigue sin acceso
 -- para usuarios con sesión ni anon (la columna nueva no abre nada).
 -- Migración: 20261016130000_landing_events_reprocesos.
 
@@ -75,20 +74,12 @@ begin
     raise exception 'FALLA: landing_events no tiene exactamente un CHECK sobre status';
   end if;
 
-  -- Índice parcial de lo que lee el cron, por catálogo.
-  if not exists (
-    select 1
-      from pg_index i
-      join pg_class c on c.oid = i.indexrelid
-     where i.indrelid = 'public.landing_events'::regclass
-       and c.relname = 'landing_events_a_reprocesar'
-       and i.indpred is not null
-       and pg_get_indexdef(i.indexrelid) like '%(received_at)%'
-       and pg_get_expr(i.indpred, i.indrelid) like '%error%'
-       and pg_get_expr(i.indpred, i.indrelid) like '%pending%'
-       and pg_get_expr(i.indpred, i.indrelid) not like '%failed%'
-  ) then
-    raise exception 'FALLA: falta el índice parcial landing_events_a_reprocesar sobre error y pending';
+  -- Sin índice propio (AR pasada 2): el cron usa landing_events_status_received.
+  if to_regclass('public.landing_events_a_reprocesar') is not null then
+    raise exception 'FALLA: volvió el índice parcial landing_events_a_reprocesar (redundante con landing_events_status_received)';
+  end if;
+  if to_regclass('public.landing_events_status_received') is null then
+    raise exception 'FALLA: falta landing_events_status_received, el índice que usa el cron';
   end if;
 
   -- Sin acceso para usuarios: ni policies ni privilegios (también sobre la columna nueva).
