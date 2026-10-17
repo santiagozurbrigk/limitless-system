@@ -14,7 +14,7 @@ Una sola base PostgreSQL 17 en Supabase (Auth + Storage + pgvector), multi-tenan
 - Una migración por cambio de feature; las primeras usan nombres en inglés, las de septiembre en español.
 - Idempotentes en lo posible (`if not exists`, `drop policy if exists`), porque parte de producción se armó a mano antes de ordenar el historial.
 - `supabase/scripts/` guarda SQL que **no** es migración: `legacy_RUN_ALL_PHASE1_NO_EJECUTAR.sql` (pisa `get_my_organization_id()`; no correr) y `mark_fathom_business_context_calls.sql`.
-- No hay `supabase/config.toml` ni stack local de Supabase: el entorno local apunta a un proyecto remoto.
+- `supabase/config.toml` define el Supabase local (`supabase start`, SCRUM-539; guía en [`docs/operacion/supabase-local.md`](../operacion/supabase-local.md)) y es el mismo archivo que leería Supabase Branching. Su bloque `[auth]` es el del entorno local, no un registro de la configuración de Auth de producción, que sigue sólo en el dashboard (`[AUTH-MFA-Y-POLITICA]`).
 
 ### Invariante de versiones
 

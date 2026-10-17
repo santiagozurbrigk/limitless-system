@@ -75,7 +75,14 @@ Prueban lo que la base deja hacer a cada usuario, que Vitest no puede ver porque
 - Cada archivo arma sus datos dentro de `begin; ... rollback;`, actúa con `select ci.jwt(...); set local role authenticated;` y vuelve con `reset role`.
 - Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9). Hoy son 12 (`00_ayudas.sql` a `96_registrar_pago_de_cliente.sql`). SCRUM-503, `95_crear_sprint.sql`: `crear_sprint` crea en la organización propia y no en otra, deja un solo sprint activo y anon no la puede llamar. SCRUM-504, `96_registrar_pago_de_cliente.sql`: el pago y su cuota en una transacción, con la RLS y la org de la sesión, la clave de idempotencia (la misma clave con otro cliente, monto, fecha o cuota se rechaza; el monto se compara redondeado; el comprobante que faltaba se suma), sólo el comprobante editable por un miembro (la definición de la policy de UPDATE y las dos columnas con grant se verifican) y sin EXECUTE para anon ni public.
 - Validez, igual que en Vitest: sacar la migración que arregla el problema y confirmar que el test falla con `FALLA: ...`.
+- Una afirmación sobre DELETE o UPDATE sólo tiene cobertura propia si la fila es visible para el usuario: en Postgres esas sentencias con WHERE alcanzan sólo filas que alguna policy de SELECT deja ver. Si no, la tapa la afirmación de lectura. `20_storage_import_files.sql` crea, dentro de su transacción, una policy de lectura de prueba y afirma la visibilidad como precondición antes de borrar (SCRUM-539).
 - Para correrlos a mano: los mismos comandos de "Migraciones" más arriba.
+- **Contra el Supabase local** ([`supabase-local.md`](./supabase-local.md#tests-de-rls-contra-el-local)): los mismos archivos pasan, salvo una diferencia. El storage real trae el trigger `storage.protect_delete`, que corta todo DELETE directo sobre `storage.objects` y `storage.buckets` con 42501, y el stub del CI no lo tiene. Por eso `20_storage_import_files.sql` corta en el borrado. Para que decida la RLS, como en el CI, se corre con `set storage.allow_delete_query = 'true'` en la misma sesión:
+
+  ```bash
+  { cat supabase/ci/tests/00_ayudas.sql; echo "set storage.allow_delete_query = 'true';"; cat supabase/ci/tests/20_storage_import_files.sql; echo 'drop schema ci cascade;'; } \
+    | docker exec -i supabase_db_limitless-local psql -U postgres -v ON_ERROR_STOP=1 -q -f -
+  ```
 
 Qué no testear en Vitest: componentes React con estado o efectos, actions que sólo hacen `select`, wrappers de SDKs externos, constantes sin lógica.
 
