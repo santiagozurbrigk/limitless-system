@@ -1,11 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { reportarFalla } from "@/lib/observability/reportar-falla";
-import {
-  landingIngestRateLimit,
-  rateLimitExceeded,
-  type RateLimitResult,
-} from "@/lib/rate-limit";
+import { landingIngestRateLimit, type RateLimitResult } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarClaveDeIngesta } from "@/lib/webinar/claves-de-ingesta";
 import {
@@ -22,9 +18,12 @@ import { LIMITE_DEL_CUERPO_BYTES, validarEventoDeLanding } from "@/lib/webinar/n
  * Orden, y qué responde cada paso (JSON corto, sin detalles internos):
  *   1. Clave de ingesta (`Authorization: Bearer <clave>`): inválida o revocada
  *      401; la base falla al verificarla, 500.
- *   2. Límite por clave (`landingIngestRateLimit`): 429 con `Retry-After`.
+ *   2. Límite por clave (`landingIngestRateLimit`): 429 con `Retry-After`
+ *      y el mismo formato que el resto (`{ ok: false, error }`).
  *   3. Cuerpo de hasta 16 KB, contado antes de parsear: 413.
- *   4. JSON y contrato (Zod): 400 con un motivo genérico.
+ *   4. JSON, texto guardable (sin NUL ni surrogates sueltos, en valores y
+ *      claves), profundidad, contrato (Zod) y ventana de `occurred_at`: 400
+ *      con un motivo genérico. Lo que pasa se puede guardar siempre.
  *   5. Crudo en `landing_events` (`pending`): si falla, 500 y la landing
  *      reintenta.
  *   6. 200, y la normalización corre después de responder (`after`).
@@ -54,6 +53,23 @@ const ETIQUETA = "[ingest/landing]";
 
 function respuesta(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
+}
+
+/** Segundos hasta que se abre la ventana del límite (al menos 1). */
+export function segundosParaReintentar(resetAt: number, ahora: number = Date.now()): number {
+  return Math.max(1, Math.ceil((resetAt - ahora) / 1000));
+}
+
+/** 429 con la forma de las demás respuestas y un texto que coincide con `Retry-After`. */
+export function demasiadasSolicitudes(resetAt: number): NextResponse {
+  const segundos = segundosParaReintentar(resetAt);
+  return NextResponse.json(
+    {
+      ok: false,
+      error: `Demasiadas solicitudes. Reintentá en ${segundos} ${segundos === 1 ? "segundo" : "segundos"}.`,
+    },
+    { status: 429, headers: { "Retry-After": String(segundos) } },
+  );
 }
 
 /** El token del header `Authorization: Bearer <token>`, o `null`. */
@@ -135,7 +151,7 @@ export async function atenderIngestaDeLanding(
   const limite = await (dependencias.limite ?? landingIngestRateLimit)(
     `ingest-landing:${clave.claveId}`,
   );
-  if (!limite.allowed) return rateLimitExceeded(limite.resetAt);
+  if (!limite.allowed) return demasiadasSolicitudes(limite.resetAt);
 
   // 3. Cuerpo.
   const cuerpo = await leerCuerpoConLimite(request, LIMITE_DEL_CUERPO_BYTES);
@@ -149,7 +165,7 @@ export async function atenderIngestaDeLanding(
   } catch {
     return respuesta(400, PAYLOAD_INVALIDO);
   }
-  const evento = validarEventoDeLanding(json);
+  const evento = validarEventoDeLanding(json, { referencia: new Date() });
   if (!evento) return respuesta(400, PAYLOAD_INVALIDO);
 
   // 5. Crudo primero: tal cual llegó.

@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { esEmailValido, normalizarEmail, telefonoE164 } from "@/lib/webinar/identity";
 import {
+  esJsonGuardable,
+  esTextoGuardable,
+  estaEnLaVentana,
   LIMITE_DEL_CUERPO_BYTES,
-  validarEventoDeLanding,
+  PROFUNDIDAD_MAXIMA,
+  validarEventoDeLanding as validarConReferencia,
+  VENTANA_HACIA_ADELANTE_MS,
+  VENTANA_HACIA_ATRAS_MS,
   type RegistroDeLanding,
   type VisitaDeLanding,
 } from "@/lib/webinar/normalize/evento";
@@ -18,15 +24,11 @@ import {
   MOTIVO_LANZAMIENTO_CERRADO,
   MOTIVO_LANZAMIENTO_DESCONOCIDO,
 } from "@/lib/webinar/normalize/filas";
-import {
-  codigoSeguro,
-  esErrorDefinitivo,
-  MAXIMO_DE_REPROCESOS,
-  mensajeDeCorteDefinitivo,
-  mensajeDeFalla,
-  mensajeDeReclamo,
-  reprocesosHechos,
-} from "@/lib/webinar/normalize/reproceso";
+import { codigoSeguro, MAXIMO_DE_REPROCESOS, mensajeDeFalla } from "@/lib/webinar/normalize/reproceso";
+
+/** La hora de llegada de los ejemplos: los `occurred_at` de abajo caen en su ventana. */
+const LLEGADA = new Date("2026-10-17T03:00:00.000Z");
+const validarEventoDeLanding = (json: unknown) => validarConReferencia(json, { referencia: LLEGADA });
 
 /** Datos de prueba inventados: ningún email ni teléfono es de una persona real. */
 const REGISTRO = {
@@ -248,24 +250,101 @@ describe("textos del error y cuenta de reprocesos", () => {
     expect(codigoSeguro(undefined)).toBeNull();
   });
 
-  it("⭐ cuenta los reprocesos desde el texto guardado", () => {
+  it("⭐ el texto de la falla es fijo: paso y código, sin cuenta (la cuenta es una columna)", () => {
     expect(mensajeDeFalla("lead", "08006")).toBe("Falló la normalización en lead (código 08006).");
-    expect(reprocesosHechos(mensajeDeFalla("lead", "08006"))).toBe(0);
-    expect(reprocesosHechos(null)).toBe(0);
-    expect(reprocesosHechos(mensajeDeReclamo(3))).toBe(3);
-    expect(mensajeDeFalla("registro", null, 2)).toBe("Falló la normalización en registro. Reproceso 2 de 5.");
-    expect(reprocesosHechos(mensajeDeFalla("registro", null, 2))).toBe(2);
-    expect(esErrorDefinitivo(mensajeDeFalla("registro", null, 2))).toBe(false);
+    expect(mensajeDeFalla("registro", null)).toBe("Falló la normalización en registro.");
+    expect(mensajeDeFalla("evento", "Key (email)=(x@y.test)")).toBe("Falló la normalización en evento.");
+    expect(MAXIMO_DE_REPROCESOS).toBe(5);
+  });
+});
+
+describe("⭐ lo que pasa la validación se puede guardar (AR pasada 1, MAYOR-1)", () => {
+  const base = () => ({ ...REGISTRO });
+
+  it("esTextoGuardable coincide con String.prototype.isWellFormed y rechaza NUL", () => {
+    const casos = ["normal", "emoji \u{1F600}", "a\uD800", "\uDC00b", "a\uDBFF\uDFFFb", "", "ñandú"];
+    for (const texto of casos) {
+      const bienFormado = (texto as string & { isWellFormed(): boolean }).isWellFormed();
+      expect(esTextoGuardable(texto), JSON.stringify(texto)).toBe(bienFormado);
+    }
+    expect(esTextoGuardable("Persona\u0000Prueba")).toBe(false);
   });
 
-  it("⭐ el último reproceso fallido es definitivo", () => {
-    expect(MAXIMO_DE_REPROCESOS).toBe(5);
-    const definitivo = mensajeDeFalla("evento", "57014", 5);
-    expect(definitivo).toBe(
-      "Falló la normalización en evento (código 57014). Reproceso 5 de 5: no se reintenta más.",
-    );
-    expect(esErrorDefinitivo(definitivo)).toBe(true);
-    expect(esErrorDefinitivo(mensajeDeCorteDefinitivo())).toBe(true);
-    expect(esErrorDefinitivo(null)).toBe(false);
+  it.each([
+    ["NUL en un campo del contrato", { ...base(), name: "Persona\u0000Prueba" }],
+    ["NUL en un campo de más", { ...base(), extra: "x\u0000" }],
+    ["NUL en una clave de más", { ...base(), ["cla\u0000ve"]: "x" }],
+    ["NUL en el visitor_id", { ...VISITA, visitor_id: "v\u0000" }],
+    ["NUL dentro de tracking", { ...base(), tracking: { utm_source: "a\u0000" } }],
+    ["surrogate alto suelto", { ...base(), name: "Persona \uD800" }],
+    ["surrogate bajo suelto en un campo de más", { ...base(), extra: ["\uDC00"] }],
+    ["surrogate suelto en una clave", { ...base(), ["\uD83D"]: 1 }],
+  ])("⭐ rechaza: %s", (_caso, json) => {
+    expect(validarEventoDeLanding(json)).toBeNull();
   });
+
+  it("un emoji bien formado pasa", () => {
+    expect(validarEventoDeLanding({ ...base(), name: "Persona \u{1F600}" })).not.toBeNull();
+  });
+
+  it("⭐ profundidad: hasta PROFUNDIDAD_MAXIMA niveles sí, uno más no, y 6000 tampoco", () => {
+    const anidado = (n: number): unknown => (n === 0 ? "x" : [anidado(n - 1)]);
+    expect(PROFUNDIDAD_MAXIMA).toBe(10);
+    // El objeto raíz es el nivel 0: `extra` con 9 arrays llega al nivel 10 con su texto.
+    expect(esJsonGuardable({ extra: anidado(PROFUNDIDAD_MAXIMA - 1) })).toBe(true);
+    expect(esJsonGuardable({ extra: anidado(PROFUNDIDAD_MAXIMA) })).toBe(false);
+    expect(validarEventoDeLanding({ ...base(), extra: anidado(PROFUNDIDAD_MAXIMA) })).toBeNull();
+    const profundo = JSON.parse(`{"x":${"[".repeat(6000)}${"]".repeat(6000)}}`);
+    expect(esJsonGuardable(profundo)).toBe(false);
+  });
+});
+
+describe("⭐ ventana de occurred_at (AR pasada 1, MAYOR-2)", () => {
+  const llegada = LLEGADA.getTime();
+  const iso = (ms: number) => new Date(ms).toISOString();
+
+  it("30 días hacia atrás y 5 minutos hacia adelante", () => {
+    expect(VENTANA_HACIA_ATRAS_MS).toBe(30 * 24 * 3600 * 1000);
+    expect(VENTANA_HACIA_ADELANTE_MS).toBe(5 * 60 * 1000);
+    expect(estaEnLaVentana(iso(llegada - VENTANA_HACIA_ATRAS_MS), LLEGADA)).toBe(true);
+    expect(estaEnLaVentana(iso(llegada - VENTANA_HACIA_ATRAS_MS - 1), LLEGADA)).toBe(false);
+    expect(estaEnLaVentana(iso(llegada + VENTANA_HACIA_ADELANTE_MS), LLEGADA)).toBe(true);
+    expect(estaEnLaVentana(iso(llegada + VENTANA_HACIA_ADELANTE_MS + 1), LLEGADA)).toBe(false);
+    // La holgura de la revalidación amplía los dos bordes.
+    expect(estaEnLaVentana(iso(llegada - VENTANA_HACIA_ATRAS_MS - 1), LLEGADA, 60_000)).toBe(true);
+  });
+
+  it.each([
+    ["año 0", "0000-01-01T00:00:00Z"],
+    ["año 10000 en UTC", "9999-12-31T23:59:59-01:00"],
+    ["1900", "1900-01-01T00:00:00Z"],
+    ["2999", "2999-01-01T00:00:00Z"],
+    ["31 días antes", "2026-09-16T02:59:59Z"],
+    ["10 minutos después", "2026-10-17T03:10:00Z"],
+  ])("⭐ rechaza un registro y una visita con occurred_at %s", (_caso, occurred_at) => {
+    expect(validarEventoDeLanding({ ...REGISTRO, occurred_at })).toBeNull();
+    expect(validarEventoDeLanding({ ...VISITA, occurred_at })).toBeNull();
+  });
+
+  it("acepta uno de ayer, con otra zona, y uno sin occurred_at", () => {
+    expect(validarEventoDeLanding({ ...REGISTRO, occurred_at: "2026-10-16T00:00:00-03:00" })).not.toBeNull();
+    expect(validarEventoDeLanding({ ...VISITA, occurred_at: null })).not.toBeNull();
+  });
+});
+
+describe("⭐ email normalizado con Unicode (AR pasada 1, MENOR-2)", () => {
+  it("NFC y NFD son el mismo email", () => {
+    const nfc = "jos\u00e9@ejemplo.test";
+    const nfd = "jose\u0301@ejemplo.test";
+    expect(nfc).not.toBe(nfd);
+    expect(normalizarEmail(nfd)).toBe(normalizarEmail(nfc));
+    expect(normalizarEmail("JOSE\u0301@Ejemplo.TEST")).toBe("jos\u00e9@ejemplo.test");
+  });
+
+  it.each(["\u200B", "\u200C", "\u200D", "\u2060", "\uFEFF", "\u180E", "\u00A0"])(
+    "saca el invisible %j",
+    (invisible) => {
+      expect(normalizarEmail(`zw${invisible}@ejemplo.test`)).toBe("zw@ejemplo.test");
+    },
+  );
 });

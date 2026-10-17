@@ -36,9 +36,8 @@ const { POST: POST_DEL_CRON } = await import("@/app/api/cron/reprocesar-landing/
 const { generarClaveDeIngesta } = await import("@/lib/webinar/claves-de-ingesta");
 const { reprocesarEventosDeLanding } = await import("@/lib/webinar/reprocesar-landing");
 const { LIMITE_DE_INGESTA_DE_LANDING } = await import("@/lib/rate-limit");
-const { MOTIVO_LANZAMIENTO_CERRADO, MOTIVO_LANZAMIENTO_DESCONOCIDO } = await import(
-  "@/lib/webinar/normalize/filas"
-);
+const { MOTIVO_LANZAMIENTO_CERRADO, MOTIVO_LANZAMIENTO_DESCONOCIDO, NOTA_ID_REUSADO_CON_OTRO_EMAIL } =
+  await import("@/lib/webinar/normalize/filas");
 
 const ORG = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OTRA_ORG = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -114,7 +113,12 @@ function crudos() {
   return base.filas("landing_events");
 }
 
+/** Hora fija (sólo `Date`): los `occurred_at` de los ejemplos caen en su ventana de 30 días. */
+const AHORA = new Date("2026-10-17T06:00:00.000Z");
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(AHORA);
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
   vi.stubEnv("CRON_SECRET", "secreto-del-cron-de-prueba");
   sim.tareas = [];
@@ -156,6 +160,7 @@ afterEach(() => {
   for (const prohibido of prohibidos) expect(escrito).not.toContain(prohibido);
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("POST /api/ingest/landing: clave", () => {
@@ -340,9 +345,67 @@ describe("POST /api/ingest/landing: cuerpo y contrato", () => {
     expect(r.json).toEqual({ ok: false, error: "Payload inválido." });
     expect(crudos()).toHaveLength(0);
   });
+
+  /** Arma el cuerpo a mano: `JSON.stringify` escaparía distinto un surrogate suelto. */
+  const conCampo = (cuerpo: object, campo: string) => JSON.stringify(cuerpo).replace(/}$/, `,${campo}}`);
+
+  it.each([
+    ["NUL en el nombre", JSON.stringify(registro({ name: "Persona\u0000Prueba" }))],
+    ["NUL en un campo de más", JSON.stringify(registro({ extra: "x\u0000" }))],
+    ["NUL en una clave de más", conCampo(registro(), '"cla\\u0000ve":1')],
+    ["NUL en el visitor_id", JSON.stringify(visita({ visitor_id: "v\u0000" }))],
+    ["surrogate suelto en el nombre", conCampo(registro({ name: undefined }), '"name":"Persona \\ud800"')],
+    ["surrogate suelto en un campo de más", conCampo(registro(), '"x":"\\udc00"')],
+    ["anidamiento de 6000 niveles en un campo de más", conCampo(registro(), `"x":${"[".repeat(6000)}${"]".repeat(6000)}`)],
+    ["11 niveles en tracking", JSON.stringify(registro({ tracking: { utm_source: "a", x: [[[[[[[[[[1]]]]]]]]]] } }))],
+  ])("⭐ AR p1 MAYOR-1, %s: 400, sin crudo y sin Sentry", async (_caso, crudo) => {
+    expect(Buffer.byteLength(crudo)).toBeLessThanOrEqual(16384);
+    const r = await enviar(null, { crudo });
+    expect(r.status).toBe(400);
+    expect(r.json).toEqual({ ok: false, error: "Payload inválido." });
+    expect(crudos()).toHaveLength(0);
+    expect(sim.reportes).toHaveLength(0);
+  });
+
+  it.each([
+    ["año 0", "0000-01-01T00:00:00Z"],
+    ["año 10000 en UTC", "9999-12-31T23:59:59-01:00"],
+    ["1900", "1900-01-01T00:00:00Z"],
+    ["2999", "2999-01-01T00:00:00Z"],
+    ["31 días antes", "2026-09-16T05:59:59Z"],
+    ["6 minutos después", "2026-10-17T06:06:00Z"],
+  ])("⭐ AR p1 MAYOR-2, occurred_at %s: 400 en registro y en visita, sin crudo", async (_caso, occurred_at) => {
+    expect((await enviar(registro({ occurred_at }))).status).toBe(400);
+    expect((await enviar(visita({ occurred_at }))).status).toBe(400);
+    expect(crudos()).toHaveLength(0);
+    expect(sim.reportes).toHaveLength(0);
+  });
+
+  it("occurred_at dentro de la ventana (hace 29 días, dentro de 4 minutos) pasa y queda con esa fecha", async () => {
+    expect((await enviar(registro({ occurred_at: "2026-09-18T06:00:00Z" }))).status).toBe(200);
+    expect((await enviar(visita({ occurred_at: "2026-10-17T06:04:00Z" }))).status).toBe(200);
+    await correrTareas();
+    expect(crudos().map((c) => c.status)).toEqual(["processed", "processed"]);
+    expect(base.filas("launch_registrations")[0].registered_at).toBe("2026-09-18T06:00:00.000Z");
+    expect(base.filas("landing_visits")[0].day).toBe("2026-10-17");
+  });
 });
 
 describe("POST /api/ingest/landing: idempotencia", () => {
+  it("⭐ AR p1 MENOR-1: el mismo client_registration_id con otro email no deja un lead suelto", async () => {
+    await enviar(registro({ email: "typo@ejemplo.tst" }));
+    await correrTareas();
+    await enviar(registro({ email: "corregido@ejemplo.test" }));
+    await correrTareas();
+    expect(base.filas("leads").map((l) => l.email_normalized)).toEqual(["typo@ejemplo.tst"]);
+    expect(base.filas("launch_registrations")).toHaveLength(1);
+    expect(base.filas("lead_events")).toHaveLength(1);
+    expect(crudos().map((c) => [c.status, c.error_message])).toEqual([
+      ["processed", null],
+      ["processed", NOTA_ID_REUSADO_CON_OTRO_EMAIL],
+    ]);
+  });
+
   it("⭐ un reenvío (mismo client_registration_id) no duplica", async () => {
     expect((await enviar(registro())).status).toBe(200);
     expect((await enviar(registro({ name: "Otro Nombre" }))).status).toBe(200);
@@ -513,7 +576,10 @@ describe("POST /api/ingest/landing: límite por clave", () => {
     }
     const r = await enviar(visita({ visitor_id: "vis-601" }));
     expect(r.status).toBe(429);
-    expect(Number(r.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+    // AR p1 MENOR-3: la misma forma que el resto y el texto con los segundos de Retry-After.
+    const segundos = Number(r.headers.get("retry-after"));
+    expect(segundos).toBe(10);
+    expect(r.json).toEqual({ ok: false, error: "Demasiadas solicitudes. Reintentá en 10 segundos." });
     expect(crudos()).toHaveLength(600);
   }, 30_000);
 
@@ -550,6 +616,7 @@ describe("POST /api/ingest/landing: límite por clave", () => {
 
 describe("reproceso de la landing (cron)", () => {
   const MAS_TARDE = () => new Date(Date.now() + 6 * 60_000);
+  const FALLA = "Falló la normalización en registro (código 08006).";
 
   function crudo(extra: Fila): Fila {
     const fila = {
@@ -559,33 +626,29 @@ describe("reproceso de la landing (cron)", () => {
       payload: registro(),
       received_at: new Date().toISOString(),
       status: "error",
-      error_message: "Falló la normalización en registro (código 08006).",
+      error_message: FALLA,
       processed_at: null,
+      reprocess_attempts: 0,
       ...extra,
     };
     base.filas("landing_events").push(fila);
     return fila;
   }
 
-  it("⭐ reintenta hasta 5 veces y después lo deja en error definitivo con aviso a Sentry", async () => {
+  it("⭐ reintenta hasta 5 veces (columna reprocess_attempts) y después failed con aviso a Sentry", async () => {
     const fila = crudo({});
     base.errores["launch_registrations:insert"] = { message: "down", code: "08006" };
 
     for (let reproceso = 1; reproceso <= 4; reproceso++) {
       const resumen = await reprocesarEventosDeLanding(base.cliente() as SupabaseClient);
       expect(resumen).toMatchObject({ encontrados: 1, conError: 1, definitivos: 0 });
-      expect(fila.error_message).toBe(
-        `Falló la normalización en registro (código 08006). Reproceso ${reproceso} de 5.`,
-      );
+      expect(fila).toMatchObject({ status: "error", reprocess_attempts: reproceso, error_message: FALLA });
       expect(sim.reportes).toHaveLength(0);
     }
 
     const quinto = await reprocesarEventosDeLanding(base.cliente() as SupabaseClient);
     expect(quinto).toMatchObject({ encontrados: 1, conError: 0, definitivos: 1 });
-    expect(fila).toMatchObject({
-      status: "error",
-      error_message: "Falló la normalización en registro (código 08006). Reproceso 5 de 5: no se reintenta más.",
-    });
+    expect(fila).toMatchObject({ status: "failed", reprocess_attempts: 5, error_message: FALLA });
     expect(sim.reportes).toHaveLength(1);
     expect(sim.reportes[0].contexto).toEqual({
       cron: "/api/cron/reprocesar-landing",
@@ -594,11 +657,30 @@ describe("reproceso de la landing (cron)", () => {
       extra: { landing_event_id: fila.id, paso: "registro", codigo: "08006" },
     });
 
-    // Ya no se lee más, aunque la base se recupere.
+    // Ya no se lee más, aunque la base se recupere: el cron filtra por status.
     delete base.errores["launch_registrations:insert"];
     expect((await reprocesarEventosDeLanding(base.cliente() as SupabaseClient)).encontrados).toBe(0);
-    expect(fila.status).toBe("error");
+    expect(fila.status).toBe("failed");
     expect(sim.reportes).toHaveLength(1);
+  });
+
+  it("⭐ el cron filtra por columnas: ninguna consulta mira error_message", async () => {
+    crudo({});
+    await reprocesarEventosDeLanding(base.cliente() as SupabaseClient);
+    const deLanding = base.consultas.filter((c) => c.tabla === "landing_events");
+    expect(deLanding.length).toBeGreaterThan(0);
+    for (const c of deLanding) {
+      expect(c.filtros.some(([col]) => col === "error_message"), JSON.stringify(c.filtros)).toBe(false);
+    }
+  });
+
+  it("⭐ revivir un failed (runbook de alertas.md): status error y reprocess_attempts 0", async () => {
+    const fila = crudo({ status: "failed", reprocess_attempts: 5 });
+    expect((await reprocesarEventosDeLanding(base.cliente() as SupabaseClient)).encontrados).toBe(0);
+    Object.assign(fila, { status: "error", reprocess_attempts: 0 });
+    const resumen = await reprocesarEventosDeLanding(base.cliente() as SupabaseClient);
+    expect(resumen).toMatchObject({ encontrados: 1, procesados: 1 });
+    expect(fila).toMatchObject({ status: "processed", reprocess_attempts: 1, error_message: null });
   });
 
   it("⭐ toma un pending trabado (el after se cortó) y lo procesa", async () => {
@@ -608,7 +690,7 @@ describe("reproceso de la landing (cron)", () => {
 
     const resumen = await reprocesarEventosDeLanding(base.cliente() as SupabaseClient, { ahora: MAS_TARDE() });
     expect(resumen).toMatchObject({ encontrados: 1, procesados: 1 });
-    expect(fila.status).toBe("processed");
+    expect(fila).toMatchObject({ status: "processed", reprocess_attempts: 1 });
     expect(base.filas("launch_registrations")).toHaveLength(1);
   });
 
@@ -616,29 +698,29 @@ describe("reproceso de la landing (cron)", () => {
     const ahora = MAS_TARDE();
     const fila = crudo({
       status: "pending",
-      error_message: "Reproceso 2 de 5 en curso.",
+      reprocess_attempts: 2,
       received_at: new Date(Date.now() - 60 * 60_000).toISOString(),
       processed_at: new Date(ahora.getTime() - 60_000).toISOString(),
     });
     const resumen = await reprocesarEventosDeLanding(base.cliente() as SupabaseClient, { ahora });
     expect(resumen).toMatchObject({ encontrados: 1, omitidos: 1, procesados: 0 });
-    expect(fila.status).toBe("pending");
-    expect(fila.error_message).toBe("Reproceso 2 de 5 en curso.");
+    expect(fila).toMatchObject({ status: "pending", reprocess_attempts: 2 });
   });
 
-  it("⭐ un pending que se cortó en su reproceso 5 queda definitivo sin procesarlo", async () => {
+  it("⭐ un pending que se cortó en su reproceso 5 pasa a failed sin procesarlo", async () => {
     const ahora = MAS_TARDE();
     const fila = crudo({
       status: "pending",
-      error_message: "Reproceso 5 de 5 en curso.",
+      reprocess_attempts: 5,
       processed_at: new Date(Date.now() - 60 * 60_000).toISOString(),
       received_at: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
     });
     const resumen = await reprocesarEventosDeLanding(base.cliente() as SupabaseClient, { ahora });
     expect(resumen).toMatchObject({ definitivos: 1, procesados: 0 });
     expect(fila).toMatchObject({
-      status: "error",
-      error_message: "El reproceso 5 de 5 no terminó: no se reintenta más.",
+      status: "failed",
+      reprocess_attempts: 5,
+      error_message: "El último reproceso no terminó y no quedan reprocesos.",
     });
     expect(base.filas("launch_registrations")).toHaveLength(0);
     expect(sim.reportes).toHaveLength(1);
@@ -647,16 +729,16 @@ describe("reproceso de la landing (cron)", () => {
   it("⭐ un pending trabado a medio reproceso sigue contando desde su número", async () => {
     const fila = crudo({
       status: "pending",
-      error_message: "Reproceso 3 de 5 en curso.",
+      reprocess_attempts: 3,
       processed_at: new Date(Date.now() - 60 * 60_000).toISOString(),
     });
     base.errores["launch_registrations:insert"] = { message: "down", code: "08006", veces: 1 };
     await reprocesarEventosDeLanding(base.cliente() as SupabaseClient, { ahora: MAS_TARDE() });
-    expect(fila.error_message).toBe("Falló la normalización en registro (código 08006). Reproceso 4 de 5.");
+    expect(fila).toMatchObject({ status: "error", reprocess_attempts: 4, error_message: FALLA });
   });
 
   it("⭐ dos corridas a la vez no procesan dos veces el mismo evento", async () => {
-    crudo({});
+    const fila = crudo({});
     const [a, b] = await Promise.all([
       reprocesarEventosDeLanding(base.cliente() as SupabaseClient),
       reprocesarEventosDeLanding(base.cliente() as SupabaseClient),
@@ -668,6 +750,7 @@ describe("reproceso de la landing (cron)", () => {
     // lo impide. Sin él, la idempotencia y el cierre condicionado esconderían
     // el doble proceso, pero la cuenta de reprocesos quedaría mal.
     expect(base.consultas.filter((c) => c.tabla === "webinar_launches")).toHaveLength(1);
+    expect(fila.reprocess_attempts).toBe(1);
   });
 
   it("no toca unmapped ni processed", async () => {

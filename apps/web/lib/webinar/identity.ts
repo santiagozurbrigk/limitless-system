@@ -18,12 +18,21 @@ export const LARGO_MAXIMO_DEL_EMAIL = 320;
 const FORMA_DE_EMAIL = /^[^@]+@[^@]+\.[^@]+$/;
 
 /**
- * Email normalizado: en minúsculas y sin ningún espacio (ni al principio, ni
- * al final, ni en el medio, donde lo deja un autocompletado o un copiar y
- * pegar). Es lo que va a `leads.email_normalized` y la llave del lead.
+ * Caracteres invisibles que deja un copiar y pegar y `\s` no cubre: espacio,
+ * unión y no unión de ancho cero, unión de palabras, separador vocal mongol y
+ * BOM.
+ */
+const INVISIBLES = /[\u200B-\u200D\u2060\u180E\uFEFF]/g;
+
+/**
+ * Email normalizado: en Unicode NFC (una "é" compuesta y una "e" con tilde
+ * combinada son la misma), sin caracteres invisibles de ancho cero, sin
+ * ningún espacio (ni al principio, ni al final, ni en el medio, donde lo deja
+ * un autocompletado) y en minúsculas. Es lo que va a
+ * `leads.email_normalized` y la llave del lead.
  */
 export function normalizarEmail(email: string): string {
-  return email.replace(/\s+/g, "").toLowerCase();
+  return email.replace(INVISIBLES, "").replace(/\s+/g, "").toLowerCase().normalize("NFC");
 }
 
 /** Si el email, ya normalizado, tiene forma de email y el largo que acepta la base. */

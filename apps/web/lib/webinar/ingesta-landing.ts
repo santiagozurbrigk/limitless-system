@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { FallaDeLaBase } from "@/lib/server/action-result";
+import { normalizarEmail } from "@/lib/webinar/identity";
 import { validarEventoDeLanding, type EventoDeLanding } from "@/lib/webinar/normalize/evento";
 import {
   datosQueCompletan,
@@ -9,6 +10,7 @@ import {
   filaDelRegistro,
   motivoParaNoAsignar,
   MOTIVO_PAYLOAD_FUERA_DE_CONTRATO,
+  NOTA_ID_REUSADO_CON_OTRO_EMAIL,
   type LanzamientoLeido,
   type RegistroGuardado,
 } from "@/lib/webinar/normalize/filas";
@@ -83,8 +85,15 @@ function fallo(paso: PasoDeNormalizacion, error: unknown): FallaDeNormalizacion 
 }
 
 export type ResultadoDeNormalizacion =
-  | { estado: "processed" }
+  /** `nota`: texto fijo que queda en `error_message` de un `processed` (rastreable). */
+  | { estado: "processed"; nota?: string }
   | { estado: "unmapped"; motivo: string };
+
+/**
+ * Al revalidar un crudo guardado, la ventana de `occurred_at` se mide contra
+ * `received_at` con un minuto de holgura (ver `OpcionesDeValidacion`).
+ */
+const HOLGURA_AL_REVALIDAR_MS = 60_000;
 
 /**
  * ⭐ Normaliza un evento guardado: escribe el lead, el registro y su evento
@@ -100,7 +109,10 @@ export async function normalizarEventoCrudo(
   admin: SupabaseClient,
   crudo: EventoCrudo,
 ): Promise<ResultadoDeNormalizacion> {
-  const evento = validarEventoDeLanding(crudo.payload);
+  const evento = validarEventoDeLanding(crudo.payload, {
+    referencia: new Date(crudo.received_at),
+    holguraMs: HOLGURA_AL_REVALIDAR_MS,
+  });
   if (!evento) return { estado: "unmapped", motivo: MOTIVO_PAYLOAD_FUERA_DE_CONTRATO };
 
   const organizationId = crudo.organization_id;
@@ -124,6 +136,14 @@ export async function normalizarEventoCrudo(
     return { estado: "processed" };
   }
 
+  // Si el client_registration_id ya está registrado con otro email, no se
+  // crea un lead suelto: se conserva el primer registro (AR pasada 1).
+  const previo = await registroPorId(admin, organizationId, evento.client_registration_id);
+  if (previo && !(await esDelMismoEmail(admin, organizationId, previo.lead_id, evento.email))) {
+    await asegurarEventoRegistrado(admin, previo);
+    return { estado: "processed", nota: NOTA_ID_REUSADO_CON_OTRO_EMAIL };
+  }
+
   const leadId = await asegurarLead(admin, evento, organizationId, crudo.received_at);
 
   const { error: errorRegistro } = await admin.from("launch_registrations").insert(
@@ -145,12 +165,50 @@ export async function normalizarEventoCrudo(
     leadId,
   );
 
-  const { error: errorEvento } = await admin
-    .from("lead_events")
-    .insert(filaDelEventoRegistrado(guardado));
-  if (errorEvento && errorEvento.code !== YA_EXISTE) throw fallo("evento", errorEvento);
-
+  await asegurarEventoRegistrado(admin, guardado);
   return { estado: "processed" };
+}
+
+/** El evento `registered` del registro guardado; si ya estaba, nada. */
+async function asegurarEventoRegistrado(
+  admin: SupabaseClient,
+  guardado: RegistroGuardado,
+): Promise<void> {
+  const { error } = await admin.from("lead_events").insert(filaDelEventoRegistrado(guardado));
+  if (error && error.code !== YA_EXISTE) throw fallo("evento", error);
+}
+
+/** El registro de este `client_registration_id` en la organización, si existe. */
+async function registroPorId(
+  admin: SupabaseClient,
+  organizationId: string,
+  clientRegistrationId: string,
+): Promise<RegistroGuardado | null> {
+  const { data, error } = await admin
+    .from("launch_registrations")
+    .select(COLUMNAS_DEL_REGISTRO)
+    .eq("organization_id", organizationId)
+    .eq("client_registration_id", clientRegistrationId)
+    .maybeSingle();
+  if (error) throw fallo("registro", error);
+  return (data as RegistroGuardado | null) ?? null;
+}
+
+/** Si el lead del registro previo tiene el mismo email normalizado que el que llega. */
+async function esDelMismoEmail(
+  admin: SupabaseClient,
+  organizationId: string,
+  leadId: string,
+  email: string,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from("leads")
+    .select("email_normalized")
+    .eq("organization_id", organizationId)
+    .eq("id", leadId)
+    .maybeSingle();
+  if (error) throw fallo("lead", error);
+  return (data as { email_normalized: string } | null)?.email_normalized === normalizarEmail(email);
 }
 
 /**
@@ -208,14 +266,8 @@ async function registroGuardado(
   launchId: string,
   leadId: string,
 ): Promise<RegistroGuardado> {
-  const porId = await admin
-    .from("launch_registrations")
-    .select(COLUMNAS_DEL_REGISTRO)
-    .eq("organization_id", organizationId)
-    .eq("client_registration_id", clientRegistrationId)
-    .maybeSingle();
-  if (porId.error) throw fallo("registro", porId.error);
-  if (porId.data) return porId.data as RegistroGuardado;
+  const porId = await registroPorId(admin, organizationId, clientRegistrationId);
+  if (porId) return porId;
 
   const porLead = await admin
     .from("launch_registrations")
@@ -229,14 +281,16 @@ async function registroGuardado(
 }
 
 export type CierreDelEvento =
-  | { status: "processed" }
+  | { status: "processed"; nota?: string }
   | { status: "unmapped"; motivo: string }
-  | { status: "error"; mensaje: string };
+  /** `failed`: error definitivo, después del último reproceso. */
+  | { status: "error" | "failed"; mensaje: string };
 
 /**
  * Deja el crudo en su estado final, sólo si sigue en `pending` (el que lo
- * reclamó es quien lo cierra). `processed` y `unmapped` llevan `processed_at`;
- * `unmapped` y `error`, su motivo en `error_message` (texto fijo). Devuelve si
+ * reclamó es quien lo cierra). Todos llevan `processed_at`; `unmapped`,
+ * `error` y `failed` llevan su motivo en `error_message` (texto fijo), y un
+ * `processed`, la nota si la hay. Devuelve si
  * se cerró; si la base falla, `false`: el evento queda en `pending` y el cron
  * lo levanta como trabado.
  */
@@ -246,12 +300,13 @@ export async function cerrarEventoCrudo(
   cierre: CierreDelEvento,
   ahora: Date = new Date(),
 ): Promise<boolean> {
-  const cambios =
+  const texto =
     cierre.status === "processed"
-      ? { status: "processed", error_message: null, processed_at: ahora.toISOString() }
+      ? (cierre.nota ?? null)
       : cierre.status === "unmapped"
-        ? { status: "unmapped", error_message: cierre.motivo, processed_at: ahora.toISOString() }
-        : { status: "error", error_message: cierre.mensaje, processed_at: ahora.toISOString() };
+        ? cierre.motivo
+        : cierre.mensaje;
+  const cambios = { status: cierre.status, error_message: texto, processed_at: ahora.toISOString() };
   try {
     const { data, error } = await admin
       .from("landing_events")
@@ -270,27 +325,26 @@ export async function cerrarEventoCrudo(
 export type ResultadoDeProceso =
   | { status: "processed" }
   | { status: "unmapped" }
-  | { status: "error"; paso: PasoDeNormalizacion; codigo: string | null }
+  | { status: "error" | "failed"; paso: PasoDeNormalizacion; codigo: string | null }
   /** Normalizó (o no) pero no pudo escribir el estado final. */
   | { status: "sin_cerrar" };
 
 /**
- * Normaliza y cierra el crudo. `reproceso` es el número de reproceso del
- * cron (0 para el intento del endpoint): define el texto del error. No lanza
- * nunca: corre en `after` o en el cron, donde una excepción no tiene quién la
- * atienda.
+ * Normaliza y cierra el crudo. Con `ultimoIntento`, una falla lo deja en
+ * `failed` (error definitivo) en vez de `error`. No lanza nunca: corre en
+ * `after` o en el cron, donde una excepción no tiene quién la atienda.
  */
 export async function procesarEventoCrudo(
   admin: SupabaseClient,
   crudo: EventoCrudo,
-  reproceso: number = 0,
+  opciones: { ultimoIntento?: boolean } = {},
 ): Promise<ResultadoDeProceso> {
   let cierre: CierreDelEvento;
   let resultado: ResultadoDeProceso;
   try {
     const normalizado = await normalizarEventoCrudo(admin, crudo);
     if (normalizado.estado === "processed") {
-      cierre = { status: "processed" };
+      cierre = { status: "processed", nota: normalizado.nota };
       resultado = { status: "processed" };
     } else {
       cierre = { status: "unmapped", motivo: normalizado.motivo };
@@ -299,8 +353,9 @@ export async function procesarEventoCrudo(
   } catch (error) {
     const paso = error instanceof FallaDeNormalizacion ? error.paso : "desconocido";
     const codigo = error instanceof FallaDeNormalizacion ? error.codigo : null;
-    cierre = { status: "error", mensaje: mensajeDeFalla(paso, codigo, reproceso) };
-    resultado = { status: "error", paso, codigo };
+    const status = opciones.ultimoIntento ? "failed" : "error";
+    cierre = { status, mensaje: mensajeDeFalla(paso, codigo) };
+    resultado = { status, paso, codigo };
   }
   const cerrado = await cerrarEventoCrudo(admin, crudo, cierre);
   return cerrado ? resultado : { status: "sin_cerrar" };

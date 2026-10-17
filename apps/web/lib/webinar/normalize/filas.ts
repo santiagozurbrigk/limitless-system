@@ -31,6 +31,14 @@ export const MOTIVO_LANZAMIENTO_DESCONOCIDO =
 export const MOTIVO_LANZAMIENTO_CERRADO = "Lanzamiento cerrado: no recibe registros ni visitas.";
 export const MOTIVO_PAYLOAD_FUERA_DE_CONTRATO =
   "El payload guardado no cumple el contrato de la landing.";
+/**
+ * Nota de un `processed` cuyo `client_registration_id` ya estaba registrado
+ * con otro email (la persona corrigió el email y la landing reusó el id): se
+ * conserva el primer registro y no se crea un lead suelto. Rastreable por el
+ * texto, sin datos personales.
+ */
+export const NOTA_ID_REUSADO_CON_OTRO_EMAIL =
+  "client_registration_id ya registrado con otro email: se conservó el primer registro y no se creó otro lead.";
 
 /**
  * Por qué un evento no se puede asignar a su lanzamiento, o `null` si se

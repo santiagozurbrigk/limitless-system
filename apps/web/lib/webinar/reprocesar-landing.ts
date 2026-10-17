@@ -4,11 +4,8 @@ import { limiteDePendienteTrabado } from "@/lib/webhooks/reclamar";
 import { procesarEventoCrudo, type EventoCrudo } from "@/lib/webinar/ingesta-landing";
 import {
   codigoSeguro,
-  MARCA_DE_ERROR_DEFINITIVO,
   MAXIMO_DE_REPROCESOS,
-  mensajeDeCorteDefinitivo,
-  mensajeDeReclamo,
-  reprocesosHechos,
+  MENSAJE_REPROCESO_SIN_TERMINAR,
 } from "@/lib/webinar/normalize/reproceso";
 
 /**
@@ -16,16 +13,19 @@ import {
  * `lib/webhooks/reclamar.ts`: lo corre el cron `/api/cron/reprocesar-landing`
  * cada 10 minutos.
  *
- * Toma los eventos en `error` (salvo el error definitivo) y los trabados en
- * `pending` (llegaron hace más de `MINUTOS_PENDIENTE_TRABADO` y nadie los
- * cerró: la función se cortó antes o durante la normalización). Cada uno se
- * reclama con un UPDATE condicionado a lo que se leyó (estado, marca de
- * `processed_at` y texto del error), así dos corridas a la vez no lo procesan
- * dos veces ni cuentan mal sus reprocesos.
+ * Toma los eventos en `error` y los trabados en `pending` (llegaron hace más
+ * de `MINUTOS_PENDIENTE_TRABADO` y nadie los cerró: la función se cortó antes
+ * o durante la normalización), filtrando por columnas (índice parcial
+ * `landing_events_a_reprocesar`). Cada uno se reclama con un UPDATE
+ * condicionado a lo que se leyó (estado, `reprocess_attempts` y, en un
+ * `pending`, la marca `processed_at`) que suma uno a `reprocess_attempts`: dos
+ * corridas a la vez no lo procesan dos veces ni cuentan mal.
  *
- * Hasta `MAXIMO_DE_REPROCESOS` reprocesos por evento. Si el último falla, el
- * evento queda en `error` definitivo y se avisa a Sentry (sin datos
- * personales: el id del evento, la organización, el paso y el SQLSTATE).
+ * Hasta `MAXIMO_DE_REPROCESOS` reprocesos por evento. Si el último falla (o
+ * se cortó sin cerrarse), el evento pasa a `failed`, el error definitivo que
+ * el cron ya no lee, y se avisa a Sentry (sin datos personales: el id del
+ * evento, la organización, el paso y el SQLSTATE). Para revivirlo, ver
+ * `docs/operacion/alertas.md`.
  *
  * `unmapped` no se reprocesa: un lanzamiento desconocido o cerrado no cambia
  * por reintentar.
@@ -38,11 +38,12 @@ export const EVENTOS_POR_CORRIDA = 200;
 
 type Candidato = EventoCrudo & {
   status: "error" | "pending";
-  error_message: string | null;
   processed_at: string | null;
+  reprocess_attempts: number;
 };
 
-const COLUMNAS = "id, organization_id, kind, payload, received_at, status, error_message, processed_at";
+const COLUMNAS =
+  "id, organization_id, kind, payload, received_at, status, processed_at, reprocess_attempts";
 
 export type ResumenDeReproceso = {
   encontrados: number;
@@ -72,7 +73,6 @@ async function leerCandidatos(
       .from("landing_events")
       .select(COLUMNAS)
       .eq("status", "error")
-      .not("error_message", "like", `%${MARCA_DE_ERROR_DEFINITIVO}%`)
       .order("received_at", { ascending: true })
       .limit(limite),
     admin
@@ -111,11 +111,8 @@ async function reclamar(
     .update(cambios)
     .eq("organization_id", candidato.organization_id)
     .eq("id", candidato.id)
-    .eq("status", candidato.status);
-  consulta =
-    candidato.error_message === null
-      ? consulta.is("error_message", null)
-      : consulta.eq("error_message", candidato.error_message);
+    .eq("status", candidato.status)
+    .eq("reprocess_attempts", candidato.reprocess_attempts);
   if (candidato.status === "pending") {
     if (candidato.processed_at !== null && candidato.processed_at >= limite) return false;
     consulta = consulta.lt("received_at", limite);
@@ -165,14 +162,14 @@ export async function reprocesarEventosDeLanding(
   };
 
   for (const candidato of candidatos) {
-    const hechos = reprocesosHechos(candidato.error_message);
+    const hechos = candidato.reprocess_attempts;
 
     // Ya agotó sus reprocesos (se cortó en el último sin cerrarse): definitivo sin procesar.
     if (hechos >= MAXIMO_DE_REPROCESOS) {
       const tomado = await reclamar(
         admin,
         candidato,
-        { status: "error", error_message: mensajeDeCorteDefinitivo(), processed_at: ahora.toISOString() },
+        { status: "failed", error_message: MENSAJE_REPROCESO_SIN_TERMINAR, processed_at: ahora.toISOString() },
         ahora,
       );
       if (tomado) {
@@ -188,7 +185,7 @@ export async function reprocesarEventosDeLanding(
     const tomado = await reclamar(
       admin,
       candidato,
-      { status: "pending", error_message: mensajeDeReclamo(reproceso), processed_at: ahora.toISOString() },
+      { status: "pending", reprocess_attempts: reproceso, processed_at: ahora.toISOString() },
       ahora,
     );
     if (!tomado) {
@@ -196,11 +193,13 @@ export async function reprocesarEventosDeLanding(
       continue;
     }
 
-    const resultado = await procesarEventoCrudo(admin, candidato, reproceso);
+    const resultado = await procesarEventoCrudo(admin, candidato, {
+      ultimoIntento: reproceso >= MAXIMO_DE_REPROCESOS,
+    });
     if (resultado.status === "processed") resumen.procesados++;
     else if (resultado.status === "unmapped") resumen.sinAsignar++;
     else if (resultado.status === "sin_cerrar") resumen.omitidos++;
-    else if (reproceso >= MAXIMO_DE_REPROCESOS) {
+    else if (resultado.status === "failed") {
       resumen.definitivos++;
       avisarErrorDefinitivo(candidato, { paso: resultado.paso, codigo: resultado.codigo });
     } else {

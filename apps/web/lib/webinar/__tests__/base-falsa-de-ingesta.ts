@@ -38,6 +38,18 @@ export const LLAVES_UNICAS: Record<string, string[][]> = {
   ingest_keys: [["key_hash"]],
 };
 
+/**
+ * CHECKs de la migración que la ingesta puede violar con un valor propio:
+ * `landing_events.status` (con `failed` desde 20261016130000) y
+ * `reprocess_attempts >= 0`. Un valor fuera de esto devuelve 23514.
+ */
+const CHECKS: Record<string, (fila: Fila) => boolean> = {
+  landing_events: (fila) =>
+    ["pending", "processed", "unmapped", "error", "failed"].includes(fila.status as string) &&
+    typeof fila.reprocess_attempts === "number" &&
+    fila.reprocess_attempts >= 0,
+};
+
 export type BaseFalsa = {
   tablas: Record<string, Fila[]>;
   consultas: Consulta[];
@@ -129,10 +141,18 @@ function consulta(base: BaseFalsa, tabla: string) {
         id: nuevoId(),
         created_at: "2026-10-16T12:00:00.000Z",
         ...(tabla === "landing_events"
-          ? { received_at: new Date().toISOString(), error_message: null, processed_at: null }
+          ? {
+              received_at: new Date().toISOString(),
+              error_message: null,
+              processed_at: null,
+              reprocess_attempts: 0,
+            }
           : {}),
         ...c.valores,
       };
+      if (CHECKS[tabla] && !CHECKS[tabla](nueva)) {
+        return { data: null, error: { code: "23514", message: `check violation on ${tabla}` } };
+      }
       if (violaUnica(base, tabla, nueva)) {
         if (c.op === "upsert" && ignorarDuplicados) return { data: [], error: null };
         return {
@@ -154,6 +174,10 @@ function consulta(base: BaseFalsa, tabla: string) {
     }
     encontradas = encontradas.slice(0, limite);
     if (c.op === "update") {
+      const chequeo = CHECKS[tabla];
+      if (chequeo && encontradas.some((fila) => !chequeo({ ...fila, ...c.valores }))) {
+        return { data: null, error: { code: "23514", message: `check violation on ${tabla}` } };
+      }
       for (const fila of encontradas) Object.assign(fila, c.valores);
       return { data: devolver ? encontradas.map(proyectar) : null, error: null };
     }
