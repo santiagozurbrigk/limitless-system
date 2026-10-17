@@ -41,8 +41,12 @@ begin
   end;
 
   -- 'failed' entra; un status desconocido no; los de SCRUM-526 siguen.
-  update public.landing_events set status = 'failed', reprocess_attempts = 5
-   where id = '98000000-0000-0000-0000-0000000000e1';
+  begin
+    update public.landing_events set status = 'failed', reprocess_attempts = 5
+     where id = '98000000-0000-0000-0000-0000000000e1';
+  exception when check_violation then
+    raise exception 'FALLA: landing_events no acepta status failed';
+  end;
   begin
     update public.landing_events set status = 'definitivo'
      where id = '98000000-0000-0000-0000-0000000000e1';
