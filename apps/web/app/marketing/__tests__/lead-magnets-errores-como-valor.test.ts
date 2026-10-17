@@ -137,6 +137,26 @@ describe("getLeadMagnetsAction", () => {
     expect(base.filtrosDe("lead_magnet_leads", "select")).toEqual([["organization_id", ORG]]);
   });
 
+  it("⭐ el revenue sólo suma clientes de la organización (un cliente de otra, aunque esté atribuido, no cuenta)", async () => {
+    // Un `attributed_client_id` de otra org escrito a mano en un lead propio
+    // (la RLS de lead_magnet_leads lo permite); la RLS de la cartera del
+    // holding podría dejar leer ese cliente.
+    const AJENO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    base.tablas.clients.push({ id: AJENO, organization_id: OTRA_ORG, total_amount: 9000 });
+    base.tablas.lead_magnet_leads.push({
+      id: "lead-3",
+      organization_id: ORG,
+      lead_magnet_id: LM,
+      attributed_client_id: AJENO,
+    });
+    const r = await getLeadMagnetsAction();
+    expect(r.success && r.data[0].totalRevenue).toBe(1500);
+    expect(base.filtrosDe("clients", "select")).toEqual([
+      ["organization_id", ORG],
+      ["in:id", [CLIENTE, AJENO]],
+    ]);
+  });
+
   it("sin Supabase configurado, la lista vacía sin tocar la base (como antes)", async () => {
     sim.configurado = false;
     await expect(getLeadMagnetsAction()).resolves.toEqual({ success: true, data: [] });

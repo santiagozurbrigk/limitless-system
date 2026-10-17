@@ -140,9 +140,16 @@ export async function getLeadMagnetsAction(): Promise<MutationResult<LeadMagnet[
 
     let revenueByClient: Record<string, number> = {};
     if (clientIds.length > 0) {
+      // Filtro por la organización como defensa en profundidad (QA de SCRUM-520):
+      // la única escritura de `attributed_client_id` (`attributeLeadMagnetToClient`)
+      // guarda un cliente de la misma organización que el lead, así que no se
+      // pierde nada; sin el filtro, un `attributed_client_id` de otro negocio
+      // escrito a mano sumaría su revenue si la RLS lo deja leer (cartera del
+      // holding).
       const { data: clients, error: clientsError } = await supabase
         .from("clients")
         .select("id, total_amount")
+        .eq("organization_id", organizationId)
         .in("id", clientIds);
       if (clientsError) throw new FallaDeLaBase(clientsError);
       revenueByClient = Object.fromEntries(
