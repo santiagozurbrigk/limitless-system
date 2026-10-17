@@ -10,6 +10,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const sim = vi.hoisted(() => ({
   escondido: { ingestaLanding: true },
   salud: vi.fn(),
+  tieneRol: vi.fn(async () => true),
+  // Para el test de paralelismo: Calendly no responde hasta que se pidió la
+  // tarjeta Landing. Si la tarjeta corre después del Promise.all, nunca.
+  calendlyEspera: null as null | Promise<void>,
   requireOrganizationId: async () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 }));
 
@@ -34,7 +38,9 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
 vi.mock("@/lib/auth/require-org-role", () => ({
   requireOrgRole: vi.fn(),
+  tieneRolEnLaOrg: sim.tieneRol,
   ROLES_CONFIG_ORG: ["founder"],
+  ROLES_CLAVES_DE_INGESTA: ["founder", "admin"],
   SIN_PERMISO_CONFIG_ORG: "",
 }));
 vi.mock("@/lib/discord/intent-contenido", () => ({
@@ -42,7 +48,10 @@ vi.mock("@/lib/discord/intent-contenido", () => ({
   diagnosticarIntentDeContenido: vi.fn(),
 }));
 vi.mock("@/app/calendly/actions", () => ({
-  getCalendlyIntegrationStatusAction: async () => ({ connected: false, webhookEnabled: false }),
+  getCalendlyIntegrationStatusAction: async () => {
+    if (sim.calendlyEspera) await sim.calendlyEspera;
+    return { connected: false, webhookEnabled: false };
+  },
 }));
 vi.mock("@/app/fathom/actions", () => ({
   getFathomIntegrationStatusAction: async () => ({ connected: false }),
@@ -83,7 +92,11 @@ async function panoramaCon(ingestaLanding: boolean) {
   return getIntegrationsOverviewAction();
 }
 
-afterEach(() => sim.salud.mockReset());
+afterEach(() => {
+  sim.salud.mockReset();
+  sim.tieneRol.mockClear();
+  sim.calendlyEspera = null;
+});
 
 describe("panorama de Integraciones y la Landing", () => {
   it("escondida: no lee las claves y la Landing no está en el panorama", async () => {
@@ -105,7 +118,25 @@ describe("panorama de Integraciones y la Landing", () => {
     sim.salud.mockResolvedValue(salud);
     const { healths } = await panoramaCon(false);
     expect(sim.salud).toHaveBeenCalledTimes(1);
-    expect(sim.salud).toHaveBeenCalledWith(sim.requireOrganizationId);
+    expect(sim.salud).toHaveBeenCalledWith(sim.requireOrganizationId, expect.any(Function));
     expect(healths.find((h) => h.provider === "landing")).toEqual(salud);
+
+    // El segundo argumento pregunta por founder o admin (AR pasada 1).
+    const puede = sim.salud.mock.calls[0][1] as () => Promise<boolean>;
+    expect(await puede()).toBe(true);
+    expect(sim.tieneRol).toHaveBeenCalledWith(["founder", "admin"]);
+  });
+
+  it("la tarjeta se pide en paralelo con los demás estados, no después (AR pasada 1)", async () => {
+    let soltar: () => void = () => {};
+    sim.calendlyEspera = new Promise<void>((ok) => (soltar = ok));
+    sim.salud.mockImplementation(async () => {
+      soltar();
+      return { provider: "landing", state: "not_connected", accountLabel: null, lastSyncAt: null, records: null, recordsLabel: null, issues: [] };
+    });
+    const limite = new Promise<"en serie">((ok) => setTimeout(() => ok("en serie"), 2000));
+    const resultado = await Promise.race([panoramaCon(false).then(() => "en paralelo"), limite]);
+    soltar();
+    expect(resultado).toBe("en paralelo");
   });
 });

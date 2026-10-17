@@ -2,8 +2,8 @@
  * Supabase falso en memoria para los tests de las claves de ingesta
  * (SCRUM-527). Modela lo que usan `lib/webinar/claves-de-ingesta.ts` y
  * `app/webinar/claves-de-ingesta-actions.ts`: select, insert y update con
- * filtros `eq` e `is`, `order`, `single` y `maybeSingle`. Los filtros se
- * aplican de verdad: si una consulta pierde el de `organization_id`, devuelve o
+ * filtros `eq` e `is`, `order`, `single` y `maybeSingle`. Los filtros y el
+ * orden se aplican de verdad (el orden desde la AR pasada 1): si una consulta pierde el de `organization_id`, devuelve o
  * toca filas de otra organización y el test lo ve.
  */
 
@@ -15,6 +15,7 @@ export type Consulta = {
   columnas?: string;
   valores?: unknown;
   filtros: Array<[string, "eq" | "is", unknown]>;
+  orden?: { columna: string; ascendente: boolean };
 };
 
 export type BaseFalsa = {
@@ -82,6 +83,14 @@ function consulta(base: BaseFalsa, tabla: string) {
       for (const fila of filas) Object.assign(fila, c.valores as Fila);
     } else {
       filas = filasDeLaTabla.filter(coincide);
+      const orden = c.orden;
+      if (orden) {
+        filas = [...filas].sort((a, b) => {
+          const x = String(a[orden.columna] ?? "");
+          const y = String(b[orden.columna] ?? "");
+          return (x < y ? -1 : x > y ? 1 : 0) * (orden.ascendente ? 1 : -1);
+        });
+      }
     }
 
     const proyectadas = filas.map(proyectar);
@@ -122,7 +131,11 @@ function consulta(base: BaseFalsa, tabla: string) {
       c.filtros.push([columna, "is", valor]);
       return builder;
     },
-    order: () => builder,
+    order(columna: string, opciones?: { ascending?: boolean }) {
+      // Default de PostgREST: ascendente.
+      c.orden = { columna, ascendente: opciones?.ascending ?? true };
+      return builder;
+    },
     single: async () => ejecutar("una"),
     maybeSingle: async () => ejecutar("quizas"),
     then<R1, R2>(

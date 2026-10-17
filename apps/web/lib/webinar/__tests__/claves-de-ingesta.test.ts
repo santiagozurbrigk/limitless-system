@@ -38,6 +38,7 @@ const {
   PREFIJO_CLAVE_DE_INGESTA,
   generarClaveDeIngesta,
   hashDeClaveDeIngesta,
+  hayQueAnotarElUso,
   tieneFormatoDeClaveDeIngesta,
   verificarClaveDeIngesta,
 } = await import("@/lib/webinar/claves-de-ingesta");
@@ -65,10 +66,17 @@ function fila(clave: string, extra: Record<string, unknown> = {}) {
   };
 }
 
-function verificar(token: unknown, extra: Parameters<typeof verificarClaveDeIngesta>[1] = {}) {
+/** Las tareas de `last_used_at` que la verificación mandó a segundo plano. */
+let enEspera: Promise<void>[] = [];
+
+function verificar(
+  token: unknown,
+  extra: Partial<Parameters<typeof verificarClaveDeIngesta>[1]> = {},
+) {
   return verificarClaveDeIngesta(token, {
     cliente: base.cliente() as SupabaseClient,
     ahora: () => AHORA,
+    enSegundoPlano: (t) => enEspera.push(t),
     ...extra,
   });
 }
@@ -83,6 +91,7 @@ function todoLoRegistrado(): string {
 }
 
 beforeEach(() => {
+  enEspera = [];
   sim.reportes = [];
   sim.bytesPedidos = [];
   base = crearBaseFalsa();
@@ -202,7 +211,9 @@ describe("verificarClaveDeIngesta", () => {
         return b;
       },
     } as unknown as SupabaseClient;
-    expect(await verificarClaveDeIngesta(clave, { cliente, ahora: () => AHORA })).toBeNull();
+    expect(
+      await verificarClaveDeIngesta(clave, { cliente, ahora: () => AHORA, enSegundoPlano: () => {} }),
+    ).toBeNull();
   });
 
   it("si la base falla al buscar, lanza una falla con texto fijo, sin la clave ni el hash", async () => {
@@ -234,13 +245,31 @@ describe("verificarClaveDeIngesta", () => {
       expect(base.tablas.ingest_keys[0].last_used_at).toBe(AHORA.toISOString());
     });
 
-    it("sin enSegundoPlano también la anota, sin esperarla", async () => {
+    it("enSegundoPlano es obligatoria: sin ella no compila (AR pasada 1)", async () => {
       const { clave } = generarClaveDeIngesta();
       base.tablas.ingest_keys = [fila(clave)];
+      const cliente = base.cliente() as SupabaseClient;
+      // Si la opción volviera a ser opcional, tsc marca la directiva sin uso.
+      // @ts-expect-error falta enSegundoPlano
+      const sinOpcion = () => verificarClaveDeIngesta(clave, { cliente });
+      // En ejecución tampoco hay un camino suelto: sin la función, lanza.
+      await expect(sinOpcion()).rejects.toThrow();
+    });
+
+    it("un last_used_at ilegible se vuelve a anotar", async () => {
+      const { clave } = generarClaveDeIngesta();
+      base.tablas.ingest_keys = [fila(clave, { last_used_at: "no-es-una-fecha" })];
       await verificar(clave);
-      await vi.waitFor(() =>
-        expect(base.tablas.ingest_keys[0].last_used_at).toBe(AHORA.toISOString()),
-      );
+      await Promise.all(enEspera);
+      expect(enEspera).toHaveLength(1);
+      expect(base.tablas.ingest_keys[0].last_used_at).toBe(AHORA.toISOString());
+    });
+
+    it("hayQueAnotarElUso: nunca, ilegible y viejo sí; reciente no", () => {
+      expect(hayQueAnotarElUso(null, AHORA)).toBe(true);
+      expect(hayQueAnotarElUso("no-es-una-fecha", AHORA)).toBe(true);
+      expect(hayQueAnotarElUso(new Date(AHORA.getTime() - INTERVALO_MINIMO_ULTIMO_USO_MS).toISOString(), AHORA)).toBe(true);
+      expect(hayQueAnotarElUso(new Date(AHORA.getTime() - 1000).toISOString(), AHORA)).toBe(false);
     });
 
     it("no la reescribe si se anotó hace menos de un minuto", async () => {

@@ -87,12 +87,12 @@ export type OpcionesDeVerificacion = {
   /** Reloj, para los tests. */
   ahora?: () => Date;
   /**
-   * Qué hacer con la escritura de `last_used_at`, que no se espera. Por
-   * defecto se larga suelta; el endpoint de SCRUM-528 puede pasar `after` de
-   * `next/server` para que la función serverless no se congele antes de
-   * terminarla.
+   * Qué hacer con la escritura de `last_used_at`, que no se espera.
+   * Obligatoria (AR pasada 1): suelta, en una función serverless puede no
+   * completarse nunca. El endpoint de SCRUM-528 pasa `after` de `next/server`;
+   * un test, la función que junta las tareas.
    */
-  enSegundoPlano?: (tarea: Promise<void>) => void;
+  enSegundoPlano: (tarea: Promise<void>) => void;
 };
 
 /**
@@ -114,7 +114,7 @@ export type OpcionesDeVerificacion = {
  */
 export async function verificarClaveDeIngesta(
   token: unknown,
-  opciones: OpcionesDeVerificacion = {},
+  opciones: OpcionesDeVerificacion,
 ): Promise<ClaveDeIngestaVerificada | null> {
   if (!tieneFormatoDeClaveDeIngesta(token)) return null;
 
@@ -141,8 +141,7 @@ export async function verificarClaveDeIngesta(
   const ahora = (opciones.ahora ?? (() => new Date()))();
   if (hayQueAnotarElUso(fila.last_used_at, ahora)) {
     const tarea = anotarUltimoUso(cliente, fila, ahora);
-    if (opciones.enSegundoPlano) opciones.enSegundoPlano(tarea);
-    else void tarea;
+    opciones.enSegundoPlano(tarea);
   }
 
   return { organizationId: fila.organization_id, claveId: fila.id };
@@ -158,6 +157,7 @@ function hashesIguales(guardado: string, calculado: string): boolean {
 export function hayQueAnotarElUso(ultimoUso: string | null, ahora: Date): boolean {
   if (ultimoUso === null) return true;
   const anterior = Date.parse(ultimoUso);
+  // Una fecha ilegible no puede dejar la clave sin anotar para siempre.
   if (Number.isNaN(anterior)) return true;
   return ahora.getTime() - anterior >= INTERVALO_MINIMO_ULTIMO_USO_MS;
 }
@@ -229,22 +229,48 @@ const MOTIVO_SIN_LEER = "no se pudieron leer las claves de ingesta.";
  *
  * `organizacion` resuelve la organización de la sesión (en Integraciones,
  * `requireOrganizationId`) y corre dentro de la lectura protegida.
+ *
+ * `puedeVerDetalle` dice si quien mira es founder o admin (AR pasada 1): sólo
+ * a ellos la tarjeta les muestra cuántas claves hay y cuándo se usó la última,
+ * lo mismo que ven al abrir el panel. Al resto le dice si hay alguna activa
+ * (conectada o no) y que el detalle lo ven el founder o un admin.
  */
 export async function saludDeLaLanding(
   organizacion: () => Promise<string>,
+  puedeVerDetalle: () => Promise<boolean>,
   leer: (organizationId: string) => Promise<ClavesActivas> = leerClavesActivas,
 ): Promise<IntegrationHealth> {
-  const claves = await lecturaDegradable<ClavesActivas | null>(
+  const lectura = await lecturaDegradable<{ claves: ClavesActivas; detalle: boolean } | null>(
     "integraciones:landing",
-    async () => leer(await organizacion()),
+    async () => {
+      const organizationId = await organizacion();
+      const [claves, detalle] = await Promise.all([leer(organizationId), puedeVerDetalle()]);
+      return { claves, detalle };
+    },
     null,
-  ).catch((error: unknown) => valorSiNoEsFalla<ClavesActivas | null>(error, null));
+  ).catch((error: unknown) =>
+    valorSiNoEsFalla<{ claves: ClavesActivas; detalle: boolean } | null>(error, null),
+  );
 
-  if (!claves) {
+  if (!lectura) {
     return estadoSinLeer({
       provider: "landing",
       recordsLabel: "claves activas",
       motivo: MOTIVO_SIN_LEER,
+    });
+  }
+
+  const { claves, detalle } = lectura;
+  if (!detalle) {
+    return buildHealth({
+      provider: "landing",
+      connected: claves.activas > 0,
+      issues: [
+        {
+          level: "info",
+          message: "El detalle de las claves de ingesta lo ven el founder o un admin.",
+        },
+      ],
     });
   }
 

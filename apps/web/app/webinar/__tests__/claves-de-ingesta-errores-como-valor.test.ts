@@ -49,8 +49,9 @@ vi.mock("@/lib/auth/bootstrap", async () => {
     },
   };
 });
-// `requireOrgRole` corre de verdad; lo que se simula es la respuesta de
-// `current_user_has_org_role` para el rol del usuario.
+// `requireOrgRole` corre de verdad contra una RPC simulada: la respuesta de
+// `current_user_has_org_role` sale del rol del usuario. La función SQL (y el
+// founder de un holding) se prueban en `supabase/ci/tests/30_roles_equipo_y_config.sql`.
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     rpc: async (nombre: string, args: { roles: string[] }) => {
@@ -237,6 +238,25 @@ describe("listarClavesDeIngestaAction", () => {
     expect(JSON.stringify(resultado)).not.toContain(sha256("propia"));
   });
 
+  it("la más nueva primero (AR pasada 1)", async () => {
+    base.tablas.ingest_keys.push({
+      id: "55555555-5555-4555-8555-555555555555",
+      organization_id: ORG,
+      key_hash: sha256("nueva"),
+      label: "Landing de diciembre",
+      created_at: "2026-10-12T00:00:00.000Z",
+      last_used_at: null,
+      revoked_at: null,
+    });
+    const resultado = await listarClavesDeIngestaAction();
+    if (!resultado.success) throw new Error(resultado.error);
+    expect(resultado.data.map((c) => c.label)).toEqual([
+      "Landing de diciembre",
+      "Landing de noviembre",
+      "Landing vieja",
+    ]);
+  });
+
   it("una falla de la base como valor vuelve con el texto fijo y se registra", async () => {
     base.errores["ingest_keys:select"] = { message: "TypeError: fetch failed" };
     expect(await listarClavesDeIngestaAction()).toEqual({ success: false, error: FALLO_AL_LEER });
@@ -305,6 +325,22 @@ describe("crearClaveDeIngestaAction", () => {
     expect(await crearClaveDeIngestaAction(nombre)).toEqual({ success: false, error: mensaje });
     expect(escrituras()).toHaveLength(0);
     expect(sim.reportes).toHaveLength(0);
+  });
+
+  it.each(["a\u0000b", "Landing\nde noviembre", "Landing\tB", "\u0000", "borrar\u007f", "x\u001fy"])(
+    "rechaza el nombre con caracteres de control %j como valor, sin escribir (AR pasada 1)",
+    async (nombre) => {
+      expect(await crearClaveDeIngestaAction(nombre)).toEqual({
+        success: false,
+        error: "El nombre de la clave no puede tener saltos de línea, tabulaciones ni otros caracteres invisibles.",
+      });
+      expect(escrituras()).toHaveLength(0);
+      expect(sim.reportes).toHaveLength(0);
+    },
+  );
+
+  it("acepta acentos, ñ y emojis en el nombre", async () => {
+    expect((await crearClaveDeIngestaAction("Señal, lanzamiento 🚀")).success).toBe(true);
   });
 
   it("acepta 100 caracteres aunque sean de más de una unidad UTF-16", async () => {

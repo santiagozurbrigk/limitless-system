@@ -19,6 +19,7 @@ import {
   generarClaveDeIngesta,
   type ClaveDeIngestaResumen,
 } from "@/lib/webinar/claves-de-ingesta";
+import { CLAVE_DE_INGESTA_INEXISTENTE } from "@/lib/webinar/textos-de-claves";
 import { paths } from "@/routes";
 
 /*
@@ -45,11 +46,15 @@ import { paths } from "@/routes";
 const NO_DISPONIBLE = "Las claves de ingesta todavía no están disponibles.";
 const NOMBRE_VACIO = "Poné un nombre para la clave, por ejemplo el de la landing que la va a usar.";
 const NOMBRE_LARGO = "El nombre de la clave puede tener hasta 100 caracteres.";
-const CLAVE_INEXISTENTE = "No encontramos esa clave o ya estaba revocada.";
+const NOMBRE_CON_CONTROL = "El nombre de la clave no puede tener saltos de línea, tabulaciones ni otros caracteres invisibles.";
+const CLAVE_INEXISTENTE = CLAVE_DE_INGESTA_INEXISTENTE;
 const FALLO_AL_LEER =
   "No se pudieron leer las claves de ingesta. Recargá la página para intentar de nuevo.";
 
 const LARGO_MAXIMO_DEL_NOMBRE = 100;
+// Caracteres de control: Postgres no acepta NUL en `text` (22P05) y los demás
+// no tienen sentido en un nombre (AR pasada 1).
+const CARACTER_DE_CONTROL = /[\u0000-\u001f\u007f]/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COLUMNAS_DEL_RESUMEN = "id, label, created_at, last_used_at, revoked_at";
 
@@ -82,6 +87,7 @@ async function organizacionConPermiso(): Promise<string> {
 function nombreValido(label: unknown): string {
   const limpio = typeof label === "string" ? label.trim() : "";
   if (!limpio) throw new ErrorEsperable(NOMBRE_VACIO);
+  if (CARACTER_DE_CONTROL.test(limpio)) throw new ErrorEsperable(NOMBRE_CON_CONTROL);
   // Como `char_length` de la base: cuenta caracteres, no unidades UTF-16.
   if ([...limpio].length > LARGO_MAXIMO_DEL_NOMBRE) throw new ErrorEsperable(NOMBRE_LARGO);
   return limpio;

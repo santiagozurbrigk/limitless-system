@@ -53,6 +53,8 @@ describe("saludDeLaLanding", () => {
   // Se importa en cada test: los de arriba reinician los módulos.
   const modulo = () => import("@/lib/webinar/claves-de-ingesta");
   const ORG = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  /** Quien mira es founder o admin. */
+  const SI = async () => true;
 
   beforeEach(() => {
     sim.reportes = [];
@@ -73,7 +75,7 @@ describe("saludDeLaLanding", () => {
     expect(claves).toEqual({ activas: 2, ultimoUso: "2026-10-16T00:00:00Z" });
     expect(base.consultas[0].columnas).toBe("last_used_at");
 
-    const salud = await saludDeLaLanding(async () => ORG, async (org) => {
+    const salud = await saludDeLaLanding(async () => ORG, SI, async (org) => {
       expect(org).toBe(ORG);
       return claves;
     });
@@ -88,19 +90,19 @@ describe("saludDeLaLanding", () => {
 
   it("sin claves activas, no está conectada", async () => {
     const { saludDeLaLanding } = await modulo();
-    const salud = await saludDeLaLanding(async () => ORG, async () => ({ activas: 0, ultimoUso: null }));
+    const salud = await saludDeLaLanding(async () => ORG, SI, async () => ({ activas: 0, ultimoUso: null }));
     expect(salud.state).toBe("not_connected");
   });
 
   it("con claves que nunca se usaron, lo avisa", async () => {
     const { saludDeLaLanding } = await modulo();
-    const salud = await saludDeLaLanding(async () => ORG, async () => ({ activas: 1, ultimoUso: null }));
+    const salud = await saludDeLaLanding(async () => ORG, SI, async () => ({ activas: 1, ultimoUso: null }));
     expect(salud.issues.map((i) => i.message)).toEqual(["Ninguna clave activa se usó todavía."]);
   });
 
   it("si la lectura falla, la tarjeta dice que no se pudo leer y se registra", async () => {
     const { saludDeLaLanding } = await modulo();
-    const salud = await saludDeLaLanding(async () => ORG, async () => {
+    const salud = await saludDeLaLanding(async () => ORG, SI, async () => {
       throw new TypeError("fetch failed");
     });
     expect(salud.sinLeer).toBe(true);
@@ -115,9 +117,40 @@ describe("saludDeLaLanding", () => {
     const leer = vi.fn();
     const salud = await saludDeLaLanding(async () => {
       throw new ErrorEsperable("Sesión no válida");
-    }, leer);
+    }, SI, leer);
     expect(leer).not.toHaveBeenCalled();
     expect(salud.sinLeer).toBe(true);
     expect(sim.reportes).toHaveLength(0);
+  });
+
+  it("a quien no es founder ni admin no le muestra el conteo ni el último uso (AR pasada 1)", async () => {
+    const { saludDeLaLanding } = await modulo();
+    const salud = await saludDeLaLanding(async () => ORG, async () => false, async () => ({
+      activas: 3,
+      ultimoUso: "2026-10-16T00:00:00Z",
+    }));
+    expect(salud.state).toBe("connected");
+    expect(salud.records).toBeNull();
+    expect(salud.lastSyncAt).toBeNull();
+    expect(salud.recordsLabel).toBeNull();
+    expect(salud.issues.map((i) => i.message)).toEqual([
+      "El detalle de las claves de ingesta lo ven el founder o un admin.",
+    ]);
+    expect(JSON.stringify(salud)).not.toContain("2026-10-16");
+    expect(JSON.stringify(salud)).not.toContain("3");
+  });
+
+  it("si no se puede verificar el rol, la tarjeta dice que no se pudo leer", async () => {
+    const { saludDeLaLanding } = await modulo();
+    const salud = await saludDeLaLanding(
+      async () => ORG,
+      async () => {
+        throw new TypeError("fetch failed");
+      },
+      async () => ({ activas: 3, ultimoUso: "2026-10-16T00:00:00Z" }),
+    );
+    expect(salud.sinLeer).toBe(true);
+    expect(salud.records).toBeNull();
+    expect(sim.reportes).toHaveLength(1);
   });
 });

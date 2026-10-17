@@ -72,3 +72,25 @@ export async function requireOrgRole(
     throw new ErrorEsperable(mensajeSinPermiso);
   }
 }
+
+/**
+ * Lo mismo que `requireOrgRole`, pero como respuesta: para decidir si se
+ * muestra un dato, no para cortar una acción (la tarjeta Landing de
+ * Integraciones, SCRUM-527). No poder verificarlo es una falla: lanza
+ * `FallaDeLaBase` y quien llama decide (la tarjeta lo trata como lectura
+ * degradada), nunca "sí".
+ */
+export async function tieneRolEnLaOrg(roles: readonly string[]): Promise<boolean> {
+  const supabase = await createClient();
+  const respuesta = await supabase.rpc("current_user_has_org_role", {
+    roles: [...roles],
+  });
+  const resultado = evaluarPermiso(respuesta);
+  if (resultado === "error") {
+    throw new FallaDeLaBase({
+      message: "No se pudo verificar el permiso.",
+      code: respuesta.error?.code,
+    });
+  }
+  return resultado === "permitido";
+}

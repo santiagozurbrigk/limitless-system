@@ -47,9 +47,16 @@ import { ESCONDIDO } from "@/lib/release/escondido";
 import { saludDeLaLanding } from "@/lib/webinar/claves-de-ingesta";
 import {
   requireOrgRole,
+  ROLES_CLAVES_DE_INGESTA,
   ROLES_CONFIG_ORG,
   SIN_PERMISO_CONFIG_ORG,
+  tieneRolEnLaOrg,
 } from "@/lib/auth/require-org-role";
+
+/** Si quien mira puede ver el detalle de las claves de ingesta (tarjeta Landing). */
+function puedeVerClavesDeIngesta(): Promise<boolean> {
+  return tieneRolEnLaOrg(ROLES_CLAVES_DE_INGESTA);
+}
 
 const GOOGLE_INTEGRATION_TABLE: Record<
   GoogleIntegrationProvider,
@@ -359,6 +366,7 @@ export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverv
     webinarJamStatus,
     hyrosStatus,
     paymentStatuses,
+    saludLanding,
   ] = await Promise.all([
     getCalendlyIntegrationStatusAction(),
     getGHLIntegrationStatusAction(),
@@ -375,6 +383,11 @@ export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverv
     getWebinarJamStatusAction().catch(() => null),
     getHyrosStatusAction().catch(() => null),
     getPaymentIntegrationsStatusAction().catch(() => []),
+    // Landing (SCRUM-527): escondida, no se lee nada. Visible, la tarjeta cuenta
+    // las claves activas, en paralelo con el resto (AR pasada 1).
+    ESCONDIDO.ingestaLanding
+      ? null
+      : saludDeLaLanding(requireOrganizationId, puedeVerClavesDeIngesta),
   ]);
 
   const [
@@ -608,11 +621,7 @@ export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverv
     }),
   );
 
-  // Landing (SCRUM-527): escondida, no se lee nada. Visible, la tarjeta cuenta
-  // las claves de ingesta activas de la organización.
-  if (!ESCONDIDO.ingestaLanding) {
-    byProvider.set("landing", await saludDeLaLanding(requireOrganizationId));
-  }
+  if (saludLanding) byProvider.set("landing", saludLanding);
 
   byProvider.set(
     "hyros",
