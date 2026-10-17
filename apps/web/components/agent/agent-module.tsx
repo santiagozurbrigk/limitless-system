@@ -6,6 +6,7 @@ import { PromptInputBox } from "@/components/ui/ai-prompt-box";
 import { useAgentData } from "@/providers/agent-data-provider";
 import { useToast } from "@/providers/toast-provider";
 import { detectCanvasIntent } from "@/lib/agent/canvas-intent";
+import { avisoDeEnvioFallido } from "@/lib/agent/motivo-del-envio";
 import { isAgentBusy } from "@/lib/agent/types";
 import { AgentEmptyState } from "./agent-empty-state";
 import { ChatMessage } from "./chat-message";
@@ -231,13 +232,9 @@ export function AgentModule() {
                     setShowCanvas(true);
                     setCanvasPending(true);
                   }
-                } catch {
-                  push({
-                    title: "No se pudo enviar el mensaje",
-                    description:
-                      "Revisá tu conexión o la API de Claude e intentá de nuevo.",
-                    variant: "default",
-                  });
+                } catch (error) {
+                  // El motivo de un rechazo conocido; si no, el de conexión (SCRUM-506).
+                  push(avisoDeEnvioFallido(error));
                 }
               })();
             }}

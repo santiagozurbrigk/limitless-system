@@ -4,7 +4,8 @@
  * provider las conecta: que la pantalla guarda el motivo de la lectura de
  * mensajes (y no un `{ success: false }` como mensajes), que crear o borrar no
  * refresca ni navega si la acción devolvió un error, y que el chat flotante
- * muestra el motivo como respuesta.
+ * muestra el motivo como respuesta. También que un envío por `/api/agent/send`
+ * rechazado con un motivo conocido llega a la pantalla con ese motivo.
  *
  * Sin DOM no hay React que guarde el estado entre renders, así que los hooks
  * se reemplazan por unos mínimos que sí lo guardan (la misma técnica que
@@ -71,6 +72,7 @@ const sim = vi.hoisted(() => ({
   avisos: [] as Array<{ title: string; description?: string }>,
   acciones: {} as Record<string, (...args: unknown[]) => Promise<unknown>>,
   llamadas: [] as string[],
+  pedidos: [] as string[],
   router: {
     push: (ruta: string) => sim.llamadas.push(`router.push ${ruta}`),
     replace: (ruta: string) => sim.llamadas.push(`router.replace ${ruta}`),
@@ -118,6 +120,10 @@ vi.mock("@/app/agent/actions", () => {
 
 import { AgentDataProvider, type useAgentData } from "@/providers/agent-data-provider";
 import { FloatingChatProvider, type useFloatingChat } from "@/providers/floating-chat-provider";
+import { avisoDeEnvioFallido, EnvioRechazado } from "@/lib/agent/motivo-del-envio";
+import { formatSseEvent } from "@/lib/agent/sse";
+import { AI_KEY_REJECTED_MESSAGE, NO_AI_CREDENTIALS_MESSAGE } from "@/lib/ai/anthropic-auth-errors";
+import { claudeNoCreditsUserMessage } from "@/lib/ai/anthropic-errors";
 
 const CONVERSACION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const MENSAJE = { id: "m-1", role: "user", content: "hola" };
@@ -214,6 +220,53 @@ describe("AgentDataProvider con estado", () => {
     await renderPantalla().deleteStage(CONVERSACION);
     expect(sim.avisos.map((a) => [a.title, a.description])).toEqual([["No se pudo eliminar la etapa", "Sesión no válida"]]);
     expect(sim.llamadas).toEqual(["deleteBusinessStageAction"]);
+  });
+});
+
+describe("AgentDataProvider: envío por /api/agent/send", () => {
+  /** La ruta responde un stream SSE con sólo el evento `error`, como hace ante un rechazo. */
+  function rutaQueRechaza(mensaje: string, status = 200) {
+    sim.pedidos = [];
+    (globalThis as Record<string, unknown>).fetch = async (url: string) => {
+      sim.pedidos.push(url);
+      return new Response(formatSseEvent("error", { message: mensaje }), { status });
+    };
+  }
+
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>).fetch;
+  });
+
+  it.each([
+    ["la clave rechazada", AI_KEY_REJECTED_MESSAGE],
+    ["la cuenta sin créditos", claudeNoCreditsUserMessage()],
+    ["sin clave de Claude", NO_AI_CREDENTIALS_MESSAGE],
+  ])("⭐ con %s el envío se rechaza con ese motivo, que la pantalla muestra", async (_n, motivo) => {
+    rutaQueRechaza(motivo);
+    const error = await renderPantalla().sendMessage("hola").catch((e: unknown) => e);
+    expect(sim.pedidos).toEqual(["/api/agent/send"]);
+    expect(error).toBeInstanceOf(EnvioRechazado);
+    expect(avisoDeEnvioFallido(error).description).toBe(motivo);
+    expect(renderPantalla().agentStatus).toBe("error");
+  });
+
+  it("⭐ con el texto de una falla el aviso sigue siendo el de conexión", async () => {
+    rutaQueRechaza("boom en la tabla");
+    const error = await renderPantalla().sendMessage("hola").catch((e: unknown) => e);
+    expect(error).not.toBeInstanceOf(EnvioRechazado);
+    expect(avisoDeEnvioFallido(error).description).toBe(
+      "Revisá tu conexión o la API de Claude e intentá de nuevo."
+    );
+  });
+
+  it("si la red falla el aviso es el de conexión", async () => {
+    (globalThis as Record<string, unknown>).fetch = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+    const error = await renderPantalla().sendMessage("hola").catch((e: unknown) => e);
+    expect(avisoDeEnvioFallido(error).description).toBe(
+      "Revisá tu conexión o la API de Claude e intentá de nuevo."
+    );
   });
 });
 

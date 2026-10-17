@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { resolveAgentFlags } from "@/lib/agent/canvas-intent";
+import { EnvioRechazado, motivoDelEnvio } from "@/lib/agent/motivo-del-envio";
 import { parseSseBuffer } from "@/lib/agent/sse";
 import { useStreamTypewriter } from "@/lib/agent/use-stream-typewriter";
 import type { AgentStatus } from "@/lib/agent/types";
@@ -446,7 +447,10 @@ export function AgentDataProvider({
         }
 
         if (streamError) {
-          throw new Error(streamError);
+          // Un rechazo conocido (sin clave, clave rechazada, sin saldo, límite)
+          // se muestra con su motivo; cualquier otro, con el aviso de conexión.
+          const motivo = motivoDelEnvio(streamError, trimmed);
+          throw motivo ? new EnvioRechazado(motivo) : new Error(streamError);
         }
 
         if (!receivedDone) {
