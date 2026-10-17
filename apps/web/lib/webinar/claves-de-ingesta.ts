@@ -244,7 +244,13 @@ export async function saludDeLaLanding(
     "integraciones:landing",
     async () => {
       const organizationId = await organizacion();
-      const [claves, detalle] = await Promise.all([leer(organizationId), puedeVerDetalle()]);
+      // Cada una envuelta en una función async: si una lanza de forma
+      // síncrona, es un rechazo que atiende el Promise.all y la otra promesa
+      // no queda sin atender.
+      const [claves, detalle] = await Promise.all([
+        (async () => leer(organizationId))(),
+        (async () => puedeVerDetalle())(),
+      ]);
       return { claves, detalle };
     },
     null,

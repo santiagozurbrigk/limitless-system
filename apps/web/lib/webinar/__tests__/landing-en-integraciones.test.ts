@@ -140,6 +140,30 @@ describe("saludDeLaLanding", () => {
     expect(JSON.stringify(salud)).not.toContain("3");
   });
 
+  it("si puedeVerDetalle lanza de forma síncrona, la lectura de claves no queda sin atender", async () => {
+    const { saludDeLaLanding } = await modulo();
+    const sueltas: unknown[] = [];
+    const oir = (motivo: unknown) => sueltas.push(motivo);
+    process.on("unhandledRejection", oir);
+    try {
+      const salud = await saludDeLaLanding(
+        async () => ORG,
+        (() => {
+          throw new TypeError("tieneRolEnLaOrg is not a function");
+        }) as () => Promise<boolean>,
+        async () => {
+          await Promise.resolve();
+          throw new TypeError("cliente.from is not a function");
+        },
+      );
+      await new Promise((listo) => setTimeout(listo, 20));
+      expect(salud.sinLeer).toBe(true);
+      expect(sueltas).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", oir);
+    }
+  });
+
   it("si no se puede verificar el rol, la tarjeta dice que no se pudo leer", async () => {
     const { saludDeLaLanding } = await modulo();
     const salud = await saludDeLaLanding(
