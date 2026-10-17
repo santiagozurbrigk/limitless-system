@@ -397,10 +397,16 @@ Contrato (Zod, `lib/webinar/normalize/evento.ts`):
 
 - Un registro necesita `launch_public_id`, `client_registration_id` y `email`; una visita,
   `launch_public_id` y `visitor_id`. El resto es opcional y puede venir en `null`; un texto
-  vacío vale lo mismo que no mandarlo. `occurred_at` es ISO 8601 con zona; si no viene, vale
-  la hora en que llegó. Los largos máximos son los de la base (un valor que la base
-  rechazaría se rechaza con 400 en vez de fallar siempre al normalizar). Las claves de más se
-  ignoran.
+  vacío vale lo mismo que no mandarlo. `occurred_at` es ISO 8601 con zona y tiene que caer
+  entre 30 días antes y 5 minutos después de la hora en que llega (fuera de eso, 400); si no
+  viene, vale la hora en que llegó. Las claves de más se ignoran al normalizar pero el crudo
+  las guarda.
+- Antes de guardar nada se rechaza con 400 (AR pasada 1): todo texto, valor o clave, también
+  las de más, con NUL o con un surrogate suelto (no es UTF-16 bien formado: lo produce una
+  landing que corta un nombre en la mitad de un emoji); estructuras de más de 10 niveles;
+  textos más largos que su columna; y un `occurred_at` fuera de la ventana (un año 0 o 10000
+  no entra en un `timestamptz`, y un 1900 o un 2999 movería las métricas por fecha). Así, lo
+  que se acepta siempre se puede guardar como jsonb y normalizar.
 
 Cómo fluye:
 
@@ -413,8 +419,12 @@ Cómo fluye:
      existe ahí (también si es de otra organización) o está cerrado, el crudo queda
      `unmapped` con el motivo en `error_message` y no se escribe nada más. Un borrador sí
      recibe (así se prueba la landing antes de abrir);
-   - **registro:** el lead se crea por `(organization_id, email_normalized)` (email en
-     minúsculas y sin ningún espacio, `lib/webinar/identity.ts`) con
+   - **registro:** si el `client_registration_id` ya está registrado con otro email (la
+     persona corrigió el email y la landing reusó el id), se conserva el primer registro, no
+     se crea un lead suelto y el crudo queda `processed` con una nota fija en
+     `error_message` ("client_registration_id ya registrado con otro email..."). Si no, el
+     lead se crea por `(organization_id, email_normalized)` (email en Unicode NFC, sin
+     caracteres de ancho cero, sin ningún espacio y en minúsculas, `lib/webinar/identity.ts`) con
      `insert ... on conflict do nothing`. Si ya existía, se queda con lo primero que se supo
      de él y sólo se completan el nombre o el teléfono que le faltaban. El teléfono va en
      E.164 sólo si trae código de país (`+` o `00`); si no, `null` (completarlo con un país
@@ -434,21 +444,24 @@ Cómo fluye:
    personales. Si ni siquiera se pudo cerrar, queda en `pending`.
 
 **Reproceso** (`/api/cron/reprocesar-landing`, cada 10 minutos, `lib/webinar/reprocesar-landing.ts`):
-toma los `error` (salvo los definitivos) y los `pending` de más de 5 minutos, de todas las
-organizaciones, hasta 200 por corrida. Cada uno se reclama con un UPDATE condicionado al
-estado, a la marca `processed_at` y al texto del error que se leyeron (patrón de
-`lib/webhooks/reclamar.ts`), así dos corridas no lo procesan dos veces. La cuenta de
-reprocesos va en el mismo `error_message` (la migración de SCRUM-526 no tiene columna de
-intentos y no hizo falta una): "Reproceso n de 5 en curso." al reclamarlo, "... Reproceso n
-de 5." si falla. Si falla el quinto, queda en `error` definitivo ("... no se reintenta más."),
-el cron ya no lo lee y avisa a Sentry con la organización, el id del evento, el paso y el
-SQLSTATE. `unmapped` no se reprocesa. El cron usa el monitor de crons y el registro de
-corridas como los demás.
+toma los `error` y los `pending` de más de 5 minutos, de todas las organizaciones, hasta 200
+por corrida, filtrando por columnas (índice parcial `landing_events_a_reprocesar`). El estado
+del reproceso vive en columnas propias (migración `20261016130000_landing_events_reprocesos`,
+AR pasada 1): `reprocess_attempts` cuenta los reprocesos que arrancó el cron y `status =
+'failed'` es el error definitivo. Cada evento se reclama con un UPDATE condicionado al
+estado, a `reprocess_attempts` y, en un `pending`, a la marca `processed_at` (patrón de
+`lib/webhooks/reclamar.ts`), que suma uno a `reprocess_attempts`: dos corridas no lo
+procesan dos veces ni cuentan mal, y un proceso que se corta igual gasta su intento. Si falla
+el quinto reproceso (o se cortó sin cerrarse), el evento pasa a `failed`, el cron ya no lo
+lee y avisa a Sentry con la organización, el id del evento, el paso y el SQLSTATE. Para
+revivirlo: `docs/operacion/alertas.md` § Evento de la landing en `failed`. `error_message`
+queda como texto fijo que describe la última falla y nada lo interpreta. `unmapped` no se
+reprocesa. El cron usa el monitor de crons y el registro de corridas como los demás.
 
-Medido contra un Supabase local con `next start` (evidencia de SCRUM-528): 50 registros por
-segundo durante 2 minutos (6000 pedidos, 300 reenvíos) respondieron todos 200 con p50 10,9 ms,
-p95 18,1 ms y p99 27,9 ms; quedaron 5700 registros, leads y eventos para 5700 ids distintos,
-sin duplicados ni pérdidas.
+Medido contra un Supabase local con `next start` (evidencia de SCRUM-528, con el fix-pack de
+la AR pasada 1): 50 registros por segundo durante 2 minutos (6000 pedidos, 300 reenvíos)
+respondieron todos 200 con p50 12,1 ms, p95 27,5 ms y p99 41,3 ms; quedaron 5700 registros,
+leads y eventos para 5700 ids distintos, sin duplicados ni pérdidas.
 
 El alta en Zoom por QStash es la Fase 2 y no está. El endpoint no mira
 `ESCONDIDO.ingestaLanding`: mientras la entrada está escondida la app no deja crear claves, y

@@ -1348,8 +1348,9 @@ Probado con `next start` y Supabase y Sentry falsos (evidencia de SCRUM-516); fa
 
 ## Ingesta de la landing de Limitless Webinars (SCRUM-528)
 
-**Prerrequisitos:** los PR de SCRUM-526, 527 y 528 mergeados y desplegados, y la migración de SCRUM-526 aplicada en
-producción (SCRUM-532; SCRUM-528 no agrega migraciones). Una organización de prueba con un lanzamiento `active` y una
+**Prerrequisitos:** los PR de SCRUM-526, 527 y 528 mergeados y desplegados, y las dos migraciones aplicadas en
+producción en orden (SCRUM-532): `20261016120000_webinars_modelo_de_datos` (SCRUM-526) y
+`20261016130000_landing_events_reprocesos` (SCRUM-528), con los SQL de `limitless-auditoria/sql-produccion/`. Una organización de prueba con un lanzamiento `active` y una
 clave de ingesta (con `ESCONDIDO.ingestaLanding` en `true` hay que crearla con la bandera apagada en un preview o
 como lo defina SCRUM-532). Probado contra un Supabase local con `next start` (evidencia de SCRUM-528); falta en
 Vercel con la base real.
@@ -1363,3 +1364,5 @@ Vercel con la base real.
 4. ⭐ Vercel → Settings → Cron Jobs: aparece `/api/cron/reprocesar-landing` cada 10 minutos. Sentry → Crons: el
    monitor `cron-reprocesar-landing` en verde después de su primera corrida, y Super-admin → Infraestructura lo lista.
 5. Los logs de Vercel de esas llamadas no muestran el email, la clave ni su hash.
+6. Un payload con `"name":"Persona \u0000"` o con `"occurred_at":"1900-01-01T00:00:00Z"` → 400 `Payload inválido.`, sin
+   fila en `landing_events` y sin evento en Sentry.

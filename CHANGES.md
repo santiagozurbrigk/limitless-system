@@ -28,6 +28,32 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-16 — Limitless Webinars: fix-pack de la AR pasada 1 de la ingesta de la landing (SCRUM-528)
+
+**Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (sobre `efcce6c0`)
+**Commit(s):** `44d6fff9`: feat(webinars): reprocess_attempts y status failed en landing_events con índice parcial para el cron, migración nueva y test de estructura; `d29b49fb`: fix(webinars): la ingesta rechaza con 400 textos no guardables, anidamiento y occurred_at fuera de ventana; reproceso por columnas; sin lead suelto con un id reusado; email NFC y 429 con forma propia; `83b67404`: test(webinars): el test 98 nombra la falla cuando landing_events no acepta failed; y este (docs).
+**Módulo(s) afectado(s):** `supabase/migrations/20261016130000_landing_events_reprocesos.sql` (nueva), `supabase/ci/tests/98_landing_events_reprocesos.sql` (nuevo), `apps/web/lib/webinar/{endpoint-de-ingesta,ingesta-landing,reprocesar-landing,identity}.ts`, `apps/web/lib/webinar/normalize/{evento,filas,reproceso}.ts`, tests de `lib/webinar/__tests__/`; docs de embudos, seguridad, base de datos, jobs, alertas (runbook) y testing.
+
+**Qué se hizo:** los 6 hallazgos de la AR pasada 1 (3 MAYOR, 3 MENOR).
+- **MAYOR-1:** después de `JSON.parse` se recorre el valor con profundidad acotada (10 niveles) y se rechaza con 400 todo texto, valor o clave (también las de más), con NUL o con un surrogate suelto (lo mismo que `isWellFormed()`). Antes, esos payloads pasaban Zod, la base no los podía guardar como jsonb y respondían 500 en bucle con un evento de Sentry por pedido.
+- **MAYOR-2:** `occurred_at` sólo vale entre 30 días antes y 5 minutos después de la llegada (400 fuera de eso), en registros y visitas. Antes, un año 0 o 10000 en UTC respondía 200 y gastaba 5 reprocesos hasta el error definitivo, y un 1900 o un 2999 movía las métricas por fecha. Al revalidar un crudo guardado, la ventana se mide contra `received_at` con un minuto de holgura.
+- **MAYOR-3:** la cuenta de reprocesos pasa a una columna propia, `landing_events.reprocess_attempts` (smallint not null default 0, CHECK >= 0), y el error definitivo es explícito: `status = 'failed'` en el CHECK. Índice parcial `landing_events_a_reprocesar` sobre `received_at` con `status in ('error', 'pending')`. El cron filtra por columnas (sin `like`) y reclama con un UPDATE condicionado a `status` y `reprocess_attempts`, que suma uno. `error_message` queda sólo como texto descriptivo. Runbook en `docs/operacion/alertas.md` para revivir un `failed`. Los SQL de producción para SCRUM-532 están en `limitless-auditoria/sql-produccion/scrum-528/` (precheck, migración idéntica al archivo y verificación de sólo lectura, probados en un Postgres 17 descartable).
+- **MENOR-1:** si el `client_registration_id` ya está registrado con otro email, no se crea un lead suelto: se conserva el primer registro y el crudo queda `processed` con una nota fija en `error_message`.
+- **MENOR-2:** `normalizarEmail` saca los caracteres de ancho cero y aplica NFC.
+- **MENOR-3:** el 429 del endpoint tiene la forma `{"ok":false,"error":"Demasiadas solicitudes. Reintentá en N segundos."}` con N igual a `Retry-After`.
+
+**Por qué / finalidad:** que lo que la ingesta acepta se pueda guardar y normalizar siempre, y que el estado del reproceso no dependa de la redacción de un texto.
+
+**Decisiones de diseño relevantes:**
+- `failed` como status y no un booleano: un solo campo dice si el cron lo toma, el índice parcial lo excluye y revivir es volver a `error` con `reprocess_attempts = 0`. Reemplaza la decisión "sin migración" de la entrada anterior.
+- Profundidad 10 (el contrato usa 2); ventana de 30 días y 5 minutos (la landing manda en el momento; 5 minutos cubren relojes desfasados).
+- El chequeo de texto es una expresión regular de surrogates sueltos más el NUL, equivalente a `isWellFormed()` (el `lib` ES2022 del proyecto no lo tipa); un test la compara con la función real.
+- La nota del id reusado va en `error_message` de un `processed`: rastreable sin datos personales y sin un estado nuevo.
+
+**Verificación:** suite completa 276 archivos y 4.493 tests (también con `TZ=UTC`, sin unhandled), `tsc` limpio, lint igual a `bd02ddc4`, `check-migrations.sh` con 195 migraciones y 14 tests de RLS en `pgvector/pgvector:pg17`, 28 mutantes de código y 5 de la migración muertos por su test, control negativo con la implementación de `efcce6c0` (46 tests en rojo), `next build` sin "Dynamic server usage". Contra un Supabase local con la migración nueva: cadena 46 de 46, los ataques de la AR dan 400 sin crudos ni errores en el log del servidor, el runbook revive dos `failed` y la carga de 50 por segundo durante 2 minutos da 6000 respuestas 200 con p50 12,1 ms, p95 27,5 ms y p99 41,3 ms, sin duplicados.
+
+**Riesgos / deuda técnica pendiente:** **SCRUM-532 ahora aplica dos migraciones** (20261016120000 de SCRUM-526 y 20261016130000 de esta tarea, en ese orden, antes del deploy del código). La collation de producción no se verificó contra el CHECK de `leads.email_normalized` (en el local, `en_US.UTF-8`, cumple para todo el plano básico). Sigue `[WEBINARS-UNMAPPED-SIN-REASIGNAR]`.
+
 ### 2026-10-16 — Limitless Webinars: endpoint de ingesta de la landing y reproceso (SCRUM-528)
 
 **Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (encadenada sobre `feat/SCRUM-527-webinars-claves-de-ingesta` en `bd02ddc4`, PR #144, que va sobre #141; nada mergeado)

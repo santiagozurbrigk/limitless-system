@@ -45,7 +45,7 @@ Vercel invoca los crons con **GET** y el header `Authorization: Bearer <CRON_SEC
 | `/api/cron/cleanup-trial-reels` | `0 3 * * *` | Borra del bucket `trial-reels` los archivos de jobs `done`/`failed` con más de 30 días | 60 | no |
 | `/api/cron/capture-ad-metrics` | `30 5 * * *` | Snapshot diario de anuncios de Zernio → `ad_metrics_daily` (el único histórico de Spend) | 60 | no |
 | `/api/cron/daily-signals` | `20 7 * * *` | Clasifica mensajes nuevos de Discord y propone hitos desde Discord y desde llamadas de entrega | 600 | no |
-| `/api/cron/reprocesar-landing` | `*/10 * * * *` | Reproceso de los eventos de la landing de Limitless Webinars (SCRUM-528) en `error` o trabados en `pending` (más de 5 min), con el reclamo condicionado de `reclamar.ts`; hasta 5 reprocesos por evento y después error definitivo con aviso a Sentry. Hasta 200 eventos por corrida; responde sólo conteos | 300 | no |
+| `/api/cron/reprocesar-landing` | `*/10 * * * *` | Reproceso de los eventos de la landing de Limitless Webinars (SCRUM-528) en `error` o trabados en `pending` (más de 5 min), con el reclamo condicionado de `reclamar.ts` sobre `status` y `reprocess_attempts`; hasta 5 reprocesos por evento y después `status = 'failed'` con aviso a Sentry (revivir: `docs/operacion/alertas.md`). Hasta 200 eventos por corrida; responde sólo conteos | 300 | no |
 
 Patrón de los crons con fan-out: `?organizationId=<uuid>` corre una sola org (test manual o retry); si `QSTASH_TOKEN` está configurado publica un job por org con `publishCronFanout` (2 reintentos); si no, corre en serie dentro del mismo `maxDuration`.
 
