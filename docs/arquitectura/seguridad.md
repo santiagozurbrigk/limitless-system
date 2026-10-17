@@ -17,6 +17,7 @@ El detalle de sesión, organización efectiva, holding y permisos por módulo es
 | Jobs | `CRON_SECRET`, `WORKER_AUTH_SECRET`, firma QStash, comparación en tiempo constante | `lib/integrations/cron-auth.ts`, `lib/queue/verify-queue-request.ts`, `lib/security/safe-equal.ts` |
 | Webhooks | Firma o secreto por proveedor, fail-closed | ver `docs/arquitectura/jobs-webhooks-y-colas.md` |
 | Abuso | Rate limit compartido en Postgres | `lib/rate-limit.ts` |
+| Ingesta pública | Clave de ingesta (sólo el hash en la base), límite por clave, cuerpo de 16 KB y Zod | `lib/webinar/endpoint-de-ingesta.ts` |
 | IA | Contenido no confiable envuelto antes de ir al prompt | `lib/ai/wrap-untrusted-content.ts` |
 | Errores | Sentry sin cookies | `sentry.*.config.ts` |
 
@@ -75,6 +76,21 @@ SCRUM-527 (`lib/webinar/claves-de-ingesta.ts`, `app/webinar/claves-de-ingesta-ac
 - Ni la clave ni el hash van a un log, a Sentry ni al texto de un error: la falla al guardar la clave y la de anotar el último uso usan textos fijos con el código de Postgres.
 - Rotar es crear una nueva, cargarla en la landing y revocar la vieja. Revocar corta en el acto.
 
+### Endpoint público de ingesta de la landing
+
+SCRUM-528: `POST /api/ingest/landing` (`app/api/ingest/landing/route.ts`, lógica en `lib/webinar/endpoint-de-ingesta.ts`). Es público para el middleware (sin sesión) y lo autentica la clave de ingesta. Qué lo protege, en orden:
+
+- **Fuera del middleware de sesión:** está en `isPublicPath` (sólo la ruta exacta) y, además, el matcher de `middleware.ts` la excluye (`api/ingest/landing$`), así el middleware ni siquiera corre. Comprobado contra el `middleware-manifest.json` del build.
+- **Clave:** `Authorization: Bearer <clave>` → `verificarClaveDeIngesta`. Sin header, con otra forma, inexistente o revocada: 401 `{"ok":false,"error":"No autorizado."}`, siempre la misma respuesta. Si la base falla al verificar: 500 (no 401: la landing tiene que reintentar). La organización sale de la clave, nunca del payload.
+- **Límite por clave** (`landingIngestRateLimit`, identificador `ingest-landing:<id de la clave>`): ventana fija de 10 s con 600 pedidos (50 por segundo sostenidos con 20% de margen, y ráfagas de hasta 600). Excedido: 429 con `Retry-After` y la misma forma que el resto, `{"ok":false,"error":"Demasiadas solicitudes. Reintentá en N segundos."}`, con N igual a `Retry-After`. Fail-open como el resto de `lib/rate-limit.ts`.
+- **Cuerpo de 16 KB como mucho**, contado antes de parsear: un `Content-Length` de más se rechaza sin leer y, si no viene, se cuentan los bytes del stream y se corta apenas pasa. 413.
+- **Contrato con Zod y entrada guardable** (`lib/webinar/normalize/evento.ts`): JSON roto, UTF-8 inválido, cualquier texto (valor o clave, también las de más) con NUL o con un surrogate suelto, estructuras de más de 10 niveles y payload fuera de contrato responden 400 `"Payload inválido."`, sin repetir valores (los mensajes de Zod los repiten, por eso no se devuelven). Lo que pasa se puede guardar siempre: un payload hostil no produce un 500 en bucle ni un evento de Sentry por pedido (AR pasada 1, comprobado contra la base real). Un `occurred_at` bien escrito pero fuera de la ventana (30 días antes, 5 minutos después de la llegada) no da 400: se ignora y vale la hora de llegada, así un reloj adelantado no pierde el registro (AR pasada 2).
+- **Respuestas cortas:** `{"ok":true}` o `{"ok":false,"error":"<texto fijo>"}`, también el 429. Ningún detalle interno.
+- **Sin datos personales en logs ni en Sentry:** los registros llevan texto fijo, la organización y el id del evento. `landing_events.error_message` es un texto fijo con el paso y el SQLSTATE (`lib/webinar/normalize/reproceso.ts`), nunca el texto de la base, que puede repetir valores de la fila. Ni la clave ni su hash aparecen en ningún lado.
+- **Escrituras con service role filtradas por organización:** todas las consultas de la ingesta y del reproceso filtran o escriben el `organization_id` de la clave (lo comprueba un barrido en los tests). Las FK compuestas de SCRUM-526 impiden además apuntar a un lanzamiento o lead de otra organización.
+- **El reproceso** (`/api/cron/reprocesar-landing`) se autentica con `CRON_SECRET` como los demás crons y responde sólo conteos.
+- **Riesgo conocido, el límite es fail-open:** si `consume_rate_limit` falla (la base no responde o la RPC da error), `lib/rate-limit.ts` cae al contador en memoria de cada instancia y lo registra en la consola. Es el comportamiento de todos los límites del repo y no se cambió para este endpoint. Mientras dure la falla, el tope de 600 cada 10 s vale por instancia serverless y no en total, así que una clave podría pasar más pedidos. Lo acota que cada pedido igual necesita una clave válida, que con la base caída la verificación de la clave falla primero (500) y que guardar el crudo también depende de la base. Visto en la QA de SCRUM-528.
+
 ## Crons, colas y bot
 
 - `assertCronAuthorized`: `Bearer CRON_SECRET` en tiempo constante (`safeEqual` hashea ambos lados con SHA-256 antes de `timingSafeEqual`, así tampoco filtra el largo). **Lanza si `CRON_SECRET` no está**: un cron sin la variable responde 500, nunca queda abierto.
@@ -128,4 +144,5 @@ Contador en Postgres (`consume_rate_limit`), fail-open. Límites y usos en `docs
 - `apps/web/lib/storage/org-path.ts`
 - `apps/web/lib/ai/wrap-untrusted-content.ts`, `apps/web/lib/sanitize.ts`
 - `apps/web/lib/rate-limit.ts`
+- `apps/web/lib/webinar/{claves-de-ingesta,endpoint-de-ingesta}.ts`, `apps/web/app/api/ingest/landing/route.ts`
 - `supabase/migrations/20260922100000_profiles_columnas_protegidas.sql`, `20260922110000_rpcs_y_policies_entre_organizaciones.sql`

@@ -22,6 +22,7 @@ Team y crear las reglas de esta página. Decisión del 2026-10-02: las alertas v
 | Una server action que falla por algo inesperado (la red, la base, un bug) en los módulos que separan sus errores (SCRUM-497: Auth, Clientes, Equipo, Closing; SCRUM-503: Tablero; SCRUM-504: Ventas; SCRUM-516: carga y negocio de Clientes) o una falla de infraestructura dentro de `runMutation` en el resto | `registrarFallaDeAccion` → `reportarFalla` (`lib/server/action-result.ts`) | `server_action` (etiqueta de la acción; sin `proceso_de_fondo`) |
 | Una pantalla que no se pudo dibujar (la ve el usuario como "No pudimos cargar…"; SCRUM-108) | El boundary (`error.tsx` o `global-error.tsx`) la captura desde el navegador con `Sentry.captureException`. Si vino del servidor, además llega el evento del servidor (el que captura el SDK al envolver el Server Component, o `onRequestError`), con el mensaje real y el stack y el mismo código: `etiquetarDigest` en el `beforeSend` del servidor lo calcula como Next (`lib/observability/digest-de-next.ts`) | Navegador: `boundary` (`global`, `plataforma`, `super-admin`, `marketing`, `tablero`, `agente`, `ventas`) y `error_digest`. Servidor: `error_digest` (el código de referencia que ve el usuario) |
 | Una lectura secundaria del layout de la plataforma que falló y se reemplazó por un valor por defecto (holding, onboarding, zona, aviso de la clave de IA; SCRUM-108), o una lectura de Clientes que otras pantallas componen y sigue con vacío (wins y sus capturas, usos y links, baselines, nichos, facturación por cliente, duraciones de plan en Cobros, columnas, seguimiento; SCRUM-516 y SCRUM-517) | `lecturaDegradable` → `reportarFalla` (las de Clientes, con `.catch` a `valorSiNoEsFalla`, que no registra la falta de sesión) | `lectura_degradada` (`layout-plataforma:holding`, `clientes:wins`…; sin `proceso_de_fondo`) |
+| Un evento de la landing de Limitless Webinars que falló sus 5 reprocesos y quedó en `failed` (SCRUM-528) | `reportarFalla` desde el cron `/api/cron/reprocesar-landing`, mensaje "Un evento de la landing falló sus 5 reprocesos y quedó en error definitivo." | `proceso_de_fondo`, `cron`, `org_id`, `provider=landing`; en el detalle `landing_event_id`, `paso` y `codigo` (SQLSTATE). Sin datos personales. Qué hacer: § Evento de la landing en `failed` |
 | Errores del bot de Discord y del reel-worker | `@sentry/node` (si tienen `SENTRY_DSN`) | `app=discord-bot` / `app=reel-worker`, `proceso_de_fondo` |
 
 Detalle técnico en [`arquitectura/jobs-webhooks-y-colas.md`](../arquitectura/jobs-webhooks-y-colas.md) § Instrumentación y Sentry.
@@ -71,7 +72,7 @@ acción *Notify on preferred channel* → Team o Members, y cada persona tiene q
 Settings → Account → Notifications.
 
 1. **Monitores de crons:** aparecen solos en Sentry → Crons después de la primera corrida de cada uno (19). Cada uno
-   abre un issue a las 2 fallas seguidas. Revisar que estén los 19 y que el horario coincida con `vercel.json`.
+   abre un issue a las 2 fallas seguidas. Revisar que estén los 20 y que el horario coincida con `vercel.json`.
 2. **Regla "issue nuevo de un proceso de fondo"** (Monitors → Alerts → Create Alert, source *all issues in selected projects*):
    - Cuándo: *A new issue is created*.
    - Filtro: tag `proceso_de_fondo` igual a `true`.
@@ -183,7 +184,7 @@ después de 20 min … responde commit Y" y qué revisar. Sin tokens de Vercel.
 
 ## Registro de corridas de los crons
 
-Cada corrida autorizada de los 19 crons de `vercel.json` queda en la tabla `corridas_de_procesos`
+Cada corrida autorizada de los 20 crons de `vercel.json` queda en la tabla `corridas_de_procesos`
 (`lib/observability/registro-de-corridas.ts`, desde `conMonitorDeCron`): inicio, fin, estado (`en_curso`, `ok`,
 `encolado`, `fallo`, `parcial`), orgs procesadas y fallidas, los ids de las fallidas, los jobs encolados de los crons
 con fan-out y un mensaje de error saneado (sin query, emails, tokens ni valores de claves, también compuestas como
@@ -217,3 +218,38 @@ order by inicio desc
 limit 50;
 ```
 
+## Evento de la landing en `failed` (SCRUM-528)
+
+La alerta dice que un registro o una visita de la landing de un lanzamiento quedó guardado en
+`landing_events` pero no se pudo normalizar en el intento del endpoint ni en 5 reprocesos del cron
+(cada 10 minutos, unos 50 minutos en total). El crudo está completo: no se perdió nada, sólo no entró en
+los números.
+
+1. **Ver la causa.** `paso` y `codigo` del evento de Sentry dicen dónde falló (lanzamiento, lead, registro,
+   evento o visita) y el SQLSTATE. Lo mismo está en `error_message` de la fila. Si muchos eventos fallaron
+   en la misma ventana, casi siempre es un deploy roto o la base caída, no los datos.
+2. **Arreglar la causa** (deploy, migración, base). Revivir antes sólo los vuelve a llevar a `failed`.
+3. **Revivir.** El estado del reproceso son dos columnas: `status` y `reprocess_attempts`. Volver a
+   `error` con la cuenta en 0, siempre acotado por organización (y, si son muchos, por la ventana de la
+   falla). En Supabase → SQL Editor:
+
+   ```sql
+   update public.landing_events
+      set status = 'error', reprocess_attempts = 0
+    where organization_id = '<uuid de la organización>'
+      and status = 'failed'
+      and received_at >= '<inicio de la ventana de la falla>'
+      and received_at <  '<fin de la ventana de la falla>'
+   returning id;
+   ```
+
+   Para uno solo, `and id = '<landing_event_id del evento de Sentry>'` en vez de la ventana. No toques
+   `payload` (es el crudo tal cual llegó), ni `error_message` (es descriptivo: el cron no lo lee y lo
+   reescribe), ni `processed_at`.
+4. **Esperar al cron** (10 minutos como mucho) o correrlo a mano:
+   `curl -H "Authorization: Bearer $CRON_SECRET" "$APP/api/cron/reprocesar-landing"`. La respuesta trae
+   `procesados`. El reproceso es idempotente: un evento que ya había escrito parte del registro no lo duplica.
+5. Si vuelve a `failed`, la causa sigue: no revivir en bucle.
+
+Probado contra un Supabase local (`limitless-auditoria/evidencia-sprint2/scrum-528/local/10-revivir-failed-p2.txt`):
+los dos eventos `failed` revivieron con este UPDATE y el cron siguiente los dejó `processed`.

@@ -147,6 +147,20 @@ export const webhookRateLimit = rateLimit({
   maxRequests: 100,
 });
 
+/**
+ * Ingesta de la landing de Limitless Webinars (SCRUM-528), por clave de
+ * ingesta. Ventana fija de 10 segundos con 600 pedidos: la landing puede
+ * sostener 50 por segundo con un 20% de margen (con 500 justos, una ventana
+ * que arranca unos milisegundos tarde ya cortaría a una landing que manda 50
+ * por segundo parejos), y una ráfaga de hasta 600 en un mismo segundo pasa si
+ * la ventana venía tranquila. Lo que pasa de ahí recibe 429 con `Retry-After`.
+ */
+export const LIMITE_DE_INGESTA_DE_LANDING: RateLimitConfig = {
+  windowMs: 10 * 1000,
+  maxRequests: 600,
+};
+export const landingIngestRateLimit = rateLimit(LIMITE_DE_INGESTA_DE_LANDING);
+
 /** Webhook Unipile — sin auth de header (dashboard no lo soporta) */
 export const unipileWebhookRateLimit = rateLimit({
   windowMs: 60 * 1000,

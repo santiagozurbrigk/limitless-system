@@ -302,14 +302,14 @@ No tiene relación con el motor de embudos (no usa `funnel_instances`) ni con la
 "próximo lanzamiento" del onboarding de clientes, que es un campo configurable del área
 Clientes.
 
-### Limitless Webinars (Fase 1: modelo de datos y claves de ingesta)
+### Limitless Webinars (Fase 1: modelo de datos, claves e ingesta de la landing)
 
 SCRUM-526 (épica SCRUM-521) creó las tablas de los lanzamientos de webinars en
 `supabase/migrations/20261016120000_webinars_modelo_de_datos.sql`: `webinar_launches`,
 `webinar_sessions`, `launch_ad_campaigns`, `launch_products`, `leads`,
 `launch_registrations`, `landing_visits`, `lead_events`, `ingest_keys` y `landing_events`.
 No reutiliza `launches` ni `launch_metrics` (quedan como están). Las claves de ingesta
-(SCRUM-527, abajo) son el primer código que las usa; el endpoint de la landing es SCRUM-528.
+(SCRUM-527) y la ingesta de la landing (SCRUM-528) son el código que las usa hoy (abajo).
 
 Lo que ya hace cumplir la base:
 - Cada miembro lee sólo lo de su organización; la configuración del lanzamiento (lanzamiento,
@@ -379,6 +379,106 @@ Archivos: `lib/webinar/claves-de-ingesta.ts`, `app/webinar/claves-de-ingesta-act
 `components/integrations/settings/landing-settings.tsx`. Tests en `lib/webinar/__tests__/`,
 `app/webinar/__tests__/`, `app/integrations/__tests__/panorama-con-landing.test.ts`,
 `app/(platform)/integrations/__tests__/` y `components/integrations/__tests__/landing-settings.test.ts`.
+
+#### Ingesta de la landing (SCRUM-528)
+
+`POST /api/ingest/landing` recibe los registros y las visitas de la landing del lanzamiento.
+La seguridad del endpoint (clave, límite, cuerpo, respuestas) está en
+`docs/arquitectura/seguridad.md` § Endpoint público de ingesta de la landing.
+
+Contrato (Zod, `lib/webinar/normalize/evento.ts`):
+
+```json
+{ "type": "registration" | "visit", "launch_public_id", "client_registration_id",
+  "name", "email", "phone",
+  "tracking": { "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "fbclid", "sl" },
+  "ab_variant", "qualification", "visitor_id", "occurred_at" }
+```
+
+- Un registro necesita `launch_public_id`, `client_registration_id` y `email`; una visita,
+  `launch_public_id` y `visitor_id`. El resto es opcional y puede venir en `null`; un texto
+  vacío vale lo mismo que no mandarlo. `occurred_at` es ISO 8601 con zona (si no lo es, 400).
+  Se usa sólo si cae entre 30 días antes y 5 minutos después de la hora en que llegó el
+  evento (`received_at`); fuera de eso (el reloj de un navegador adelantado, un año 0 o 10000
+  que no entra en un `timestamptz`, un 1900 o un 2999 que movería las métricas por fecha) se
+  ignora y el registro o la visita entran con la hora de llegada, igual que si no viniera. El
+  crudo guarda el valor original. Rechazarlo con 400 perdía el registro, porque la landing no
+  reintenta un 400 (AR pasada 2). Las claves de más se ignoran al normalizar pero el crudo las
+  guarda.
+- 400 queda sólo para lo que no se puede guardar o no cumple el contrato (AR pasada 1): todo
+  texto, valor o clave, también las de más, con NUL o con un surrogate suelto (no es UTF-16
+  bien formado: lo produce una landing que corta un nombre en la mitad de un emoji);
+  estructuras de más de 10 niveles; textos más largos que su columna; campos obligatorios que
+  faltan o con otro tipo. Así, lo que se acepta siempre se puede guardar como jsonb y
+  normalizar.
+
+Cómo fluye:
+
+1. Clave → organización; límite por clave; cuerpo de hasta 16 KB; JSON y contrato.
+2. **Crudo primero:** el payload tal cual llegó va a `landing_events` en `pending` y la
+   landing recibe `{"ok":true}`. Si no se pudo guardar, 500 y la landing reintenta.
+3. **Normalización después de responder** (`after` de `next/server`,
+   `lib/webinar/ingesta-landing.ts`):
+   - el lanzamiento se busca por `public_id` **dentro de la organización de la clave**. Si no
+     existe ahí (también si es de otra organización) o está cerrado, el crudo queda
+     `unmapped` con el motivo en `error_message` y no se escribe nada más. Un borrador sí
+     recibe (así se prueba la landing antes de abrir);
+   - **registro:** si el `client_registration_id` ya está registrado con otro email (la
+     persona corrigió el email y la landing reusó el id), se conserva el primer registro, no
+     se crea un lead suelto y el crudo queda `processed` con una nota fija en
+     `error_message` ("client_registration_id ya registrado con otro email..."). Si no, el
+     lead se crea por `(organization_id, email_normalized)` (email en Unicode NFC, sin
+     caracteres de ancho cero, sin ningún espacio y en minúsculas, `lib/webinar/identity.ts`) con
+     `insert ... on conflict do nothing`. Si ya existía, se queda con lo primero que se supo
+     de él y sólo se completan el nombre o el teléfono que le faltaban. El teléfono va en
+     E.164 sólo si trae código de país (`+` o `00`); si no, `null` (completarlo con un país
+     sería inventar). Después, el registro en `launch_registrations` con el tracking y
+     `raw_event_id`, y el evento `registered` en `lead_events` (`source = 'landing'`,
+     `source_ref` = `client_registration_id`);
+   - **visita:** una fila en `landing_visits` por `(launch_id, visitor_id, day)`, con el día
+     en UTC (da lo mismo en cualquier servidor).
+   - Al terminar, el crudo pasa a `processed` con `processed_at`.
+4. **Idempotencia:** cada escritura tiene su llave única y un 23505 es "ya estaba". Un
+   reenvío con el mismo `client_registration_id` no duplica nada; el mismo lead con otro
+   `client_registration_id` en el mismo lanzamiento se queda con el primer registro, y el
+   evento `registered` sale siempre del registro guardado, así no hay dos. Una normalización
+   que se corta a la mitad y se reprocesa tampoco duplica.
+5. **Si la normalización falla**, el crudo queda en `error` con un texto fijo (el paso y el
+   SQLSTATE, por ejemplo "Falló la normalización en registro (código 57014)."), sin datos
+   personales. Si ni siquiera se pudo cerrar, queda en `pending`.
+
+**Reproceso** (`/api/cron/reprocesar-landing`, cada 10 minutos, `lib/webinar/reprocesar-landing.ts`):
+toma los `error` y los `pending` de más de 5 minutos, de todas las organizaciones, hasta 200
+por corrida, filtrando por columnas (sobre el índice `(status, received_at)` de SCRUM-526). El estado
+del reproceso vive en columnas propias (migración `20261016130000_landing_events_reprocesos`,
+AR pasada 1): `reprocess_attempts` cuenta los reprocesos que arrancó el cron y `status =
+'failed'` es el error definitivo. Cada evento se reclama con un UPDATE condicionado al
+estado, a `reprocess_attempts` y, en un `pending`, a la marca `processed_at` (patrón de
+`lib/webhooks/reclamar.ts`), que suma uno a `reprocess_attempts`: dos corridas no lo
+procesan dos veces ni cuentan mal, y un proceso que se corta igual gasta su intento. Si falla
+el quinto reproceso (o se cortó sin cerrarse), el evento pasa a `failed`, el cron ya no lo
+lee y avisa a Sentry con la organización, el id del evento, el paso y el SQLSTATE. Para
+revivirlo: `docs/operacion/alertas.md` § Evento de la landing en `failed`. `error_message`
+queda como texto fijo que describe la última falla y nada lo interpreta. `unmapped` no se
+reprocesa. El cron usa el monitor de crons y el registro de corridas como los demás.
+
+Medido contra un Supabase local con `next start` (evidencia de SCRUM-528, con el fix-pack de
+la AR pasada 1): 50 registros por segundo durante 2 minutos (6000 pedidos, 300 reenvíos)
+respondieron todos 200 con p50 12,1 ms, p95 27,5 ms y p99 41,3 ms; quedaron 5700 registros,
+leads y eventos para 5700 ids distintos, sin duplicados ni pérdidas.
+
+Cada reenvío guarda otro crudo (los normalizados no se duplican) y nada borra crudos viejos:
+abierto como `[WEBINARS-RETENCION-CRUDOS]`.
+
+El alta en Zoom por QStash es la Fase 2 y no está. El endpoint no mira
+`ESCONDIDO.ingestaLanding`: mientras la entrada está escondida la app no deja crear claves, y
+sin una clave activa todo pedido es 401.
+
+Archivos: `app/api/ingest/landing/route.ts`, `app/api/cron/reprocesar-landing/route.ts`,
+`lib/webinar/{endpoint-de-ingesta,ingesta-landing,reprocesar-landing,identity}.ts`,
+`lib/webinar/normalize/{evento,filas,reproceso}.ts`. Tests:
+`lib/webinar/__tests__/{identidad-y-normalizacion,ingesta-de-la-landing}.test.ts` (con la base
+falsa `base-falsa-de-ingesta.ts`, que aplica las llaves únicas de la migración).
 
 ## Archivos clave
 

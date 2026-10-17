@@ -196,7 +196,7 @@ Propósito de cada una en el doc del área. Las notas del cliente son columnas d
 `workboard_tasks`, `workboard_task_attachments`, `workboard_task_documents`, `sprints` (a lo sumo uno `active` por organización: índice único parcial `sprints_un_activo_por_org`, `20261008120000`), `sops`, `sop_versions`, `sop_attachments`, `sop_generation_jobs`, `weekly_inputs`, `weekly_reports`, `intelligence_snapshots`, `executive_reports`, `launches`, `launch_metrics`.
 
 ### Limitless Webinars (`docs/areas/embudos.md`)
-Fase 1 del modelo de datos (SCRUM-526, `20261016120000_webinars_modelo_de_datos`). Sin código de la app todavía: las claves y la ingesta de la landing son SCRUM-527 y SCRUM-528. Las tablas viejas `launches` y `launch_metrics` (Operaciones) no se usan para esto.
+Fase 1 del modelo de datos (SCRUM-526, `20261016120000_webinars_modelo_de_datos`). Las usan las claves de ingesta (SCRUM-527) y la ingesta de la landing (SCRUM-528, `POST /api/ingest/landing` y el cron `/api/cron/reprocesar-landing`, con la migración `20261016130000_landing_events_reprocesos`, que agrega el estado del reproceso a `landing_events`). Las tablas viejas `launches` y `launch_metrics` (Operaciones) no se usan para esto.
 
 | Tabla | Propósito y reglas |
 |---|---|
@@ -209,14 +209,14 @@ Fase 1 del modelo de datos (SCRUM-526, `20261016120000_webinars_modelo_de_datos`
 | `landing_visits` | Visitas: única `(launch_id, visitor_id, day)` |
 | `lead_events` | Eventos del lead, append-only: `kind` (16 tipos, de `registered` a `note`), `source` (`landing`, `zoom`, `ghl`, `calendly`, `whop`, `fanbasis`, `commas`, `manual`), `source_ref`, `occurred_at`, `actor_user_id`, `data`. Única `(organization_id, source, source_ref, kind)`; índices `(launch_id, kind, lead_id)` y `(lead_id, occurred_at)`. `launch_id` es obligatorio |
 | `ingest_keys` | Hash de la clave de ingesta (`key_hash` único), `label`, `last_used_at`, `revoked_at`. Sólo service role |
-| `landing_events` | Crudo de la landing: `kind` (`registration`, `visit`), `payload`, `received_at`, `status` (`pending`, `processed`, `unmapped`, `error`), `error_message`, `processed_at`: las columnas del patrón de reclamo y reproceso de `lib/webhooks/reclamar.ts` (los requerimientos decían `error`). Índice `(status, received_at)`. Sólo service role |
+| `landing_events` | Crudo de la landing: `kind` (`registration`, `visit`), `payload`, `received_at`, `status` (`pending`, `processed`, `unmapped`, `error` y, desde `20261016130000`, `failed`: error definitivo que el cron no reprocesa), `error_message`, `processed_at`: las columnas del patrón de reclamo y reproceso de `lib/webhooks/reclamar.ts` (los requerimientos decían `error`). `reprocess_attempts` (smallint, default 0, `>= 0`, SCRUM-528): reprocesos que arrancó el cron, hasta 5. Índice `(status, received_at)`, que también usa el cron (sus dos lecturas son condiciones exactas sobre él). Sólo service role. `error_message` es siempre un texto fijo (motivo del `unmapped`, paso y SQLSTATE de la última falla, o la nota de un `processed`), nunca el texto de la base, y nada lo interpreta |
 
 Reglas comunes:
 - **Ninguna fila hija apunta a otra organización**: las FK hacia `webinar_launches`, `leads` y `landing_events` son compuestas con `organization_id` (contra un único `(id, organization_id)` del padre). Vale también para el service role.
 - **Ningún DELETE de un usuario se lleva historial**: las FK de `launch_registrations`, `landing_visits` y `lead_events` hacia el lanzamiento son NO ACTION. Un lanzamiento con registros, visitas o eventos no se puede borrar (23503); un borrador vacío sí, y sus sesiones, campañas y productos se van en cascada. Borrar la organización sigue borrando todo (NO ACTION se chequea al final de la sentencia). Las FK hacia `leads` siguen en cascada porque ningún usuario borra leads. Si en vez de borrar se quiere archivar, se decide en SCRUM-522.
 - **Lectura**: miembros de la org (`get_my_organization_id()`) en todas, salvo `ingest_keys` y `landing_events`.
 - **Escritura**: la configuración (`webinar_launches`, `webinar_sessions`, `launch_ad_campaigns`, `launch_products`) sólo founder o admin de la org activa (también el founder de un holding que opera uno de sus negocios) (`current_user_has_org_role(array['founder','admin'])`, patrón de SCRUM-1; SCRUM-533 la pasa a permisos por módulo). `leads`, `launch_registrations`, `landing_visits` y `lead_events` no tienen grants de escritura para `authenticated`: las escribe la ingesta con el service role. `anon` no tiene ningún grant.
-- Tests: `supabase/ci/tests/97_webinars_modelo_de_datos.sql`.
+- Tests: `supabase/ci/tests/97_webinars_modelo_de_datos.sql` y `98_landing_events_reprocesos.sql` (columna, CHECKs, `failed`, sin índice propio, sin acceso para usuarios).
 
 ### Discord (`docs/areas/discord.md`)
 `discord_integrations`, `discord_client_links`, `discord_messages`, `discord_pending_links` (vacía), `discord_channel_clients`, `discord_team_members`.
