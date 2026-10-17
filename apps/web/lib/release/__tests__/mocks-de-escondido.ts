@@ -36,7 +36,10 @@ export function soloCodigo(fuente: string): string {
     const c = fuente[i];
     const sig = fuente[i + 1];
     if (c === "/" && sig === "/") {
-      while (i < fuente.length && fuente[i] !== "\n") (salida += " "), i++;
+      while (i < fuente.length && fuente[i] !== "\n") {
+        salida += " ";
+        i++;
+      }
       continue;
     }
     if (c === "/" && sig === "*") {
@@ -50,8 +53,13 @@ export function soloCodigo(fuente: string): string {
       salida += c;
       i++;
       while (i < fuente.length && fuente[i] !== c) {
-        if (fuente[i] === "\\") (salida += "  "), (i += 2);
-        else (salida += fuente[i] === "\n" ? "\n" : " "), i++;
+        if (fuente[i] === "\\") {
+          salida += "  ";
+          i += 2;
+        } else {
+          salida += fuente[i] === "\n" ? "\n" : " ";
+          i++;
+        }
       }
       salida += c;
       i++;
