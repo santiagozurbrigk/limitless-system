@@ -35,6 +35,7 @@ const { POST } = await import("@/app/api/ingest/landing/route");
 const { POST: POST_DEL_CRON } = await import("@/app/api/cron/reprocesar-landing/route");
 const { generarClaveDeIngesta } = await import("@/lib/webinar/claves-de-ingesta");
 const { reprocesarEventosDeLanding } = await import("@/lib/webinar/reprocesar-landing");
+const { procesarEventoCrudo } = await import("@/lib/webinar/ingesta-landing");
 const { LIMITE_DE_INGESTA_DE_LANDING } = await import("@/lib/rate-limit");
 const { MOTIVO_LANZAMIENTO_CERRADO, MOTIVO_LANZAMIENTO_DESCONOCIDO, NOTA_ID_REUSADO_CON_OTRO_EMAIL } =
   await import("@/lib/webinar/normalize/filas");
@@ -769,6 +770,47 @@ describe("reproceso de la landing (cron)", () => {
     // el doble proceso, pero la cuenta de reprocesos quedaría mal.
     expect(base.consultas.filter((c) => c.tabla === "webinar_launches")).toHaveLength(1);
     expect(fila.reprocess_attempts).toBe(1);
+  });
+
+  it("⭐ QA M11: el cierre no pisa un evento que otro proceso ya cerró (carrera entre after y el cron)", async () => {
+    // El cron ya lo procesó y lo cerró; el after de la primera llegada termina tarde y falla.
+    const fila = crudo({ status: "processed", error_message: null, reprocess_attempts: 1 });
+    base.errores["webinar_launches:select"] = { message: "down", code: "08006" };
+    const resultado = await procesarEventoCrudo(base.cliente() as SupabaseClient, {
+      id: fila.id as string,
+      organization_id: ORG,
+      kind: "registration",
+      payload: fila.payload,
+      received_at: fila.received_at as string,
+    });
+    expect(resultado).toEqual({ status: "sin_cerrar" });
+    expect(fila).toMatchObject({ status: "processed", error_message: null, reprocess_attempts: 1 });
+  });
+
+  it("⭐ QA M30: un reclamo con reprocess_attempts viejo no toma el evento ni cuenta mal", async () => {
+    // Otra corrida lo reprocesó entre la lectura y el reclamo de ésta: sigue en error, con un intento más.
+    const fila = crudo({ reprocess_attempts: 2 });
+    const cliente = base.cliente() as { from: (t: string) => Record<string, unknown> };
+    let adelantado = false;
+    const conCarrera = {
+      from: (tabla: string) => {
+        const builder = cliente.from(tabla);
+        if (tabla !== "landing_events") return builder;
+        const update = builder.update as (v: unknown) => unknown;
+        builder.update = (valores: unknown) => {
+          if (!adelantado) {
+            adelantado = true;
+            fila.reprocess_attempts = 3;
+          }
+          return update(valores);
+        };
+        return builder;
+      },
+    };
+    const resumen = await reprocesarEventosDeLanding(conCarrera as unknown as SupabaseClient);
+    expect(resumen).toMatchObject({ encontrados: 1, omitidos: 1, procesados: 0 });
+    expect(fila).toMatchObject({ status: "error", reprocess_attempts: 3 });
+    expect(base.consultas.filter((c) => c.tabla === "webinar_launches")).toHaveLength(0);
   });
 
   it("no toca unmapped ni processed", async () => {
