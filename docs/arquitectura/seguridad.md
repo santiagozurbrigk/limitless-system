@@ -69,6 +69,8 @@ SCRUM-527 (`lib/webinar/claves-de-ingesta.ts`, `app/webinar/claves-de-ingesta-ac
 - `lmt_ing_` más 32 bytes de `crypto.randomBytes` (256 bits) en base64url. El prefijo deja reconocer una clave filtrada.
 - En la base sólo queda el sha256 (`ingest_keys.key_hash`, único). La clave en texto sale del servidor una sola vez, en la respuesta de `crearClaveDeIngestaAction`; la lista nunca trae el hash.
 - `verificarClaveDeIngesta` busca por el sha256 del token (nunca por el token), compara el hash de la fila con `timingSafeEqual` y rechaza las revocadas. El tiempo de la búsqueda depende del sha256 del token, que quien ataca no puede acercar al de una clave real.
+- `last_used_at` se escribe en segundo plano con una función que el llamador está obligado a pasar (`enSegundoPlano`; el endpoint usa `after`), así ninguna escritura queda suelta en una función serverless.
+- La tarjeta del catálogo muestra el conteo de claves activas y su último uso sólo a founder o admin (`tieneRolEnLaOrg`); al resto, sólo si hay alguna activa.
 - `ingest_keys` no tiene policies: crear, listar y revocar usan el service role después de exigir founder o admin de la organización activa (`requireOrgRole`) y filtran por `organization_id`.
 - Ni la clave ni el hash van a un log, a Sentry ni al texto de un error: la falla al guardar la clave y la de anotar el último uso usan textos fijos con el código de Postgres.
 - Rotar es crear una nueva, cargarla en la landing y revocar la vieja. Revocar corta en el acto.

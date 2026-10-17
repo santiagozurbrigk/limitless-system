@@ -351,20 +351,27 @@ con `Authorization: Bearer <clave>`. La clave dice de qué organización es lo q
   pueden ver la lista, crear y revocar: `ingest_keys` no tiene policies, así que las acciones
   usan el service role y el chequeo es ése. Toda consulta filtra por `organization_id`;
   revocar una clave de otra organización, inexistente o ya revocada responde "No encontramos
-  esa clave o ya estaba revocada.". Revocar pide confirmación dentro del panel.
+  esa clave o ya estaba revocada.". Revocar pide confirmación dentro del panel (el foco va a
+  «Cancelar» y vuelve al cerrar); si la respuesta es ésa, por ejemplo porque otra pestaña ya la
+  revocó, el panel cierra la confirmación y relee la lista.
 - `verificarClaveDeIngesta(token)` (`lib/webinar/claves-de-ingesta.ts`) es lo que va a usar el
   endpoint: devuelve `{ organizationId, claveId }` si el hash existe y la clave no está
   revocada, y si no `null`. Busca por el sha256 del token y compara el hash de la fila con
   `timingSafeEqual`; un token sin el formato se rechaza sin consultar la base. Si la base
   falla, lanza `FallaDeLaBase` con un texto fijo (el endpoint responde 500, no 401).
-- `last_used_at` se anota sin esperar (opción `enSegundoPlano`, pensada para `after` de
-  `next/server`) y como mucho una vez por minuto por clave: con 50 eventos por segundo, una
+- `last_used_at` se anota sin esperar y como mucho una vez por minuto por clave. La opción
+  `enSegundoPlano` es obligatoria (el endpoint pasa `after` de `next/server`; suelta, en una
+  función serverless la escritura puede no completarse). Una fecha ilegible se vuelve a anotar.
+  El intervalo: con 50 eventos por segundo, una
   escritura por evento no tiene sentido para un dato que se muestra en minutos. Si falla, se
   registra con un texto fijo y la clave sigue valiendo.
-- La tarjeta de Integraciones cuenta las claves activas y su último uso (`saludDeLaLanding`);
-  si la lectura falla, dice que no se pudo leer en vez de "Sin conectar".
-- Errores como valor (`mutacionConErroresEsperables`): sesión, permiso, nombre vacío o de más
-  de 100 caracteres y clave inexistente vuelven con su motivo; lo demás va a la consola y a
+- La tarjeta de Integraciones (`saludDeLaLanding`, en paralelo con el resto del panorama)
+  muestra cuántas claves activas hay y su último uso sólo a founder o admin; al resto le dice si
+  hay alguna activa y que el detalle lo ven ellos. Si la lectura o el chequeo del rol fallan,
+  dice que no se pudo leer en vez de "Sin conectar".
+- Errores como valor (`mutacionConErroresEsperables`): sesión, permiso, nombre vacío, de más
+  de 100 caracteres o con caracteres de control (saltos de línea, tabulaciones, NUL) y clave
+  inexistente vuelven con su motivo; lo demás va a la consola y a
   Sentry con el tag `server_action` y el usuario ve el texto fijo. Ni la clave ni su hash van a
   un log, a Sentry ni al texto de un error.
 
