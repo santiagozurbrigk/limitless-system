@@ -73,7 +73,10 @@ describe("saludDeLaLanding", () => {
     expect(claves).toEqual({ activas: 2, ultimoUso: "2026-10-16T00:00:00Z" });
     expect(base.consultas[0].columnas).toBe("last_used_at");
 
-    const salud = await saludDeLaLanding(async () => claves);
+    const salud = await saludDeLaLanding(async () => ORG, async (org) => {
+      expect(org).toBe(ORG);
+      return claves;
+    });
     expect(salud).toMatchObject({
       provider: "landing",
       state: "connected",
@@ -85,19 +88,19 @@ describe("saludDeLaLanding", () => {
 
   it("sin claves activas, no está conectada", async () => {
     const { saludDeLaLanding } = await modulo();
-    const salud = await saludDeLaLanding(async () => ({ activas: 0, ultimoUso: null }));
+    const salud = await saludDeLaLanding(async () => ORG, async () => ({ activas: 0, ultimoUso: null }));
     expect(salud.state).toBe("not_connected");
   });
 
   it("con claves que nunca se usaron, lo avisa", async () => {
     const { saludDeLaLanding } = await modulo();
-    const salud = await saludDeLaLanding(async () => ({ activas: 1, ultimoUso: null }));
+    const salud = await saludDeLaLanding(async () => ORG, async () => ({ activas: 1, ultimoUso: null }));
     expect(salud.issues.map((i) => i.message)).toEqual(["Ninguna clave activa se usó todavía."]);
   });
 
   it("si la lectura falla, la tarjeta dice que no se pudo leer y se registra", async () => {
     const { saludDeLaLanding } = await modulo();
-    const salud = await saludDeLaLanding(async () => {
+    const salud = await saludDeLaLanding(async () => ORG, async () => {
       throw new TypeError("fetch failed");
     });
     expect(salud.sinLeer).toBe(true);
@@ -109,9 +112,11 @@ describe("saludDeLaLanding", () => {
   it("sin sesión, tampoco se sabe, pero no es una falla", async () => {
     const { saludDeLaLanding } = await modulo();
     const { ErrorEsperable } = await import("@/lib/server/error-esperable");
+    const leer = vi.fn();
     const salud = await saludDeLaLanding(async () => {
       throw new ErrorEsperable("Sesión no válida");
-    });
+    }, leer);
+    expect(leer).not.toHaveBeenCalled();
     expect(salud.sinLeer).toBe(true);
     expect(sim.reportes).toHaveLength(0);
   });

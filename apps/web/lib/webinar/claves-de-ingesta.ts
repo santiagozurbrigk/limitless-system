@@ -226,13 +226,17 @@ const MOTIVO_SIN_LEER = "no se pudieron leer las claves de ingesta.";
  * `lectura_degradada`) y la tarjeta dice que no se pudo leer, en vez de
  * mostrar "Sin conectar" (SCRUM-519). Sin sesión, tampoco se sabe: mismo
  * estado, sin registrarlo como falla.
+ *
+ * `organizacion` resuelve la organización de la sesión (en Integraciones,
+ * `requireOrganizationId`) y corre dentro de la lectura protegida.
  */
 export async function saludDeLaLanding(
-  leer: () => Promise<ClavesActivas>,
+  organizacion: () => Promise<string>,
+  leer: (organizationId: string) => Promise<ClavesActivas> = leerClavesActivas,
 ): Promise<IntegrationHealth> {
   const claves = await lecturaDegradable<ClavesActivas | null>(
     "integraciones:landing",
-    leer,
+    async () => leer(await organizacion()),
     null,
   ).catch((error: unknown) => valorSiNoEsFalla<ClavesActivas | null>(error, null));
 
