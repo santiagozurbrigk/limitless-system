@@ -1,4 +1,6 @@
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildPlatformNavigation } from "@/lib/navigation/build-platform-navigation";
@@ -6,7 +8,7 @@ import { modulesWithChildren } from "@/lib/navigation/sidebar-modules";
 import { LISTED_INTEGRATIONS } from "@/lib/integrations/registry";
 import { canalesDeLeadMagnetVisibles } from "@/lib/marketing/lead-magnet-canales";
 import { paths } from "@/routes/paths";
-import { analizarFuente, revisarMocksDeEscondido } from "./mocks-de-escondido";
+import { analizarFuente, archivosDeTest, revisarMocksDeEscondido } from "./mocks-de-escondido";
 
 const WEB = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -157,6 +159,39 @@ describe("el control de los mocks de ESCONDIDO", () => {
     const helper = join(WEB, "lib/algo/__tests__/ayuda.ts");
     expect(revisar(`import { vi } from "vitest";\nvi.mock("@/lib/release/escondido", ${PARCIAL});`, helper)[0]?.ok).toBe(false);
     // y el recorrido real los lista (ver el testigo del test de arriba)
+  });
+
+  it("el recorrido: .test/.spec en cualquier carpeta y todo .ts/.tsx de __tests__, sin node_modules, .next, e2e ni dist", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "recorrido-527-"));
+    try {
+      const archivos = [
+        "a.test.ts",
+        "b/c.spec.tsx",
+        "d/__tests__/ayuda.ts",
+        "d/__tests__/vista.tsx",
+        "d/__tests__/tipos.d.ts",
+        "d/__tests__/sub/mas.ts",
+        "e/codigo.ts",
+        "node_modules/x.test.ts",
+        ".next/y.test.ts",
+        "e2e/z.spec.ts",
+        "dist/w.test.ts",
+      ];
+      for (const a of archivos) {
+        mkdirSync(dirname(join(raiz, a)), { recursive: true });
+        writeFileSync(join(raiz, a), "");
+      }
+      const encontrados = archivosDeTest(raiz).map((a) => relative(raiz, a).replace(/\\/g, "/")).sort();
+      expect(encontrados).toEqual([
+        "a.test.ts",
+        "b/c.spec.tsx",
+        "d/__tests__/ayuda.ts",
+        "d/__tests__/sub/mas.ts",
+        "d/__tests__/vista.tsx",
+      ]);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
   });
 
   it("F5: un primer argumento que no es un texto fijo es problema siempre, diga o no escondido", () => {
