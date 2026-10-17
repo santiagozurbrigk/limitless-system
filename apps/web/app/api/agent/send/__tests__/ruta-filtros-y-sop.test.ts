@@ -215,6 +215,29 @@ describe("filtros por organización del envío por streaming", () => {
   });
 });
 
+describe("filtros por organización del envío por streaming (barrido de la parte 5)", () => {
+  it("⭐ el nombre del negocio del prompt es el de la organización", async () => {
+    base.tablas.organizations = [
+      { id: OTRA_ORG, name: "Nombre-de-la-otra-org" },
+      { id: ORG, name: "Nombre-de-mi-org" },
+    ];
+    sim.respuestas = [texto("Listo"), titulo];
+    await enviar();
+    expect(sim.pedidos[0]).toContain("Nombre-de-mi-org");
+    expect(sim.pedidos[0]).not.toContain("Nombre-de-la-otra-org");
+  });
+
+  it("⭐ el mensaje del usuario y la respuesta se guardan en la organización", async () => {
+    sim.respuestas = [texto("Listo"), titulo];
+    await enviar();
+    const guardados = base.escrituras().filter((o) => o.tabla === "agent_messages" && o.op === "insert");
+    expect(guardados.map((o) => [(o.valores as { role: string }).role, (o.valores as { organization_id: string }).organization_id])).toEqual([
+      ["user", ORG],
+      ["assistant", ORG],
+    ]);
+  });
+});
+
 describe("CREATE_SOP dentro del stream", () => {
   const CON_SOP = 'Listo [ACTION:CREATE_SOP:{"title":"Onboarding","content":"Paso 1: dar la bienvenida.","goal":"Ordenar el ingreso"}]';
 
