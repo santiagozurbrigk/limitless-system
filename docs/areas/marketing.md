@@ -166,8 +166,9 @@ Overview → recomputeContentAssetAttribution (escribe contadores en content_ass
 - **Lead magnets:** CRUD en `lead-magnets-actions.ts`. Los leads sólo se registran cuando alguien corre el
   análisis IA de una conversación de Zernio (`analyzeZernioConversationAction`) y un mensaje saliente contiene
   el `asset_url`/`redirect_url` (`lib/marketing/lead-magnets-internal.ts`). La atribución a cliente se hace
-  al crear el cliente.
-- **Automatizaciones:** lee flows de ManyChat (`lib/manychat/client.ts`); si no hay ManyChat, empty state.
+  al crear el cliente. "Eliminar" archiva (`status = 'archived'`) y la lista no muestra los archivados.
+- **Automatizaciones:** lee flows de ManyChat (`lib/manychat/client.ts`); si no hay ManyChat, empty state; si
+  ManyChat rechaza la API key o falla, el motivo (SCRUM-520).
 - **Meta Pixel / CAPI:** sólo para la landing de Limitless, no por org. `components/landing/meta-pixel.tsx`
   (`NEXT_PUBLIC_META_PIXEL_ID`) y `lib/meta/conversions-api.ts` (`META_CONVERSIONS_API_TOKEN`), evento `Lead`
   desde `/api/waitlist` y `/api/trial-confirm` (este último es el alta de prueba de la landing, no Trial Reels).
@@ -339,6 +340,31 @@ como JSON.
   (`estaConectada`, `sinLeer`) y aparece en "Requieren atención"; el provider de Marketing deja
   `instagramConnected` en `null` (no se pudo leer), Administrar y el selector de Drive con el motivo y el botón
   que corresponde, la etiqueta, el minuto del CTA y los patrones en su propio aviso.
+- **Errores como valor en UTMs, lead magnets y automatizaciones (SCRUM-520).** Las acciones de
+  `utm-actions.ts`, `lead-magnets-actions.ts` y `automations-actions.ts` devuelven `MutationResult` con
+  `mutacionConErroresEsperables`. Vuelven con su motivo: sin sesión, un id que no es UUID ("ID inválido"), la
+  campaña vacía ("La campaña UTM es obligatoria.") o repetida (`23505`, "Ya existe un UTM con esa campaña."),
+  un UTM inexistente o de otra org ("UTM no encontrado."; también si desaparece entre la lectura y el update,
+  `PGRST116`), un lead magnet inexistente o de otra org ("No encontramos ese lead magnet."), un nombre vacío o un
+  tipo, canal o estado fuera de los enums de la base (`20260806120000_lead_magnets.sql`), y la API key de
+  ManyChat rechazada (401/403: "ManyChat rechazó la API key de tu organización. Hay que volver a conectarlo.";
+  con `ESCONDIDO.integracionManyChat` en `false`, "Volvé a conectarlo desde Integraciones."). Lo demás (la base, la red, cualquier otra respuesta de ManyChat) va a la consola y a Sentry
+  con la etiqueta de la acción y el usuario ve el texto fijo. Borrar un UTM y editar o archivar un lead magnet de
+  otra org ya no responden éxito sin escribir (la escritura pide las filas que tocó; editar un UTM ajeno ya
+  respondía "UTM no encontrado."). Ninguna lectura esconde una
+  falla: la URL del sitio ya no es `null`, la lista de UTMs ya no es `[]` (el resumen de Marketing tampoco suma
+  ceros), crear o editar un UTM no guarda el UUID interno del video ni la URL por defecto si esas lecturas
+  fallan, las métricas de los lead magnets no salen en cero, sus leads no salen vacíos y los flujos de ManyChat
+  no son "No hay flujos configurados" (`fetchManyChatFlows` ya no devuelve `[]` ante un error; `manyChatFetch`
+  lanza `ManyChatHttpError` con el status y el mismo mensaje). Las pantallas muestran el motivo:
+  `/marketing/utms` en la tabla ("No se pudieron cargar los UTMs") y en el generador ("No se pudo leer la URL
+  de tu sitio web", en vez de pedir configurarla), con el resto de la pantalla igual; el funnel de un UTM en su
+  panel; borrar un UTM avisa si falla; `/marketing/lead-magnets` y `/marketing/automatizaciones` con un aviso;
+  el detalle de un lead magnet en sus leads recientes; recargar, pausar, eliminar y crear avisan el motivo (y
+  sólo dicen "Lead Magnet eliminado" o "pausado" si se guardó); el selector de flujos del formulario, con el
+  motivo (el canal ManyChat está escondido por `leadMagnetsCanalesSinCaptura`). Si `getFlows` responde con
+  error a una cuenta sin página de Facebook, hoy se registra como falla: sin confirmar
+  (`[MKT-MANYCHAT-FLUJOS-SIN-PAGINA-FB]`).
 - **Drive: qué es motivo y qué es falla.** Según la guía de errores de la API de Drive (copia en la evidencia de
   SCRUM-519, `fuentes-google/`): 401 (token vencido o revocado, ya se intentó renovar) es el motivo para
   reconectar Google; un 403 sólo es motivo para los cuatro `reason` de acceso que la guía nombra, cada uno con
@@ -405,6 +431,7 @@ Detalle y prioridades: `PENDIENTES.md` (entregado al integrador del backlog).
 | Pantallas de contenido, detalle y anuncios con el motivo; avisos de Trial Reels, Drive, anuncios y comentarios | `apps/web/app/(platform)/marketing/__tests__/pantallas-de-contenido.test.ts`, `apps/web/components/marketing/__tests__/contenido-pantallas-errores-como-valor.test.ts` |
 | Triggers de comentarios Zernio (Embudos) | `apps/web/lib/zernio/__tests__/triggers.test.ts` |
 | Errores como valor de resumen, Drive, sincronización y patrones (SCRUM-519): cada acción con su motivo, éxito, falla de la base y excepción; cada filtro por organización con un test que falla si se quita; Google, Zernio y Claude son dobles; las pantallas y componentes que las llaman | `apps/web/app/marketing/__tests__/{resumen,drive,sincronizacion,patrones,llamadores}-errores-como-valor.test.ts` (base falsa en `base-falsa.ts`) |
+| Errores como valor de UTMs, lead magnets y automatizaciones (SCRUM-520): cada acción con su motivo, éxito, falla de la base y excepción; cada filtro por organización con un test que falla si se quita; ManyChat es un `fetch` falso; las pantallas y componentes que las llaman | `apps/web/app/marketing/__tests__/{utm,lead-magnets,automatizaciones}-errores-como-valor.test.ts`, `apps/web/components/marketing/__tests__/utm-y-lead-magnets-pantallas-errores-como-valor.test.ts` |
 | `/api/cron/sync-content-metrics` pasa sin sesión y `/api/content/analyze` exige sesión (`isPublicPath`; `/api/utm/*` no tiene caso de test) | `apps/web/lib/supabase/__tests__/public-paths.test.ts` |
 
 Sin cubrir: `resolve-analytics.ts` `[T-11]`, `lib/utm/*` `[T-5]`, `overview-metrics.ts` `[T-12]`,

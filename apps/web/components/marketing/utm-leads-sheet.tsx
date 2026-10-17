@@ -84,12 +84,15 @@ export function UTMLeadsSheet({
   onOpenChange,
   link,
   funnel,
+  motivo = null,
   loading,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   link: UTMLinkRow | null;
   funnel: UTMFunnelData | null;
+  /** Si no se pudo cargar el funnel, su motivo en vez del funnel vacío (SCRUM-520). */
+  motivo?: string | null;
   loading?: boolean;
 }) {
   const leads = funnel?.leads ?? [];
@@ -136,6 +139,11 @@ export function UTMLeadsSheet({
 
         {loading ? (
           <p className="text-sm text-muted-foreground">Cargando funnel…</p>
+        ) : motivo ? (
+          <div className="text-sm">
+            <p className="font-medium text-foreground">No se pudo cargar el funnel</p>
+            <p className="mt-1 text-muted-foreground">{motivo}</p>
+          </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
             <FunnelStep label="Leads capturados" count={leads.length}>

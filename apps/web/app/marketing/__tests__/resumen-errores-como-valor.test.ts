@@ -10,7 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const sim = vi.hoisted(() => ({
   recalculo: null as unknown,
   insight: null as null | (() => Promise<string | null>),
-  utm: [] as unknown[],
+  // `getUTMLinksAction` devuelve `MutationResult` desde SCRUM-520.
+  utm: { success: true, data: [] } as unknown,
 }));
 
 vi.mock("@/lib/observability/reportar-falla", async () => {
@@ -104,7 +105,7 @@ beforeEach(() => {
   base.reiniciar();
   sim.recalculo = null;
   sim.insight = null;
-  sim.utm = [];
+  sim.utm = { success: true, data: [] };
   base.tablas.content_assets = [
     activo(VIDEO, ORG),
     activo(VIDEO_AJENO, OTRA_ORG, { effective_label: "AUTORIDAD" }),
@@ -249,6 +250,32 @@ describe("getMarketingOverviewContextAction", () => {
       error: TEXTO_FIJO,
     });
     esperarFallaRegistrada("[getMarketingOverviewContext]");
+  });
+
+  it("⭐ suma los UTMs que devuelve la lectura de UTMs (SCRUM-520)", async () => {
+    sim.utm = {
+      success: true,
+      data: [{ clicks: 3, bookings_attributed: 4, sales_attributed: 1, revenue_attributed: 900 }],
+    };
+    const r = await getMarketingOverviewContextAction();
+    expect(r.success && r.data.utmSummary).toEqual({
+      totalBookings: 4,
+      totalSales: 1,
+      totalRevenue: 900,
+      totalClicks: 3,
+    });
+    expect(r.success && r.data.hasUtmAttributions).toBe(true);
+  });
+
+  it("⭐ si fallan los UTMs, el motivo que devolvió su lectura y no ceros (SCRUM-520)", async () => {
+    // La lectura de UTMs ya registró la falla con su etiqueta: el resumen pasa
+    // su motivo sin registrarla otra vez.
+    sim.utm = { success: false, error: TEXTO_FIJO };
+    await expect(getMarketingOverviewContextAction()).resolves.toEqual({
+      success: false,
+      error: TEXTO_FIJO,
+    });
+    expect(base.reportes).toEqual([]);
   });
 
   it("si falla el contenido, texto fijo", async () => {

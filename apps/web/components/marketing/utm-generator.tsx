@@ -6,6 +6,7 @@ import { AlertTriangle, Check, Copy } from "lucide-react";
 import { Button, Input, Label, cn } from "@ai-coo/ui";
 import { paths } from "@/routes";
 import { createUTMLinkAction } from "@/app/marketing/utm-actions";
+import { leerConMotivo, type Lectura } from "@/lib/client/correr-accion";
 import { slugifyCampaign } from "@/lib/utm/slugify-campaign";
 import {
   buildLandingUtmUrl,
@@ -25,13 +26,27 @@ type VideoOption =
   | { kind: "youtube"; externalId: string; title: string }
   | { kind: "manual"; title: string };
 
+/**
+ * Crea el UTM y devuelve el link o el motivo para el usuario: el que la acción
+ * devolvió como valor o, si lanzó, el texto fijo (SCRUM-520). Antes un error
+ * lanzado se mostraba como "No se pudo guardar el UTM." sin registrarse.
+ */
+export function guardarUtmNuevo(
+  datos: Parameters<typeof createUTMLinkAction>[0]
+): Promise<Lectura<UTMLinkRow>> {
+  return leerConMotivo(() => createUTMLinkAction(datos), "[UTMGenerator] crear UTM");
+}
+
 export function UTMGenerator({
   youtubeVideos,
   orgWebsiteUrl,
+  motivoDeUrlDelSitio = null,
   onCreated,
 }: {
   youtubeVideos: ContentAssetView[];
   orgWebsiteUrl: string | null;
+  /** Si no se pudo leer la URL del sitio, su motivo en vez del aviso de configurarla. */
+  motivoDeUrlDelSitio?: string | null;
   onCreated: (link: UTMLinkRow) => void;
 }) {
   const [videoMode, setVideoMode] = useState<"select" | "manual">(
@@ -115,29 +130,25 @@ export function UTMGenerator({
     }
 
     startTransition(async () => {
-      try {
-        const result = await createUTMLinkAction({
-          youtube_video_id:
-            selectedVideo?.kind === "youtube" && selectedVideo.externalId
-              ? selectedVideo.externalId
-              : undefined,
-          youtube_video_title: videoTitle || undefined,
-          utm_campaign: effectiveCampaign,
-          utm_content: content || undefined,
-          instagram_username: normalizedIg || undefined,
-        });
-        if (result.success && result.data) {
-          onCreated(result.data);
-          setCampaign("");
-          setCampaignTouched(false);
-          setManualTitle("");
-          setContent("");
-          setInstagramUsername("");
-        } else if (!result.success) {
-          setError(result.error);
-        }
-      } catch {
-        setError("No se pudo guardar el UTM.");
+      const result = await guardarUtmNuevo({
+        youtube_video_id:
+          selectedVideo?.kind === "youtube" && selectedVideo.externalId
+            ? selectedVideo.externalId
+            : undefined,
+        youtube_video_title: videoTitle || undefined,
+        utm_campaign: effectiveCampaign,
+        utm_content: content || undefined,
+        instagram_username: normalizedIg || undefined,
+      });
+      if (result.ok && result.data) {
+        onCreated(result.data);
+        setCampaign("");
+        setCampaignTouched(false);
+        setManualTitle("");
+        setContent("");
+        setInstagramUsername("");
+      } else if (!result.ok) {
+        setError(result.motivo);
       }
     });
   }
@@ -151,7 +162,17 @@ export function UTMGenerator({
         </p>
       </div>
 
-      {!orgWebsiteUrl?.trim() ? (
+      {motivoDeUrlDelSitio ? (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-900/10 p-3">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <div className="flex flex-col gap-1">
+            <p className="text-[12px] font-medium text-amber-600 dark:text-amber-400">
+              No se pudo leer la URL de tu sitio web
+            </p>
+            <p className="text-[11px] text-muted-foreground">{motivoDeUrlDelSitio}</p>
+          </div>
+        </div>
+      ) : !orgWebsiteUrl?.trim() ? (
         <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-900/10 p-3">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
           <div className="flex flex-col gap-1">

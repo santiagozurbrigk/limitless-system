@@ -1,11 +1,12 @@
 import { listAutomationFlowsAction } from "@/app/marketing/automations-actions";
 import { AutomationsDashboard } from "@/components/marketing/automations-dashboard";
+import { EmptyState } from "@/components/shared/empty-state";
 import { paths } from "@/routes";
 
 export const metadata = { title: "Automatizaciones" };
 
 export default async function AutomatizacionesPage() {
-  const { flows, manychatConnected } = await listAutomationFlowsAction();
+  const resultado = await listAutomationFlowsAction();
 
   return (
     <div className="p-6">
@@ -15,11 +16,20 @@ export default async function AutomatizacionesPage() {
           Flujos activos de tus integraciones conectadas
         </p>
       </div>
-      <AutomationsDashboard
-        flows={flows}
-        manychatConnected={manychatConnected}
-        integrationsPath={paths.platform.integrations}
-      />
+      {/* Los flujos devuelven su error como valor (SCRUM-520): si ManyChat o la
+          base fallan, el motivo en vez de "No hay flujos configurados". */}
+      {resultado.success ? (
+        <AutomationsDashboard
+          flows={resultado.data.flows}
+          manychatConnected={resultado.data.manychatConnected}
+          integrationsPath={paths.platform.integrations}
+        />
+      ) : (
+        <EmptyState
+          title="No se pudieron cargar los flujos"
+          description={resultado.error}
+        />
+      )}
     </div>
   );
 }

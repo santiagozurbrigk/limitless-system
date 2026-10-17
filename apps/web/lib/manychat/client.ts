@@ -24,6 +24,20 @@ export type ManyChatSubscriber = {
   tags?: Array<{ id?: number; name?: string } | string>;
 };
 
+/**
+ * Un error de la API de ManyChat con el status de la respuesta, para que quien
+ * llama distinga una API key rechazada (401/403) de una falla (SCRUM-520). El
+ * mensaje es el mismo de antes.
+ */
+export class ManyChatHttpError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ManyChatHttpError";
+    this.status = status;
+  }
+}
+
 async function manyChatFetch<T>(
   apiToken: string,
   path: string,
@@ -49,7 +63,7 @@ async function manyChatFetch<T>(
       firstDetail ??
       json?.message ??
       `ManyChat API error (${resp.status})`;
-    throw new Error(message);
+    throw new ManyChatHttpError(message, resp.status);
   }
 
   return (json?.data ?? json) as T;
@@ -85,13 +99,14 @@ export type ManyChatFlow = {
   status: "enabled" | "disabled" | "draft" | string;
 };
 
+/**
+ * Los flujos de la página. Si ManyChat rechaza o falla, lanza (SCRUM-520):
+ * antes devolvía `[]` y la pantalla de Automatizaciones decía que no había
+ * flujos configurados.
+ */
 export async function fetchManyChatFlows(apiToken: string): Promise<ManyChatFlow[]> {
-  try {
-    const data = await manyChatFetch<ManyChatFlow[]>(apiToken, "/fb/page/getFlows");
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  const data = await manyChatFetch<ManyChatFlow[]>(apiToken, "/fb/page/getFlows");
+  return Array.isArray(data) ? data : [];
 }
 
 export async function fetchManyChatSubscriber(
