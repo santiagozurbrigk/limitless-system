@@ -3255,6 +3255,17 @@ Fuente: PENDIENTES.md [FEAT-2] · Doc del área: docs/areas/marketing.md",FEAT-2
 *Dónde:* {{apps/web/app/marketing/content/sync-actions.ts}}, {{apps/reel-worker/src/}}
 
 Fuente: PENDIENTES.md [MKT-TESTS-SYNC-WORKER] · Doc del área: docs/areas/marketing.md",MKT-TESTS-SYNC-WORKER,Marketing,P3,,tests
+[WEBINARS-RETENCION-CRUDOS] Los crudos de la landing (landing_events) crecen sin límite,Task,Low,embudos,p3,operacion,deuda,,,"*Tipo:* operación / deuda
+
+*Estado verificado:* desde SCRUM-528, cada pedido aceptado de {{POST /api/ingest/landing}} guarda una fila en {{landing_events}} antes de normalizar (crudo primero), también cada reenvío del mismo {{client_registration_id}}: los registros normalizados no se duplican, pero los crudos sí (en la carga de prueba, 6000 crudos para 5700 registros). Nada borra ni archiva crudos; con 50 eventos por segundo en un lanzamiento grande, la tabla suma cientos de miles de filas con el payload completo (datos personales incluidos) por lanzamiento. Lo que sí se usa de un crudo viejo: {{launch_registrations.raw_event_id}} (la FK queda en null si el crudo se borra, {{on delete set null}}) y la auditoría de lo que mandó la landing.
+
+*Qué hay que hacer:* definir con SCRUM-522 cuántos días se guarda un crudo {{processed}} (y si {{unmapped}} y {{failed}} se guardan más, porque son los que se revisan o se reviven) y agregar un cron que borre o archive en lotes los crudos {{processed}} con más de N días, sin tocar {{leads}}, {{launch_registrations}}, {{landing_visits}} ni {{lead_events}}. Monitoreado como los demás crons.
+
+*Criterio de aceptación:* con N configurado, una corrida del cron deja en {{landing_events}} sólo crudos {{processed}} de los últimos N días (más todos los {{pending}}, {{error}}, {{unmapped}} y {{failed}} según lo decidido); los registros, leads, visitas y eventos normalizados quedan iguales (mismos conteos antes y después); la corrida borra en lotes acotados y queda en el registro de corridas.
+
+*Dónde:* {{supabase/migrations/}} (si hace falta un índice por {{processed_at}}), {{apps/web/app/api/cron/}}, {{apps/web/vercel.json}}, {{apps/web/lib/webinar/}}.
+
+Fuente: PENDIENTES.md [WEBINARS-RETENCION-CRUDOS] · Doc del área: docs/areas/embudos.md",WEBINARS-RETENCION-CRUDOS,Embudos y Lanzamientos,P3,,operación / deuda
 [FEAT-GHL-OAUTH] App del Marketplace de GHL,Story,Low,embudos,p3,feature,,,,"*Tipo:* feature
 
 *Estado verificado:* sólo PIT + {{location_id}} ({{ghl-connect-dialog.tsx}}); no hay rutas OAuth de GHL.

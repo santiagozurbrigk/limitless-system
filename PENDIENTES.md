@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 16 | 7 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 16 | 8 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 14 |
@@ -1425,6 +1425,13 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Dónde:** `apps/web/lib/webinar/reprocesar-landing.ts`, `apps/web/lib/webinar/normalize/filas.ts` (`motivoParaNoAsignar`).
 
 ### Embudos y Lanzamientos · P3
+
+#### [WEBINARS-RETENCION-CRUDOS] Los crudos de la landing (`landing_events`) crecen sin límite
+- **Tipo:** operación / deuda
+- **Estado verificado:** desde SCRUM-528, cada pedido aceptado de `POST /api/ingest/landing` guarda una fila en `landing_events` antes de normalizar (crudo primero), también cada reenvío del mismo `client_registration_id`: los registros normalizados no se duplican, pero los crudos sí (en la carga de prueba, 6000 crudos para 5700 registros). Nada borra ni archiva crudos; con 50 eventos por segundo en un lanzamiento grande, la tabla suma cientos de miles de filas con el payload completo (datos personales incluidos) por lanzamiento. Lo que sí se usa de un crudo viejo: `launch_registrations.raw_event_id` (la FK queda en null si el crudo se borra, `on delete set null`) y la auditoría de lo que mandó la landing.
+- **Qué hay que hacer:** definir con SCRUM-522 cuántos días se guarda un crudo `processed` (y si `unmapped` y `failed` se guardan más, porque son los que se revisan o se reviven) y agregar un cron que borre o archive en lotes los crudos `processed` con más de N días, sin tocar `leads`, `launch_registrations`, `landing_visits` ni `lead_events`. Monitoreado como los demás crons.
+- **Criterio de aceptación:** con N configurado, una corrida del cron deja en `landing_events` sólo crudos `processed` de los últimos N días (más todos los `pending`, `error`, `unmapped` y `failed` según lo decidido); los registros, leads, visitas y eventos normalizados quedan iguales (mismos conteos antes y después); la corrida borra en lotes acotados y queda en el registro de corridas.
+- **Dónde:** `supabase/migrations/` (si hace falta un índice por `processed_at`), `apps/web/app/api/cron/`, `apps/web/vercel.json`, `apps/web/lib/webinar/`.
 
 #### [FEAT-GHL-OAUTH] App del Marketplace de GHL
 - **Tipo:** feature

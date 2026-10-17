@@ -28,6 +28,23 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-17 — Limitless Webinars: menores de la QA de la ingesta de la landing (SCRUM-528)
+
+**Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (sobre `6625f9fb`)
+**Commit(s):** `e7d72b16`: test(webinars): el cierre condicionado a pending y el reclamo con reprocess_attempts tienen test propio; y este (docs).
+**Módulo(s) afectado(s):** `apps/web/lib/webinar/__tests__/ingesta-de-la-landing.test.ts`, `PENDIENTES.md`, `docs/backlog/jira-import.csv`, `docs/arquitectura/seguridad.md`, `docs/areas/embudos.md`, `docs/operacion/testing.md`.
+
+**Qué se hizo:**
+- Dos tests nuevos para los mutantes que la QA dejó vivos: el cierre de un crudo no pisa uno que otro proceso ya cerró (carrera entre el `after` y el cron sobre un `pending` viejo; sin `.eq("status","pending")` el test falla) y un reclamo con `reprocess_attempts` viejo no toma el evento ni cuenta mal (sin la comparación, el test falla). Sumados a los mutantes de la evidencia: 31 de 31 muertos por su test.
+- Nuevo `[WEBINARS-RETENCION-CRUDOS]` (P3, Embudos y Lanzamientos): cada reenvío guarda otro crudo y nada los borra; criterio para un cron de retención de los `processed` sin tocar lo normalizado.
+- `seguridad.md`: el fail-open de `lib/rate-limit.ts` (si `consume_rate_limit` falla, cuenta en memoria por instancia) queda anotado como riesgo conocido del endpoint público, sin cambiarlo.
+
+**Por qué / finalidad:** cerrar los MENOR de la QA antes de DONE.
+
+**Decisiones de diseño relevantes:** no se cambia el fail-open: es el comportamiento común de todos los límites del repo.
+
+**Riesgos / deuda técnica pendiente:** `[WEBINARS-RETENCION-CRUDOS]` y `[WEBINARS-UNMAPPED-SIN-REASIGNAR]`.
+
 ### 2026-10-17 — Limitless Webinars: AR pasada 2 de la ingesta de la landing (SCRUM-528)
 
 **Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (sobre `6ba9da71`)

@@ -467,6 +467,9 @@ la AR pasada 1): 50 registros por segundo durante 2 minutos (6000 pedidos, 300 r
 respondieron todos 200 con p50 12,1 ms, p95 27,5 ms y p99 41,3 ms; quedaron 5700 registros,
 leads y eventos para 5700 ids distintos, sin duplicados ni pérdidas.
 
+Cada reenvío guarda otro crudo (los normalizados no se duplican) y nada borra crudos viejos:
+abierto como `[WEBINARS-RETENCION-CRUDOS]`.
+
 El alta en Zoom por QStash es la Fase 2 y no está. El endpoint no mira
 `ESCONDIDO.ingestaLanding`: mientras la entrada está escondida la app no deja crear claves, y
 sin una clave activa todo pedido es 401.

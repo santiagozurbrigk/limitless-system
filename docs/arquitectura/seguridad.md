@@ -89,6 +89,7 @@ SCRUM-528: `POST /api/ingest/landing` (`app/api/ingest/landing/route.ts`, lógic
 - **Sin datos personales en logs ni en Sentry:** los registros llevan texto fijo, la organización y el id del evento. `landing_events.error_message` es un texto fijo con el paso y el SQLSTATE (`lib/webinar/normalize/reproceso.ts`), nunca el texto de la base, que puede repetir valores de la fila. Ni la clave ni su hash aparecen en ningún lado.
 - **Escrituras con service role filtradas por organización:** todas las consultas de la ingesta y del reproceso filtran o escriben el `organization_id` de la clave (lo comprueba un barrido en los tests). Las FK compuestas de SCRUM-526 impiden además apuntar a un lanzamiento o lead de otra organización.
 - **El reproceso** (`/api/cron/reprocesar-landing`) se autentica con `CRON_SECRET` como los demás crons y responde sólo conteos.
+- **Riesgo conocido, el límite es fail-open:** si `consume_rate_limit` falla (la base no responde o la RPC da error), `lib/rate-limit.ts` cae al contador en memoria de cada instancia y lo registra en la consola. Es el comportamiento de todos los límites del repo y no se cambió para este endpoint. Mientras dure la falla, el tope de 600 cada 10 s vale por instancia serverless y no en total, así que una clave podría pasar más pedidos. Lo acota que cada pedido igual necesita una clave válida, que con la base caída la verificación de la clave falla primero (500) y que guardar el crudo también depende de la base. Visto en la QA de SCRUM-528.
 
 ## Crons, colas y bot
 
