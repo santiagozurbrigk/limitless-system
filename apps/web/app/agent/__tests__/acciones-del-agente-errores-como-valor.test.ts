@@ -47,6 +47,7 @@ import {
   deleteAgentConversationAction,
   deleteBusinessStageAction,
   listAgentMessagesAction,
+  listAgentWorkspaceAction,
 } from "../actions";
 import { FallaDeLaBase } from "@/lib/server/action-result";
 import { base, CACHE_CAIDA, ORG, OTRA_ORG, TEXTO_FIJO } from "./supabase-falso";
@@ -239,6 +240,18 @@ describe("listAgentMessagesAction", () => {
     base.lanzaEnSesion = interno;
     await expect(listAgentMessagesAction(CONVERSACION)).rejects.toBe(interno);
     expect(base.reportes).toHaveLength(0);
+  });
+});
+
+describe("listAgentWorkspaceAction (QA final: filtros por organización)", () => {
+  it("⭐ devuelve sólo las etapas y las conversaciones de la organización", async () => {
+    base.tablas.business_stages = [etapa("e-ajena", OTRA_ORG), etapa(ETAPA, ORG)];
+    base.tablas.agent_conversations = [conversacion("c-ajena", OTRA_ORG), conversacion(CONVERSACION, ORG)];
+    const r = await listAgentWorkspaceAction();
+    expect(r.stages.map((e) => e.id)).toEqual([ETAPA]);
+    expect(r.conversations.map((c) => c.id)).toEqual([CONVERSACION]);
+    expect(base.filtrosDe("business_stages", "select")).toContainEqual(["organization_id", ORG]);
+    expect(base.filtrosDe("agent_conversations", "select")).toContainEqual(["organization_id", ORG]);
   });
 });
 
