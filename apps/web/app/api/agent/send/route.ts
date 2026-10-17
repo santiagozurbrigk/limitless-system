@@ -2,8 +2,13 @@ import * as Sentry from "@sentry/nextjs";
 import { streamAgentMessage } from "@/lib/agent/stream-agent-message";
 import { createSseEmitter, formatSseEvent } from "@/lib/agent/sse";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
-import { AGENT_ERROR_REPLY, FallaYaRegistrada } from "@/lib/agent/errores-del-agente";
+import {
+  AGENT_ERROR_REPLY,
+  FallaYaRegistrada,
+  SESION_NO_VALIDA,
+} from "@/lib/agent/errores-del-agente";
 import { esErrorEsperable } from "@/lib/server/error-esperable";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import type { AgentFlags } from "@/types/agent";
 import type { PageContextState } from "@/lib/agent/page-context";
 
@@ -99,6 +104,10 @@ export async function POST(req: Request) {
           } else if (esErrorEsperable(error)) {
             // Rechazo esperable (SCRUM-506): su motivo, sin Sentry.
             emitter.emit("error", { message: error.message });
+          } else if (isRedirectError(error)) {
+            // `requireAuthContext` redirige al cambio de contraseña: en un stream
+            // no se puede navegar, y no es una falla (SCRUM-506, AR pasada 2).
+            emitter.emit("error", { message: SESION_NO_VALIDA });
           } else {
             // Falla: a Sentry (salvo que ya la haya registrado una acción) y un
             // texto fijo; nunca el texto de la base ni de Anthropic.

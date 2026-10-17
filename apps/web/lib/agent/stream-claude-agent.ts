@@ -324,10 +324,12 @@ export async function streamClaudeAgent(
           tb.input as Record<string, unknown>
         );
 
+        // Al navegador sólo el nombre de la tool (SCRUM-506, AR pasada 2): el
+        // resultado puede traer el texto crudo de la base y la pantalla no lo
+        // usa. El modelo lo sigue recibiendo entero en el tool_result.
         req.emitter.emit("tool_end", {
           type: "tool_end",
           toolName: tb.name,
-          result: resultStr.slice(0, 200),
         });
 
         toolResults.push({
