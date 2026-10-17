@@ -1,5 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildPlatformNavigation } from "@/lib/navigation/build-platform-navigation";
@@ -7,6 +6,9 @@ import { modulesWithChildren } from "@/lib/navigation/sidebar-modules";
 import { LISTED_INTEGRATIONS } from "@/lib/integrations/registry";
 import { canalesDeLeadMagnetVisibles } from "@/lib/marketing/lead-magnet-canales";
 import { paths } from "@/routes/paths";
+import { analizarFuente, revisarMocksDeEscondido } from "./mocks-de-escondido";
+
+const WEB = fileURLToPath(new URL("../../../", import.meta.url));
 
 /**
  * SCRUM-490: lo escondido para el release no aparece en ningún lado — ni en el
@@ -41,31 +43,10 @@ describe("escondido para el release", () => {
   it("todo mock de ESCONDIDO parte del objeto real (SCRUM-527)", () => {
     // Un mock con sólo las banderas que el test conoce deja las demás en
     // `undefined`, que se lee como visible: la Landing corría en el test de
-    // Marketing sin que nadie lo supiera. El factory tiene que usar
-    // `importOriginal` y partir de `real.ESCONDIDO`.
-    const web = fileURLToPath(new URL("../../../", import.meta.url));
-    const tests: string[] = [];
-    const recorrer = (dir: string) => {
-      for (const nombre of readdirSync(dir)) {
-        if (["node_modules", ".next", "e2e"].includes(nombre)) continue;
-        const ruta = join(dir, nombre);
-        if (statSync(ruta).isDirectory()) recorrer(ruta);
-        else if (/\.test\.tsx?$/.test(nombre)) tests.push(ruta);
-      }
-    };
-    recorrer(web);
-    const mocks: string[] = [];
-    const sinReal: string[] = [];
-    const patron = /vi\.(?:mock|doMock)\(\s*"@\/lib\/release\/escondido"([\s\S]*?)\n\s*\}\);|vi\.(?:mock|doMock)\(\s*"@\/lib\/release\/escondido"[^\n]*\);/g;
-    for (const ruta of tests) {
-      for (const m of readFileSync(ruta, "utf8").matchAll(patron)) {
-        const rel = relative(web, ruta);
-        mocks.push(rel);
-        if (!/importOriginal/.test(m[0]) || !/\.\.\.real\.ESCONDIDO/.test(m[0])) sinReal.push(rel);
-      }
-    }
-    expect(mocks.length).toBeGreaterThanOrEqual(5);
-    expect(sinReal).toEqual([]);
+    // Marketing sin que nadie lo supiera. Qué cuenta como mock y qué se exige:
+    // `mocks-de-escondido.ts`; los casos de abajo prueban que lo detecta.
+    const { problemas } = revisarMocksDeEscondido(WEB);
+    expect(problemas).toEqual([]);
   });
 
   it("el catálogo de integraciones no ofrece la Landing de Webinars (SCRUM-527)", () => {
@@ -81,5 +62,63 @@ describe("escondido para el release", () => {
       "manual",
     ]);
     expect(canalesDeLeadMagnetVisibles(canales, false)).toHaveLength(6);
+  });
+});
+
+/**
+ * El control de los mocks de ESCONDIDO, contra fuentes armadas acá (AR pasada
+ * 2): tiene que encontrar el mock parcial en todas sus formas. Las fuentes se
+ * arman concatenando, así el recorrido del repo no las toma por mocks reales.
+ */
+describe("el control de los mocks de ESCONDIDO", () => {
+  const VI = "vi";
+  const BT = String.fromCharCode(96);
+  const ARCHIVO = join(WEB, "lib/algo/__tests__/x.test.ts");
+  const parcial = (especificador: string, llamada = "mock") =>
+    `${VI}.${llamada}(${especificador}, () => ({ ESCONDIDO: { marketingOverview: false } }));`;
+  const desdeElReal = (especificador: string) =>
+    `${VI}.mock(${especificador}, async (importOriginal) => {\n` +
+    `  const real = await importOriginal<typeof import("@/lib/release/escondido")>();\n` +
+    `  return { ESCONDIDO: { ...real.ESCONDIDO, marketingOverview: false } };\n});`;
+  const revisar = (fuente: string, archivo = ARCHIVO) => analizarFuente(fuente, archivo, WEB);
+
+  it.each([
+    ["comillas dobles", '"@/lib/release/escondido"'],
+    ["comillas simples", "'@/lib/release/escondido'"],
+    ["backticks", `${BT}@/lib/release/escondido${BT}`],
+    ["ruta relativa", '"../../release/escondido"'],
+    ["ruta relativa con extensión", "'../../release/escondido.ts'"],
+    ["import()", 'import("@/lib/release/escondido")'],
+  ])("detecta el mock parcial con %s", (_caso, especificador) => {
+    const [r] = revisar(parcial(especificador));
+    expect(r?.ok).toBe(false);
+  });
+
+  it("detecta vi.doMock y una llamada partida en varias líneas", () => {
+    expect(revisar(parcial("'@/lib/release/escondido'", "doMock"))[0]?.ok).toBe(false);
+    expect(revisar(`${VI}\n  .mock(\n  '@/lib/release/escondido',\n  () => ({ ESCONDIDO: {} }),\n);`)[0]?.ok).toBe(false);
+  });
+
+  it("nombrar importOriginal y ...real.ESCONDIDO en un comentario no alcanza", () => {
+    const fuente =
+      `${VI}.mock("@/lib/release/escondido", () => ({\n` +
+      `  // parte de importOriginal con ...real.ESCONDIDO\n` +
+      `  ESCONDIDO: { marketingOverview: false },\n}));`;
+    expect(revisar(fuente)[0]?.ok).toBe(false);
+  });
+
+  it("un especificador que no es un texto fijo cuenta como problema", () => {
+    expect(revisar(`${VI}.mock(${BT}@/lib/release/\${"escondido"}${BT}, () => ({}));`)[0]?.ok).toBe(false);
+  });
+
+  it("acepta el mock que parte del real, con comillas simples o ruta relativa", () => {
+    expect(revisar(desdeElReal("'@/lib/release/escondido'"))[0]?.ok).toBe(true);
+    expect(revisar(desdeElReal('"../../release/escondido"'))[0]?.ok).toBe(true);
+  });
+
+  it("ignora los mocks de otros módulos y las rutas relativas que no llegan al módulo", () => {
+    expect(revisar(parcial('"@/lib/release/otro"'))).toEqual([]);
+    expect(revisar(parcial('"../escondido"'))).toEqual([]);
+    expect(revisar(`${VI}.mocked(algo); ${VI}.doUnmock("@/lib/release/escondido");`)).toEqual([]);
   });
 });

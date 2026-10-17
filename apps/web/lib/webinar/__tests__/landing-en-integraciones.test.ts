@@ -140,6 +140,16 @@ describe("saludDeLaLanding", () => {
     expect(JSON.stringify(salud)).not.toContain("3");
   });
 
+  it("sin detalle y sin claves activas, no está conectada (AR pasada 2)", async () => {
+    const { saludDeLaLanding } = await modulo();
+    const salud = await saludDeLaLanding(async () => ORG, async () => false, async () => ({
+      activas: 0,
+      ultimoUso: null,
+    }));
+    expect(salud.state).toBe("not_connected");
+    expect(salud.records).toBeNull();
+  });
+
   it("si puedeVerDetalle lanza de forma síncrona, la lectura de claves no queda sin atender", async () => {
     const { saludDeLaLanding } = await modulo();
     const sueltas: unknown[] = [];
