@@ -45,7 +45,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Verificación:** suite completa 276 archivos y 4.498 tests (también con `TZ=UTC`, sin unhandled), `tsc` limpio, lint igual a `bd02ddc4`, `check-migrations.sh` con 195 migraciones y 14 tests de RLS, 29 mutantes de código y 5 de la migración muertos por su test, control negativo con `6ba9da71` (14 tests en rojo), `next build` sin "Dynamic server usage", cadena contra el Supabase local 53 de 53 (+6 y +60 minutos, 31 días atrás, año 0 y 10000 dan 200 con la hora de llegada).
 
-**Riesgos / deuda técnica pendiente:** **SCRUM-532 sigue aplicando dos migraciones** (20261016120000 y 20261016130000; la segunda ya sin índice). MENOR-5 queda para integrar desde SCRUM-526. Sigue `[WEBINARS-UNMAPPED-SIN-REASIGNAR]`.
+**Riesgos / deuda técnica pendiente:** **SCRUM-532 sigue aplicando dos migraciones** (20261016120000 y 20261016130000; la segunda ya sin índice). El orden exacto de los seis SQL (precheck, migración y verificación de 526, y después los de 528) está en `limitless-auditoria/sql-produccion/LEEME-scrum-532.md` (AR pasada 3, MENOR-6): la verificación de 526 se corre antes de aplicar 528, porque después da `checks_de_enums` y `columnas_exactas` en false de forma esperable. Probado en un Postgres 17 descartable con las 193 migraciones previas: las dos verificaciones dan `todo_ok = t` en su momento. MENOR-5 queda para integrar desde SCRUM-526. Sigue `[WEBINARS-UNMAPPED-SIN-REASIGNAR]`.
 
 ### 2026-10-16 — Limitless Webinars: fix-pack de la AR pasada 1 de la ingesta de la landing (SCRUM-528)
 

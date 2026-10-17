@@ -1350,7 +1350,9 @@ Probado con `next start` y Supabase y Sentry falsos (evidencia de SCRUM-516); fa
 
 **Prerrequisitos:** los PR de SCRUM-526, 527 y 528 mergeados y desplegados, y las dos migraciones aplicadas en
 producción en orden (SCRUM-532): `20261016120000_webinars_modelo_de_datos` (SCRUM-526) y
-`20261016130000_landing_events_reprocesos` (SCRUM-528), con los SQL de `limitless-auditoria/sql-produccion/`. Una organización de prueba con un lanzamiento `active` y una
+`20261016130000_landing_events_reprocesos` (SCRUM-528), con los SQL de `limitless-auditoria/sql-produccion/` en el
+orden de `limitless-auditoria/sql-produccion/LEEME-scrum-532.md` (cada verificación inmediatamente después de su
+migración: la de 526 da false de forma esperable si se corre después de aplicar 528). Una organización de prueba con un lanzamiento `active` y una
 clave de ingesta (con `ESCONDIDO.ingestaLanding` en `true` hay que crearla con la bandera apagada en un preview o
 como lo defina SCRUM-532). Probado contra un Supabase local con `next start` (evidencia de SCRUM-528); falta en
 Vercel con la base real.
