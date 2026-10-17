@@ -38,8 +38,8 @@ import {
   eliminarConversacionDelAgente,
   eliminarEtapaDelAgente,
   leerMensajesDelAgente,
-} from "./agent-data-provider";
-import { enviarAlAgente } from "./floating-chat-provider";
+} from "../agent-data-provider";
+import { enviarAlAgente } from "../floating-chat-provider";
 import { ERROR_INESPERADO } from "@/lib/client/correr-accion";
 
 const ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
