@@ -71,7 +71,7 @@ acción *Notify on preferred channel* → Team o Members, y cada persona tiene q
 Settings → Account → Notifications.
 
 1. **Monitores de crons:** aparecen solos en Sentry → Crons después de la primera corrida de cada uno (19). Cada uno
-   abre un issue a las 2 fallas seguidas. Revisar que estén los 19 y que el horario coincida con `vercel.json`.
+   abre un issue a las 2 fallas seguidas. Revisar que estén los 20 y que el horario coincida con `vercel.json`.
 2. **Regla "issue nuevo de un proceso de fondo"** (Monitors → Alerts → Create Alert, source *all issues in selected projects*):
    - Cuándo: *A new issue is created*.
    - Filtro: tag `proceso_de_fondo` igual a `true`.
@@ -183,7 +183,7 @@ después de 20 min … responde commit Y" y qué revisar. Sin tokens de Vercel.
 
 ## Registro de corridas de los crons
 
-Cada corrida autorizada de los 19 crons de `vercel.json` queda en la tabla `corridas_de_procesos`
+Cada corrida autorizada de los 20 crons de `vercel.json` queda en la tabla `corridas_de_procesos`
 (`lib/observability/registro-de-corridas.ts`, desde `conMonitorDeCron`): inicio, fin, estado (`en_curso`, `ok`,
 `encolado`, `fallo`, `parcial`), orgs procesadas y fallidas, los ids de las fallidas, los jobs encolados de los crons
 con fan-out y un mensaje de error saneado (sin query, emails, tokens ni valores de claves, también compuestas como
