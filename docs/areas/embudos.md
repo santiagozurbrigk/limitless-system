@@ -397,16 +397,20 @@ Contrato (Zod, `lib/webinar/normalize/evento.ts`):
 
 - Un registro necesita `launch_public_id`, `client_registration_id` y `email`; una visita,
   `launch_public_id` y `visitor_id`. El resto es opcional y puede venir en `null`; un texto
-  vacío vale lo mismo que no mandarlo. `occurred_at` es ISO 8601 con zona y tiene que caer
-  entre 30 días antes y 5 minutos después de la hora en que llega (fuera de eso, 400); si no
-  viene, vale la hora en que llegó. Las claves de más se ignoran al normalizar pero el crudo
-  las guarda.
-- Antes de guardar nada se rechaza con 400 (AR pasada 1): todo texto, valor o clave, también
-  las de más, con NUL o con un surrogate suelto (no es UTF-16 bien formado: lo produce una
-  landing que corta un nombre en la mitad de un emoji); estructuras de más de 10 niveles;
-  textos más largos que su columna; y un `occurred_at` fuera de la ventana (un año 0 o 10000
-  no entra en un `timestamptz`, y un 1900 o un 2999 movería las métricas por fecha). Así, lo
-  que se acepta siempre se puede guardar como jsonb y normalizar.
+  vacío vale lo mismo que no mandarlo. `occurred_at` es ISO 8601 con zona (si no lo es, 400).
+  Se usa sólo si cae entre 30 días antes y 5 minutos después de la hora en que llegó el
+  evento (`received_at`); fuera de eso (el reloj de un navegador adelantado, un año 0 o 10000
+  que no entra en un `timestamptz`, un 1900 o un 2999 que movería las métricas por fecha) se
+  ignora y el registro o la visita entran con la hora de llegada, igual que si no viniera. El
+  crudo guarda el valor original. Rechazarlo con 400 perdía el registro, porque la landing no
+  reintenta un 400 (AR pasada 2). Las claves de más se ignoran al normalizar pero el crudo las
+  guarda.
+- 400 queda sólo para lo que no se puede guardar o no cumple el contrato (AR pasada 1): todo
+  texto, valor o clave, también las de más, con NUL o con un surrogate suelto (no es UTF-16
+  bien formado: lo produce una landing que corta un nombre en la mitad de un emoji);
+  estructuras de más de 10 niveles; textos más largos que su columna; campos obligatorios que
+  faltan o con otro tipo. Así, lo que se acepta siempre se puede guardar como jsonb y
+  normalizar.
 
 Cómo fluye:
 
@@ -445,7 +449,7 @@ Cómo fluye:
 
 **Reproceso** (`/api/cron/reprocesar-landing`, cada 10 minutos, `lib/webinar/reprocesar-landing.ts`):
 toma los `error` y los `pending` de más de 5 minutos, de todas las organizaciones, hasta 200
-por corrida, filtrando por columnas (índice parcial `landing_events_a_reprocesar`). El estado
+por corrida, filtrando por columnas (sobre el índice `(status, received_at)` de SCRUM-526). El estado
 del reproceso vive en columnas propias (migración `20261016130000_landing_events_reprocesos`,
 AR pasada 1): `reprocess_attempts` cuenta los reprocesos que arrancó el cron y `status =
 'failed'` es el error definitivo. Cada evento se reclama con un UPDATE condicionado al

@@ -1364,5 +1364,6 @@ Vercel con la base real.
 4. ⭐ Vercel → Settings → Cron Jobs: aparece `/api/cron/reprocesar-landing` cada 10 minutos. Sentry → Crons: el
    monitor `cron-reprocesar-landing` en verde después de su primera corrida, y Super-admin → Infraestructura lo lista.
 5. Los logs de Vercel de esas llamadas no muestran el email, la clave ni su hash.
-6. Un payload con `"name":"Persona \u0000"` o con `"occurred_at":"1900-01-01T00:00:00Z"` → 400 `Payload inválido.`, sin
-   fila en `landing_events` y sin evento en Sentry.
+6. Un payload con `"name":"Persona \u0000"` → 400 `Payload inválido.`, sin fila en `landing_events` y sin evento en
+   Sentry. Uno con `"occurred_at"` una hora adelantado o en 1900 → 200, y el registro queda con la hora de llegada
+   (`registered_at` = `received_at`).

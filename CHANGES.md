@@ -28,6 +28,25 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-17 — Limitless Webinars: AR pasada 2 de la ingesta de la landing (SCRUM-528)
+
+**Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (sobre `6ba9da71`)
+**Commit(s):** `c2d8949e`: fix(webinars): un occurred_at fuera de la ventana se ignora y vale received_at en vez de rechazar el registro; sin índice parcial redundante en la migración 20261016130000; y este (docs).
+**Módulo(s) afectado(s):** `apps/web/lib/webinar/normalize/evento.ts`, `apps/web/lib/webinar/ingesta-landing.ts`, `apps/web/lib/webinar/reprocesar-landing.ts` (comentario), `supabase/migrations/20261016130000_landing_events_reprocesos.sql` (todavía no aplicada), `supabase/ci/tests/98_landing_events_reprocesos.sql`, tests de `lib/webinar/__tests__/`; docs de embudos, seguridad, base de datos, testing y verificación manual; `limitless-auditoria/sql-produccion/scrum-528/`.
+
+**Qué se hizo:**
+- **MAYOR-4:** un `occurred_at` bien escrito pero fuera de la ventana (más de 5 minutos adelantado, más de 30 días atrás, año 0 o 10000) ya no rechaza el registro ni la visita: se ignora y vale `received_at`. El crudo guarda el valor original. La decisión se toma al normalizar, contra `received_at`, así es la misma en el endpoint y en cualquier reproceso (se sacó la holgura de un minuto, que ya no hace falta). 400 queda sólo para lo que no se puede guardar o no cumple el contrato, incluido un `occurred_at` que no es fecha ISO con zona.
+- **MENOR-4:** la migración `20261016130000` ya no crea `landing_events_a_reprocesar`: las dos lecturas del cron son condiciones exactas sobre `landing_events_status_received` de SCRUM-526. El test 98 falla si el índice vuelve, `02_verificacion.sql` lo comprueba (`sin_indice_nuevo`) y compara la definición completa del índice de 526, y `01_migracion.sql` se recopió idéntico al archivo (comprobado con diff). Prueba de los SQL repetida: `todo_ok = false` antes, `true` después, también en read only.
+- **MENOR-5** (collation del CHECK de `leads`) lo resuelve SCRUM-526 en su rama; acá no se tocó.
+
+**Por qué / finalidad:** un 400 no se reintenta: rechazar por el reloj de un navegador adelantado perdía registros reales sin dejar crudo. Y una escritura de índice de más por cada insert y cambio de estado no aportaba nada.
+
+**Decisiones de diseño relevantes:** ignorar en vez de rechazar (la alternativa, exigir que `occurred_at` salga del reloj del servidor de la landing, dependía de un acuerdo externo). La fecha original queda en el crudo para auditarla.
+
+**Verificación:** suite completa 276 archivos y 4.498 tests (también con `TZ=UTC`, sin unhandled), `tsc` limpio, lint igual a `bd02ddc4`, `check-migrations.sh` con 195 migraciones y 14 tests de RLS, 29 mutantes de código y 5 de la migración muertos por su test, control negativo con `6ba9da71` (14 tests en rojo), `next build` sin "Dynamic server usage", cadena contra el Supabase local 53 de 53 (+6 y +60 minutos, 31 días atrás, año 0 y 10000 dan 200 con la hora de llegada).
+
+**Riesgos / deuda técnica pendiente:** **SCRUM-532 sigue aplicando dos migraciones** (20261016120000 y 20261016130000; la segunda ya sin índice). MENOR-5 queda para integrar desde SCRUM-526. Sigue `[WEBINARS-UNMAPPED-SIN-REASIGNAR]`.
+
 ### 2026-10-16 — Limitless Webinars: fix-pack de la AR pasada 1 de la ingesta de la landing (SCRUM-528)
 
 **Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (sobre `efcce6c0`)
