@@ -73,18 +73,24 @@ enabled = false
 
 [auth]
 enabled = true
+# URLs locales. En una rama de Branching habría que cambiarlas (env() o un
+# bloque [remotes.<rama>]): ver docs/operacion/supabase-local.md.
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://127.0.0.1:3000", "http://localhost:3000"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
-enable_signup = true
+# Como en producción (disable_signup: true, SCRUM-23): no hay alta pública, las
+# cuentas se crean por invitación o con la API admin (ver la guía).
+enable_signup = false
 enable_anonymous_sign_ins = false
 enable_manual_linking = false
 minimum_password_length = 6
 password_requirements = ""
 
 [auth.email]
+# Proveedor email habilitado (GOTRUE_EXTERNAL_EMAIL_ENABLED: login con contraseña). El alta
+# pública la cierra [auth] enable_signup = false.
 enable_signup = true
 double_confirm_changes = true
 # Como en producción: aceptar una invitación de equipo confía en

@@ -2,3 +2,5 @@
 .branches
 .temp
 .env
+.env.keys
+.env.*.local

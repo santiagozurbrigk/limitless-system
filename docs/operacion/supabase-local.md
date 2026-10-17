@@ -62,7 +62,7 @@ diff <(ls supabase/migrations/*.sql | xargs -n1 basename | cut -d_ -f1 | sort) \
 ### Diferencias con producción
 
 - **Auth Hook:** `custom_access_token_hook` (claim `active_business_org_id` del holding) está activo por `config.toml`. En producción se activa a mano en el panel; la migración sola no lo activa.
-- **Configuración de Auth:** el bloque `[auth]` de `config.toml` es el del entorno local, no un registro de la configuración de producción (duración del JWT, mínimo de contraseña y protección contra contraseñas filtradas siguen sin versionar, `[AUTH-MFA-Y-POLITICA]`). La confirmación de email sí está activa, igual que en producción.
+- **Configuración de Auth:** el bloque `[auth]` de `config.toml` es el del entorno local, no un registro de la configuración de producción (duración del JWT, mínimo de contraseña y protección contra contraseñas filtradas siguen sin versionar, `[AUTH-MFA-Y-POLITICA]`). Lo que sí copia de producción (verificado el 2026-10-09, ver [`entorno-y-deploy.md`](./entorno-y-deploy.md)): la confirmación de email está activa y el alta pública cerrada (`enable_signup = false`, SCRUM-23). Lo que no: `site_url` y las redirect URLs son locales (`http://localhost:3000`).
 - **Storage:** el storage-api local (v1.82.1) bloquea el `DELETE` directo sobre `storage.objects` y `storage.buckets` con el trigger `storage.protect_delete` (error 42501) salvo con `set storage.allow_delete_query = 'true'`. Por eso `supabase/ci/tests/20_storage_import_files.sql` corta en el local y pasa en el CI, cuyo stub no tiene el trigger. Los otros 11 archivos de tests de RLS pasan igual en los dos.
 - **Datos:** la base arranca vacía. No hay seed: los datos se cargan a mano o por la app.
 
@@ -94,7 +94,7 @@ pnpm --filter @ai-coo/web dev     # http://localhost:3000
 
 ## Crear un usuario de prueba
 
-No hay alta pública (SCRUM-23): el usuario se crea con la API admin de Auth local, ya confirmado.
+El alta pública está cerrada, como en producción (`enable_signup = false`, SCRUM-23): `POST /auth/v1/signup` con la anon key responde 422 `signup_disabled`. El usuario de prueba se crea con la API admin de Auth local, ya confirmado.
 
 ```bash
 set -a; . /tmp/supabase-local.env; set +a
@@ -164,4 +164,9 @@ Medido con `docker stats --no-stream` el 2026-10-16 con la configuración de est
 
 ## Supabase Branching
 
-`supabase/config.toml` es el mismo archivo que lee Supabase Branching: si algún día se activa en el proyecto, cada rama preview arma su base con estas migraciones y toma de aquí la configuración de Auth (incluidos el Auth Hook y la confirmación de email). Por eso el archivo no tiene secretos: lo que tenga que venir de afuera va como `env(NOMBRE)`. Activar Branching es una decisión aparte (revisa el costo de las ramas en tu plan); este archivo no lo activa.
+`supabase/config.toml` es el mismo archivo que lee Supabase Branching: si algún día se activa en el proyecto, cada rama preview arma su base con estas migraciones y toma de aquí la configuración de Auth (incluidos el Auth Hook, la confirmación de email y el alta pública cerrada). Por eso el archivo no tiene secretos: lo que tenga que venir de afuera va como `env(NOMBRE)`. Activar Branching es una decisión aparte (revisa el costo de las ramas en tu plan); este archivo no lo activa.
+
+Antes de activarlo hay que resolver:
+
+- **URLs de Auth locales.** `site_url` y `additional_redirect_urls` apuntan a `http://localhost:3000`: en una rama preview, los links de confirmación y de recuperación de contraseña llevarían a localhost. Hay que pasarlas a `env(...)` o sobrescribirlas para la rama en un bloque `[remotes.<rama>]` (con el `project_id` de la rama; el CLI 2.121.0 lo soporta).
+- **Qué pasa al mergear.** Confirmar en el panel de Supabase si la integración de GitHub aplica este `config.toml` al proyecto de producción al mergear a la rama principal. Si lo aplica, `site_url`, las redirect URLs, el alta, el mínimo de contraseña y el resto del `[auth]` de este archivo pisarían los de producción: primero hay que alinearlos con producción o limitarlos a las ramas con `[remotes.<rama>]`.
