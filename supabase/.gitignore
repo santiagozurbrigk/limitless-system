@@ -1,0 +1,4 @@
+# Archivos que genera el CLI de Supabase al levantar el entorno local.
+.branches
+.temp
+.env

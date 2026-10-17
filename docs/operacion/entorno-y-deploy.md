@@ -16,7 +16,7 @@ pnpm --filter @ai-coo/web clean           # borra .next si hay errores ENOENT (W
 
 `pnpm dev` en la raíz levanta **todos** los `dev` del workspace vía turbo, incluido el bot de Discord (`tsx watch`), que sin `DISCORD_BOT_TOKEN` corta al arrancar. Preferí el `--filter`.
 
-- **No hay Supabase local** (no hay `supabase/config.toml`). El entorno local apunta a un proyecto remoto: usá uno propio de desarrollo con las 175 migraciones aplicadas (`supabase db push`), no producción.
+- **Supabase local** (SCRUM-539): `supabase start` con el CLI 2.121.0 arma Postgres 17, Auth, REST, Realtime y Storage desde cero con todas las migraciones, sin costo y sin tocar producción. Requisitos, `.env.local`, usuario de prueba, reset, apagado y memoria en [`supabase-local.md`](./supabase-local.md).
 - **Modo demo:** sin `NEXT_PUBLIC_SUPABASE_URL` + anon key, `isSupabaseConfigured()` es `false`, el middleware deja pasar todo y los providers cargan `apps/web/mocks/`. **Sólo funciona para `/demo`, `/design-system` y lo que no pase por el layout de plataforma**: cualquier página de `(platform)` responde 500 desde `getHoldingSessionState` (`[DEMO-LAYOUT-500]`).
 - OAuth desde local: las redirect URIs de `.env.example` apuntan a `localhost:3000`; hay que registrarlas en la consola de cada proveedor. Google en modo "Prueba" exige agregar el email como test user.
 - `ffmpeg` se resuelve por `@ffmpeg-installer/ffmpeg` y `ffprobe-static`; no hace falta instalarlo para `apps/web`. Sí para `apps/reel-worker` en local.
@@ -153,8 +153,9 @@ El repo se renombró de `ai-coo-platform` a `limitless-system` el 2026-09-22. No
 
 ## Configuración de Supabase Auth
 
-La configuración de Auth (confirmación de email, signups, duración del JWT) no está versionada: no hay
-`supabase/config.toml` (`[AUTH-MFA-Y-POLITICA]`). Lo que el código da por sentado:
+La configuración de Auth de producción (confirmación de email, signups, duración del JWT) no está versionada: el
+`[auth]` de `supabase/config.toml` es el del Supabase local (y de Branching si se activa), no un registro de
+producción (`[AUTH-MFA-Y-POLITICA]`). Lo que el código da por sentado:
 
 - **"Confirm email" activo.** Aceptar una invitación de equipo (`aceptar_invitacion_de_equipo`, SCRUM-495) confía
   en `auth.users.email_confirmed_at` para saber que la cuenta es de quien recibe el email. Si la confirmación está

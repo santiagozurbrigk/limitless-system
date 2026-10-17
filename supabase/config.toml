@@ -1,0 +1,119 @@
+# Supabase local para desarrollo y pruebas (SCRUM-539).
+# Guía: docs/operacion/supabase-local.md
+# CLI fijado: supabase@2.121.0 (npm exec --yes --package=supabase@2.121.0 -- supabase <comando>).
+# Referencia de todas las claves: https://supabase.com/docs/guides/local-development/cli/config
+#
+# Este mismo archivo es el que lee Supabase Branching si algún día se activa:
+# no pongas secretos aquí, usa env(NOMBRE) para lo que tenga que venir de afuera.
+#
+# Puertos: todos en 543xx para no chocar con los arneses de prueba (3xxx, 55xxx,
+# 56xxx, 57xxx). Servicios que la app no usa, apagados para gastar menos memoria.
+
+project_id = "limitless-local"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+health_timeout = "2m"
+# Misma versión mayor que producción.
+major_version = 17
+
+[db.pooler]
+enabled = false
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+# No hay seed: el usuario de prueba se crea a mano (ver la guía).
+enabled = false
+sql_paths = ["./seed.sql"]
+
+[realtime]
+# La app escucha cambios de business_context_documents y del provider de plataforma.
+enabled = true
+
+[studio]
+# Apagado para ahorrar memoria. Para usarlo: enabled = true y supabase start de nuevo.
+enabled = false
+port = 54323
+api_url = "http://127.0.0.1"
+
+[local_smtp]
+# Servidor de mail de prueba (Mailpit): los mails de Auth (confirmación,
+# recuperación) no salen, se ven en http://127.0.0.1:54324. Hace falta porque
+# la confirmación de email está activa, como en producción.
+enabled = true
+port = 54324
+
+[storage]
+# La app usa buckets (comprobantes, adjuntos, contexto, avatares).
+enabled = true
+file_size_limit = "50MiB"
+
+[storage.s3_protocol]
+enabled = false
+
+[storage.analytics]
+enabled = false
+
+[storage.vector]
+enabled = false
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://127.0.0.1:3000", "http://localhost:3000"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+minimum_password_length = 6
+password_requirements = ""
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+# Como en producción: aceptar una invitación de equipo confía en
+# auth.users.email_confirmed_at (ver docs/operacion/entorno-y-deploy.md).
+enable_confirmations = true
+secure_password_change = false
+max_frequency = "1s"
+otp_length = 6
+otp_expiry = 3600
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+template = "Your code is {{ .Code }}"
+max_frequency = "5s"
+
+# Igual que producción: el hook agrega active_business_org_id al JWT del holding
+# (migración 20260620100000_holding_jwt_claim_hook.sql). En la nube se activa en
+# el dashboard; aquí y en Branching lo activa este bloque.
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+
+[edge_runtime]
+# No hay funciones en supabase/functions.
+enabled = false
+
+[analytics]
+# Logflare/Vector apagados: es lo que más memoria gasta y no hace falta en local.
+enabled = false
+port = 54327
+backend = "postgres"
