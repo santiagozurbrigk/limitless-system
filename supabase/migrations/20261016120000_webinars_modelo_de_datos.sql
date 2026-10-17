@@ -149,8 +149,13 @@ create table if not exists public.leads (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   email text not null check (char_length(btrim(email)) between 3 and 320),
+  -- El CHECK no depende de la collation de la base: lower() con la collation
+  -- por defecto cambia según el locale (con tr-TR, lower('I') es 'ı'). Con
+  -- collate "C" sólo pasa A-Z a minúsculas, igual en cualquier base. Impide
+  -- mayúsculas ASCII y espacios en los bordes; una mayúscula fuera de ASCII
+  -- no la juzga la base (la normalización completa es de la ingesta).
   email_normalized text not null
-    check (email_normalized = lower(btrim(email_normalized)) and char_length(email_normalized) between 3 and 320),
+    check (email_normalized = lower(btrim(email_normalized) collate "C") and char_length(email_normalized) between 3 and 320),
   name text,
   phone_e164 text check (phone_e164 ~ '^\+[1-9][0-9]{6,14}$'),
   first_seen_at timestamptz not null default now(),
