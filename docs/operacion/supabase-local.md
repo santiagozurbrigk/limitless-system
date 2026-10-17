@@ -18,11 +18,13 @@ alias supabase='npm exec --yes --package=supabase@2.121.0 -- supabase'
 supabase --version    # 2.121.0
 ```
 
+El alias sólo vale en una shell interactiva. En scripts (y en `bash -c`) usa el comando completo: `npm exec --yes --package=supabase@2.121.0 -- supabase <comando>`.
+
 `npx supabase@2.121.0 --version` no sirve para comprobarlo: `npx` se queda con `--version` y muestra la versión de npm. Si `pnpm dlx` falla fuera del repo con `Cannot find module .../pnpm.cjs`, es corepack sin `packageManager`: usa el alias de arriba.
 
 ### Si `supabase start` falla con `docker-credential-desktop.exe`
 
-Pasa cuando en WSL quedó la configuración de un Docker Desktop viejo (`"credsStore": "desktop.exe"` en `~/.docker/config.json`) y no se puede bajar ninguna imagen. Dos salidas:
+Pasa cuando en WSL quedó la configuración de un Docker Desktop viejo (`"credsStore": "desktop.exe"` en `~/.docker/config.json`) y no se puede bajar ninguna imagen. Sólo molesta cuando hay que bajar imágenes (el primer `supabase start`, un cambio de versión del CLI o un `docker pull`): con las imágenes ya en caché, `supabase start` anda sin tocar nada. Dos salidas:
 
 - Sacar la línea `credsStore` de `~/.docker/config.json` (si no usas Docker Desktop, no hace falta).
 - O no tocarla y darle al CLI una configuración aparte: `mkdir -p ~/.docker-wsl && echo '{}' > ~/.docker-wsl/config.json` y `export DOCKER_CONFIG=~/.docker-wsl` antes de `supabase start`.
@@ -35,7 +37,7 @@ Desde la raíz del repo:
 supabase start
 ```
 
-La primera vez baja las imágenes y aplica las 193 migraciones (unos 85 segundos con buena conexión). Después, con las imágenes bajadas y los datos guardados, tarda unos 35 segundos. Al terminar muestra las URL y las claves locales. Las claves son las de ejemplo de Supabase, iguales en todas las máquinas: no son secretas, pero tampoco las pegues en issues, PRs ni evidencias.
+La primera vez baja las imágenes y aplica las 193 migraciones (unos 85 segundos con buena conexión). Después, con las imágenes bajadas y los datos guardados, tarda unos 35 segundos. Al terminar, `supabase start` imprime por la salida estándar las URL **y las claves locales** (anon, service role, JWT secret), igual que `supabase status`. Son las de ejemplo de Supabase, iguales en todas las máquinas: no son secretas, pero no pegues esa salida tal cual en issues, PRs ni evidencias; si hace falta guardarla, tapa las claves antes.
 
 Qué levanta y qué no (ver comentarios en `config.toml`):
 
@@ -128,6 +130,19 @@ docker exec supabase_db_limitless-local psql -U postgres -c "drop schema ci casc
 ```
 
 `20_storage_import_files.sql` falla por el trigger de Storage (ver [Diferencias con producción](#diferencias-con-producción)). Para que decida la RLS como en el CI, antepón `set storage.allow_delete_query = 'true';` a ese archivo en la misma sesión.
+
+## Check de migraciones del CI
+
+`supabase/ci/check-migrations.sh` (el job `migrations`) arma una base con stubs en un Postgres pelado, no usa el Supabase local. Necesita `psql` en la máquina: sin él corta con exit 127. Si no lo tienes instalado, córrelo dentro de la misma imagen del CI, desde la raíz del repo:
+
+```bash
+docker run -d --rm --name check-migraciones -e POSTGRES_PASSWORD=postgres \
+  -v "$PWD/supabase:/repo/supabase:ro" pgvector/pgvector:pg17
+until docker exec check-migraciones pg_isready -U postgres -h localhost >/dev/null 2>&1; do sleep 2; done
+docker exec -e PGHOST=localhost -e PGUSER=postgres -e PGPASSWORD=postgres \
+  check-migraciones bash /repo/supabase/ci/check-migrations.sh
+docker stop check-migraciones
+```
 
 ## Resetear
 

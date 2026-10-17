@@ -50,6 +50,8 @@ pnpm exec playwright test --ui
 
 # Migraciones contra un Postgres con pgvector
 PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres supabase/ci/check-migrations.sh
+# (necesita psql en el host; sin él, exit 127. Alternativa dentro de pgvector/pgvector:pg17:
+#  docs/operacion/supabase-local.md § Check de migraciones del CI)
 ```
 
 ## Convenciones
