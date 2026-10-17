@@ -34,6 +34,9 @@
   JWT, rotación de refresh tokens, límite de sesiones, "Confirm email", "Secure email change", largo mínimo de
   contraseña, signups habilitados, proveedores de login social, rate limits propios de Auth, si el Custom Access Token
   Hook está activo. Sólo el advisor confirma una cosa: **la protección contra contraseñas filtradas está apagada**.
+  > **Nota 2026-10-16 (SCRUM-539):** desde ese día existe `supabase/config.toml`, pero sólo para el Supabase local (y
+  > Branching si se activa). Su `[auth]` no es un registro de la configuración de producción: lo de arriba sigue
+  > sin verificarse en el repo.
 - **Variables en Vercel, Railway y Fly** (valores y quién tiene acceso), rotaciones hechas alguna vez y la consola de QStash.
 - **Qué manda realmente Sentry** (headers, query string) en un evento: no hay acceso al proyecto de Sentry.
 - **Explotación**: los hallazgos sobre la base se deducen del catálogo; no se probó ninguna escritura.
@@ -277,6 +280,8 @@ repiten: se listan al final con su ID.
   según `mapAuthError`, `app/auth/actions.ts:39`); el resto de los flujos pide 8. No existe `supabase/config.toml`:
   duración del JWT, rotación de refresh tokens, confirmación de email y de cambio de email, y signups habilitados
   viven sólo en el dashboard.
+  > **Nota 2026-10-16 (SCRUM-539):** ahora existe `supabase/config.toml`, pero su `[auth]` es el del Supabase local
+  > (y de Branching si se activa), no un registro de producción: lo de producción sigue viviendo sólo en el dashboard.
 - **Riesgo.** Si una contraseña del super admin o de un founder se filtra en otro sitio (reuso), entonces se entra
   con ella sola, con 10 intentos cada 15 minutos por email (`signin` + `signin-superadmin`) y sin límite por IP
   (`[LOGIN-RATE-LIMIT]`). Probabilidad media: es el ataque más común contra paneles SaaS.

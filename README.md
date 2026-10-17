@@ -28,7 +28,7 @@ cp .env.example apps/web/.env.local     # completar; ver docs/operacion/entorno-
 pnpm --filter @ai-coo/web dev           # http://localhost:3000
 ```
 
-No hay Supabase local: apuntá a un proyecto de desarrollo con las migraciones aplicadas, nunca a producción.
+Supabase local: `supabase start` (CLI 2.121.0, Docker) arma la base desde cero con todas las migraciones, sin costo y sin tocar producción. Guía en [`docs/operacion/supabase-local.md`](docs/operacion/supabase-local.md). Nunca apuntes el entorno local a producción.
 
 ## Comandos
 
