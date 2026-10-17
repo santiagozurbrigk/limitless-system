@@ -87,7 +87,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
-| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
+| [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 14 |
 
 ---
 
@@ -2658,6 +2658,16 @@ Prioridad sugerida P3: por sí sola no expone datos; depende de un consumidor co
 - **Estado verificado:** `@vitest/coverage-v8` no está instalado ni configurado.
 - **Qué hay que hacer:** sumarlo sin umbral; poner umbral cuando la cobertura sea significativa.
 - **Dónde:** `apps/web/vitest.config.ts`.
+
+#### [T-INFRA-DOM] Vitest sin entorno DOM: el cableado de los componentes no tiene test
+- **Tipo:** tests
+- **Severidad:** Baja
+- **Estado verificado:** `apps/web/vitest.config.ts` corre con `environment: "node"` y `apps/web/package.json` no tiene jsdom, happy-dom ni `@testing-library/react`; los componentes se prueban sólo con `renderToStaticMarkup`, sin efectos ni eventos. En el panel de claves de ingesta (`components/integrations/settings/landing-settings.tsx`, SCRUM-527) se prueban las decisiones (`manejarResultadoDeRevocar`, `destinoDelFoco`, `copiarAlPortapapeles`), pero cuatro ediciones de una línea del cableado dejan la suite en verde (mutantes B1 a B4 de la AR pasada 2, `limitless-auditoria/evidencia-sprint2/scrum-527/02_mutantes-p4.txt`): sacar `if (lectura.ok) setClaves(lectura.data)` (no toma la lista releída), que el efecto de foco no llame a `.focus()`, sacar el `ref` de «Cancelar» y `releer: () => {}` en vez de `router.refresh()`.
+- **Riesgo:** Si alguien rompe ese cableado, entonces revocar con la lista vieja deja la confirmación abierta o la lista sin actualizar, o el foco cae en `body`, y ningún test lo avisa.
+- **Impacto:** Founder y admin de las organizaciones con la experiencia webinar (hoy nadie: la entrada está escondida con `ESCONDIDO.ingestaLanding`); por extensión, todo componente con estado o efectos del repo.
+- **Qué hay que hacer:** sumar un entorno DOM a Vitest en `apps/web` (jsdom o happy-dom, más `@testing-library/react`) sólo para los tests que lo pidan (`// @vitest-environment jsdom` por archivo o `environmentMatchGlobs`), sin cambiar el entorno `node` del resto; escribir los tests de cableado de `LandingSettings` montando el componente con las acciones, el router y los avisos simulados; actualizar "Qué no testear en Vitest" de `docs/operacion/testing.md`.
+- **Criterio de aceptación:** con el entorno nuevo, los tests de `LandingSettings` matan B1 a B4 (cada mutante pone en rojo un test con su nombre); la suite completa, también con `TZ=UTC`, sigue en verde, con exit 0 y sin rechazos sin atender; los tests que ya existían siguen corriendo en `node`.
+- **Dónde:** `apps/web/vitest.config.ts`, `apps/web/package.json`, `apps/web/components/integrations/settings/landing-settings.tsx`, `apps/web/components/integrations/__tests__/`, `docs/operacion/testing.md`.
 
 #### [PACKAGES-RESERVADOS] Cuatro paquetes vacíos
 - **Tipo:** deuda técnica
