@@ -17,7 +17,13 @@ const sim = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/release/escondido", () => ({ ESCONDIDO: { marketingOverview: false } }));
+// Parte del objeto real (SCRUM-527): una bandera nueva no queda `undefined`
+// (visible) sin que el test lo sepa. Lo que este test cambia es sólo el
+// Overview de Marketing.
+vi.mock("@/lib/release/escondido", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/release/escondido")>();
+  return { ESCONDIDO: { ...real.ESCONDIDO, marketingOverview: false } };
+});
 vi.mock("@/app/marketing/actions", () => ({
   getContentDistributionDataAction: async () => sim.distribucion,
   getMarketingOverviewContextAction: async () => sim.resumen,

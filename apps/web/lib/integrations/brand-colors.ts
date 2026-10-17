@@ -36,6 +36,7 @@ export const INTEGRATION_BRAND_COLORS: Record<
   vturb: { bg: "#1B1B1F" },
   webinarjam: { bg: "#2E7DD1" },
   hyros: { bg: "#111827" },
+  landing: { bg: "#0F766E" },
   // Cobros
   whop: { bg: "#FF6243" },
   fanbasis: { bg: "#0F172A" },
@@ -89,6 +90,9 @@ const LOGO_ASSETS: Partial<Record<IntegrationProvider, IntegrationLogoAsset>> =
     mercadopago: { kind: "mask", src: "/integrations/mercadopago.svg" },
     google_forms: { kind: "mask", src: "/integrations/google_forms.svg" },
     google_ecosystem: { kind: "mask", src: "/integrations/google_forms.svg" },
+    // Landing no es una marca ajena: es la landing propia del negocio. El
+    // glifo es un globo genérico (SCRUM-527).
+    landing: { kind: "mask", src: "/integrations/landing.svg" },
 
     // App icons con su propio fondo
     zernio: { kind: "icon", src: "/integrations/zernio.svg" },

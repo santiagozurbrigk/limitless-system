@@ -3591,6 +3591,23 @@ Fuente: PENDIENTES.md [T-24] · Doc del área: docs/arquitectura/vision-general.
 *Dónde:* {{apps/web/vitest.config.ts}}.
 
 Fuente: PENDIENTES.md [T-INFRA-COVERAGE] · Doc del área: docs/arquitectura/vision-general.md",T-INFRA-COVERAGE,"Infraestructura, seguridad y tests (transversal)",P3,,tests
+[T-INFRA-DOM] Vitest sin entorno DOM: el cableado de los componentes no tiene test,Task,Low,infra,p3,sev-baja,tests,,,"*Tipo:* tests
+
+*Severidad:* Baja
+
+*Estado verificado:* {{apps/web/vitest.config.ts}} corre con {{environment: ""node""}} y {{apps/web/package.json}} no tiene jsdom, happy-dom ni {{@testing-library/react}}; los componentes se prueban sólo con {{renderToStaticMarkup}}, sin efectos ni eventos. En el panel de claves de ingesta ({{components/integrations/settings/landing-settings.tsx}}, SCRUM-527) se prueban las decisiones ({{manejarResultadoDeRevocar}}, {{destinoDelFoco}}, {{copiarAlPortapapeles}}), pero cuatro ediciones de una línea del cableado dejan la suite en verde (mutantes B1 a B4 de la AR pasada 2, {{limitless-auditoria/evidencia-sprint2/scrum-527/02_mutantes-p4.txt}}): sacar {{if (lectura.ok) setClaves(lectura.data)}} (no toma la lista releída), que el efecto de foco no llame a {{.focus()}}, sacar el {{ref}} de «Cancelar» y {{releer: () => {}}} en vez de {{router.refresh()}}.
+
+*Riesgo:* Si alguien rompe ese cableado, entonces revocar con la lista vieja deja la confirmación abierta o la lista sin actualizar, o el foco cae en {{body}}, y ningún test lo avisa.
+
+*Impacto:* Founder y admin de las organizaciones con la experiencia webinar (hoy nadie: la entrada está escondida con {{ESCONDIDO.ingestaLanding}}); por extensión, todo componente con estado o efectos del repo.
+
+*Qué hay que hacer:* sumar un entorno DOM a Vitest en {{apps/web}} (jsdom o happy-dom, más {{@testing-library/react}}) sólo para los tests que lo pidan ({{// @vitest-environment jsdom}} por archivo o {{environmentMatchGlobs}}), sin cambiar el entorno {{node}} del resto; escribir los tests de cableado de {{LandingSettings}} montando el componente con las acciones, el router y los avisos simulados; actualizar ""Qué no testear en Vitest"" de {{docs/operacion/testing.md}}.
+
+*Criterio de aceptación:* con el entorno nuevo, los tests de {{LandingSettings}} matan B1 a B4 (cada mutante pone en rojo un test con su nombre); la suite completa, también con {{TZ=UTC}}, sigue en verde, con exit 0 y sin rechazos sin atender; los tests que ya existían siguen corriendo en {{node}}.
+
+*Dónde:* {{apps/web/vitest.config.ts}}, {{apps/web/package.json}}, {{apps/web/components/integrations/settings/landing-settings.tsx}}, {{apps/web/components/integrations/__tests__/}}, {{docs/operacion/testing.md}}.
+
+Fuente: PENDIENTES.md [T-INFRA-DOM] · Doc del área: docs/arquitectura/vision-general.md",T-INFRA-DOM,"Infraestructura, seguridad y tests (transversal)",P3,Baja,tests
 [PACKAGES-RESERVADOS] Cuatro paquetes vacíos,Task,Low,infra,p3,deuda-tecnica,,,,"*Tipo:* deuda técnica
 
 *Estado verificado:* {{packages/{ai,database,integrations,queue}}} sólo exportan una constante {{*_RESERVED}}; {{apps/web/api/}} y {{apps/web/server/}} son carpetas vacías con {{.gitkeep}}; {{apps/web/workspaces/}} es un placeholder sin funcionalidad.

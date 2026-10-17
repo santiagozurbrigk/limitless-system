@@ -302,14 +302,14 @@ No tiene relación con el motor de embudos (no usa `funnel_instances`) ni con la
 "próximo lanzamiento" del onboarding de clientes, que es un campo configurable del área
 Clientes.
 
-### Limitless Webinars (Fase 1: sólo modelo de datos)
+### Limitless Webinars (Fase 1: modelo de datos y claves de ingesta)
 
 SCRUM-526 (épica SCRUM-521) creó las tablas de los lanzamientos de webinars en
 `supabase/migrations/20261016120000_webinars_modelo_de_datos.sql`: `webinar_launches`,
 `webinar_sessions`, `launch_ad_campaigns`, `launch_products`, `leads`,
 `launch_registrations`, `landing_visits`, `lead_events`, `ingest_keys` y `landing_events`.
-No reutiliza `launches` ni `launch_metrics` (quedan como están). Todavía no hay código de la
-app que las use: las claves de ingesta y el endpoint de la landing son SCRUM-527 y SCRUM-528.
+No reutiliza `launches` ni `launch_metrics` (quedan como están). Las claves de ingesta
+(SCRUM-527, abajo) son el primer código que las usa; el endpoint de la landing es SCRUM-528.
 
 Lo que ya hace cumplir la base:
 - Cada miembro lee sólo lo de su organización; la configuración del lanzamiento (lanzamiento,
@@ -330,6 +330,55 @@ Lo que ya hace cumplir la base:
 
 Detalle de columnas y reglas: `docs/arquitectura/base-de-datos.md` § Limitless Webinars.
 Tests: `supabase/ci/tests/97_webinars_modelo_de_datos.sql`.
+
+#### Claves de ingesta de la landing (SCRUM-527)
+
+La landing del lanzamiento manda registros y visitas a `POST /api/ingest/landing` (SCRUM-528)
+con `Authorization: Bearer <clave>`. La clave dice de qué organización es lo que llega.
+
+- Se crean, se listan y se revocan en Integraciones → Landing (categoría Medición de embudos,
+  `provider: "landing"` en `lib/integrations/registry.ts`). Hoy la entrada está escondida
+  con `ESCONDIDO.ingestaLanding` (`lib/release/escondido.ts`): no se lista, la página no lee
+  las claves ni monta el panel y las acciones responden "Las claves de ingesta todavía no
+  están disponibles.". SCRUM-523/524 la pasan a depender de la experiencia webinar de la
+  organización.
+- Formato: `lmt_ing_` más 32 bytes de `crypto.randomBytes` en base64url (51 caracteres). En
+  `ingest_keys.key_hash` queda sólo el sha256 en hexadecimal; la clave se muestra una vez, al
+  crearla, con un botón para copiarla y el aviso de que no se vuelve a ver. Si se pierde, se
+  crea otra y se revoca la vieja.
+- Sólo founder o admin de la organización activa (`requireOrgRole` con
+  `current_user_has_org_role`, que incluye al founder de un holding operando un negocio)
+  pueden ver la lista, crear y revocar: `ingest_keys` no tiene policies, así que las acciones
+  usan el service role y el chequeo es ése. Toda consulta filtra por `organization_id`;
+  revocar una clave de otra organización, inexistente o ya revocada responde "No encontramos
+  esa clave o ya estaba revocada.". Revocar pide confirmación dentro del panel (el foco va a
+  «Cancelar» y vuelve al cerrar); si la respuesta es ésa, por ejemplo porque otra pestaña ya la
+  revocó, el panel cierra la confirmación y relee la lista.
+- `verificarClaveDeIngesta(token)` (`lib/webinar/claves-de-ingesta.ts`) es lo que va a usar el
+  endpoint: devuelve `{ organizationId, claveId }` si el hash existe y la clave no está
+  revocada, y si no `null`. Busca por el sha256 del token y compara el hash de la fila con
+  `timingSafeEqual`; un token sin el formato se rechaza sin consultar la base. Si la base
+  falla, lanza `FallaDeLaBase` con un texto fijo (el endpoint responde 500, no 401).
+- `last_used_at` se anota sin esperar y como mucho una vez por minuto por clave. La opción
+  `enSegundoPlano` es obligatoria (el endpoint pasa `after` de `next/server`; suelta, en una
+  función serverless la escritura puede no completarse). Una fecha ilegible se vuelve a anotar.
+  El intervalo: con 50 eventos por segundo, una
+  escritura por evento no tiene sentido para un dato que se muestra en minutos. Si falla, se
+  registra con un texto fijo y la clave sigue valiendo.
+- La tarjeta de Integraciones (`saludDeLaLanding`, en paralelo con el resto del panorama)
+  muestra cuántas claves activas hay y su último uso sólo a founder o admin; al resto le dice si
+  hay alguna activa y que el detalle lo ven ellos. Si la lectura o el chequeo del rol fallan,
+  dice que no se pudo leer en vez de "Sin conectar".
+- Errores como valor (`mutacionConErroresEsperables`): sesión, permiso, nombre vacío, de más
+  de 100 caracteres o con caracteres de control (saltos de línea, tabulaciones, NUL) y clave
+  inexistente vuelven con su motivo; lo demás va a la consola y a
+  Sentry con el tag `server_action` y el usuario ve el texto fijo. Ni la clave ni su hash van a
+  un log, a Sentry ni al texto de un error.
+
+Archivos: `lib/webinar/claves-de-ingesta.ts`, `app/webinar/claves-de-ingesta-actions.ts`,
+`components/integrations/settings/landing-settings.tsx`. Tests en `lib/webinar/__tests__/`,
+`app/webinar/__tests__/`, `app/integrations/__tests__/panorama-con-landing.test.ts`,
+`app/(platform)/integrations/__tests__/` y `components/integrations/__tests__/landing-settings.test.ts`.
 
 ## Archivos clave
 
