@@ -1635,9 +1635,9 @@ Doc del área: [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md)
 
 #### [AGENTE-TOOLS-ERROR-CRUDO] (nuevo) Las tools del agente le pasan al modelo el texto crudo de la base
 - **Tipo:** deuda técnica
-- **Estado verificado:** al guardar una propuesta, el resultado de la tool lleva `insertErr.message` o `String(err)`, y las tools de contenido, `err.message` de lo que lanzó (`lib/agent/agent-tool-handler.ts`, el del streaming, y el de `sendAgentMessageAction` en `app/agent/actions.ts`); el modelo puede repetirlo en su respuesta. La falla tampoco se registra. Visto al hacer SCRUM-506, que no cambió el protocolo de las tools.
-- **Qué hay que hacer:** que las tools devuelvan un texto fijo para el modelo y registren la falla (`FallaDeLaBase`, `registrarFallaDeAccion`), en los dos manejadores.
-- **Dónde:** `apps/web/lib/agent/agent-tool-handler.ts`, `apps/web/app/agent/actions.ts`.
+- **Estado verificado:** el resultado de una tool que falla lleva el texto técnico del error: al guardar una propuesta, `insertErr.message` o `String(err)`; en las tools de contenido, `err.message` de lo que lanzó (`lib/agent/agent-tool-handler.ts`, el del streaming, y el de `sendAgentMessageAction` en `app/agent/actions.ts`); en las tools de lectura, `err.message` (`lib/agent/data-reader-handlers.ts`). Lo recibe el modelo, que puede repetirlo en su respuesta, y la falla no se registra. Al navegador ya no llega: desde SCRUM-506 (AR pasada 2) el evento `tool_end` del stream manda sólo el nombre de la tool.
+- **Qué hay que hacer:** que las tools devuelvan un texto fijo para el modelo y registren la falla (`FallaDeLaBase`, `registrarFallaDeAccion`), en los tres archivos.
+- **Dónde:** `apps/web/lib/agent/agent-tool-handler.ts`, `apps/web/lib/agent/data-reader-handlers.ts`, `apps/web/app/agent/actions.ts`.
 
 ### Agente de negocio e IA · P3
 
