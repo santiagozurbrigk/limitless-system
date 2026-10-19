@@ -61,8 +61,10 @@ Mobile: `components/layout/mobile-nav.tsx` (drawer) reutiliza `components/naviga
 también usa el sidebar de super admin. Esos archivos **no son restos**.
 
 Paleta de comandos: `components/navigation/command-palette.tsx`, ⌘K / Ctrl+K
-(`providers/command-palette-provider.tsx`). Lista `platformNavigation` de `routes/navigation.ts`,
-**sin filtrar por permisos ni add-ons**.
+(`providers/command-palette-provider.tsx`). En una organización `full` lista `platformNavigation` de
+`routes/navigation.ts` y las acciones rápidas, **sin filtrar por permisos ni add-ons**
+(`[NAV-PALETA-PERMISOS]`). En una organización `webinar` lista sólo las entradas listas de su menú,
+filtradas por permiso con `canSeeNavItem` (`itemsDeLaPaleta`).
 
 ### Rutas
 
@@ -72,6 +74,51 @@ Paleta de comandos: `components/navigation/command-palette.tsx`, ⌘K / Ctrl+K
   temporales, no 308). `/` → `/login`.
 - Full-bleed (sin título ni padding): `/agent`, `/sales/inbox`, `/product` (`lib/navigation/full-bleed.ts`).
 - Chromeless (sin barra): `/onboarding` (`lib/navigation/chromeless.ts`).
+
+### Menú por experiencia (Limitless Webinars)
+
+Cada organización tiene una experiencia (`organizations.experience`, SCRUM-523): `full` (Limitless
+completo) o `webinar` (Limitless Webinars). La lee `getOrganizationExperience()` para la organización
+activa (la del negocio elegido, en un holding), una vez por request; si falla, es `full`. El layout de
+`(platform)` la pasa al cliente con `ExperienciaProvider` (`providers/experiencia-provider.tsx`).
+
+- **Config:** `lib/navigation/menu-webinar.ts`. `MENU_WEBINAR` tiene las cinco entradas del PO, en
+  orden: Inicio (`/inicio`, módulo `dashboard`, SCRUM-534), Lanzamientos (`/lanzamientos`, `funnels`,
+  SCRUM-529), Leads (`/leads`, `sales`, SCRUM-537), Llamadas (`/llamadas`, `sales`, SCRUM-537) y Equipo
+  (`/team`, `team`). Cada una tiene `lista`: hoy sólo Equipo. Una entrada que no está lista no se
+  muestra (sin "Próximamente") y su ruta redirige como cualquier otra. `RUTAS_LIBRES_WEBINAR`:
+  `/onboarding` (adonde el middleware manda al founder sin onboarding; bloquearla armaría un bucle),
+  `/holding` y `/settings` (ajustes de la cuenta, desde el menú de perfil).
+- **Reglas:** `lib/navigation/rutas-por-experiencia.ts`. `full` abre todo y su pantalla de inicio es
+  `/dashboard`. `webinar` abre las entradas listas (con sus subrutas) y las libres; la pantalla de
+  inicio es Inicio si está lista y si no, la primera entrada lista (hoy, `/team`).
+- **Barra:** `buildPlatformSidebarNav(enabledAddOns, experiencia)` devuelve, para `webinar`, sólo las
+  entradas listas como links directos con su `permissionId`; la notch nav y el menú móvil las filtran
+  por permiso como siempre. Sin grupos, así que tampoco aparece Integraciones en la isla derecha.
+- **Bloqueo de rutas:** cada carpeta de `app/(platform)` tiene un `layout.tsx` que llama a
+  `exigirRutaDeLaExperiencia("/<segmento>")` (`lib/organization/ruta-de-la-experiencia.ts`) y
+  redirige a la pantalla de inicio (no muestra `SinAcceso`). Va ahí y no en el layout de `(platform)`
+  porque ese no se vuelve a ejecutar en una navegación del cliente; el del segmento se ejecuta en el
+  servidor cada vez que se entra al segmento (URL tipeada, link, `router.push`, ruta anidada). No va en
+  el middleware porque ahí no se puede usar `getOrganizationExperience()` y habría que copiar la
+  resolución del negocio activo del holding. `/lanzamientos` primero aplica la experiencia y después
+  `ESCONDIDO.lanzamientos`, que sigue mandando al Panel a todas las organizaciones `full`.
+- **Al cargar la página, la experiencia va antes que el permiso:** el layout de `(platform)` también
+  redirige con `x-pathname` antes de decidir `SinAcceso`. Si dibuja `SinAcceso` no dibuja `children`,
+  y entonces la redirección del layout del segmento no se aplica: sin este chequeo, un miembro sin el
+  módulo Marketing que tipeaba `/marketing` veía «No tenés acceso» en vez de ir a su inicio (lo mostró
+  la prueba contra el Supabase local). Queda un caso: desde una pantalla que ya muestra `SinAcceso`,
+  una navegación del cliente cambia la URL pero sigue mostrando `SinAcceso` (no muestra la pantalla
+  bloqueada ni redirige); es el mismo límite de `[PERMISOS-LAYOUT-NAV-SUAVE]`.
+- **Destino después del login:** `signInAction` y `/auth/callback` (sin `next` válido) van a la
+  pantalla de inicio de la experiencia (`pantallaDeInicioDeLaOrganizacionActiva`); el `next` de una
+  invitación y `destinoSeguro` se respetan. Las pantallas del cliente que mandan a `/dashboard`
+  (recuperar contraseña, cambio obligatorio, aceptar invitación, onboarding) y el middleware que saca
+  de `/login` a quien ya tiene sesión llegan a la pantalla de inicio por el layout de `/dashboard`,
+  con un salto más. Lo mismo `enterBusinessAction` del holding: redirige a `/dashboard` y la request
+  siguiente, ya con la cookie del negocio nuevo, decide (la misma request todavía lleva el header
+  `x-active-org-id` del negocio anterior).
+- Para encender una entrada: crear la pantalla y poner `lista: true` en `MENU_WEBINAR`. Nada más.
 
 ### Título y "volver"
 
@@ -140,8 +187,12 @@ servidor, `client.ts` los `"use client"`; nunca importar un barrel con clientes 
 - `[NAV-1]` La notch nav nunca se validó con sesión real (pill activo, dropdowns, switcher, drawer mobile).
 - `[NAV-2]` Renombrar `sidebar-modules.ts` a `platform-modules.ts` (cosmético: 3 imports y algunas menciones en comentarios).
 - `[NAV-3]` La etiqueta "Fase 1 · Beta" se perdió con el sidebar; decidir si vuelve.
-- `[NAV-PALETA-PERMISOS]` (nuevo) La paleta ⌘K ofrece todos los módulos aunque el rol o el add-on no los
-  incluya. Junto con `[PERMISOS-LAYOUT-NAV-SUAVE]` (ver arquitectura) puede abrir un módulo bloqueado.
+- `[NAV-PALETA-PERMISOS]` (nuevo) En una organización `full`, la paleta ⌘K ofrece todos los módulos aunque
+  el rol o el add-on no los incluya. Junto con `[PERMISOS-LAYOUT-NAV-SUAVE]` (ver arquitectura) puede abrir
+  un módulo bloqueado. En una organización `webinar` ya filtra por permiso (SCRUM-524).
+- `[WEBINAR-NAV-RESTOS]` En una organización `webinar`, la isla derecha sigue mostrando el panel de
+  reportes ejecutivos y el indicador de configuración pendiente, y el logo y la miga "Inicio" llevan a
+  `/dashboard` (redirige a la pantalla de inicio).
 - `[NAV-ISLAS-1280]` Con 10 módulos las islas se superponen a 1280 px; medir antes de activar Operaciones
   y Producto juntos.
 - `[UI-EMOJIS]` (nuevo) 20 archivos de `components/` tienen emojis o símbolos (✓, ✗, ⚠) en JSX o strings de UI
@@ -162,8 +213,12 @@ servidor, `client.ts` los `"use client"`; nunca importar un barrel con clientes 
 | `apps/web/lib/navigation/__tests__/module-for-path.test.ts` | Toda ruta de `(platform)` tiene módulo o es libre |
 | `apps/web/lib/navigation/__tests__/page-meta.test.ts` | Título y "volver" de cada pantalla |
 | `apps/web/lib/onboarding/__tests__/tours.test.ts` | Anclas `data-tour` existen en el JSX |
+| `apps/web/lib/navigation/__tests__/menu-webinar.test.ts` | Menú webinar: orden, entradas listas, módulo de cada entrada igual al de su ruta, pantalla de inicio y reglas de rutas |
+| `apps/web/lib/navigation/__tests__/rutas-por-experiencia-en-disco.test.ts` | Toda pantalla de `(platform)` cuelga del layout de su segmento con `exigirRutaDeLaExperiencia` de su propia ruta; las de afuera no pasan por el bloqueo |
+| `apps/web/lib/navigation/__tests__/menu-por-experiencia.test.ts` | Barra y paleta para `full` (igual que antes) y `webinar` (entradas listas, filtradas por permiso) |
+| `apps/web/app/__tests__/bloqueo-por-experiencia.test.ts` | Ejecuta el layout real de cada segmento: webinar redirige a Equipo, full no cambia, organización activa y falla de lectura |
 
-Sin tests: `packages/ui` entero, la notch nav, `buildPlatformRootItems`, la paleta. Sin Playwright de
+Sin tests: `packages/ui` entero, la notch nav como componente, `buildPlatformRootItems`. Sin Playwright de
 navegación (sólo `e2e/holding.spec.ts`).
 
 ## Archivos clave

@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 32 | 18 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 33 | 18 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
@@ -343,9 +343,15 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 
 #### [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo)
 - **Tipo:** bug
-- **Estado verificado:** `components/navigation/command-palette.tsx` usa `platformNavigation` estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos `hidden` del menú (`lib/navigation/build-platform-navigation.ts`); permisos y add-ons siguen sin filtrarse.
-- **Qué hay que hacer:** construirla con `buildPlatformSidebarNav(enabledAddOns)` + `canSeeNavItem`.
+- **Estado verificado:** en una organización `full`, `components/navigation/command-palette.tsx` usa `platformNavigation` estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos `hidden` del menú (`lib/navigation/build-platform-navigation.ts`); permisos y add-ons siguen sin filtrarse. En una organización `webinar` ya filtra por permiso (`itemsDeLaPaleta`, SCRUM-524), y desde SCRUM-524 el layout de la plataforma deja a la paleta dentro de `PermissionsProvider`.
+- **Qué hay que hacer:** para `full`, construirla con `buildPlatformSidebarNav(enabledAddOns)` + `canSeeNavItem`, como ya hace `itemsDeLaPaleta` para `webinar`.
 - **Dónde:** `apps/web/components/navigation/command-palette.tsx`, `apps/web/routes/navigation.ts`.
+
+#### [WEBINAR-NAV-RESTOS] Lo que una organización webinar todavía ve fuera de su menú (nuevo)
+- **Tipo:** decisión de producto / deuda técnica
+- **Estado verificado:** SCRUM-524 arma la barra y la paleta de una organización `webinar` con su menú (`lib/navigation/menu-webinar.ts`) y redirige las demás rutas, pero la isla derecha de la notch nav sigue mostrando `ReportsPanel` (reportes ejecutivos, que lee `getLatestReportsByCadenceAction`) y `NotchSetupIndicator` (checklist del Panel, que lleva a `/dashboard`); el logo, la miga "Inicio" (`lib/navigation/breadcrumbs.ts`) y los "Ir al panel" de las pantallas de error llevan a `/dashboard`, que redirige a la pantalla de inicio con un salto más. La pantalla de inicio no mira permisos: un miembro sin acceso a Equipo cae en `/team` y ve `SinAcceso`, y desde una pantalla con `SinAcceso` una navegación del cliente cambia la URL pero sigue mostrando `SinAcceso` sin redirigir (no muestra la pantalla bloqueada; mismo límite que `[PERMISOS-LAYOUT-NAV-SUAVE]`, medido en `evidencia-sprint2/scrum-524/prueba-local/`).
+- **Qué hay que hacer:** que el PO decida qué queda en la isla derecha para Webinars (probablemente nada de eso hasta SCRUM-534) y, con Inicio lista, si la pantalla de inicio tiene que ser la primera entrada que el rol puede ver.
+- **Dónde:** `apps/web/components/navigation/notch-nav/platform-notch-nav.tsx`, `apps/web/lib/navigation/rutas-por-experiencia.ts`, `apps/web/lib/navigation/breadcrumbs.ts`.
 
 #### [DIALOG-DOBLE-PADDING] Padding duplicado en los modales
 - **Tipo:** deuda técnica
@@ -435,7 +441,7 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Tipo:** decisión de negocio
 - **Severidad:** Media
 - **Estado verificado:** desde SCRUM-523 (`20261019120000_organizations_experience.sql`) toda organización nueva nace con `organizations.experience = 'webinar'`, salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin (`createFounderAccountAction`, `createOrganizationFromHoldingAction`, `createHoldingOrgAction` en `app/super-admin/actions.ts`) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para `authenticated`) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL).
-- **Riesgo:** cuando SCRUM-524 esconda el menú según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan `webinar`) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
+- **Riesgo:** desde SCRUM-524, que esconde el menú y redirige las rutas según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan `webinar`) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
 - **Impacto:** clientes nuevos de Limitless completo dados de alta por el super admin después del deploy de SCRUM-523.
 - **Qué hay que hacer:** que el PO decida quién y desde dónde pasa una organización a `full` (por ejemplo, un selector en el detalle de la organización del super admin, con `createAdminClient` y `requireSuperAdmin`, como `updateOrgAddOnsAction`), y si el cambio de un holding se propaga a sus negocios.
 - **Criterio de aceptación:** el super admin pasa una organización de `webinar` a `full` (y de vuelta) sin SQL; un usuario de la organización sigue sin poder cambiarla (`supabase/ci/tests/97_experiencia_de_la_organizacion.sql`).

@@ -1448,13 +1448,22 @@ Fuente: PENDIENTES.md [GLASS-TOKENS-PISADOS] · Doc del área: docs/areas/plataf
 Fuente: PENDIENTES.md [UI-EMOJIS] · Doc del área: docs/areas/plataforma.md",UI-EMOJIS,Plataforma,P2,,deuda técnica
 [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo),Bug,Medium,plataforma,p2,bug,,,,"*Tipo:* bug
 
-*Estado verificado:* {{components/navigation/command-palette.tsx}} usa {{platformNavigation}} estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos {{hidden}} del menú ({{lib/navigation/build-platform-navigation.ts}}); permisos y add-ons siguen sin filtrarse.
+*Estado verificado:* en una organización {{full}}, {{components/navigation/command-palette.tsx}} usa {{platformNavigation}} estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos {{hidden}} del menú ({{lib/navigation/build-platform-navigation.ts}}); permisos y add-ons siguen sin filtrarse. En una organización {{webinar}} ya filtra por permiso ({{itemsDeLaPaleta}}, SCRUM-524), y desde SCRUM-524 el layout de la plataforma deja a la paleta dentro de {{PermissionsProvider}}.
 
-*Qué hay que hacer:* construirla con {{buildPlatformSidebarNav(enabledAddOns)}} + {{canSeeNavItem}}.
+*Qué hay que hacer:* para {{full}}, construirla con {{buildPlatformSidebarNav(enabledAddOns)}} + {{canSeeNavItem}}, como ya hace {{itemsDeLaPaleta}} para {{webinar}}.
 
 *Dónde:* {{apps/web/components/navigation/command-palette.tsx}}, {{apps/web/routes/navigation.ts}}.
 
 Fuente: PENDIENTES.md [NAV-PALETA-PERMISOS] · Doc del área: docs/areas/plataforma.md",NAV-PALETA-PERMISOS,Plataforma,P2,,bug
+[WEBINAR-NAV-RESTOS] Lo que una organización webinar todavía ve fuera de su menú (nuevo),Task,Medium,plataforma,p2,decision-de-producto,deuda-tecnica,,,"*Tipo:* decisión de producto / deuda técnica
+
+*Estado verificado:* SCRUM-524 arma la barra y la paleta de una organización {{webinar}} con su menú ({{lib/navigation/menu-webinar.ts}}) y redirige las demás rutas, pero la isla derecha de la notch nav sigue mostrando {{ReportsPanel}} (reportes ejecutivos, que lee {{getLatestReportsByCadenceAction}}) y {{NotchSetupIndicator}} (checklist del Panel, que lleva a {{/dashboard}}); el logo, la miga ""Inicio"" ({{lib/navigation/breadcrumbs.ts}}) y los ""Ir al panel"" de las pantallas de error llevan a {{/dashboard}}, que redirige a la pantalla de inicio con un salto más. La pantalla de inicio no mira permisos: un miembro sin acceso a Equipo cae en {{/team}} y ve {{SinAcceso}}, y desde una pantalla con {{SinAcceso}} una navegación del cliente cambia la URL pero sigue mostrando {{SinAcceso}} sin redirigir (no muestra la pantalla bloqueada; mismo límite que {{[PERMISOS-LAYOUT-NAV-SUAVE]}}, medido en {{evidencia-sprint2/scrum-524/prueba-local/}}).
+
+*Qué hay que hacer:* que el PO decida qué queda en la isla derecha para Webinars (probablemente nada de eso hasta SCRUM-534) y, con Inicio lista, si la pantalla de inicio tiene que ser la primera entrada que el rol puede ver.
+
+*Dónde:* {{apps/web/components/navigation/notch-nav/platform-notch-nav.tsx}}, {{apps/web/lib/navigation/rutas-por-experiencia.ts}}, {{apps/web/lib/navigation/breadcrumbs.ts}}.
+
+Fuente: PENDIENTES.md [WEBINAR-NAV-RESTOS] · Doc del área: docs/areas/plataforma.md",WEBINAR-NAV-RESTOS,Plataforma,P2,,decisión de producto / deuda técnica
 [DIALOG-DOBLE-PADDING] Padding duplicado en los modales,Task,Medium,plataforma,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
 
 *Estado verificado:* {{packages/ui/src/primitives/dialog.tsx}} con {{p-6}} en content y {{px-6}} en header/footer.
@@ -1587,7 +1596,7 @@ Fuente: PENDIENTES.md [LAYOUT-CAJONES] · Doc del área: docs/areas/plataforma.m
 
 *Estado verificado:* desde SCRUM-523 ({{20261019120000_organizations_experience.sql}}) toda organización nueva nace con {{organizations.experience = 'webinar'}}, salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin ({{createFounderAccountAction}}, {{createOrganizationFromHoldingAction}}, {{createHoldingOrgAction}} en {{app/super-admin/actions.ts}}) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para {{authenticated}}) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL).
 
-*Riesgo:* cuando SCRUM-524 esconda el menú según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan {{webinar}}) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
+*Riesgo:* desde SCRUM-524, que esconde el menú y redirige las rutas según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan {{webinar}}) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
 
 *Impacto:* clientes nuevos de Limitless completo dados de alta por el super admin después del deploy de SCRUM-523.
 

@@ -14,8 +14,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyPermissions } from "@/constants/permission-modules";
 import type { UserPermissions } from "@/lib/auth/get-current-permissions";
 
+class Redireccion extends Error {
+  constructor(readonly destino: string) {
+    super(`redirect ${destino}`);
+  }
+}
+
 const sim = vi.hoisted(() => ({
   experiencia: "full" as "full" | "webinar",
+  pathname: "/team",
   recibidas: [] as unknown[],
   orden: [] as string[],
 }));
@@ -29,7 +36,13 @@ const PERMISOS: UserPermissions = {
 };
 
 vi.mock("next/headers", () => ({
-  headers: async () => new Headers({ "x-pathname": "/team" }),
+  headers: async () => new Headers({ "x-pathname": sim.pathname }),
+}));
+vi.mock("next/navigation", async (original) => ({
+  ...(await original<typeof import("next/navigation")>()),
+  redirect: (destino: string) => {
+    throw new Redireccion(destino);
+  },
 }));
 vi.mock("@/lib/auth/get-current-permissions", () => ({
   getCurrentUserPermissions: async () => PERMISOS,
@@ -84,6 +97,7 @@ async function render(): Promise<string> {
 
 beforeEach(() => {
   sim.experiencia = "full";
+  sim.pathname = "/team";
   sim.recibidas = [];
   sim.orden = [];
 });
@@ -110,5 +124,42 @@ describe("⭐ la experiencia llega al menú", () => {
     await render();
     expect(sim.orden.indexOf("experiencia")).toBeLessThan(sim.orden.indexOf("app"));
     expect(sim.orden.indexOf("permisos")).toBeLessThan(sim.orden.indexOf("app"));
+  });
+});
+
+/** Qué pasa al cargar la página: el HTML o `redirect <destino>`. */
+async function cargar(): Promise<string> {
+  try {
+    return await render();
+  } catch (error) {
+    if (error instanceof Redireccion) return `redirect ${error.destino}`;
+    throw error;
+  }
+}
+
+describe("⭐ al cargar la página, la experiencia va antes que el permiso", () => {
+  it("webinar sin el módulo Marketing que tipea /marketing va a su inicio, no a «No tenés acceso»", async () => {
+    sim.experiencia = "webinar";
+    sim.pathname = "/marketing/content";
+    expect(await cargar()).toBe("redirect /team");
+  });
+
+  it("full sin el módulo Marketing sigue viendo «No tenés acceso», como antes", async () => {
+    sim.pathname = "/marketing/content";
+    const html = await cargar();
+    expect(html).toContain("No tenés acceso");
+    expect(html).not.toContain("pantalla");
+  });
+
+  it("webinar en una ruta abierta dibuja la pantalla", async () => {
+    sim.experiencia = "webinar";
+    sim.pathname = "/team/roles";
+    expect(await cargar()).toContain("pantalla");
+  });
+
+  it("sin x-pathname no se redirige (no hay ruta que mirar)", async () => {
+    sim.experiencia = "webinar";
+    sim.pathname = "";
+    expect(await cargar()).toContain("pantalla");
   });
 });

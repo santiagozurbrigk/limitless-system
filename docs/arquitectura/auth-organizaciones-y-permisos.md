@@ -149,8 +149,17 @@ activa (la del negocio elegido en una cuenta holding) con la sesión de quien mi
 (nadie pierde módulos por una falla de lectura) y la falla va a Sentry con el tag
 `lectura_degradada = organizacion:experiencia`. Sin organización activa o sin Supabase configurado
 devuelve `full` sin consultar. No se mezcla con las banderas de `lib/release/escondido.ts`, que
-esconden algo a todas las organizaciones. Qué cambia en el menú y las rutas con cada valor es
-SCRUM-524; hasta entonces nadie la llama.
+esconden algo a todas las organizaciones.
+
+Qué cambia con cada valor (SCRUM-524): con `full`, nada (mismo menú, mismas rutas, mismo destino
+después del login). Con `webinar`, la barra y la paleta muestran sólo las entradas listas del menú
+de Limitless Webinars (`lib/navigation/menu-webinar.ts`) y toda otra ruta de `app/(platform)`,
+salvo `/onboarding`, `/holding` y `/settings`, redirige a la pantalla de inicio. El bloqueo vive en
+el layout de cada segmento de primer nivel, porque el de `(platform)` no se vuelve a ejecutar en
+una navegación del cliente. Detalle en
+[`diseno/ui-y-navegacion.md` § Menú por experiencia](../diseno/ui-y-navegacion.md#menú-por-experiencia-limitless-webinars).
+La experiencia no es un límite de seguridad de los datos: eso lo siguen haciendo los permisos por
+módulo y la RLS.
 
 ### Aceptar una invitación
 

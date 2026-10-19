@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { createElement, type ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { pantallas } from "@/lib/navigation/__tests__/pantallas-de-app";
 
 /**
@@ -98,6 +98,12 @@ async function entrar(segmento: string): Promise<string> {
     throw error;
   }
 }
+
+// Importar los 23 layouts (y lo que traen) tarda; con la suite completa en
+// paralelo pasaba los 5 s por defecto de un test. Se cargan una vez acá.
+beforeAll(async () => {
+  for (const segmento of SEGMENTOS) await layout(segmento);
+}, 120_000);
 
 beforeEach(() => {
   sim.experiencias = { "org-full": "full", "org-webinar": "webinar", "holding-1": "full" };

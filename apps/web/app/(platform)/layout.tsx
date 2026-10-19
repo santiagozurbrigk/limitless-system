@@ -16,6 +16,8 @@ import {
 } from "@/lib/onboarding/current";
 import { TOUR_IDS } from "@/lib/onboarding/tours";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { redireccionPorExperiencia } from "@/lib/navigation/rutas-por-experiencia";
 import { moduloBloqueadoParaRuta } from "@/lib/auth/acceso-a-modulo";
 import { getPermissionModuleLabel } from "@/constants/permission-modules";
 import { SinAcceso } from "@/components/platform/sin-acceso";
@@ -119,18 +121,31 @@ export default async function PlatformRouteLayout({
    * `module-for-path` tiene que colgar de este layout: el test de
    * `module-for-path` recorre `app/` y falla si una queda afuera (SCRUM-18).
    */
-  const moduloBloqueado = moduloBloqueadoParaRuta(
-    headerList.get("x-pathname") ?? "",
-    permissions
-  );
+  const pathname = headerList.get("x-pathname") ?? "";
+
+  /**
+   * ⭐ La experiencia va antes que el permiso (SCRUM-524). Si este layout
+   * dibuja `SinAcceso`, no dibuja `children`, y entonces el layout del
+   * segmento (el que hace el bloqueo por experiencia en una navegación del
+   * cliente) no llega a aplicar su redirección: una organización webinar que
+   * tipeaba `/marketing` sin el módulo Marketing veía «No tenés acceso» en vez
+   * de ir a su pantalla de inicio. Acá se cubre la carga de la página (URL
+   * tipeada, recarga, link externo), que es cuando este layout corre.
+   */
+  const destinoPorExperiencia = pathname
+    ? redireccionPorExperiencia(experiencia, pathname)
+    : null;
+  if (destinoPorExperiencia) redirect(destinoPorExperiencia);
+
+  const moduloBloqueado = moduloBloqueadoParaRuta(pathname, permissions);
 
   /**
    * La experiencia (SCRUM-524) arma el menú de la barra y de la paleta de
    * comandos. Los permisos envuelven a `AppProviders` para que la paleta, que
    * se dibuja ahí adentro, también los vea. El bloqueo de las rutas que no son
-   * de la experiencia no está acá, porque este layout no se vuelve a ejecutar
-   * en una navegación del cliente: lo hace el layout de cada segmento
-   * (`exigirRutaDeLaExperiencia`).
+   * de la experiencia no alcanza con el chequeo de arriba, porque este layout
+   * no se vuelve a ejecutar en una navegación del cliente: para eso está el
+   * layout de cada segmento (`exigirRutaDeLaExperiencia`).
    */
   return (
     <ZonaDeLaOrganizacionProvider zona={zona}>

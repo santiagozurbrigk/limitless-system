@@ -1328,14 +1328,16 @@ Funcionalidad: F-OPS-13 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * Dado un miembro sin acceso a un módulo, cuando abre la paleta ⌘K, entonces ese módulo no aparece.
 * Dado un módulo adicional que la organización no contrató, entonces no aparece ni en la barra ni en la paleta.
 * Dado un holding con módulos adicionales distintos a los de uno de sus negocios, cuando entra a ese negocio, entonces el menú muestra los módulos del negocio y no los del holding.
+* Dada una organización de Limitless Webinars, cuando entra, entonces la barra y la paleta muestran sólo las entradas listas de su menú (Inicio, Lanzamientos, Leads, Llamadas y Equipo) que su rol le deja ver, y cualquier otra pantalla la lleva a su pantalla de inicio.
 * Se recorrió la barra con una sesión real (menús desplegables, cambio de negocio del holding, contador de Clientes, perfil y versión celular) y el resultado quedó anotado.
 
 *Tareas técnicas (PENDIENTES.md):*
 * [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo) (P2)
 * [ADDONS-HOLDING] Add-ons de UI y de servidor salen de orgs distintas en un holding (nuevo) (P2)
 * [NAV-1] Validar la notch nav con sesión real (P2)
+* [WEBINAR-NAV-RESTOS] Lo que una organización webinar todavía ve fuera de su menú (nuevo) (P2)
 
-Funcionalidad: F-PLA-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-08]",H-PLA-08,Plataforma,P2,,NAV-PALETA-PERMISOS ADDONS-HOLDING NAV-1,
+Funcionalidad: F-PLA-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-08]",H-PLA-08,Plataforma,P2,,NAV-PALETA-PERMISOS ADDONS-HOLDING NAV-1 WEBINAR-NAV-RESTOS,
 [H-PLA-15] Ver en el Panel General números completos y propios,Story,Medium,historia,plataforma,p2,para-confirmar,,,"*Historia:* Como founder, quiero que el Panel General muestre mis KPIs, embudo, ingresos, ventas y ranking de closers con todos los datos de mi negocio, para tomar decisiones con números que no estén cortados.
 
 *Criterios de aceptación:*
