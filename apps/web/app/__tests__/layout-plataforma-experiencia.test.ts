@@ -177,7 +177,10 @@ describe("⭐ al cargar la página, la experiencia va antes que el permiso", () 
   });
 });
 
-describe("⭐ la pantalla de inicio llega al logo y la paleta, con los permisos de quien mira", () => {
+// El logo y el pie de la paleta toman de este provider la pantalla de inicio; que
+// la usen de verdad lo prueban `barra-por-experiencia.test.ts` y
+// `paleta-por-experiencia.test.ts`. Acá, sólo el valor que el layout calcula.
+describe("⭐ el layout calcula la pantalla de inicio con los permisos de quien mira y la pasa al provider", () => {
   it("full: /dashboard; webinar con Equipo: /team; webinar sin Equipo: /settings", async () => {
     await render();
     sim.experiencia = "webinar";

@@ -131,7 +131,16 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
   con un salto más. Lo mismo `enterBusinessAction` del holding: redirige a `/dashboard` y la request
   siguiente, ya con la cookie del negocio nuevo, decide (la misma request todavía lleva el header
   `x-active-org-id` del negocio anterior).
-- Para encender una entrada: crear la pantalla y poner `lista: true` en `MENU_WEBINAR`. Nada más.
+- **Ajustes (`/settings`) es libre y completo (decisión abierta):** para una organización `webinar`
+  muestra todas sus pestañas, las mismas que en `full` (General, Perfil, IA, Seguridad, Pagos para el
+  founder, Mi Calendly para un closer), cada una con sus permisos de siempre. No es un problema de
+  datos (son de su organización), pero no está en las decisiones del PO. Queda para revisar con
+  SCRUM-535 y SCRUM-537, que van a usar pagos y Calendly: si Webinars necesita esas pestañas, cuáles
+  se esconden y si conviene separar la parte personal (contraseña, tema, cerrar sesión) del resto.
+- Para encender una entrada: crear la pantalla y poner `lista: true` en `MENU_WEBINAR`. Si su
+  segmento todavía la esconde con una bandera de `ESCONDIDO` (hoy `/lanzamientos`), hay que apagarla
+  o cambiar ese layout: si no, se arma un bucle de redirecciones, y el test de invariante de
+  `menu-webinar.test.ts` falla con ese mensaje.
 
 ### Título y "volver"
 
@@ -223,7 +232,9 @@ servidor, `client.ts` los `"use client"`; nunca importar un barrel con clientes 
 | `apps/web/lib/navigation/__tests__/module-for-path.test.ts` | Toda ruta de `(platform)` tiene módulo o es libre |
 | `apps/web/lib/navigation/__tests__/page-meta.test.ts` | Título y "volver" de cada pantalla |
 | `apps/web/lib/onboarding/__tests__/tours.test.ts` | Anclas `data-tour` existen en el JSX |
-| `apps/web/lib/navigation/__tests__/menu-webinar.test.ts` | Menú webinar: orden, entradas listas, módulo de cada entrada igual al de su ruta, pantalla de inicio y reglas de rutas |
+| `apps/web/lib/navigation/__tests__/menu-webinar.test.ts` | Menú webinar: orden, entradas listas, módulo de cada entrada igual al de su ruta, pantalla de inicio, reglas de rutas e invariante de que una entrada lista no siga escondida por `ESCONDIDO` |
+| `apps/web/components/layout/__tests__/menu-celular-por-experiencia.test.ts` | El `MobileNav` real abierto: `full` con los ítems de siempre, `webinar` sólo con las entradas que el rol ve |
+| `apps/web/components/navigation/__tests__/paleta-por-experiencia.test.ts` | La paleta real: link del pie y lista para `full` y `webinar` |
 | `apps/web/lib/navigation/__tests__/rutas-por-experiencia-en-disco.test.ts` | Toda pantalla de `(platform)` cuelga del layout de su segmento con `exigirRutaDeLaExperiencia` de su propia ruta; las de afuera no pasan por el bloqueo |
 | `apps/web/lib/navigation/__tests__/menu-por-experiencia.test.ts` | Barra y paleta para `full` (igual que antes) y `webinar` (entradas listas, filtradas por permiso) |
 | `apps/web/components/navigation/notch-nav/__tests__/barra-por-experiencia.test.ts` | La barra real: logo, ítems e isla derecha para `full` (igual que antes) y `webinar` (sin reportes, sin configuración pendiente, logo a la pantalla de inicio) |

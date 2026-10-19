@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   ACCESOS_DE_LA_ISLA,
   MENU_WEBINAR,
@@ -190,5 +192,43 @@ describe("⭐ rutas por experiencia", () => {
         expect(rutaPermitidaParaLaExperiencia(experiencia, pantallaDeInicio(experiencia, permisos))).toBe(true);
       }
     }
+  });
+});
+
+/**
+ * Las entradas listas cuyo layout de segmento las sigue escondiendo con una
+ * bandera de `ESCONDIDO` que está en `true`. Ese layout manda a `/dashboard`, el
+ * layout de `/dashboard` manda a la pantalla de inicio y, si esa entrada es la
+ * primera lista, la pantalla de inicio es ella misma: bucle de redirecciones.
+ */
+function entradasListasEscondidas(menu: readonly EntradaDelMenuWebinar[]): string[] {
+  const problemas: string[] = [];
+  for (const entrada of menu.filter((e) => e.lista)) {
+    const layout = join(process.cwd(), "app", "(platform)", entrada.href.slice(1), "layout.tsx");
+    if (!existsSync(layout)) continue;
+    for (const [, bandera] of readFileSync(layout, "utf8").matchAll(/ESCONDIDO\.(\w+)/g)) {
+      if (ESCONDIDO[bandera as keyof typeof ESCONDIDO]) {
+        problemas.push(
+          `${entrada.label} está lista en MENU_WEBINAR pero app/(platform)${entrada.href}/layout.tsx la sigue ` +
+            `escondiendo con ESCONDIDO.${bandera} = true: ese layout manda a /dashboard, /dashboard manda a la ` +
+            `pantalla de inicio, que puede ser ${entrada.href} otra vez (bucle de redirecciones). Al encenderla, ` +
+            `pon la bandera en false o saca ese redirect del layout para las organizaciones webinar.`
+        );
+      }
+    }
+  }
+  return problemas;
+}
+
+describe("⭐ invariante: una entrada lista no puede seguir escondida (SCRUM-529 al encender Lanzamientos)", () => {
+  it("ninguna entrada lista del menú webinar está escondida por ESCONDIDO", () => {
+    expect(entradasListasEscondidas(MENU_WEBINAR)).toEqual([]);
+  });
+
+  it("la regla ve el caso de hoy: Lanzamientos lista con ESCONDIDO.lanzamientos en true", () => {
+    const problemas = entradasListasEscondidas(conListas("lanzamientos", "equipo"));
+    expect(problemas).toHaveLength(1);
+    expect(problemas[0]).toContain("ESCONDIDO.lanzamientos");
+    expect(problemas[0]).toContain("bucle de redirecciones");
   });
 });

@@ -42,10 +42,12 @@ vi.mock("../notch-nav", () => ({
     items,
     logo,
     rightContent,
+    mobileContent,
   }: {
     items: Array<{ type: string; href?: string; label: string; children?: Array<{ href: string }> }>;
     logo: ReactNode;
     rightContent: ReactNode;
+    mobileContent: ReactNode;
   }) =>
     createElement(
       Fragment,
@@ -60,7 +62,8 @@ vi.mock("../notch-nav", () => ({
             : createElement("b", { key: item.label }, item.label)
         )
       ),
-      createElement("div", { "data-zona": "isla" }, rightContent)
+      createElement("div", { "data-zona": "isla" }, rightContent),
+      createElement("div", { "data-zona": "celular" }, mobileContent)
     ),
 }));
 
@@ -102,14 +105,16 @@ function dibujar(experiencia: OrganizationExperience, inicio: string, permisos: 
     items: [...zona("items").matchAll(/>([^<]+)<\/(?:a|b)>/g)].map((m) => m[1]),
     isla: zona("isla"),
     islaHrefs: hrefs(zona("isla")),
+    logoCelular: hrefs(zona("celular")),
   };
 }
 
 describe("⭐ barra de una organización full: igual que antes", () => {
   const barra = dibujar("full", "/dashboard", FOUNDER);
 
-  it("el logo lleva al Panel", () => {
+  it("el logo lleva al Panel, en la barra y en el celular", () => {
     expect(barra.logo).toEqual(["/dashboard"]);
+    expect(barra.logoCelular).toEqual(["/dashboard"]);
   });
 
   it("el menú completo", () => {
@@ -140,6 +145,10 @@ describe("⭐ barra de una organización webinar", () => {
     expect(barra.logo).toEqual(["/team"]);
   });
 
+  it("el logo del celular también lleva a la pantalla de inicio", () => {
+    expect(barra.logoCelular).toEqual(["/team"]);
+  });
+
   it("sólo las entradas listas del menú", () => {
     expect(barra.items).toEqual(["Equipo"]);
   });
@@ -159,6 +168,7 @@ describe("⭐ barra de una organización webinar", () => {
     const miembro = dibujar("webinar", "/settings", SIN_EQUIPO);
     expect(miembro.items).toEqual([]);
     expect(miembro.logo).toEqual(["/settings"]);
+    expect(miembro.logoCelular).toEqual(["/settings"]);
     expect(miembro.isla).not.toContain('data-marca="reportes"');
   });
 });
