@@ -13,7 +13,7 @@
  *     el rol ve, sin reportes, sin configuración pendiente, sin Integraciones.
  */
 
-import { createElement, Fragment, type ReactNode } from "react";
+import { createElement, Fragment, type ComponentType, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { emptyPermissions } from "@/constants/permission-modules";
@@ -68,6 +68,9 @@ import { PlatformNotchNav } from "../platform-notch-nav";
 import { ExperienciaProvider } from "@/providers/experiencia-provider";
 import { PermissionsProvider } from "@/providers/permissions-provider";
 
+/** `children` opcional en el tipo, para pasarlo como hijo de `createElement`. */
+const Permisos = PermissionsProvider as ComponentType<{ value: UserPermissions; children?: ReactNode }>;
+
 const FOUNDER: UserPermissions = {
   role: "founder",
   isFounder: true,
@@ -88,7 +91,7 @@ function dibujar(experiencia: OrganizationExperience, inicio: string, permisos: 
     createElement(
       ExperienciaProvider,
       { experiencia, inicio },
-      createElement(PermissionsProvider, { value: permisos, children: createElement(PlatformNotchNav) })
+      createElement(Permisos, { value: permisos }, createElement(PlatformNotchNav))
     )
   );
   const zona = (nombre: string) =>
