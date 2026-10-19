@@ -16,10 +16,9 @@ import {
 } from "@/lib/onboarding/current";
 import { TOUR_IDS } from "@/lib/onboarding/tours";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import {
   pantallaDeInicio,
-  redireccionPorExperiencia,
+  rutaPermitidaParaLaExperiencia,
 } from "@/lib/navigation/rutas-por-experiencia";
 import { moduloBloqueadoParaRuta } from "@/lib/auth/acceso-a-modulo";
 import { getPermissionModuleLabel } from "@/constants/permission-modules";
@@ -127,28 +126,35 @@ export default async function PlatformRouteLayout({
   const pathname = headerList.get("x-pathname") ?? "";
 
   /**
-   * ⭐ La experiencia va antes que el permiso (SCRUM-524). Si este layout
-   * dibuja `SinAcceso`, no dibuja `children`, y entonces el layout del
-   * segmento (el que hace el bloqueo por experiencia en una navegación del
-   * cliente) no llega a aplicar su redirección: una organización webinar que
-   * tipeaba `/marketing` sin el módulo Marketing veía «No tenés acceso» en vez
-   * de ir a su pantalla de inicio. Acá se cubre la carga de la página (URL
-   * tipeada, recarga, link externo), que es cuando este layout corre.
+   * ⭐ Una ruta fuera de la experiencia no se decide acá (SCRUM-524).
+   *
+   * Si este layout dibujara `SinAcceso`, no dibujaría `children`, y el layout
+   * del segmento, que es el que redirige a la pantalla de inicio
+   * (`exigirRutaDeLaExperiencia`), no llegaría a aplicar su redirección: una
+   * organización webinar sin el módulo Marketing que tipeaba `/marketing` veía
+   * «No tenés acceso». Por eso, fuera de la experiencia este layout no bloquea
+   * por permiso: deja pasar `children` y redirige el segmento.
+   *
+   * Este layout tampoco redirige por su cuenta. Lo hacía (un `redirect` con
+   * `x-pathname`) y en una organización webinar, un `router.push` a una ruta
+   * bloqueada seguido de `router.refresh()` (aceptar una invitación, entrar a
+   * un negocio del holding) dejaba la pantalla sin barra y el navegador en un
+   * bucle de pedidos `?_rsc=` (QA final de SCRUM-524). La redirección del
+   * segmento cubre la carga de la página y la navegación del cliente.
    */
-  const destinoPorExperiencia = pathname
-    ? redireccionPorExperiencia(experiencia, pathname, permissions)
-    : null;
-  if (destinoPorExperiencia) redirect(destinoPorExperiencia);
-
-  const moduloBloqueado = moduloBloqueadoParaRuta(pathname, permissions);
+  const fueraDeLaExperiencia =
+    pathname !== "" && !rutaPermitidaParaLaExperiencia(experiencia, pathname);
+  const moduloBloqueado = fueraDeLaExperiencia
+    ? null
+    : moduloBloqueadoParaRuta(pathname, permissions);
 
   /**
    * La experiencia (SCRUM-524) arma el menú de la barra y de la paleta de
    * comandos. Los permisos envuelven a `AppProviders` para que la paleta, que
    * se dibuja ahí adentro, también los vea. El bloqueo de las rutas que no son
-   * de la experiencia no alcanza con el chequeo de arriba, porque este layout
-   * no se vuelve a ejecutar en una navegación del cliente: para eso está el
-   * layout de cada segmento (`exigirRutaDeLaExperiencia`).
+   * de la experiencia lo hace el layout de cada segmento
+   * (`exigirRutaDeLaExperiencia`), que corre en la carga de la página y en cada
+   * navegación del cliente.
    */
   return (
     <ZonaDeLaOrganizacionProvider zona={zona}>

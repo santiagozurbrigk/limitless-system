@@ -150,11 +150,24 @@ async function cargar(): Promise<string> {
   }
 }
 
-describe("⭐ al cargar la página, la experiencia va antes que el permiso", () => {
-  it("webinar sin el módulo Marketing que tipea /marketing va a su inicio, no a «No tenés acceso»", async () => {
+describe("⭐ fuera de la experiencia, el layout de la plataforma no decide: deja pasar al segmento", () => {
+  // Sin redirect acá: con un redirect en este layout, `router.push` a una ruta
+  // bloqueada más `router.refresh()` dejaba la pantalla sin barra y un bucle de
+  // pedidos `?_rsc=` (QA final). Redirige el layout del segmento.
+  it("⭐ webinar sin el módulo Marketing que tipea /marketing: ni redirect ni «No tenés acceso», pasa al segmento", async () => {
     sim.experiencia = "webinar";
     sim.pathname = "/marketing/content";
-    expect(await cargar()).toBe("redirect /team");
+    const html = await cargar();
+    expect(html).not.toMatch(/^redirect /);
+    expect(html).not.toContain("No tenés acceso");
+    expect(html).toContain("pantalla");
+  });
+
+  it("⭐ webinar con el módulo de la ruta bloqueada: tampoco redirige el layout", async () => {
+    sim.experiencia = "webinar";
+    sim.permisos = { ...PERMISOS, modules: { ...PERMISOS.modules, finance: "full" } };
+    sim.pathname = "/finance";
+    expect(await cargar()).toContain("pantalla");
   });
 
   it("full sin el módulo Marketing sigue viendo «No tenés acceso», como antes", async () => {
@@ -164,13 +177,20 @@ describe("⭐ al cargar la página, la experiencia va antes que el permiso", () 
     expect(html).not.toContain("pantalla");
   });
 
+  it("webinar sin Equipo en /team (ruta de su menú) sigue viendo «No tenés acceso»: el permiso vale dentro de la experiencia", async () => {
+    sim.experiencia = "webinar";
+    sim.permisos = { ...PERMISOS, modules: { ...emptyPermissions(), finance: "full", settings: "view" } };
+    sim.pathname = "/team";
+    expect(await cargar()).toContain("No tenés acceso");
+  });
+
   it("webinar en una ruta abierta dibuja la pantalla", async () => {
     sim.experiencia = "webinar";
     sim.pathname = "/team/roles";
     expect(await cargar()).toContain("pantalla");
   });
 
-  it("sin x-pathname no se redirige (no hay ruta que mirar)", async () => {
+  it("sin x-pathname no se bloquea (no hay ruta que mirar)", async () => {
     sim.experiencia = "webinar";
     sim.pathname = "";
     expect(await cargar()).toContain("pantalla");
@@ -191,10 +211,10 @@ describe("⭐ el layout calcula la pantalla de inicio con los permisos de quien 
     expect(sim.inicios).toEqual(["/dashboard", "/team", "/settings"]);
   });
 
-  it("⭐ webinar sin Equipo que tipea /finance va a Ajustes", async () => {
+  it("webinar sin Equipo que tipea /finance: el layout deja pasar (el segmento lo manda a Ajustes)", async () => {
     sim.experiencia = "webinar";
     sim.permisos = { ...PERMISOS, modules: { ...emptyPermissions(), finance: "full", settings: "view" } };
     sim.pathname = "/finance";
-    expect(await cargar()).toBe("redirect /settings");
+    expect(await cargar()).toContain("pantalla");
   });
 });
