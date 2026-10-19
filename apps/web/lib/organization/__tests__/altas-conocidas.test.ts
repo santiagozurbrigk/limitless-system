@@ -48,16 +48,22 @@ import { describe, expect, it } from "vitest";
  *   6. una llamada que no es a from recibe un argumento cuyo texto se resuelve
  *      a `organizations` (un helper `insertar(admin, "organizations", fila)`).
  *
- * Lo que sigue sin verse: un acceso con clave calculada (`admin[clave](t)`,
- * `Reflect.apply`); una tabla armada en tiempo de ejecución (`["organiz",
- * "ations"].join("")`) o guardada en una propiedad de un objeto (`{ table:
- * "organizations" }`) y usada en un archivo que no escribe; un from con tabla
- * dinámica en un archivo de sólo lectura que devuelve el builder para que otro
- * archivo haga el insert; `from` guardado en una variable que se pasa a otra
- * función sin llamarlo; una URL de PostgREST armada por partes; el código
- * fuera de `apps/` y `packages/` o fuera de esas extensiones; y cualquier SQL (las funciones, triggers y reglas los mira
- * `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`; el SQL dinámico
- * no lo ve nadie). Un alta que se escape nace `full`.
+ * Lo que sigue sin verse:
+ *   - un acceso con clave calculada (`admin[clave](t)`, `Reflect.apply`)
+ *     cuando la tabla tampoco se resuelve (con `"organizations"` literal lo
+ *     agarra la regla 6);
+ *   - una tabla armada en tiempo de ejecución (`["organiz", "ations"].join("")`)
+ *     o guardada en una propiedad de un objeto (`{ table: "organizations" }`) y
+ *     usada en un archivo que no escribe;
+ *   - un from con tabla dinámica en un archivo de sólo lectura que devuelve el
+ *     builder para que otro archivo haga el insert;
+ *   - `from` guardado en una variable que se pasa a otra función sin llamarlo;
+ *   - una URL de PostgREST armada por partes;
+ *   - el código fuera de `apps/` y `packages/` o con otra extensión;
+ *   - cualquier SQL: las funciones, triggers y reglas los mira
+ *     `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`, y el SQL
+ *     dinámico no lo ve nadie.
+ * Un alta que se escape nace `full`.
  */
 
 const WEB = join(__dirname, "..", "..", "..");

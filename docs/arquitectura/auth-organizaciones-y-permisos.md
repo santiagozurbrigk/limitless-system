@@ -137,19 +137,41 @@ leen con `leerExperienciaDeLaOrganizacion` (service role) y, si no la pueden lee
 
 Qué lo controla:
 
-- `lib/organization/__tests__/altas-conocidas.test.ts` lee el código sin comentarios de `apps/` y
-  `packages/` (salvo `node_modules`, `.next`, `dist`, `.turbo`, `__tests__` y los `*.test.*`) y
-  falla si: los `.from("organizations").insert(`/`.upsert(` escritos literal no son exactamente
-  esas seis, o alguno no tiene `experience` en su argumento; un `.from("organizations")` no sigue
-  directo con `select`, `update`, `delete`, `insert` o `upsert` (por ejemplo, guardado en una
-  variable); un `.from(X)` con la tabla en una variable sigue directo con `.insert(`/`.upsert(`, o
-  está en un archivo que escribe y nombra `organizations`, y no figura en su lista de destinos
-  revisados; o aparece `rest/v1/organizations`. No ve un `["from"]("organizations")`, una tabla
-  que llega por parámetro a un helper que la guarda en una variable antes del insert en un archivo
-  que no nombra `organizations`, ni SQL dinámico. Un alta que se le escape nace `full`.
+- `lib/organization/__tests__/altas-conocidas.test.ts` lee con el AST de TypeScript (no con
+  expresiones regulares: los comentarios y el contenido de los strings no cuentan) los `.ts`,
+  `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` y `.cjs` de `apps/` y `packages/` (salvo
+  `node_modules`, `.next`, `dist`, `.turbo`, `__tests__` y los `*.test.*`). Una llamada a from es
+  `x.from(t)`, `x?.from(t)`, `x["from"](t)`, con o sin genéricos, y `x.from.call(y, t)` o
+  `x.from.apply(y, [t])`, salvo en `Array`, `Buffer` y los arreglos tipados. La tabla se resuelve si
+  es un literal, un template sin `${}`, una suma de esos o una constante `const X = "..."` de
+  cualquier archivo recorrido. Falla si:
+  1. un from con `organizations` no sigue directo con `select`, `update`, `delete`, `insert` o
+     `upsert` (por ejemplo, guardado en una variable);
+  2. los insert o upsert sobre `organizations` no son exactamente las seis altas, o alguno no manda
+     `experience` con un valor que no sea `undefined`, `null` ni `void` (en un objeto literal o un
+     arreglo de objetos literales);
+  3. un from con tabla dinámica sigue con `insert`/`upsert`, o no sigue con ningún método en un
+     archivo que hace algún `insert`/`upsert`, o está en un archivo que escribe y tiene un string con
+     `organizations`, y no está en la lista de destinos revisados (hoy dos: el checklist de
+     onboarding y la baja del super admin);
+  4. `from` se usa como referencia: `x.from.bind(...)`, o guardado en una variable
+     (`const f = x.from`, `const { from: f } = x`) que se llama en el mismo archivo;
+  5. un string contiene `rest/v1/organizations`;
+  6. una llamada que no es a from recibe un argumento que se resuelve a `organizations` (un helper
+     `insertar(admin, "organizations", fila)` o `admin[clave]("organizations")`).
+
+  Lo que no ve: un acceso con clave calculada cuando la tabla tampoco se resuelve; una tabla armada
+  en tiempo de ejecución (`["organiz", "ations"].join("")`) o guardada en una propiedad de un objeto
+  y usada en un archivo que no escribe; un from con tabla dinámica en un archivo de sólo lectura
+  que devuelve el builder para que otro archivo haga el insert; `from` guardado en una variable que
+  se pasa a otra función sin llamarlo; una URL de PostgREST armada por partes; el código fuera de
+  `apps/` y `packages/` o con otra extensión. Un alta que se le escape nace `full`.
 - `supabase/ci/tests/97_experiencia_de_la_organizacion.sql` falla si el default deja de ser `full`,
-  y si alguna función SQL de cualquier schema (también las de triggers) o regla tiene un
-  `insert into`/`merge into` en `organizations` en su texto (no ve SQL armado con `format()`).
+  y si el cuerpo de alguna función de cualquier schema (también las de triggers), sin sus
+  comentarios (`/* ... */` y `--` hasta el fin de la línea), tiene un `insert into`, `merge into` o
+  `copy` sobre `organizations`, o si una regla inserta en ella. No ve SQL armado en tiempo de
+  ejecución (`format()` y `execute`, o la tabla en una variable) ni un `--` dentro de un string en
+  la misma línea que el insert (se corta como comentario).
 
 Nadie la cambia desde la app: `authenticated` la puede leer (grant por columna) pero no tiene UPDATE
 (la migración se aborta si algún grant se lo diera). `anon` tiene SELECT de toda la tabla desde
