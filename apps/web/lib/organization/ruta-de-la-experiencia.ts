@@ -29,10 +29,16 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { getOrganizationExperience } from "@/lib/organization/experience";
+import { getCurrentUserPermissions } from "@/lib/auth/get-current-permissions";
+import { emptyPermissions } from "@/constants/permission-modules";
 import {
   pantallaDeInicio,
-  redireccionPorExperiencia,
+  rutaPermitidaParaLaExperiencia,
+  type PermisosDeLaBarra,
 } from "@/lib/navigation/rutas-por-experiencia";
+
+/** Para `full` los permisos no cambian la pantalla de inicio: no se leen. */
+const SIN_PERMISOS: PermisosDeLaBarra = { isFounder: false, modules: emptyPermissions() };
 
 /**
  * Redirige a la pantalla de inicio si la experiencia de la organización activa
@@ -41,15 +47,18 @@ import {
  */
 export async function exigirRutaDeLaExperiencia(segmento: string): Promise<void> {
   const experiencia = await getOrganizationExperience();
-  const destino = redireccionPorExperiencia(experiencia, segmento);
-  if (destino) redirect(destino);
+  if (rutaPermitidaParaLaExperiencia(experiencia, segmento)) return;
+  // Los permisos se leen sólo cuando hay que redirigir: eligen el destino.
+  redirect(pantallaDeInicio(experiencia, await getCurrentUserPermissions()));
 }
 
 /**
- * La pantalla de inicio de la organización activa: el destino por defecto
- * después del login. `/dashboard` para `full`; para `webinar`, lo que diga
- * `pantallaDeInicio`.
+ * La pantalla de inicio de quien entra, en la organización activa: el destino
+ * por defecto después del login. `/dashboard` para `full` (sin leer permisos);
+ * para `webinar`, lo que diga `pantallaDeInicio` con sus permisos.
  */
 export async function pantallaDeInicioDeLaOrganizacionActiva(): Promise<string> {
-  return pantallaDeInicio(await getOrganizationExperience());
+  const experiencia = await getOrganizationExperience();
+  if (experiencia === "full") return pantallaDeInicio("full", SIN_PERMISOS);
+  return pantallaDeInicio(experiencia, await getCurrentUserPermissions());
 }

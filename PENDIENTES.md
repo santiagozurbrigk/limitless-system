@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 33 | 18 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 32 | 18 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
@@ -136,7 +136,7 @@ Prioridad sugerida P1: la severidad es Crítica, pero la toma del super admin ex
 #### [PERMISOS-LAYOUT-NAV-SUAVE] El bloqueo por módulo vive en un layout que no se re-renderiza al navegar (nuevo)
 - **Tipo:** seguridad / verificación manual
 - **Severidad:** Alta
-- **Estado verificado:** el chequeo `sinAcceso` está en `app/(platform)/layout.tsx` leyendo `x-pathname`. En App Router los layouts compartidos no se re-renderizan en navegaciones cliente; la paleta ⌘K (`routes/navigation.ts` → `buildPlatformNavigation()`) lista todos los módulos sin filtrar permisos ni add-ons. Muy probable que `Cmd+K → Finanzas` muestre la pantalla a un rol sin acceso.
+- **Estado verificado:** el chequeo `sinAcceso` está en `app/(platform)/layout.tsx` leyendo `x-pathname`. En App Router los layouts compartidos no se re-renderizan en navegaciones cliente; lo medido en SCRUM-524 (prueba contra el Supabase local, `evidencia-sprint2/scrum-524/prueba-local/`): mientras ese layout muestra `SinAcceso`, no dibuja `children`, así que una navegación del cliente desde esa pantalla cambia la URL y sigue mostrando `SinAcceso`, sin la pantalla nueva y sin aplicar la redirección por experiencia de su segmento (la carga de la página sí redirige); la paleta ⌘K (`routes/navigation.ts` → `buildPlatformNavigation()`) lista todos los módulos sin filtrar permisos ni add-ons. Muy probable que `Cmd+K → Finanzas` muestre la pantalla a un rol sin acceso.
 - **Riesgo:** Si un member sin acceso a un módulo usa ⌘K o un link interno, entonces muy probablemente ve la pantalla completa (por ejemplo Finanzas) sin ningún conocimiento técnico. Es el camino más fácil de todos los de permisos.
 - **Impacto:** Todas las orgs que usan roles con módulos en «sin acceso»: la restricción se saltea desde la propia interfaz; no cruza organizaciones.
 - **Qué hay que hacer:** verificar en navegador; si se confirma, mover el chequeo a cada `page.tsx` (o a un layout por módulo) y filtrar la paleta con `canSeeNavItem`.
@@ -346,12 +346,6 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Estado verificado:** en una organización `full`, `components/navigation/command-palette.tsx` usa `platformNavigation` estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos `hidden` del menú (`lib/navigation/build-platform-navigation.ts`); permisos y add-ons siguen sin filtrarse. En una organización `webinar` ya filtra por permiso (`itemsDeLaPaleta`, SCRUM-524), y desde SCRUM-524 el layout de la plataforma deja a la paleta dentro de `PermissionsProvider`.
 - **Qué hay que hacer:** para `full`, construirla con `buildPlatformSidebarNav(enabledAddOns)` + `canSeeNavItem`, como ya hace `itemsDeLaPaleta` para `webinar`.
 - **Dónde:** `apps/web/components/navigation/command-palette.tsx`, `apps/web/routes/navigation.ts`.
-
-#### [WEBINAR-NAV-RESTOS] Lo que una organización webinar todavía ve fuera de su menú (nuevo)
-- **Tipo:** decisión de producto / deuda técnica
-- **Estado verificado:** SCRUM-524 arma la barra y la paleta de una organización `webinar` con su menú (`lib/navigation/menu-webinar.ts`) y redirige las demás rutas, pero la isla derecha de la notch nav sigue mostrando `ReportsPanel` (reportes ejecutivos, que lee `getLatestReportsByCadenceAction`) y `NotchSetupIndicator` (checklist del Panel, que lleva a `/dashboard`); el logo, la miga "Inicio" (`lib/navigation/breadcrumbs.ts`) y los "Ir al panel" de las pantallas de error llevan a `/dashboard`, que redirige a la pantalla de inicio con un salto más. La pantalla de inicio no mira permisos: un miembro sin acceso a Equipo cae en `/team` y ve `SinAcceso`, y desde una pantalla con `SinAcceso` una navegación del cliente cambia la URL pero sigue mostrando `SinAcceso` sin redirigir (no muestra la pantalla bloqueada; mismo límite que `[PERMISOS-LAYOUT-NAV-SUAVE]`, medido en `evidencia-sprint2/scrum-524/prueba-local/`).
-- **Qué hay que hacer:** que el PO decida qué queda en la isla derecha para Webinars (probablemente nada de eso hasta SCRUM-534) y, con Inicio lista, si la pantalla de inicio tiene que ser la primera entrada que el rol puede ver.
-- **Dónde:** `apps/web/components/navigation/notch-nav/platform-notch-nav.tsx`, `apps/web/lib/navigation/rutas-por-experiencia.ts`, `apps/web/lib/navigation/breadcrumbs.ts`.
 
 #### [DIALOG-DOBLE-PADDING] Padding duplicado en los modales
 - **Tipo:** deuda técnica

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { pantallas, type Pantalla } from "./pantallas-de-app";
 import { redireccionPorExperiencia } from "@/lib/navigation/rutas-por-experiencia";
+import { emptyPermissions } from "@/constants/permission-modules";
 
 /**
  * SCRUM-524 · ⭐ Toda pantalla de la plataforma pasa por el bloqueo por
@@ -17,6 +18,7 @@ import { redireccionPorExperiencia } from "@/lib/navigation/rutas-por-experienci
  */
 
 const APP_DIR = join(process.cwd(), "app");
+const FOUNDER = { isFounder: true, modules: emptyPermissions() };
 const GRUPO = "(platform)";
 const LLAMADA = "exigirRutaDeLaExperiencia(";
 
@@ -64,7 +66,7 @@ describe("⭐ bloqueo por experiencia en app/(platform)", () => {
   it("⭐ webinar: toda pantalla fuera de Equipo y de las libres redirige a Equipo", () => {
     const abiertas = new Set<string>();
     for (const p of dePlataforma) {
-      const destino = redireccionPorExperiencia("webinar", p.ruta);
+      const destino = redireccionPorExperiencia("webinar", p.ruta, FOUNDER);
       if (destino === null) abiertas.add(`/${segmento(p)}`);
       else expect(destino, p.ruta).toBe("/team");
     }
@@ -72,7 +74,7 @@ describe("⭐ bloqueo por experiencia en app/(platform)", () => {
   });
 
   it("full: ninguna pantalla se redirige por experiencia", () => {
-    expect(dePlataforma.filter((p) => redireccionPorExperiencia("full", p.ruta) !== null)).toEqual([]);
+    expect(dePlataforma.filter((p) => redireccionPorExperiencia("full", p.ruta, FOUNDER) !== null)).toEqual([]);
   });
 
   it("⭐ las rutas que no son de la plataforma no pasan por el bloqueo", () => {

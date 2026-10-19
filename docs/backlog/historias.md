@@ -91,7 +91,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un holding con módulos adicionales distintos a los de uno de sus negocios, cuando entra a ese negocio, entonces el menú muestra los módulos del negocio y no los del holding.
   - Dada una organización de Limitless Webinars, cuando entra, entonces la barra y la paleta muestran sólo las entradas listas de su menú (Inicio, Lanzamientos, Leads, Llamadas y Equipo) que su rol le deja ver, y cualquier otra pantalla la lleva a su pantalla de inicio.
   - Se recorrió la barra con una sesión real (menús desplegables, cambio de negocio del holding, contador de Clientes, perfil y versión celular) y el resultado quedó anotado.
-- **Tareas técnicas:** `[NAV-PALETA-PERMISOS]`, `[ADDONS-HOLDING]`, `[NAV-1]`, `[WEBINAR-NAV-RESTOS]`
+- **Tareas técnicas:** `[NAV-PALETA-PERMISOS]`, `[ADDONS-HOLDING]`, `[NAV-1]`
 - **Para confirmar:** —
 
 ### [H-PLA-09] Ver el portfolio del holding sólo si lo administro

@@ -22,14 +22,10 @@ import { es } from "@/lib/locale/es";
 import { paths } from "@/routes";
 import { platformNavigation } from "@/routes/navigation";
 import type { OrganizationExperience } from "@/lib/organization/experience";
-import type { PermissionModuleId } from "@/constants/permission-modules";
 import type { UserPermissions } from "@/lib/auth/get-current-permissions";
-import {
-  entradasListas,
-  pantallaDeInicio,
-} from "@/lib/navigation/rutas-por-experiencia";
-import { canSeeNavItem, usePermissions } from "@/providers/permissions-provider";
-import { useExperiencia } from "@/providers/experiencia-provider";
+import { entradasVisibles } from "@/lib/navigation/rutas-por-experiencia";
+import { usePermissions } from "@/providers/permissions-provider";
+import { useExperiencia, usePantallaDeInicio } from "@/providers/experiencia-provider";
 
 export type PaletteItem = {
   label: string;
@@ -97,7 +93,7 @@ const ALL_ITEMS = [...QUICK_ACTIONS, ...flattenNav()];
  *
  *   - `full`: lo de siempre, las acciones rápidas y todo el menú.
  *   - `webinar`: sólo las entradas listas de su menú, filtradas por permiso con
- *     la misma regla que la barra (`canSeeNavItem`). Sin acciones rápidas:
+ *     la misma regla que la barra (`entradasVisibles`). Sin acciones rápidas:
  *     todas llevan a módulos que no son de Limitless Webinars.
  */
 export function itemsDeLaPaleta(
@@ -105,18 +101,12 @@ export function itemsDeLaPaleta(
   permisos: Pick<UserPermissions, "isFounder" | "modules">
 ): PaletteItem[] {
   if (experiencia === "full") return ALL_ITEMS;
-  const checkAccess = (moduleId: PermissionModuleId) =>
-    permisos.isFounder || (permisos.modules[moduleId] ?? "none") !== "none";
-  return entradasListas()
-    .filter((entrada) =>
-      canSeeNavItem(entrada.permissionId, checkAccess, permisos.isFounder)
-    )
-    .map((entrada) => ({
-      label: entrada.label,
-      href: entrada.href,
-      group: "Plataforma",
-      keywords: entrada.label,
-    }));
+  return entradasVisibles(permisos).map((entrada) => ({
+    label: entrada.label,
+    href: entrada.href,
+    group: "Plataforma",
+    keywords: entrada.label,
+  }));
 }
 
 export function CommandPalette() {
@@ -124,6 +114,7 @@ export function CommandPalette() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const experiencia = useExperiencia();
+  const inicio = usePantallaDeInicio();
   const { isFounder, modules } = usePermissions();
 
   const items = useMemo(
@@ -223,7 +214,7 @@ export function CommandPalette() {
             <kbd className="rounded border border-border px-1">K</kbd> en cualquier pantalla
           </span>
           <Link
-            href={pantallaDeInicio(experiencia)}
+            href={inicio}
             className="hover:text-foreground transition-colors"
             onClick={() => setOpen(false)}
           >

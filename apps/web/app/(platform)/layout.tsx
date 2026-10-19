@@ -17,7 +17,10 @@ import {
 import { TOUR_IDS } from "@/lib/onboarding/tours";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { redireccionPorExperiencia } from "@/lib/navigation/rutas-por-experiencia";
+import {
+  pantallaDeInicio,
+  redireccionPorExperiencia,
+} from "@/lib/navigation/rutas-por-experiencia";
 import { moduloBloqueadoParaRuta } from "@/lib/auth/acceso-a-modulo";
 import { getPermissionModuleLabel } from "@/constants/permission-modules";
 import { SinAcceso } from "@/components/platform/sin-acceso";
@@ -133,7 +136,7 @@ export default async function PlatformRouteLayout({
    * tipeada, recarga, link externo), que es cuando este layout corre.
    */
   const destinoPorExperiencia = pathname
-    ? redireccionPorExperiencia(experiencia, pathname)
+    ? redireccionPorExperiencia(experiencia, pathname, permissions)
     : null;
   if (destinoPorExperiencia) redirect(destinoPorExperiencia);
 
@@ -149,7 +152,10 @@ export default async function PlatformRouteLayout({
    */
   return (
     <ZonaDeLaOrganizacionProvider zona={zona}>
-      <ExperienciaProvider experiencia={experiencia}>
+      <ExperienciaProvider
+        experiencia={experiencia}
+        inicio={pantallaDeInicio(experiencia, permissions)}
+      >
         <PermissionsProvider value={permissions}>
           <AppProviders>
             <HoldingPlatformProvider value={holdingSession}>

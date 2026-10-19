@@ -22,6 +22,8 @@ const sim = vi.hoisted(() => ({
   accountType: "founder" as "founder" | "holding",
   superAdmin: false,
   bootstraps: 0,
+  permisos: { isFounder: true, modules: {} } as { isFounder: boolean; modules: Record<string, string> },
+  lecturasDePermisos: 0,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -36,6 +38,12 @@ vi.mock("@/lib/auth/limite-login", () => ({
 }));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
 vi.mock("@/lib/auth/require-super-admin", () => ({ isSuperAdminEmail: async () => sim.superAdmin }));
+vi.mock("@/lib/auth/get-current-permissions", () => ({
+  getCurrentUserPermissions: async () => {
+    sim.lecturasDePermisos += 1;
+    return sim.permisos;
+  },
+}));
 vi.mock("@/lib/organization/experience", () => ({
   getOrganizationExperience: async () => sim.experiencia,
 }));
@@ -108,11 +116,22 @@ beforeEach(() => {
   sim.accountType = "founder";
   sim.superAdmin = false;
   sim.bootstraps = 0;
+  sim.permisos = { isFounder: true, modules: {} };
+  sim.lecturasDePermisos = 0;
 });
 
+const SIN_EQUIPO = { isFounder: false, modules: { finance: "full", settings: "view" } };
+
 describe("⭐ login con contraseña", () => {
-  it("full: al Panel, como siempre", async () => {
+  it("full: al Panel, como siempre (sin leer permisos)", async () => {
     expect(await login()).toBe("/dashboard");
+    expect(sim.lecturasDePermisos).toBe(0);
+  });
+
+  it("⭐ webinar, un miembro sin Equipo: a Ajustes", async () => {
+    sim.experiencia = "webinar";
+    sim.permisos = SIN_EQUIPO;
+    expect(await login()).toBe("/settings");
   });
 
   it("webinar: a su pantalla de inicio (hoy, Equipo)", async () => {
@@ -148,6 +167,12 @@ describe("⭐ /auth/callback", () => {
     expect(await volverDelMail()).toBe("/dashboard");
     sim.experiencia = "webinar";
     expect(await volverDelMail()).toBe("/team");
+  });
+
+  it("⭐ sin next, un miembro webinar sin Equipo: a Ajustes", async () => {
+    sim.experiencia = "webinar";
+    sim.permisos = SIN_EQUIPO;
+    expect(await volverDelMail()).toBe("/settings");
   });
 
   it("un next interno se respeta (el bloqueo lo decide el layout del destino)", async () => {

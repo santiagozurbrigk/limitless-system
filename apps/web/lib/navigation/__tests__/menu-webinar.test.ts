@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { MENU_WEBINAR, RUTAS_LIBRES_WEBINAR, type EntradaDelMenuWebinar } from "@/lib/navigation/menu-webinar";
+import {
+  ACCESOS_DE_LA_ISLA,
+  MENU_WEBINAR,
+  RUTAS_LIBRES_WEBINAR,
+  type EntradaDelMenuWebinar,
+} from "@/lib/navigation/menu-webinar";
 import {
   entradasListas,
   pantallaDeInicio,
   redireccionPorExperiencia,
   rutaPermitidaParaLaExperiencia,
+  type PermisosDeLaBarra,
 } from "@/lib/navigation/rutas-por-experiencia";
+import { emptyPermissions } from "@/constants/permission-modules";
 import { permissionModuleForPath } from "@/lib/navigation/module-for-path";
 import { NAV_ICON_NAMES } from "@/components/navigation/nav-icons";
 import { ESCONDIDO } from "@/lib/release/escondido";
@@ -17,11 +24,28 @@ import { ESCONDIDO } from "@/lib/release/escondido";
  * `app/__tests__/bloqueo-por-experiencia.test.ts`.
  */
 
+const FOUNDER: PermisosDeLaBarra = { isFounder: true, modules: emptyPermissions() };
+const CON_EQUIPO: PermisosDeLaBarra = {
+  isFounder: false,
+  modules: { ...emptyPermissions(), team: "view" },
+};
+const SIN_EQUIPO: PermisosDeLaBarra = {
+  isFounder: false,
+  modules: { ...emptyPermissions(), finance: "full", settings: "view" },
+};
+
 function conListas(...ids: EntradaDelMenuWebinar["id"][]): EntradaDelMenuWebinar[] {
   return MENU_WEBINAR.map((entrada) => ({ ...entrada, lista: ids.includes(entrada.id) }));
 }
 
 describe("⭐ la config del menú webinar", () => {
+  it("la isla derecha: reportes y configuración pendiente sólo para full", () => {
+    expect(ACCESOS_DE_LA_ISLA).toEqual({
+      full: { reportes: true, configuracionPendiente: true },
+      webinar: { reportes: false, configuracionPendiente: false },
+    });
+  });
+
   it("Inicio, Lanzamientos, Leads, Llamadas y Equipo, en ese orden (decisión del PO)", () => {
     expect(MENU_WEBINAR.map((e) => e.label)).toEqual([
       "Inicio",
@@ -68,30 +92,46 @@ describe("⭐ la config del menú webinar", () => {
 });
 
 describe("⭐ pantalla de inicio", () => {
-  it("full: el Panel General, como siempre", () => {
-    expect(pantallaDeInicio("full")).toBe("/dashboard");
+  it("full: el Panel General, como siempre, con cualquier permiso", () => {
+    expect(pantallaDeInicio("full", FOUNDER)).toBe("/dashboard");
+    expect(pantallaDeInicio("full", SIN_EQUIPO)).toBe("/dashboard");
   });
 
-  it("webinar hoy: la primera entrada lista, Equipo", () => {
-    expect(pantallaDeInicio("webinar")).toBe("/team");
+  it("webinar hoy: la primera entrada lista que se ve, Equipo", () => {
+    expect(pantallaDeInicio("webinar", FOUNDER)).toBe("/team");
+    expect(pantallaDeInicio("webinar", CON_EQUIPO)).toBe("/team");
+  });
+
+  it("⭐ webinar, un miembro sin Equipo: Ajustes, no una pantalla con «No tenés acceso»", () => {
+    expect(pantallaDeInicio("webinar", SIN_EQUIPO)).toBe("/settings");
+    expect(redireccionPorExperiencia("webinar", "/finance", SIN_EQUIPO)).toBe("/settings");
+  });
+
+  it("un miembro sin rol cargado (todo en none) tampoco ve entradas: Ajustes", () => {
+    expect(pantallaDeInicio("webinar", { isFounder: false, modules: emptyPermissions() })).toBe("/settings");
   });
 
   it("webinar con Inicio lista: /inicio", () => {
-    expect(pantallaDeInicio("webinar", conListas("inicio", "equipo"))).toBe("/inicio");
+    expect(pantallaDeInicio("webinar", FOUNDER, conListas("inicio", "equipo"))).toBe("/inicio");
   });
 
   it("Inicio gana aunque no sea la primera del menú", () => {
     const menu = [...conListas("inicio", "leads")].reverse();
-    expect(pantallaDeInicio("webinar", menu)).toBe("/inicio");
+    expect(pantallaDeInicio("webinar", FOUNDER, menu)).toBe("/inicio");
+  });
+
+  it("Inicio lista pero sin permiso de Panel: la primera que se ve", () => {
+    const menu = conListas("inicio", "leads", "equipo");
+    expect(pantallaDeInicio("webinar", { ...CON_EQUIPO, modules: { ...CON_EQUIPO.modules, sales: "view" } }, menu)).toBe("/leads");
   });
 
   it("sin Inicio: la primera lista en el orden del menú", () => {
-    expect(pantallaDeInicio("webinar", conListas("llamadas", "leads"))).toBe("/leads");
+    expect(pantallaDeInicio("webinar", FOUNDER, conListas("llamadas", "leads"))).toBe("/leads");
   });
 
   it("sin ninguna lista: Ajustes, que es libre (no hay bucle)", () => {
-    expect(pantallaDeInicio("webinar", conListas())).toBe("/settings");
-    expect(redireccionPorExperiencia("webinar", "/settings", conListas())).toBeNull();
+    expect(pantallaDeInicio("webinar", FOUNDER, conListas())).toBe("/settings");
+    expect(redireccionPorExperiencia("webinar", "/settings", FOUNDER, conListas())).toBeNull();
   });
 });
 
@@ -118,7 +158,7 @@ describe("⭐ rutas por experiencia", () => {
   ];
 
   it("full abre todas las rutas: nada se redirige", () => {
-    for (const ruta of plataforma) expect(redireccionPorExperiencia("full", ruta)).toBeNull();
+    for (const ruta of plataforma) expect(redireccionPorExperiencia("full", ruta, FOUNDER)).toBeNull();
   });
 
   it("webinar: las entradas listas (con sus subrutas) y las libres", () => {
@@ -128,7 +168,7 @@ describe("⭐ rutas por experiencia", () => {
 
   it("webinar: el resto, incluidas las entradas no listas y las rutas anidadas, va a Equipo", () => {
     for (const ruta of ["/finance", "/marketing", "/lanzamientos", "/finance/expenses", "/inicio", "/leads", "/dashboard"]) {
-      expect(redireccionPorExperiencia("webinar", ruta)).toBe("/team");
+      expect(redireccionPorExperiencia("webinar", ruta, FOUNDER)).toBe("/team");
     }
   });
 
@@ -139,14 +179,16 @@ describe("⭐ rutas por experiencia", () => {
 
   it("cuando una entrada se marca lista, su ruta se abre", () => {
     const menu = conListas("leads", "equipo");
-    expect(redireccionPorExperiencia("webinar", "/leads", menu)).toBeNull();
-    expect(redireccionPorExperiencia("webinar", "/leads/abc", menu)).toBeNull();
-    expect(redireccionPorExperiencia("webinar", "/llamadas", menu)).toBe("/leads");
+    expect(redireccionPorExperiencia("webinar", "/leads", FOUNDER, menu)).toBeNull();
+    expect(redireccionPorExperiencia("webinar", "/leads/abc", FOUNDER, menu)).toBeNull();
+    expect(redireccionPorExperiencia("webinar", "/llamadas", FOUNDER, menu)).toBe("/leads");
   });
 
   it("el destino de una redirección siempre es una ruta abierta (no hay bucle)", () => {
     for (const experiencia of ["full", "webinar"] as const) {
-      expect(rutaPermitidaParaLaExperiencia(experiencia, pantallaDeInicio(experiencia))).toBe(true);
+      for (const permisos of [FOUNDER, CON_EQUIPO, SIN_EQUIPO]) {
+        expect(rutaPermitidaParaLaExperiencia(experiencia, pantallaDeInicio(experiencia, permisos))).toBe(true);
+      }
     }
   });
 });

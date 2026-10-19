@@ -24,6 +24,8 @@ const sim = vi.hoisted(() => ({
   experiencia: "full" as "full" | "webinar",
   pathname: "/team",
   recibidas: [] as unknown[],
+  inicios: [] as unknown[],
+  permisos: null as unknown as UserPermissions,
   orden: [] as string[],
 }));
 
@@ -45,7 +47,7 @@ vi.mock("next/navigation", async (original) => ({
   },
 }));
 vi.mock("@/lib/auth/get-current-permissions", () => ({
-  getCurrentUserPermissions: async () => PERMISOS,
+  getCurrentUserPermissions: async () => sim.permisos,
 }));
 vi.mock("@/lib/holding/session", () => ({
   getHoldingSessionState: async () => ({ isHolding: false, viewingBusiness: false, businesses: [] }),
@@ -79,8 +81,17 @@ vi.mock("@/layouts", () => ({ PlatformLayout: envoltorio("marco") }));
 vi.mock("@/providers/permissions-provider", () => ({ PermissionsProvider: envoltorio("permisos") }));
 vi.mock("@/providers/onboarding-provider", () => ({ OnboardingProvider: envoltorio("onboarding") }));
 vi.mock("@/providers/experiencia-provider", () => ({
-  ExperienciaProvider: ({ experiencia, children }: { experiencia: unknown; children?: ReactNode }) => {
+  ExperienciaProvider: ({
+    experiencia,
+    inicio,
+    children,
+  }: {
+    experiencia: unknown;
+    inicio: unknown;
+    children?: ReactNode;
+  }) => {
     sim.recibidas.push(experiencia);
+    sim.inicios.push(inicio);
     sim.orden.push("experiencia");
     return createElement(Fragment, null, children);
   },
@@ -99,6 +110,8 @@ beforeEach(() => {
   sim.experiencia = "full";
   sim.pathname = "/team";
   sim.recibidas = [];
+  sim.inicios = [];
+  sim.permisos = PERMISOS;
   sim.orden = [];
 });
 
@@ -161,5 +174,24 @@ describe("⭐ al cargar la página, la experiencia va antes que el permiso", () 
     sim.experiencia = "webinar";
     sim.pathname = "";
     expect(await cargar()).toContain("pantalla");
+  });
+});
+
+describe("⭐ la pantalla de inicio llega al logo y la paleta, con los permisos de quien mira", () => {
+  it("full: /dashboard; webinar con Equipo: /team; webinar sin Equipo: /settings", async () => {
+    await render();
+    sim.experiencia = "webinar";
+    await render();
+    sim.permisos = { ...PERMISOS, modules: { ...emptyPermissions(), finance: "full", settings: "view" } };
+    sim.pathname = "/settings";
+    await render();
+    expect(sim.inicios).toEqual(["/dashboard", "/team", "/settings"]);
+  });
+
+  it("⭐ webinar sin Equipo que tipea /finance va a Ajustes", async () => {
+    sim.experiencia = "webinar";
+    sim.permisos = { ...PERMISOS, modules: { ...emptyPermissions(), finance: "full", settings: "view" } };
+    sim.pathname = "/finance";
+    expect(await cargar()).toBe("redirect /settings");
   });
 });

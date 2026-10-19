@@ -1,5 +1,6 @@
 import { paths } from "@/routes/paths";
 import type { PermissionModuleId } from "@/constants/permission-modules";
+import type { OrganizationExperience } from "@/lib/organization/experience";
 
 /**
  * ⭐ El menú de una organización de Limitless Webinars (SCRUM-524).
@@ -92,3 +93,19 @@ export const RUTAS_LIBRES_WEBINAR: readonly string[] = [
   paths.platform.holding,
   paths.platform.settings,
 ];
+
+/**
+ * Los accesos fijos de la isla derecha de la barra que llevan a pantallas
+ * fuera del menú, por experiencia. Para `webinar` no se muestran: el panel de
+ * reportes ejecutivos lee y enlaza `/executive-reports`, y el indicador de
+ * configuración pendiente es el checklist del Panel (`/dashboard`). El resto de
+ * la isla (negocio activo del holding, tema, perfil con Ajustes) es libre, e
+ * Integraciones ya sale del config de la barra.
+ */
+export const ACCESOS_DE_LA_ISLA: Record<
+  OrganizationExperience,
+  { reportes: boolean; configuracionPendiente: boolean }
+> = {
+  full: { reportes: true, configuracionPendiente: true },
+  webinar: { reportes: false, configuracionPendiente: false },
+};

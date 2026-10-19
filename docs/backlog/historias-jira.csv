@@ -1335,9 +1335,8 @@ Funcionalidad: F-OPS-13 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo) (P2)
 * [ADDONS-HOLDING] Add-ons de UI y de servidor salen de orgs distintas en un holding (nuevo) (P2)
 * [NAV-1] Validar la notch nav con sesión real (P2)
-* [WEBINAR-NAV-RESTOS] Lo que una organización webinar todavía ve fuera de su menú (nuevo) (P2)
 
-Funcionalidad: F-PLA-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-08]",H-PLA-08,Plataforma,P2,,NAV-PALETA-PERMISOS ADDONS-HOLDING NAV-1 WEBINAR-NAV-RESTOS,
+Funcionalidad: F-PLA-08 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-08]",H-PLA-08,Plataforma,P2,,NAV-PALETA-PERMISOS ADDONS-HOLDING NAV-1,
 [H-PLA-15] Ver en el Panel General números completos y propios,Story,Medium,historia,plataforma,p2,para-confirmar,,,"*Historia:* Como founder, quiero que el Panel General muestre mis KPIs, embudo, ingresos, ventas y ranking de closers con todos los datos de mi negocio, para tomar decisiones con números que no estén cortados.
 
 *Criterios de aceptación:*

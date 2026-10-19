@@ -29,6 +29,8 @@ const sim = vi.hoisted(() => ({
   experiencias: {} as Record<string, unknown>,
   falla: false,
   reportes: 0,
+  permisos: null as unknown as { isFounder: boolean; modules: Record<string, string> },
+  lecturasDePermisos: 0,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -39,6 +41,12 @@ vi.mock("next/navigation", async (original) => ({
   },
   notFound: () => {
     throw new NoEncontrada("not found");
+  },
+}));
+vi.mock("@/lib/auth/get-current-permissions", () => ({
+  getCurrentUserPermissions: async () => {
+    sim.lecturasDePermisos += 1;
+    return sim.permisos;
   },
 }));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
@@ -110,6 +118,8 @@ beforeEach(() => {
   sim.organizacionActiva = "org-full";
   sim.falla = false;
   sim.reportes = 0;
+  sim.permisos = { isFounder: true, modules: {} };
+  sim.lecturasDePermisos = 0;
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
@@ -195,6 +205,20 @@ describe("⭐ organización webinar", () => {
     expect(await entrar("dashboard")).toBe("redirect /team");
   });
 
+  it("⭐ un miembro sin Equipo va a Ajustes (no a una pantalla con «No tenés acceso»)", async () => {
+    sim.permisos = { isFounder: false, modules: { finance: "full", settings: "view" } };
+    expect(await entrar("finance")).toBe("redirect /settings");
+    expect(await entrar("dashboard")).toBe("redirect /settings");
+    expect(await entrar("lanzamientos")).toBe("redirect /settings");
+  });
+
+  it("los permisos se leen sólo para elegir el destino de una redirección", async () => {
+    expect(await entrar("team")).toBe("pasa");
+    expect(sim.lecturasDePermisos).toBe(0);
+    expect(await entrar("finance")).toBe("redirect /team");
+    expect(sim.lecturasDePermisos).toBe(1);
+  });
+
   it("Equipo dibuja la pantalla", async () => {
     const team = await layout("team");
     expect(await team({ children: PANTALLA })).toBe(PANTALLA);
@@ -212,6 +236,7 @@ describe("⭐ organización full: todo igual que antes", () => {
       ])
     );
     expect(resultado).toEqual(esperado);
+    expect(sim.lecturasDePermisos).toBe(0);
   });
 });
 

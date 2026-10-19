@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
+import { paths } from "@/routes/paths";
 import type { OrganizationExperience } from "@/lib/organization/experience";
 
 /**
@@ -12,19 +13,36 @@ import type { OrganizationExperience } from "@/lib/organization/experience";
  * `full`, lo mismo que devuelve la lectura cuando falla: fuera del provider
  * nadie pierde el menú completo.
  */
-const ExperienciaCtx = createContext<OrganizationExperience>("full");
+type Valor = { experiencia: OrganizationExperience; inicio: string };
 
+const ExperienciaCtx = createContext<Valor>({
+  experiencia: "full",
+  inicio: paths.platform.dashboard,
+});
+
+/**
+ * `inicio`: la pantalla de inicio de quien mira (`pantallaDeInicio` con sus
+ * permisos), calculada en el servidor. La usan el logo y la paleta.
+ */
 export function ExperienciaProvider({
   experiencia,
+  inicio,
   children,
 }: {
   experiencia: OrganizationExperience;
+  inicio: string;
   children?: React.ReactNode;
 }) {
-  return <ExperienciaCtx.Provider value={experiencia}>{children}</ExperienciaCtx.Provider>;
+  const valor = useMemo(() => ({ experiencia, inicio }), [experiencia, inicio]);
+  return <ExperienciaCtx.Provider value={valor}>{children}</ExperienciaCtx.Provider>;
 }
 
 /** La experiencia de la organización activa (`full` fuera del provider). */
 export function useExperiencia(): OrganizationExperience {
-  return useContext(ExperienciaCtx);
+  return useContext(ExperienciaCtx).experiencia;
+}
+
+/** La pantalla de inicio de quien mira (`/dashboard` fuera del provider). */
+export function usePantallaDeInicio(): string {
+  return useContext(ExperienciaCtx).inicio;
 }
