@@ -28,6 +28,34 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-19 — Limitless Webinars, Fase 0: tipo de experiencia por organización (SCRUM-523)
+
+**Rama:** `feat/SCRUM-523-webinars-experiencia` (base `main` `4a542e5e`)
+**Commit(s):** `01cabd6d`: wip(webinars): experiencia por organización, altas y lectura; este (docs)
+**Módulo(s) afectado(s):** Plataforma (organizaciones): `supabase/migrations/20261019120000_organizations_experience.sql` (nueva), `supabase/ci/tests/97_experiencia_de_la_organizacion.sql` (nuevo), `apps/web/lib/organization/experience.ts` (nuevo), `app/(platform)/holding/actions.ts` y `app/(platform)/onboarding/holding/actions.ts` (herencia), comentarios en `app/super-admin/actions.ts` y `lib/auth/bootstrap.ts`; docs `arquitectura/auth-organizaciones-y-permisos.md`, `arquitectura/base-de-datos.md`, `operacion/testing.md`, `PENDIENTES.md`
+
+**Qué se hizo:**
+- `organizations.experience text not null`, CHECK `organizations_experience_check` (`webinar` o `full`). La columna se agrega con default `full` (las organizaciones que existen quedan así, sin reescribir la tabla) y en la misma migración el default pasa a `webinar`, con un comentario que explica cada valor. `lock_timeout` de 5 s; idempotente (`if not exists`, `drop constraint if exists`). `authenticated` tiene SELECT de la columna (grant por columna, el layout la va a leer con la sesión) y ni `authenticated` ni `anon` tienen UPDATE: la migración revoca el de columna y se aborta si algún grant de tabla o de columna se lo diera.
+- Altas: hay seis inserts en `organizations` (no cinco: `app/super-admin/actions.ts` tiene tres). Las cuatro que no crean un negocio dentro de una cuenta holding (`createFounderAccountAction`, `createOrganizationFromHoldingAction`, `createHoldingOrgAction`, `ensureUserBootstrap`) no mandan `experience` y nacen en `webinar` por el default. Las dos que crean un negocio y lo vinculan en `holding_businesses` en el mismo flujo (`addBusinessToMyHoldingAction`, `completeHoldingOnboardingAction`) leen la experiencia del holding con `leerExperienciaDeLaOrganizacion` (service role) y la mandan explícita; si no la pueden leer, no crean nada.
+- `getOrganizationExperience()` (`lib/organization/experience.ts`): experiencia de la org activa con la sesión, envuelta en `cache()` de React (una lectura por request), con `lecturaDegradable`: ante una falla devuelve `full` y la reporta a Sentry con el tag `lectura_degradada = organizacion:experiencia`, sin el valor leído. Sin organización activa o sin Supabase configurado devuelve `full` sin consultar. No toca `lib/release/escondido.ts`. Todavía no la llama nadie: el menú y las rutas son SCRUM-524.
+- El repo no tiene tipos generados de la base (`packages/database` está reservado y vacío): no hubo tipos que actualizar.
+- SQL para producción en `limitless-auditoria/sql-produccion/scrum-523/` (precheck, migración, verificación y prueba local) y paso 10 de `LEEME-scrum-532.md`.
+
+**Por qué / finalidad:** Limitless Webinars se vende por separado. Decisión del PO (Martín, 19-oct-2026): las organizaciones nuevas son Webinars por defecto y no lo elige el cliente; las 30 actuales quedan en Limitless completo sin ningún cambio.
+
+**Decisiones de diseño relevantes:**
+- La herencia se lee del holding y se pasa explícita, en vez de un trigger en la base: la regla depende del flujo (el vínculo en `holding_businesses` se crea después del insert), y en la app se prueba con cada alta.
+- Si la lectura de la experiencia del holding falla, el alta del negocio falla: usar el default dejaría en Webinars un negocio de un holding con Limitless completo sin que nadie lo decida. Al revés que `getOrganizationExperience`, que degrada a `full` porque sólo decide qué se ve.
+- `createOrganizationFromHoldingAction` vincula la org a `holdings` (el portfolio del super admin, `OTC Portfolio`), que no es una organización con experiencia: nace en `webinar`. `createHoldingOrgAction` crea la cuenta holding misma: también `webinar`, y por eso sus negocios heredan `webinar`.
+- Sin organización activa, `getOrganizationExperience` usa `tryRequireOrganizationId` como la zona horaria del layout (`zonaDeLaOrganizacionActiva`): un super admin sin org no genera un evento por request.
+- `lib/organization/__tests__/altas-conocidas.test.ts` lee el código y falla si aparece un insert o upsert en `organizations` fuera del inventario: un alta nueva tiene que decidir su experiencia.
+
+**Verificación (evidencia en `limitless-auditoria/evidencia-sprint2/scrum-523/`):** suite completa 271 archivos y 4.254 tests, también con `TZ=UTC` (`suite.txt`, `suite-tz-utc.txt`; `main` `4a542e5e`: 266 y 4.226); `tsc --noEmit` limpio (`tsc.txt`); lint 71 avisos y 0 errores, los mismos 71 que `main` `4a542e5e` (`lint.txt`, `lint-main-4a542e5e.txt`, `lint-comparacion.txt`); los dos `--check` del backlog; `next build` exit 0 sin "Dynamic server usage" (`build.txt`); `supabase/ci/check-migrations.sh` en un Postgres 17 descartable: 194 migraciones y 13 archivos de RLS (`check-migrations.txt`). Control negativo: con las dos altas del holding de `main`, los 6 tests de herencia fallan (`control-negativo.txt`). 15 mutantes de Vitest con el marcador verificado, cada uno muerto por el test que lo nombra (`mutantes-ts.txt`) y 5 de la migración, cada uno muerto por su mensaje literal (`mutantes-sql.txt`: el test de RLS si un grant de UPDATE de la columna aparece después del chequeo; el chequeo de la migración si aparece antes; el default, el CHECK y el SELECT). Los SQL de producción en un Postgres 17 con 3 organizaciones previas: precheck, verificación antes en `false`, aborto de la migración con UPDATE de tabla para `authenticated`, migración, verificación en `t`, segunda corrida idempotente, sesión read only, una org nueva en `webinar` y 9 controles negativos de la verificación (`sql-produccion/scrum-523/prueba-local.txt`). Orden completo del LEEME (526, 528 y 523) con 30 organizaciones: las tres verificaciones en `t`, las 30 en `full`, historial sin faltantes y la foto de después distinta de la de antes sólo en `organizations` (`prueba-orden-scrum-532.txt`).
+
+**Riesgos / deuda técnica pendiente:**
+- No hay forma de pasar una organización nueva a `full` sin SQL (`[ORG-EXPERIENCIA-CAMBIO]`, nuevo en `PENDIENTES.md`). Pesa cuando SCRUM-524 use el dato para el menú.
+- `foto_estructura.sql` de SCRUM-532 mira los permisos de la tabla (`relacl`) y no los de columna (`attacl`): el `grant select (experience)` no cambia la huella por sí solo (lo cubre `scrum-523/02_verificacion.sql`). Anotado en el LEEME.
+
 ### 2026-10-13 — Marketing, contenido: errores esperables como valor (SCRUM-502)
 
 **Rama:** `fix/SCRUM-502-marketing-contenido-errores` (base `main` `0353ec05`)

@@ -1581,6 +1581,23 @@ Fuente: PENDIENTES.md [INTEGRACIONES-VERIFICAR] · Doc del área: docs/areas/pla
 *Dónde:* workboard, SOPs, UTMs, ficha de cliente.
 
 Fuente: PENDIENTES.md [LAYOUT-CAJONES] · Doc del área: docs/areas/plataforma.md",LAYOUT-CAJONES,Plataforma,P2,,verificación manual
+[ORG-EXPERIENCIA-CAMBIO] Cómo pasa a full una organización nueva que lo necesite,Task,Medium,plataforma,p2,sev-media,decision-de-negocio,,,"*Tipo:* decisión de negocio
+
+*Severidad:* Media
+
+*Estado verificado:* desde SCRUM-523 ({{20261019120000_organizations_experience.sql}}) toda organización nueva nace con {{organizations.experience = 'webinar'}}, salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin ({{createFounderAccountAction}}, {{createOrganizationFromHoldingAction}}, {{createHoldingOrgAction}} en {{app/super-admin/actions.ts}}) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para {{authenticated}}) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL).
+
+*Riesgo:* cuando SCRUM-524 esconda el menú según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan {{webinar}}) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
+
+*Impacto:* clientes nuevos de Limitless completo dados de alta por el super admin después del deploy de SCRUM-523.
+
+*Qué hay que hacer:* que el PO decida quién y desde dónde pasa una organización a {{full}} (por ejemplo, un selector en el detalle de la organización del super admin, con {{createAdminClient}} y {{requireSuperAdmin}}, como {{updateOrgAddOnsAction}}), y si el cambio de un holding se propaga a sus negocios.
+
+*Criterio de aceptación:* el super admin pasa una organización de {{webinar}} a {{full}} (y de vuelta) sin SQL; un usuario de la organización sigue sin poder cambiarla ({{supabase/ci/tests/97_experiencia_de_la_organizacion.sql}}).
+
+*Dónde:* {{app/super-admin/actions.ts}}, {{organizations.experience}}, {{lib/organization/experience.ts}}.
+
+Fuente: PENDIENTES.md [ORG-EXPERIENCIA-CAMBIO] · Doc del área: docs/areas/plataforma.md",ORG-EXPERIENCIA-CAMBIO,Plataforma,P2,Media,decisión de negocio
 [FICHA-LENTA] La ficha dispara ~15 server actions,Task,Medium,clientes,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
 
 *Estado verificado:* {{client-detail.tsx}} monta ~15 tarjetas que piden sus datos por separado (overview, recorrido, propuestas, 1-1, tareas, timeline, wins, Discord, campos, sub-clientes, facturación…). No hay action agregada como {{getClientsBoardAction}}.

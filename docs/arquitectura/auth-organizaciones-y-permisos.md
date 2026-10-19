@@ -22,6 +22,7 @@ permisos por módulo sólo cortan el render de pantallas**.
 | Permisos por módulo | `apps/web/lib/auth/get-current-permissions.ts`, `apps/web/constants/permission-modules.ts`, `apps/web/lib/team/mapper.ts` | Rol → mapa de 13 módulos con nivel `none/view/full` |
 | Gate de pantallas | `apps/web/app/(platform)/layout.tsx` + `apps/web/lib/navigation/module-for-path.ts` | Si el módulo de la ruta está en `none`, renderiza `SinAcceso` |
 | Add-ons | `apps/web/lib/auth/add-on-ids.ts`, `apps/web/lib/auth/add-ons.ts` | `organizations.enabled_add_ons`; `requireAddOn()` en server actions |
+| Experiencia | `apps/web/lib/organization/experience.ts` | `organizations.experience` (`webinar` o `full`, SCRUM-523); `getOrganizationExperience()` la lee para la org activa, una vez por request. Ver "Experiencia de la organización" |
 | Super admin | `apps/web/lib/auth/require-super-admin.ts` | Allowlist por email en `super_admin_users`. Alta y baja: [`operacion/alta-super-admin.md`](../operacion/alta-super-admin.md) (primero la cuenta, después la lista) |
 | Rate limit | `apps/web/lib/rate-limit.ts` | RPC `consume_rate_limit` (Postgres), fallback en memoria |
 | Clientes Supabase | `apps/web/lib/supabase/{server,client,admin,env}.ts` | `createClient()` respeta RLS; `createAdminClient()` = service role |
@@ -30,7 +31,7 @@ permisos por módulo sólo cortan el render de pantallas**.
 
 | Tabla | Columnas clave | Notas |
 |---|---|---|
-| `organizations` | `id`, `name`, `status`, `account_type` (`founder`/`holding`), `enabled_add_ons text[]`, `skip_onboarding`, `holding_billing_model`, `currency`, `timezone` | Raíz multi-tenant. `enabled_add_ons` no lo puede editar un usuario (20260922110000) |
+| `organizations` | `id`, `name`, `status`, `account_type` (`founder`/`holding`), `enabled_add_ons text[]`, `experience` (`webinar`/`full`), `skip_onboarding`, `holding_billing_model`, `currency`, `timezone` | Raíz multi-tenant. Ni `enabled_add_ons` (20260922110000) ni `experience` (20261019120000) las puede editar un usuario |
 | `profiles` | `id` (= `auth.users.id`, FK con `on delete cascade`), `organization_id`, `role`, `custom_role_id`, `is_holding_admin`, `must_change_password`, `temp_password_expires_at`, `is_active`, `last_login_at` | Un usuario → una org. El super admin tiene `organization_id = null` |
 | `team_roles` | `organization_id`, `name`, `permissions jsonb` (`{ "<moduleId>": "none"|"view"|"full" }`), `is_default` | Roles custom por org. Claves consolidadas a 13 módulos en `20260906102000_permisos_por_modulo.sql` |
 | `team_invitations` | `token`, `email`, `custom_role_id`, `status`, `expires_at`, `invited_by` | Aceptar NO crea cuentas: vincula una cuenta existente con ese email (perfil `role = 'member'`) vía `aceptar_invitacion_de_equipo` (SCRUM-495). Ningún código inserta filas: invitar crea la cuenta directo (ver Alta de cuentas) |
@@ -104,15 +105,52 @@ page.tsx / Server Actions → requireOrganizationId() → createClient() (RLS) o
 | Camino | Dónde | Resultado |
 |---|---|---|
 | ~~Signup público~~ | **Cerrado** (SCRUM-23, decisión de Santiago del 2026-10-09): no hay `signUpAction` ni "Crear cuenta" en `/login`, y "Allow new users to sign up" está apagado en Supabase Auth (`disable_signup: true`). Todas las altas de abajo usan `auth.admin.createUser`, que no depende de esa opción | — |
-| Super admin crea founder | `createFounderAccountAction` (`app/super-admin/actions.ts`) | Contraseña temporal (24 h, `lib/auth/temp-password-expiry.ts`) + `must_change_password` |
-| Holding agrega negocio | `addBusinessToMyHoldingAction` (`app/(platform)/holding/actions.ts`) | Org de negocio con `skip_onboarding = true` y founder con contraseña temporal |
+| Super admin crea founder | `createFounderAccountAction` (`app/super-admin/actions.ts`) | Contraseña temporal (24 h, `lib/auth/temp-password-expiry.ts`) + `must_change_password`. La org nace en `webinar` |
+| Super admin crea una org del portfolio | `createOrganizationFromHoldingAction` (`app/super-admin/actions.ts`) | Org + founder con contraseña temporal, vinculada a `holdings` (el portfolio del super admin, no una cuenta holding). Nace en `webinar` |
+| Super admin crea una cuenta holding | `createHoldingOrgAction` (`app/super-admin/actions.ts`) | Org con `account_type = 'holding'` + perfil `is_holding_admin`. Nace en `webinar` |
+| Holding agrega negocio | `addBusinessToMyHoldingAction` (`app/(platform)/holding/actions.ts`) | Org de negocio con `skip_onboarding = true` y founder con contraseña temporal. **Hereda la experiencia del holding** |
+| Onboarding del holding | `completeHoldingOnboardingAction` (`app/(platform)/onboarding/holding/actions.ts`) | Una org por negocio cargado, vinculada en `holding_businesses`. **Heredan la experiencia del holding** |
 | Invitación de equipo | `inviteTeamMemberAction` (`app/team/actions.ts`, desde `components/team/team-invite-modal.tsx`) | Crea directo `auth.users` + perfil `role = 'member'` con `custom_role_id` y contraseña temporal; el founder ve las credenciales en pantalla (`TempCredentialsDialog`) y se las pasa. **No** manda mail ni crea fila en `team_invitations` |
 | Aceptar invitación | `/invite?token=` → `aceptarInvitacionAction` (`app/team/actions.ts`) → función `aceptar_invitacion_de_equipo` | **No crea cuentas** (SCRUM-495). Ver "Aceptar una invitación" abajo. Sólo sirve para filas de `team_invitations` que ya existan: ningún código las crea hoy |
 | Login con email y contraseña | `signInAction` (`app/auth/actions.ts`) | `ensureUserBootstrap`, salvo que el `next` del login sea una invitación (`destinoDeInvitacion`): ahí vuelve a `/invite?token=` sin crear org |
 | Login con OAuth / magic link | `apps/web/app/auth/callback/route.ts` | `ensureUserBootstrap` salvo que `next` sea `/invite` |
 
 `ensureUserBootstrap` también **repara** usuarios sin perfil: `requireOrganizationId()` lo llama si el
-perfil no tiene org. Para un email de `super_admin_users` crea el perfil sin organización.
+perfil no tiene org. Para un email de `super_admin_users` crea el perfil sin organización. La org que
+crea nace en `webinar`.
+
+### Experiencia de la organización
+
+`organizations.experience` dice qué producto ve la organización (SCRUM-523, Limitless Webinars Fase 0):
+
+- `full`: Limitless completo, todos los módulos. Las organizaciones que existían antes de Webinars
+  quedaron acá (la migración `20261019120000_organizations_experience.sql` agrega la columna con
+  default `full` y después lo cambia).
+- `webinar`: Limitless Webinars. Es el default de la columna: toda organización nueva nace así. Lo
+  decidió el PO (19-oct-2026); no lo elige el cliente.
+
+La excepción: un negocio que se crea dentro de un holding (Agregar negocio y el onboarding del
+holding, que lo vinculan en `holding_businesses` en el mismo flujo) hereda la experiencia de la
+organización del holding, para que un founder con Limitless completo no pierda el menú completo. Esas
+dos altas leen la del holding con `leerExperienciaDeLaOrganizacion` (service role) y la mandan
+explícita en el insert; si no la pueden leer, no crean nada. Las otras cuatro altas no la mandan y
+queda el default. `lib/organization/__tests__/altas-conocidas.test.ts` falla si aparece un insert en
+`organizations` que no está en esa lista, y `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`
+falla si el default deja de ser `webinar`.
+
+Nadie la cambia desde la app: `authenticated` la puede leer (grant por columna) pero no tiene UPDATE
+(la migración se aborta si algún grant se lo diera). Sólo el service role la escribe; hoy no hay
+pantalla para pasar una organización de `webinar` a `full` (`[ORG-EXPERIENCIA-CAMBIO]` en
+`PENDIENTES.md`).
+
+`getOrganizationExperience()` (`lib/organization/experience.ts`) devuelve la experiencia de la org
+activa (la del negocio elegido en una cuenta holding) con la sesión de quien mira, memoizada con
+`cache()` por request. Es una lectura degradable (`lecturaDegradable`): si falla, devuelve `full`
+(nadie pierde módulos por una falla de lectura) y la falla va a Sentry con el tag
+`lectura_degradada = organizacion:experiencia`. Sin organización activa o sin Supabase configurado
+devuelve `full` sin consultar. No se mezcla con las banderas de `lib/release/escondido.ts`, que
+esconden algo a todas las organizaciones. Qué cambia en el menú y las rutas con cada valor es
+SCRUM-524; hasta entonces nadie la llama.
 
 ### Aceptar una invitación
 
