@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, relative } from "node:path";
+import { extname, join, relative } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -8,32 +9,55 @@ import { describe, expect, it } from "vitest";
  * El default de `organizations.experience` es `full` (AR pasada 1, MAYOR-2):
  * cada alta manda su experiencia explícita (`webinar`, o la del holding en un
  * negocio creado dentro de un holding). Un alta que nadie revisó nace `full`,
- * el lado seguro. Este test lee el código (sin comentarios) de todo `apps/` y
- * `packages/` (salvo `node_modules`, `.next`, `dist`, `.turbo`, `__tests__` y
- * los `*.test.*`) y falla si:
+ * el lado seguro.
  *
- *   1. hay un `.from("organizations")` (comillas simples, dobles o backticks
- *      sin `${}`) que no sigue directo con `.select`, `.update`, `.delete`,
- *      `.insert` o `.upsert`: por ejemplo, guardado en una variable para hacer
- *      el insert después;
- *   2. los `.from("organizations").insert(` o `.upsert(` no son exactamente los
- *      seis del inventario, o alguno no tiene la palabra `experience` en su
- *      argumento;
- *   3. hay un `.from(X)` con X que no es un literal de texto y sigue directo con
- *      `.insert(` o `.upsert(`, y no está en `DESTINOS_DINAMICOS_REVISADOS`;
- *   4. hay un `.from(X)` con X que no es un literal en un archivo cuyo código
- *      tiene un `.insert(` o un `.upsert(` y la palabra `organizations`, y no
- *      está en `DESTINOS_DINAMICOS_REVISADOS`;
- *   5. aparece `rest/v1/organizations` (un insert por HTTP a PostgREST).
+ * Desde la AR pasada 2 el test lee el código con el AST de TypeScript, no con
+ * expresiones regulares: los comentarios y el contenido de los strings no
+ * cuentan, y las llamadas se reconocen por su forma. Recorre los `.ts`, `.tsx`,
+ * `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` y `.cjs` de `apps/` y `packages/`
+ * (salvo `node_modules`, `.next`, `dist`, `.turbo`, `__tests__` y los
+ * `*.test.*`).
  *
- * Para 3 y 4 no cuentan los `.from(` de `Array`, `Buffer`, `Uint8Array` ni los
- * de Storage (`.storage.from(bucket)`).
+ * Una "llamada a from" es `x.from(t)`, `x?.from(t)`, `x["from"](t)`, con o sin
+ * genéricos (`x.from<"organizations">(t)`), y `x.from.call(y, t)` o
+ * `x.from.apply(y, [t])`, salvo cuando `x` es `Array`, `Buffer` o un arreglo
+ * tipado (`Array.from`, `Buffer.from`). La tabla `t` se resuelve si es un
+ * literal de texto, un template sin `${}`, una suma de esos, o una constante
+ * (`const X = "..."`) de cualquier archivo recorrido con ese nombre (si el
+ * nombre tiene varios valores, cuenta como `organizations` si alguno lo es).
+ * Lo demás es una tabla dinámica.
  *
- * Lo que NO ve: un `["from"]("organizations")`, un nombre de tabla armado en
- * otro archivo y pasado a un helper que no hace el insert en la misma cadena
- * ni vive en un archivo que diga `organizations`, y SQL dinámico. Las altas
- * por SQL (funciones y triggers que insertan en `organizations`) las mira
- * `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`.
+ * Falla si:
+ *   1. una llamada a from con la tabla `organizations` no sigue directo con
+ *      `.select`, `.update`, `.delete`, `.insert` o `.upsert` (por ejemplo,
+ *      guardada en una variable);
+ *   2. los insert o upsert sobre `organizations` no son exactamente los seis
+ *      del inventario, o alguno no tiene en su argumento (un objeto literal, o
+ *      un arreglo de objetos literales) la propiedad `experience` con un valor
+ *      que no sea `undefined`, `null` ni `void`;
+ *   3. una llamada a from con tabla dinámica sigue con `.insert`/`.upsert`, o
+ *      no sigue con ningún método en un archivo que hace algún `insert`/
+ *      `upsert`, o está en un archivo que hace algún `insert`/`upsert` y tiene
+ *      un string que contiene `organizations`; salvo que esté en
+ *      `DESTINOS_DINAMICOS_REVISADOS`;
+ *   4. se usa `from` como referencia: `x.from.bind(...)`, o guardado en una
+ *      variable (`const f = x.from`, `const { from: f } = x`) que en el mismo
+ *      archivo se llama (`f(...)`, `f.call`, `f.apply`, `f.bind`), salvo en
+ *      `Array`/`Buffer`;
+ *   5. algún string o template contiene `rest/v1/organizations`;
+ *   6. una llamada que no es a from recibe un argumento cuyo texto se resuelve
+ *      a `organizations` (un helper `insertar(admin, "organizations", fila)`).
+ *
+ * Lo que sigue sin verse: un acceso con clave calculada (`admin[clave](t)`,
+ * `Reflect.apply`); una tabla armada en tiempo de ejecución (`["organiz",
+ * "ations"].join("")`) o guardada en una propiedad de un objeto (`{ table:
+ * "organizations" }`) y usada en un archivo que no escribe; un from con tabla
+ * dinámica en un archivo de sólo lectura que devuelve el builder para que otro
+ * archivo haga el insert; `from` guardado en una variable que se pasa a otra
+ * función sin llamarlo; una URL de PostgREST armada por partes; el código
+ * fuera de `apps/` y `packages/` o fuera de esas extensiones; y cualquier SQL (las funciones, triggers y reglas los mira
+ * `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`; el SQL dinámico
+ * no lo ve nadie). Un alta que se escape nace `full`.
  */
 
 const WEB = join(__dirname, "..", "..", "..");
@@ -52,26 +76,39 @@ const ALTAS_CONOCIDAS: Record<string, number> = {
 };
 
 /**
- * `.from(X)` con X variable, revisados a mano: ninguno puede recibir
- * `organizations` como tabla. Clave: `archivo: from(X)`.
+ * Llamadas a from con tabla dinámica revisadas a mano: ninguna puede recibir
+ * `organizations` como tabla. Clave: `archivo: from(texto del argumento)`.
  */
 const DESTINOS_DINAMICOS_REVISADOS: Record<string, string> = {
   "apps/web/lib/onboarding/resolve.ts: from(table)":
     "cuenta filas de tablas de datos de la org para el checklist; sólo select con count",
   "apps/web/app/super-admin/delete-actions.ts: from(tabla)":
     "baja de una organización: borra filas de las tablas hijas por organization_id; sólo delete",
-  "apps/web/lib/observability/registro-de-corridas.ts: from(TABLA_DE_CORRIDAS)":
-    'constante del mismo archivo: "corridas_de_procesos"',
 };
 
+const EXTENSIONES: Record<string, ts.ScriptKind> = {
+  ".ts": ts.ScriptKind.TS,
+  ".mts": ts.ScriptKind.TS,
+  ".cts": ts.ScriptKind.TS,
+  ".tsx": ts.ScriptKind.TSX,
+  ".js": ts.ScriptKind.JS,
+  ".mjs": ts.ScriptKind.JS,
+  ".cjs": ts.ScriptKind.JS,
+  ".jsx": ts.ScriptKind.JSX,
+};
 const IGNORAR_CARPETAS = new Set(["node_modules", ".next", "dist", ".turbo", "__tests__"]);
+const RECEPTORES_QUE_NO_SON_TABLAS = new Set([
+  "Array", "Buffer", "Uint8Array", "Uint8ClampedArray", "Int8Array", "Uint16Array", "Int16Array",
+  "Uint32Array", "Int32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
+]);
+const METODOS_DE_ORGANIZATIONS = new Set(["select", "update", "delete", "insert", "upsert"]);
 
 function archivos(dir: string): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
     const ruta = join(dir, e.name);
     if (e.isDirectory()) return IGNORAR_CARPETAS.has(e.name) ? [] : archivos(ruta);
-    return /\.(ts|tsx|js|mjs|cjs)$/.test(e.name) && !/\.test\./.test(e.name) ? [ruta] : [];
+    return extname(e.name) in EXTENSIONES && !/\.test\./.test(e.name) ? [ruta] : [];
   });
 }
 
@@ -86,73 +123,263 @@ function carpetasRecorridas(): string[] {
   return [WEB, ...hijas(join(RAIZ, "apps")).filter((d) => d !== WEB), ...hijas(join(RAIZ, "packages"))];
 }
 
-/** El código sin comentarios, para que una explicación no cuente como uso. */
-function codigoSinComentarios(texto: string): string {
-  return texto.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
-}
-
-/** El texto entre el paréntesis que abre en `inicio` y su cierre. */
-function argumento(codigo: string, inicio: number): { texto: string; fin: number } {
-  let nivel = 0;
-  for (let i = inicio; i < codigo.length; i++) {
-    if (codigo[i] === "(") nivel++;
-    else if (codigo[i] === ")") {
-      nivel--;
-      if (nivel === 0) return { texto: codigo.slice(inicio + 1, i), fin: i + 1 };
-    }
+/** Saca paréntesis, `as`, `satisfies`, `!` y aserciones de tipo. */
+function sinEnvoltorios(n: ts.Node): ts.Node {
+  let x = n;
+  while (
+    ts.isParenthesizedExpression(x) ||
+    ts.isAsExpression(x) ||
+    ts.isSatisfiesExpression(x) ||
+    ts.isNonNullExpression(x) ||
+    ts.isTypeAssertionExpression(x)
+  ) {
+    x = x.expression;
   }
-  return { texto: codigo.slice(inicio + 1), fin: codigo.length };
+  return x;
 }
 
-const LITERAL_ORGANIZATIONS = /^(["'`])organizations\1$/;
-const LITERAL = /^(["'])[^"'\n]*\1$|^`[^`$]*`$/;
-const METODOS_DE_ORGANIZATIONS = new Set(["select", "update", "delete", "insert", "upsert"]);
-const RECEPTORES_QUE_NO_SON_TABLAS = /(\bArray|\bBuffer|\bUint8Array|\bstorage)\s*$/;
+/** El padre de `n` salteando los envoltorios. */
+function padreReal(n: ts.Node): ts.Node {
+  let p = n.parent;
+  while (
+    p &&
+    (ts.isParenthesizedExpression(p) ||
+      ts.isAsExpression(p) ||
+      ts.isSatisfiesExpression(p) ||
+      ts.isNonNullExpression(p) ||
+      ts.isTypeAssertionExpression(p))
+  ) {
+    p = p.parent;
+  }
+  return p;
+}
+
+/** El nombre de un acceso a propiedad (`x.nombre` o `x["nombre"]`), o null. */
+function nombreDeAcceso(n: ts.Node): { nombre: string; receptor: ts.Expression } | null {
+  const x = sinEnvoltorios(n);
+  if (ts.isPropertyAccessExpression(x)) return { nombre: x.name.text, receptor: x.expression };
+  if (ts.isElementAccessExpression(x) && ts.isStringLiteralLike(sinEnvoltorios(x.argumentExpression))) {
+    return { nombre: (sinEnvoltorios(x.argumentExpression) as ts.StringLiteralLike).text, receptor: x.expression };
+  }
+  return null;
+}
+
+function esReceptorQueNoEsTabla(receptor: ts.Expression): boolean {
+  const r = sinEnvoltorios(receptor);
+  return ts.isIdentifier(r) && RECEPTORES_QUE_NO_SON_TABLAS.has(r.text);
+}
+
+type Constantes = Map<string, Set<string>>;
+
+/** El texto de una expresión si se puede saber sin correr el código. */
+function textoEstatico(n: ts.Node | undefined, constantes: Constantes): string[] | null {
+  if (!n) return null;
+  const x = sinEnvoltorios(n);
+  if (ts.isStringLiteralLike(x)) return [x.text];
+  if (ts.isIdentifier(x)) {
+    const valores = constantes.get(x.text);
+    return valores && valores.size > 0 ? [...valores] : null;
+  }
+  if (ts.isBinaryExpression(x) && x.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const a = textoEstatico(x.left, constantes);
+    const b = textoEstatico(x.right, constantes);
+    return a && b ? a.flatMap((i) => b.map((j) => i + j)) : null;
+  }
+  if (ts.isTemplateExpression(x)) {
+    let partes: string[] = [x.head.text];
+    for (const span of x.templateSpans) {
+      const v = textoEstatico(span.expression, constantes);
+      if (!v) return null;
+      partes = partes.flatMap((p) => v.map((s) => p + s + span.literal.text));
+    }
+    return partes;
+  }
+  return null;
+}
+
+function parsear(ruta: string): ts.SourceFile {
+  return ts.createSourceFile(ruta, readFileSync(ruta, "utf8"), ts.ScriptTarget.Latest, true, EXTENSIONES[extname(ruta)]);
+}
+
+function recorrer(n: ts.Node, visitar: (n: ts.Node) => void): void {
+  visitar(n);
+  ts.forEachChild(n, (h) => recorrer(h, visitar));
+}
+
+/** Las `const X = "texto"` de todos los archivos, por nombre. */
+function juntarConstantes(fuentes: ts.SourceFile[]): Constantes {
+  const constantes: Constantes = new Map();
+  for (const f of fuentes) {
+    recorrer(f, (n) => {
+      if (
+        ts.isVariableDeclaration(n) &&
+        ts.isIdentifier(n.name) &&
+        n.initializer &&
+        ts.isVariableDeclarationList(n.parent) &&
+        (n.parent.flags & ts.NodeFlags.Const) !== 0
+      ) {
+        const v = sinEnvoltorios(n.initializer);
+        if (ts.isStringLiteralLike(v)) {
+          const set = constantes.get(n.name.text) ?? new Set<string>();
+          set.add(v.text);
+          constantes.set(n.name.text, set);
+        }
+      }
+    });
+  }
+  return constantes;
+}
+
+/** Si el argumento de un insert o upsert manda `experience` con un valor. */
+function mandaExperience(arg: ts.Node | undefined): boolean {
+  if (!arg) return false;
+  const x = sinEnvoltorios(arg);
+  if (ts.isArrayLiteralExpression(x)) return x.elements.length > 0 && x.elements.every(mandaExperience);
+  if (!ts.isObjectLiteralExpression(x)) return false;
+  return x.properties.some((p) => {
+    if (ts.isShorthandPropertyAssignment(p)) return p.name.text === "experience";
+    if (!ts.isPropertyAssignment(p)) return false;
+    const nombre = ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name) ? p.name.text : null;
+    if (nombre !== "experience") return false;
+    const v = sinEnvoltorios(p.initializer);
+    return !(
+      (ts.isIdentifier(v) && v.text === "undefined") ||
+      v.kind === ts.SyntaxKind.NullKeyword ||
+      ts.isVoidExpression(v)
+    );
+  });
+}
 
 type Analisis = {
   altas: Record<string, number>;
   altasSinExperiencia: string[];
   sinEncadenar: string[];
   dinamicosSinRevisar: string[];
+  fromSinLlamar: string[];
+  organizationsAOtraFuncion: string[];
   porHttp: string[];
 };
 
+/** Un método encadenado directo a `nodo` (`nodo.metodo(...)`), con sus argumentos. */
+function metodoEncadenado(nodo: ts.Node): { metodo: string; args: ts.NodeArray<ts.Expression> | null } | null {
+  const acceso = padreReal(nodo);
+  const nombre = acceso ? nombreDeAcceso(acceso) : null;
+  if (!nombre || sinEnvoltorios(nombre.receptor) !== nodo) return null;
+  const llamada = padreReal(acceso);
+  const llamado = llamada && ts.isCallExpression(llamada) && sinEnvoltorios(llamada.expression) === acceso;
+  return { metodo: nombre.nombre, args: llamado ? (llamada as ts.CallExpression).arguments : null };
+}
+
 function analizar(rutas: string[]): Analisis {
-  const r: Analisis = { altas: {}, altasSinExperiencia: [], sinEncadenar: [], dinamicosSinRevisar: [], porHttp: [] };
-  for (const ruta of rutas) {
-    const archivo = relative(RAIZ, ruta);
-    const codigo = codigoSinComentarios(readFileSync(ruta, "utf8"));
-    if (codigo.includes("rest/v1/organizations")) r.porHttp.push(archivo);
-    const escribe = /\.(insert|upsert)\s*\(/.test(codigo);
-    const nombraOrganizations = codigo.includes("organizations");
-    for (const m of codigo.matchAll(/\.\s*from\s*\(/g)) {
-      const abre = (m.index ?? 0) + m[0].length - 1;
-      const { texto, fin } = argumento(codigo, abre);
-      const arg = texto.trim();
-      const sigue = /^\s*\.\s*(\w+)\s*\(/.exec(codigo.slice(fin));
-      const metodo = sigue?.[1] ?? null;
-      if (LITERAL_ORGANIZATIONS.test(arg)) {
+  const r: Analisis = {
+    altas: {},
+    altasSinExperiencia: [],
+    sinEncadenar: [],
+    dinamicosSinRevisar: [],
+    fromSinLlamar: [],
+    organizationsAOtraFuncion: [],
+    porHttp: [],
+  };
+  const fuentes = rutas.map(parsear);
+  const constantes = juntarConstantes(fuentes);
+
+  for (const f of fuentes) {
+    const archivo = relative(RAIZ, f.fileName);
+    let escribe = false;
+    let nombraOrganizations = false;
+    recorrer(f, (n) => {
+      if (ts.isStringLiteralLike(n) || ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n)) {
+        if (n.text.includes("organizations")) nombraOrganizations = true;
+        if (n.text.includes("rest/v1/organizations")) r.porHttp.push(archivo);
+      }
+      if (ts.isCallExpression(n)) {
+        const acceso = nombreDeAcceso(n.expression);
+        if (acceso && (acceso.nombre === "insert" || acceso.nombre === "upsert")) escribe = true;
+      }
+    });
+
+    // 4: `from` como referencia: `x.from.bind(...)`, o guardado en una variable
+    // (`const f = x.from`, `const { from: f } = x`) que después se llama.
+    const llamados = new Set<string>();
+    recorrer(f, (n) => {
+      if (ts.isCallExpression(n)) {
+        const c = sinEnvoltorios(n.expression);
+        if (ts.isIdentifier(c)) llamados.add(c.text);
+        const acc = nombreDeAcceso(c);
+        if (acc && ["call", "apply", "bind"].includes(acc.nombre) && ts.isIdentifier(sinEnvoltorios(acc.receptor))) {
+          llamados.add((sinEnvoltorios(acc.receptor) as ts.Identifier).text);
+        }
+      }
+    });
+    recorrer(f, (n) => {
+      const acceso = nombreDeAcceso(n);
+      if (acceso && acceso.nombre === "from" && n === sinEnvoltorios(n) && !esReceptorQueNoEsTabla(acceso.receptor)) {
+        const m = metodoEncadenado(n);
+        if (m?.metodo === "bind") r.fromSinLlamar.push(`${archivo}: ${n.getText(f)}.bind`);
+        const p = padreReal(n);
+        if (ts.isVariableDeclaration(p) && ts.isIdentifier(p.name) && llamados.has(p.name.text)) {
+          r.fromSinLlamar.push(`${archivo}: ${p.getText(f)}`);
+        }
+      }
+      if (ts.isBindingElement(n) && n.parent && ts.isObjectBindingPattern(n.parent) && ts.isIdentifier(n.name)) {
+        const propiedad = n.propertyName && (ts.isIdentifier(n.propertyName) || ts.isStringLiteralLike(n.propertyName))
+          ? n.propertyName.text
+          : n.name.text;
+        if (propiedad === "from" && llamados.has(n.name.text)) r.fromSinLlamar.push(`${archivo}: ${n.getText(f)}`);
+      }
+
+      // 6: la tabla organizations pasada a una función que no es from.
+      if (ts.isCallExpression(n)) {
+        const callee = nombreDeAcceso(n.expression);
+        const esFrom = callee?.nombre === "from" || ((callee?.nombre === "call" || callee?.nombre === "apply") && nombreDeAcceso(callee.receptor)?.nombre === "from");
+        if (!esFrom && n.arguments.some((arg) => textoEstatico(arg, constantes)?.includes("organizations"))) {
+          r.organizationsAOtraFuncion.push(`${archivo}: ${n.expression.getText(f)}(...)`);
+        }
+      }
+
+      if (!ts.isCallExpression(n)) return;
+      const callee = nombreDeAcceso(n.expression);
+      if (!callee) return;
+      let tabla: ts.Node | undefined;
+      let receptor: ts.Expression;
+      if (callee.nombre === "from") {
+        tabla = n.arguments[0];
+        receptor = callee.receptor;
+      } else if (callee.nombre === "call" || callee.nombre === "apply") {
+        const interno = nombreDeAcceso(callee.receptor);
+        if (!interno || interno.nombre !== "from") return;
+        receptor = interno.receptor;
+        const a = n.arguments[1];
+        tabla = callee.nombre === "call" ? a : a && ts.isArrayLiteralExpression(sinEnvoltorios(a)) ? (sinEnvoltorios(a) as ts.ArrayLiteralExpression).elements[0] : undefined;
+      } else {
+        return;
+      }
+      if (esReceptorQueNoEsTabla(receptor)) return;
+
+      const valores = textoEstatico(tabla, constantes);
+      const siguiente = metodoEncadenado(n);
+      const metodo = siguiente?.metodo ?? null;
+
+      if (valores && valores.includes("organizations")) {
         if (!metodo || !METODOS_DE_ORGANIZATIONS.has(metodo)) {
-          r.sinEncadenar.push(`${archivo}: from(${arg})${metodo ? `.${metodo}` : ""}`);
-          continue;
+          r.sinEncadenar.push(`${archivo}: ${n.getText(f)}${metodo ? `.${metodo}` : ""}`);
+          return;
         }
         if (metodo === "insert" || metodo === "upsert") {
           r.altas[archivo] = (r.altas[archivo] ?? 0) + 1;
-          const abreMetodo = fin + (sigue?.[0].length ?? 0) - 1;
-          if (!/\bexperience\b/.test(argumento(codigo, abreMetodo).texto)) {
-            r.altasSinExperiencia.push(archivo);
-          }
+          if (!mandaExperience(siguiente?.args?.[0])) r.altasSinExperiencia.push(archivo);
         }
-        continue;
+        return;
       }
-      if (LITERAL.test(arg)) continue;
-      if (RECEPTORES_QUE_NO_SON_TABLAS.test(codigo.slice(0, m.index ?? 0))) continue;
-      const clave = `${archivo}: from(${arg})`;
+      if (valores) return;
+
+      const clave = `${archivo}: from(${tabla ? tabla.getText(f) : ""})`;
       const escribeDirecto = metodo === "insert" || metodo === "upsert";
-      if ((escribeDirecto || (escribe && nombraOrganizations)) && !(clave in DESTINOS_DINAMICOS_REVISADOS)) {
+      const sueltoEnArchivoQueEscribe = metodo === null && escribe;
+      if ((escribeDirecto || sueltoEnArchivoQueEscribe || (escribe && nombraOrganizations)) && !(clave in DESTINOS_DINAMICOS_REVISADOS)) {
         r.dinamicosSinRevisar.push(clave + (metodo ? `.${metodo}` : ""));
       }
-    }
+    });
   }
   return r;
 }
@@ -175,6 +402,14 @@ describe("altas de organizaciones", () => {
 
   it("⭐ ningún from() con la tabla en una variable escribe sin estar revisado", () => {
     expect(a.dinamicosSinRevisar).toEqual([]);
+  });
+
+  it("⭐ nadie usa from como referencia (bind, guardado en una variable que se llama)", () => {
+    expect(a.fromSinLlamar).toEqual([]);
+  });
+
+  it("⭐ la tabla organizations no se le pasa a otra función (un helper que hace el insert)", () => {
+    expect(a.organizationsAOtraFuncion).toEqual([]);
   });
 
   it("nadie inserta en organizations por HTTP a PostgREST", () => {

@@ -38,13 +38,22 @@ select ci.espera(
   1, 'el default de organizations.experience es full');
 
 -- ─── Ninguna alta por SQL ────────────────────────────────────────────────────
--- Un INSERT o MERGE en organizations en el cuerpo de una función de cualquier
--- schema (también las de triggers) o en una regla. No ve SQL armado con
--- format() y execute.
+-- Un INSERT o MERGE en organizations, o un COPY hacia ella, en el cuerpo de
+-- una función de cualquier schema (también las de triggers) o en una regla.
+-- Antes de buscar se sacan los comentarios del cuerpo (/* ... */ y -- hasta el
+-- fin de la línea), para que un comentario entre `insert` e `into` no lo
+-- esconda (AR pasada 2). No ve SQL armado en tiempo de ejecución (format() y
+-- execute, o el nombre de la tabla en una variable), ni un `--` dentro de un
+-- string que comparta la línea con el insert (se corta como si fuera un
+-- comentario).
+create temporary table sql_sin_comentarios on commit drop as
+select n.nspname || '.' || p.proname as funcion,
+       regexp_replace(regexp_replace(p.prosrc, '/\*.*?\*/', ' ', 'g'), '--[^\n]*', ' ', 'g') as cuerpo
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname not in ('pg_catalog', 'information_schema');
 select ci.espera(
-  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname not in ('pg_catalog', 'information_schema')
-      and p.prosrc ~* '(insert|merge)\s+into\s+("?public"?\s*\.\s*)?"?organizations"?([^a-z0-9_]|$)'),
+  (select count(*) from sql_sin_comentarios
+    where cuerpo ~* '((insert|merge)\s+into|copy)\s+("?public"?\s*\.\s*)?"?organizations"?([^a-z0-9_]|$)'),
   0, 'ninguna función SQL ni de trigger inserta en organizations');
 select ci.espera(
   (select count(*) from pg_rewrite r
