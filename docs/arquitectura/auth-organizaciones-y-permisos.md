@@ -117,40 +117,60 @@ page.tsx / Server Actions → requireOrganizationId() → createClient() (RLS) o
 
 `ensureUserBootstrap` también **repara** usuarios sin perfil: `requireOrganizationId()` lo llama si el
 perfil no tiene org. Para un email de `super_admin_users` crea el perfil sin organización. La org que
-crea nace en `webinar`.
+crea nace en `webinar` (lo manda explícito).
 
 ### Experiencia de la organización
 
 `organizations.experience` dice qué producto ve la organización (SCRUM-523, Limitless Webinars Fase 0):
 
-- `full`: Limitless completo, todos los módulos. Las organizaciones que existían antes de Webinars
-  quedaron acá (la migración `20261019120000_organizations_experience.sql` agrega la columna con
-  default `full` y después lo cambia).
-- `webinar`: Limitless Webinars. Es el default de la columna: toda organización nueva nace así. Lo
-  decidió el PO (19-oct-2026); no lo elige el cliente.
+- `full`: Limitless completo, todos los módulos. Es el default de la columna
+  (`20261019120000_organizations_experience.sql`): las organizaciones que existían antes de
+  Webinars quedaron acá, y un alta que no diga nada también nace así, el lado seguro (AR pasada 1).
+- `webinar`: Limitless Webinars. Toda organización nueva nace así porque cada alta de la app lo
+  manda explícito. Lo decidió el PO (19-oct-2026); no lo elige el cliente.
 
-La excepción: un negocio que se crea dentro de un holding (Agregar negocio y el onboarding del
-holding, que lo vinculan en `holding_businesses` en el mismo flujo) hereda la experiencia de la
-organización del holding, para que un founder con Limitless completo no pierda el menú completo. Esas
-dos altas leen la del holding con `leerExperienciaDeLaOrganizacion` (service role) y la mandan
-explícita en el insert; si no la pueden leer, no crean nada. Las otras cuatro altas no la mandan y
-queda el default. `lib/organization/__tests__/altas-conocidas.test.ts` falla si aparece un insert en
-`organizations` que no está en esa lista, y `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`
-falla si el default deja de ser `webinar`.
+Las seis altas de la tabla de arriba mandan `experience` en el insert. Las cuatro que no crean un
+negocio dentro de un holding mandan `webinar`. Las dos que sí (Agregar negocio y el onboarding del
+holding, que lo vinculan en `holding_businesses` en el mismo flujo) mandan la experiencia de la
+organización del holding, para que un founder con Limitless completo no pierda el menú completo: la
+leen con `leerExperienciaDeLaOrganizacion` (service role) y, si no la pueden leer, no crean nada.
+
+Qué lo controla:
+
+- `lib/organization/__tests__/altas-conocidas.test.ts` lee el código sin comentarios de `apps/` y
+  `packages/` (salvo `node_modules`, `.next`, `dist`, `.turbo`, `__tests__` y los `*.test.*`) y
+  falla si: los `.from("organizations").insert(`/`.upsert(` escritos literal no son exactamente
+  esas seis, o alguno no tiene `experience` en su argumento; un `.from("organizations")` no sigue
+  directo con `select`, `update`, `delete`, `insert` o `upsert` (por ejemplo, guardado en una
+  variable); un `.from(X)` con la tabla en una variable sigue directo con `.insert(`/`.upsert(`, o
+  está en un archivo que escribe y nombra `organizations`, y no figura en su lista de destinos
+  revisados; o aparece `rest/v1/organizations`. No ve un `["from"]("organizations")`, una tabla
+  que llega por parámetro a un helper que la guarda en una variable antes del insert en un archivo
+  que no nombra `organizations`, ni SQL dinámico. Un alta que se le escape nace `full`.
+- `supabase/ci/tests/97_experiencia_de_la_organizacion.sql` falla si el default deja de ser `full`,
+  y si alguna función SQL de cualquier schema (también las de triggers) o regla tiene un
+  `insert into`/`merge into` en `organizations` en su texto (no ve SQL armado con `format()`).
 
 Nadie la cambia desde la app: `authenticated` la puede leer (grant por columna) pero no tiene UPDATE
-(la migración se aborta si algún grant se lo diera). Sólo el service role la escribe; hoy no hay
+(la migración se aborta si algún grant se lo diera). `anon` tiene SELECT de toda la tabla desde
+antes, pero la RLS no le devuelve ninguna fila. Sólo el service role la escribe; hoy no hay
 pantalla para pasar una organización de `webinar` a `full` (`[ORG-EXPERIENCIA-CAMBIO]` en
 `PENDIENTES.md`).
 
 `getOrganizationExperience()` (`lib/organization/experience.ts`) devuelve la experiencia de la org
 activa (la del negocio elegido en una cuenta holding) con la sesión de quien mira, memoizada con
-`cache()` por request. Es una lectura degradable (`lecturaDegradable`): si falla, devuelve `full`
-(nadie pierde módulos por una falla de lectura) y la falla va a Sentry con el tag
-`lectura_degradada = organizacion:experiencia`. Sin organización activa o sin Supabase configurado
-devuelve `full` sin consultar. No se mezcla con las banderas de `lib/release/escondido.ts`, que
-esconden algo a todas las organizaciones. Qué cambia en el menú y las rutas con cada valor es
-SCRUM-524; hasta entonces nadie la llama.
+`cache()` por request. Resuelve la org con `requireOrganizationId()`:
+
+- sin Supabase configurado, o una cuenta sin organización (un super admin: `requireOrganizationId`
+  lanza con `SIN_ORGANIZACION_VINCULADA`), devuelve `full` sin consultar ni reportar;
+- una sesión no válida o una cuenta desactivada (`ErrorEsperable`) se relanzan, como en el layout;
+- cualquier otra falla, al resolver la org o al leer la columna, pasa por `lecturaDegradable`:
+  devuelve `full` (nadie pierde módulos por una falla de lectura) y va a Sentry con el tag
+  `lectura_degradada = organizacion:experiencia`, sin el valor leído.
+
+No se mezcla con las banderas de `lib/release/escondido.ts`, que esconden algo a todas las
+organizaciones. Qué cambia en el menú y las rutas con cada valor es SCRUM-524; hasta entonces nadie
+la llama.
 
 ### Aceptar una invitación
 
