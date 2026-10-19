@@ -22,10 +22,12 @@ import { describe, expect, it } from "vitest";
  * genéricos (`x.from<"organizations">(t)`), y `x.from.call(y, t)` o
  * `x.from.apply(y, [t])`, salvo cuando `x` es `Array`, `Buffer` o un arreglo
  * tipado (`Array.from`, `Buffer.from`). La tabla `t` se resuelve si es un
- * literal de texto, un template sin `${}`, una suma de esos, o una constante
- * (`const X = "..."`) de cualquier archivo recorrido con ese nombre (si el
- * nombre tiene varios valores, cuenta como `organizations` si alguno lo es).
- * Lo demás es una tabla dinámica.
+ * literal de texto, un template sin `${}`, una suma de esos, un arreglo
+ * literal de esos (vale cada elemento), o una constante `const X = "..."`
+ * declarada en el mismo archivo (en cualquier ámbito: si el nombre tiene
+ * varios valores, cuenta cada uno) o importada por nombre (`import { X }` o
+ * `import { Y as X }`) de un archivo recorrido, con ruta relativa o `@/`. Lo
+ * demás es una tabla dinámica.
  *
  * Falla si:
  *   1. una llamada a from con la tabla `organizations` no sigue directo con
@@ -45,13 +47,26 @@ import { describe, expect, it } from "vitest";
  *      archivo se llama (`f(...)`, `f.call`, `f.apply`, `f.bind`), salvo en
  *      `Array`/`Buffer`;
  *   5. algún string o template contiene `rest/v1/organizations`;
- *   6. una llamada que no es a from recibe un argumento cuyo texto se resuelve
- *      a `organizations` (un helper `insertar(admin, "organizations", fila)`).
+ *   6. en un archivo que hace algún `insert`/`upsert` (los mismos de la regla
+ *      3), una llamada que no es a from recibe un argumento cuyo texto se
+ *      resuelve a `organizations` (un helper `insertar(admin, "organizations",
+ *      fila)`, `Reflect.apply(admin.from, admin, ["organizations"])`). En un
+ *      archivo que sólo lee no cuenta: un conteo o un log con el nombre de la
+ *      tabla es legítimo.
  *
  * Lo que sigue sin verse:
  *   - un acceso con clave calculada (`admin[clave](t)`, `Reflect.apply`)
- *     cuando la tabla tampoco se resuelve (con `"organizations"` literal lo
- *     agarra la regla 6);
+ *     cuando la tabla tampoco se resuelve o el archivo no escribe (con
+ *     `"organizations"` resuelto en un archivo que escribe lo agarra la regla
+ *     6);
+ *   - una tabla `organizations` pasada a un helper desde un archivo que no
+ *     escribe, cuando el helper vive en otro archivo y hace el insert con la
+ *     tabla que recibe (la regla 3 marca ese helper sólo si encadena el insert
+ *     al from o deja el builder suelto en un archivo que escribe);
+ *   - una variable local llamada `Array`, `Buffer` o como un arreglo tipado:
+ *     se toma como el global;
+ *   - una constante que llega por `import * as`, un re-export o un paquete
+ *     (`@ai-coo/...`): queda como tabla dinámica;
  *   - una tabla armada en tiempo de ejecución (`["organiz", "ations"].join("")`)
  *     o guardada en una propiedad de un objeto (`{ table: "organizations" }`) y
  *     usada en un archivo que no escribe;
@@ -175,26 +190,53 @@ function esReceptorQueNoEsTabla(receptor: ts.Expression): boolean {
   return ts.isIdentifier(r) && RECEPTORES_QUE_NO_SON_TABLAS.has(r.text);
 }
 
-type Constantes = Map<string, Set<string>>;
+/** Por archivo: sus constantes de texto y lo que importa por nombre. */
+type Modulo = {
+  constantes: Map<string, Set<string>>;
+  importados: Map<string, { ruta: string | null; nombre: string }>;
+};
+type Modulos = Map<string, Modulo>;
+
+const EXTENSIONES_DE_IMPORT = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+
+/** La ruta de un import relativo o con `@/`, si es un archivo recorrido. */
+function resolverImport(desde: string, especificador: string): string | null {
+  const base = especificador.startsWith("@/")
+    ? join(WEB, especificador.slice(2))
+    : especificador.startsWith(".")
+      ? join(desde, "..", especificador)
+      : null;
+  if (!base) return null;
+  const candidatas = [base, ...EXTENSIONES_DE_IMPORT.map((e) => base + e), ...EXTENSIONES_DE_IMPORT.map((e) => join(base, "index" + e))];
+  return candidatas.find((c) => existsSync(c) && extname(c) in EXTENSIONES) ?? null;
+}
 
 /** El texto de una expresión si se puede saber sin correr el código. */
-function textoEstatico(n: ts.Node | undefined, constantes: Constantes): string[] | null {
+function textoEstatico(n: ts.Node | undefined, archivo: string, modulos: Modulos): string[] | null {
   if (!n) return null;
   const x = sinEnvoltorios(n);
   if (ts.isStringLiteralLike(x)) return [x.text];
   if (ts.isIdentifier(x)) {
-    const valores = constantes.get(x.text);
-    return valores && valores.size > 0 ? [...valores] : null;
+    const modulo = modulos.get(archivo);
+    const propias = modulo?.constantes.get(x.text);
+    if (propias && propias.size > 0) return [...propias];
+    const importado = modulo?.importados.get(x.text);
+    const ajenas = importado?.ruta ? modulos.get(importado.ruta)?.constantes.get(importado.nombre) : undefined;
+    return ajenas && ajenas.size > 0 ? [...ajenas] : null;
+  }
+  if (ts.isArrayLiteralExpression(x)) {
+    const valores = x.elements.flatMap((e) => textoEstatico(e, archivo, modulos) ?? []);
+    return valores.length > 0 ? valores : null;
   }
   if (ts.isBinaryExpression(x) && x.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-    const a = textoEstatico(x.left, constantes);
-    const b = textoEstatico(x.right, constantes);
+    const a = textoEstatico(x.left, archivo, modulos);
+    const b = textoEstatico(x.right, archivo, modulos);
     return a && b ? a.flatMap((i) => b.map((j) => i + j)) : null;
   }
   if (ts.isTemplateExpression(x)) {
     let partes: string[] = [x.head.text];
     for (const span of x.templateSpans) {
-      const v = textoEstatico(span.expression, constantes);
+      const v = textoEstatico(span.expression, archivo, modulos);
       if (!v) return null;
       partes = partes.flatMap((p) => v.map((s) => p + s + span.literal.text));
     }
@@ -212,10 +254,11 @@ function recorrer(n: ts.Node, visitar: (n: ts.Node) => void): void {
   ts.forEachChild(n, (h) => recorrer(h, visitar));
 }
 
-/** Las `const X = "texto"` de todos los archivos, por nombre. */
-function juntarConstantes(fuentes: ts.SourceFile[]): Constantes {
-  const constantes: Constantes = new Map();
+/** Las `const X = "texto"` y los imports por nombre de cada archivo. */
+function juntarModulos(fuentes: ts.SourceFile[]): Modulos {
+  const modulos: Modulos = new Map();
   for (const f of fuentes) {
+    const modulo: Modulo = { constantes: new Map(), importados: new Map() };
     recorrer(f, (n) => {
       if (
         ts.isVariableDeclaration(n) &&
@@ -226,14 +269,24 @@ function juntarConstantes(fuentes: ts.SourceFile[]): Constantes {
       ) {
         const v = sinEnvoltorios(n.initializer);
         if (ts.isStringLiteralLike(v)) {
-          const set = constantes.get(n.name.text) ?? new Set<string>();
+          const set = modulo.constantes.get(n.name.text) ?? new Set<string>();
           set.add(v.text);
-          constantes.set(n.name.text, set);
+          modulo.constantes.set(n.name.text, set);
+        }
+      }
+      if (ts.isImportDeclaration(n) && ts.isStringLiteralLike(n.moduleSpecifier)) {
+        const nombres = n.importClause?.namedBindings;
+        if (nombres && ts.isNamedImports(nombres)) {
+          const ruta = resolverImport(f.fileName, n.moduleSpecifier.text);
+          for (const e of nombres.elements) {
+            modulo.importados.set(e.name.text, { ruta, nombre: (e.propertyName ?? e.name).text });
+          }
         }
       }
     });
+    modulos.set(f.fileName, modulo);
   }
-  return constantes;
+  return modulos;
 }
 
 /** Si el argumento de un insert o upsert manda `experience` con un valor. */
@@ -287,7 +340,7 @@ function analizar(rutas: string[]): Analisis {
     porHttp: [],
   };
   const fuentes = rutas.map(parsear);
-  const constantes = juntarConstantes(fuentes);
+  const modulos = juntarModulos(fuentes);
 
   for (const f of fuentes) {
     const archivo = relative(RAIZ, f.fileName);
@@ -334,11 +387,12 @@ function analizar(rutas: string[]): Analisis {
         if (propiedad === "from" && llamados.has(n.name.text)) r.fromSinLlamar.push(`${archivo}: ${n.getText(f)}`);
       }
 
-      // 6: la tabla organizations pasada a una función que no es from.
+      // 6: en un archivo que escribe, la tabla organizations pasada a una
+      // función que no es from.
       if (ts.isCallExpression(n)) {
         const callee = nombreDeAcceso(n.expression);
         const esFrom = callee?.nombre === "from" || ((callee?.nombre === "call" || callee?.nombre === "apply") && nombreDeAcceso(callee.receptor)?.nombre === "from");
-        if (!esFrom && n.arguments.some((arg) => textoEstatico(arg, constantes)?.includes("organizations"))) {
+        if (escribe && !esFrom && n.arguments.some((arg) => textoEstatico(arg, f.fileName, modulos)?.includes("organizations"))) {
           r.organizationsAOtraFuncion.push(`${archivo}: ${n.expression.getText(f)}(...)`);
         }
       }
@@ -362,7 +416,7 @@ function analizar(rutas: string[]): Analisis {
       }
       if (esReceptorQueNoEsTabla(receptor)) return;
 
-      const valores = textoEstatico(tabla, constantes);
+      const valores = textoEstatico(tabla, f.fileName, modulos);
       const siguiente = metodoEncadenado(n);
       const metodo = siguiente?.metodo ?? null;
 
@@ -414,7 +468,7 @@ describe("altas de organizaciones", () => {
     expect(a.fromSinLlamar).toEqual([]);
   });
 
-  it("⭐ la tabla organizations no se le pasa a otra función (un helper que hace el insert)", () => {
+  it("⭐ en un archivo que escribe, la tabla organizations no se le pasa a otra función", () => {
     expect(a.organizationsAOtraFuncion).toEqual([]);
   });
 
