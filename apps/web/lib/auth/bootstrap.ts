@@ -59,6 +59,7 @@ export async function ensureUserBootstrap(user: User) {
     return profile;
   }
 
+  // Sin `experience`: nace en Limitless Webinars por el default de la base (SCRUM-523).
   const { data: org, error: orgError } = await admin
     .from("organizations")
     .insert({ name: defaultOrgName(email) })

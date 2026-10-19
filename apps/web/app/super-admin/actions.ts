@@ -141,6 +141,7 @@ export async function createFounderAccountAction(
 
     const userId = authData.user.id;
 
+    // Sin `experience`: nace en Limitless Webinars por el default de la base (SCRUM-523).
     const { data: org, error: orgError } = await admin
       .from("organizations")
       .insert({ name: organizationName, status: "active" })
@@ -198,6 +199,9 @@ export async function createOrganizationFromHoldingAction(
     const password = generateTempPassword();
     const mrrUsd = plan === "pro" ? 30000 : 0;
 
+    // Sin `experience`: nace en Limitless Webinars por el default de la base (SCRUM-523).
+    // Más abajo se vincula a `holdings` (el portfolio del super admin), que no es
+    // una cuenta holding con organización propia: no hay experiencia que heredar.
     const { data: org, error: orgError } = await admin
       .from("organizations")
       .insert({ name: organizationName, status: "active", mrr_usd: mrrUsd })
@@ -738,6 +742,7 @@ export async function createHoldingOrgAction(
 
     const userId = authData.user.id;
 
+    // Sin `experience`: nace en Limitless Webinars por el default de la base (SCRUM-523).
     const { data: org, error: orgError } = await admin
       .from("organizations")
       .insert({
