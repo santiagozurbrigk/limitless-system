@@ -143,8 +143,9 @@ Qué lo controla:
   `node_modules`, `.next`, `dist`, `.turbo`, `__tests__` y los `*.test.*`). Una llamada a from es
   `x.from(t)`, `x?.from(t)`, `x["from"](t)`, con o sin genéricos, y `x.from.call(y, t)` o
   `x.from.apply(y, [t])`, salvo en `Array`, `Buffer` y los arreglos tipados. La tabla se resuelve si
-  es un literal, un template sin `${}`, una suma de esos o una constante `const X = "..."` de
-  cualquier archivo recorrido. Falla si:
+  es un literal, un template sin `${}`, una suma de esos, un arreglo literal de esos (vale cada
+  elemento), o una constante `const X = "..."` del mismo archivo o importada por nombre
+  (`import { X }`, ruta relativa o `@/`) de un archivo recorrido. Falla si:
   1. un from con `organizations` no sigue directo con `select`, `update`, `delete`, `insert` o
      `upsert` (por ejemplo, guardado en una variable);
   2. los insert o upsert sobre `organizations` no son exactamente las seis altas, o alguno no manda
@@ -157,10 +158,18 @@ Qué lo controla:
   4. `from` se usa como referencia: `x.from.bind(...)`, o guardado en una variable
      (`const f = x.from`, `const { from: f } = x`) que se llama en el mismo archivo;
   5. un string contiene `rest/v1/organizations`;
-  6. una llamada que no es a from recibe un argumento que se resuelve a `organizations` (un helper
-     `insertar(admin, "organizations", fila)` o `admin[clave]("organizations")`).
+  6. en un archivo que hace algún `insert`/`upsert`, una llamada que no es a from recibe un
+     argumento que se resuelve a `organizations` (un helper `insertar(admin, "organizations",
+     fila)`, `admin[clave]("organizations")` o `Reflect.apply(admin.from, admin,
+     ["organizations"])`). En un archivo que sólo lee no cuenta: un conteo o un log con el nombre de
+     la tabla es legítimo (AR pasada 3).
 
-  Lo que no ve: un acceso con clave calculada cuando la tabla tampoco se resuelve; una tabla armada
+  Lo que no ve: un acceso con clave calculada (`admin[clave](t)`, `Reflect.apply`) cuando la tabla
+  tampoco se resuelve o el archivo no escribe; la tabla `organizations` pasada desde un archivo que
+  no escribe a un helper de otro archivo que hace el insert con la tabla que recibe (si el helper
+  encadena el insert al from, lo agarra la regla 3 en el helper); una variable local llamada
+  `Array`, `Buffer` o como un arreglo tipado (se toma como el global); una constante que llega por
+  `import * as`, un re-export o un paquete (queda como tabla dinámica); una tabla armada
   en tiempo de ejecución (`["organiz", "ations"].join("")`) o guardada en una propiedad de un objeto
   y usada en un archivo que no escribe; un from con tabla dinámica en un archivo de sólo lectura
   que devuelve el builder para que otro archivo haga el insert; `from` guardado en una variable que
@@ -169,9 +178,11 @@ Qué lo controla:
 - `supabase/ci/tests/97_experiencia_de_la_organizacion.sql` falla si el default deja de ser `full`,
   y si el cuerpo de alguna función de cualquier schema (también las de triggers), sin sus
   comentarios (`/* ... */` y `--` hasta el fin de la línea), tiene un `insert into`, `merge into` o
-  `copy` sobre `organizations`, o si una regla inserta en ella. No ve SQL armado en tiempo de
-  ejecución (`format()` y `execute`, o la tabla en una variable) ni un `--` dentro de un string en
-  la misma línea que el insert (se corta como comentario).
+  `copy` sobre `organizations`, o si una regla inserta en ella. Quita los comentarios con texto, no
+  con un parser de SQL, así que no ve: SQL armado en tiempo de ejecución (`format()` y `execute`, o
+  la tabla en una variable); un `--` dentro de un string en la misma línea que el insert (se corta
+  como comentario); un `/*` dentro de un string antes del insert y un `*/` en otro string después
+  (borra el insert); un comentario anidado (`/* a /* b */ c */`, corta en el primer `*/`).
 
 Nadie la cambia desde la app: `authenticated` la puede leer (grant por columna) pero no tiene UPDATE
 (la migración se aborta si algún grant se lo diera). `anon` tiene SELECT de toda la tabla desde

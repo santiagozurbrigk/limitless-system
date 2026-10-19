@@ -42,10 +42,16 @@ select ci.espera(
 -- una función de cualquier schema (también las de triggers) o en una regla.
 -- Antes de buscar se sacan los comentarios del cuerpo (/* ... */ y -- hasta el
 -- fin de la línea), para que un comentario entre `insert` e `into` no lo
--- esconda (AR pasada 2). No ve SQL armado en tiempo de ejecución (format() y
--- execute, o el nombre de la tabla en una variable), ni un `--` dentro de un
--- string que comparta la línea con el insert (se corta como si fuera un
--- comentario).
+-- esconda (AR pasada 2). Es un quitacomentarios de texto, no un parser de SQL,
+-- así que no ve (AR pasada 3):
+--   - SQL armado en tiempo de ejecución (format() y execute, o el nombre de la
+--     tabla en una variable);
+--   - un `--` dentro de un string que comparta la línea con el insert (se corta
+--     como si fuera un comentario);
+--   - un `/*` dentro de un string antes del insert y un `*/` en otro string
+--     después (se borra el insert como si fuera un comentario);
+--   - un comentario anidado (`/* a /* b */ c */`): Postgres los admite y el
+--     quitacomentarios corta en el primer `*/`.
 create temporary table sql_sin_comentarios on commit drop as
 select n.nspname || '.' || p.proname as funcion,
        regexp_replace(regexp_replace(p.prosrc, '/\*.*?\*/', ' ', 'g'), '--[^\n]*', ' ', 'g') as cuerpo
