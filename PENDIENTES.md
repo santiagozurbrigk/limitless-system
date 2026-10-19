@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 33 | 18 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 33 | 19 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
@@ -449,6 +449,13 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Dónde:** `app/super-admin/actions.ts`, `organizations.experience`, `lib/organization/experience.ts`.
 
 ### Plataforma · P3
+
+#### [WEBINAR-ONBOARDING-GATE] Una cuenta webinar nueva pasa por el gate de onboarding del producto completo (nuevo)
+- **Tipo:** decisión de negocio
+- **Severidad:** Baja
+- **Estado verificado:** medido en el QA final de SCRUM-524 con una organización webinar creada por el alta real del super admin (`evidencia-sprint2/scrum-524/qa-final.md` § MENOR-2, `qa/prueba/alta-webinar.txt`): el founder cae en `/auth/force-password-change`, después en `/onboarding`, y en el siguiente login ve en `/team` el asistente «Tu negocio» (paso 1 de 3: negocio, oferta y avatar, `components/onboarding/onboarding-gate.tsx`). Es el gate de siempre (`shouldRedirectToGate` en el middleware, salvo `skip_onboarding`), no lo agrega SCRUM-524, y `/onboarding` es una ruta libre a propósito para no armar un bucle con el bloqueo por experiencia. SCRUM-524 no lo cambia.
+- **Qué hay que hacer:** que el PO decida si una organización webinar pasa por ese gate (son preguntas del producto completo: oferta y avatar), por uno propio de Webinars o por ninguno (`skip_onboarding` en el alta), y cuándo se revisa (probablemente con Inicio, SCRUM-534).
+- **Dónde:** `apps/web/lib/onboarding/gate-routing.ts`, `apps/web/lib/supabase/middleware.ts`, `apps/web/components/onboarding/onboarding-gate.tsx`, `app/super-admin/actions.ts` (altas).
 
 #### [MIDDLEWARE-COOKIE-REFRESCADA] El middleware le pasa a la página la cookie de sesión vieja después de refrescarla (nuevo)
 - **Tipo:** bug

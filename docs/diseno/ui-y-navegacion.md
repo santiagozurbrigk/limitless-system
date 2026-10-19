@@ -115,11 +115,13 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
   el middleware porque ahí no se puede usar `getOrganizationExperience()` y habría que copiar la
   resolución del negocio activo del holding. `/lanzamientos` primero aplica la experiencia y después
   `ESCONDIDO.lanzamientos`, que sigue mandando al Panel a todas las organizaciones `full`.
-- **Al cargar la página, la experiencia va antes que el permiso:** el layout de `(platform)` también
-  redirige con `x-pathname` antes de decidir `SinAcceso`. Si dibuja `SinAcceso` no dibuja `children`,
-  y entonces la redirección del layout del segmento no se aplica: sin este chequeo, un miembro sin el
-  módulo Marketing que tipeaba `/marketing` veía «No tenés acceso» en vez de ir a su inicio (lo mostró
-  la prueba contra el Supabase local). Queda un caso: desde una pantalla que ya muestra `SinAcceso`,
+- **Fuera de la experiencia, el layout de `(platform)` no decide:** con `x-pathname` mira si la ruta
+  es de la experiencia y, si no lo es, no dibuja `SinAcceso` (que le taparía `children` al layout del
+  segmento) ni redirige: deja pasar y redirige el segmento. Así un miembro sin el módulo Marketing que
+  tipea `/marketing` va a su inicio y no ve «No tenés acceso». El layout de `(platform)` no hace
+  `redirect`: lo hacía, y en una organización webinar un `router.push` a una ruta bloqueada más
+  `router.refresh()` (aceptar una invitación, entrar a un negocio del holding) dejaba la pantalla sin
+  barra y un bucle de pedidos `?_rsc=` (QA final; `scripts/flujos-reales.mjs` de la evidencia lo mide). Queda un caso: desde una pantalla que ya muestra `SinAcceso`,
   una navegación del cliente cambia la URL pero sigue mostrando `SinAcceso` (no muestra la pantalla
   bloqueada ni redirige); es el límite de `[PERMISOS-LAYOUT-NAV-SUAVE]`, anotado ahí.
 - **Destino después del login:** `signInAction` y `/auth/callback` (sin `next` válido) van a la
