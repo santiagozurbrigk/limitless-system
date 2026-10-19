@@ -1,8 +1,12 @@
 -- SCRUM-523 · Tipo de experiencia por organización (Limitless Webinars, Fase 0)
 -- Un usuario no puede cambiar `organizations.experience`, ni siquiera el
 -- founder, que sí puede cambiar la configuración de su org. La lee con su
--- sesión (el layout la necesita). Una organización nueva nace en 'webinar'
--- y la columna sólo acepta 'webinar' o 'full'.
+-- sesión (el layout la necesita). Una organización creada sin decir la
+-- experiencia nace en 'full' (el default; las altas de la app mandan 'webinar'
+-- explícito, AR pasada 1) y la columna sólo acepta 'webinar' o 'full'.
+-- Ninguna función SQL (tampoco las de triggers) ni regla inserta en
+-- organizations: las altas son las seis de la app
+-- (apps/web/lib/organization/__tests__/altas-conocidas.test.ts).
 -- Migración: 20261019120000_organizations_experience.
 
 begin;
@@ -11,11 +15,12 @@ insert into auth.users (id, email) values
   ('97000000-0000-0000-0000-00000000000f', 'f@test'),
   ('97000000-0000-0000-0000-00000000000b', 'm@test');
 
--- Una org que pasó a full (como las que existían antes de Webinars) y una nueva.
-insert into public.organizations (id, name, experience) values
-  ('97000000-0000-0000-0000-000000000a00', 'Org completa', 'full');
+-- Una org sin decir la experiencia (como las que existían antes de Webinars) y
+-- una de Webinars, como la crean las altas de la app.
 insert into public.organizations (id, name) values
-  ('97000000-0000-0000-0000-000000000b00', 'Org nueva');
+  ('97000000-0000-0000-0000-000000000a00', 'Org completa');
+insert into public.organizations (id, name, experience) values
+  ('97000000-0000-0000-0000-000000000b00', 'Org nueva', 'webinar');
 
 insert into public.profiles (id, email, organization_id, role, full_name, is_active) values
   ('97000000-0000-0000-0000-00000000000f', 'f@test', '97000000-0000-0000-0000-000000000a00', 'founder', 'F', true),
@@ -24,8 +29,27 @@ insert into public.profiles (id, email, organization_id, role, full_name, is_act
 -- ─── La base: default, CHECK y privilegios ───────────────────────────────────
 select ci.espera(
   (select count(*) from public.organizations
-    where id = '97000000-0000-0000-0000-000000000b00' and experience = 'webinar'),
-  1, 'una organización creada sin decir la experiencia queda en webinar');
+    where id = '97000000-0000-0000-0000-000000000a00' and experience = 'full'),
+  1, 'una organización creada sin decir la experiencia queda en full');
+select ci.espera(
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'organizations'
+      and column_name = 'experience' and column_default = '''full''::text'),
+  1, 'el default de organizations.experience es full');
+
+-- ─── Ninguna alta por SQL ────────────────────────────────────────────────────
+-- Un INSERT o MERGE en organizations en el cuerpo de una función de cualquier
+-- schema (también las de triggers) o en una regla. No ve SQL armado con
+-- format() y execute.
+select ci.espera(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname not in ('pg_catalog', 'information_schema')
+      and p.prosrc ~* '(insert|merge)\s+into\s+("?public"?\s*\.\s*)?"?organizations"?([^a-z0-9_]|$)'),
+  0, 'ninguna función SQL ni de trigger inserta en organizations');
+select ci.espera(
+  (select count(*) from pg_rewrite r
+    where pg_get_ruledef(r.oid) ~* '(insert|merge)\s+into\s+("?public"?\s*\.\s*)?"?organizations"?([^a-z0-9_]|$)'),
+  0, 'ninguna regla inserta en organizations');
 select ci.espera(
   has_column_privilege('authenticated', 'public.organizations', 'experience', 'UPDATE')::int,
   0, 'authenticated no tiene UPDATE sobre organizations.experience');

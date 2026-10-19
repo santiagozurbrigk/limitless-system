@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * completo que suma un negocio no pierde el menú completo.
  *
  * Si la experiencia del holding no se puede leer, no se crea ningún negocio:
- * el default de la base lo dejaría en webinar sin que nadie lo decida.
+ * el default de la base (`full`) decidiría por el holding.
  */
 
 const sim = vi.hoisted(() => ({

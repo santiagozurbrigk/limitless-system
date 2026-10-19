@@ -2,9 +2,10 @@
  * Qué producto ve la organización: Limitless completo o Limitless Webinars
  * (`organizations.experience`, SCRUM-523).
  *
- *   - `full`: todos los módulos de siempre. Las organizaciones que existían
- *     antes de Webinars quedaron acá.
- *   - `webinar`: Limitless Webinars. Es el default de la columna: toda
+ *   - `full`: todos los módulos de siempre. Es el default de la columna: las
+ *     organizaciones que existían antes de Webinars quedaron acá, y un alta
+ *     que no diga nada también (el lado seguro).
+ *   - `webinar`: Limitless Webinars. Las altas lo mandan explícito: toda
  *     organización nueva nace así (decisión del PO), salvo el negocio que un
  *     holding crea dentro de su cuenta, que hereda la del holding.
  *
@@ -17,7 +18,7 @@
 import "server-only";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { tryRequireOrganizationId } from "@/lib/auth/bootstrap";
+import { requireOrganizationId, SIN_ORGANIZACION_VINCULADA } from "@/lib/auth/bootstrap";
 import { FallaDeLaBase } from "@/lib/server/action-result";
 import { lecturaDegradable } from "@/lib/server/lectura-degradable";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -66,11 +67,27 @@ export async function leerExperienciaDeLaOrganizacion(
   return experiencia;
 }
 
+/**
+ * La organización activa, o `null` si la cuenta no tiene ninguna (un super
+ * admin). Cualquier otra cosa que lance `requireOrganizationId` sigue de largo:
+ * una sesión no válida o una cuenta desactivada (`ErrorEsperable`) las relanza
+ * `lecturaDegradable`, como en el layout; una falla de la base o de Auth se
+ * registra y la experiencia queda en `full`.
+ */
+async function organizacionActiva(): Promise<string | null> {
+  try {
+    return await requireOrganizationId();
+  } catch (error) {
+    if (error instanceof Error && error.message === SIN_ORGANIZACION_VINCULADA) return null;
+    throw error;
+  }
+}
+
 async function experienciaDeLaOrganizacionActiva(): Promise<OrganizationExperience> {
-  // Sin base configurada o sin organización (modo demo, sesión vencida) no hay
+  // Sin base configurada (modo demo) o sin organización (super admin) no hay
   // nada que leer: no es una falla, y se ve como siempre.
   if (!isSupabaseConfigured()) return EXPERIENCIA_SI_FALLA;
-  const organizationId = await tryRequireOrganizationId();
+  const organizationId = await organizacionActiva();
   if (!organizationId) return EXPERIENCIA_SI_FALLA;
   const supabase = await createClient();
   return leerExperienciaDeLaOrganizacion(supabase, organizationId);
@@ -82,8 +99,11 @@ async function experienciaDeLaOrganizacionActiva(): Promise<OrganizationExperien
  *
  * **Memoizada por request** con `cache()` de React: el layout y las pantallas
  * del mismo render comparten una sola lectura. Lectura degradable
- * (`lecturaDegradable`, SCRUM-108): si falla, devuelve `full` y la falla queda
- * en Sentry con el tag `lectura_degradada` = `organizacion:experiencia`.
+ * (`lecturaDegradable`, SCRUM-108): si falla la lectura o la resolución de la
+ * organización, devuelve `full` y la falla queda en Sentry con el tag
+ * `lectura_degradada` = `organizacion:experiencia`. Una sesión no válida o una
+ * cuenta desactivada no se degradan: se relanzan. Sin organización activa
+ * (super admin) o sin Supabase configurado devuelve `full` sin consultar.
  */
 export const getOrganizationExperience = cache(
   (): Promise<OrganizationExperience> =>

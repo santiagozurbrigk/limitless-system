@@ -18,7 +18,8 @@ type Respuesta = { data: { experience?: unknown } | null; error: { message: stri
 
 const sim = vi.hoisted(() => ({
   configurado: true,
-  organizacion: "org-1" as string | null,
+  /** Lo que devuelve `requireOrganizationId`, o lo que lanza si es un error. */
+  organizacion: "org-1" as string | Error,
   respuesta: null as unknown as Respuesta,
   lanza: null as unknown,
   consultas: 0,
@@ -37,7 +38,11 @@ vi.mock("react", async () => {
 });
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => sim.configurado }));
 vi.mock("@/lib/auth/bootstrap", () => ({
-  tryRequireOrganizationId: async () => sim.organizacion,
+  SIN_ORGANIZACION_VINCULADA: "No se pudo vincular tu cuenta a una organización. Revisa Supabase (tablas organizations y profiles).",
+  requireOrganizationId: async () => {
+    if (sim.organizacion instanceof Error) throw sim.organizacion;
+    return sim.organizacion;
+  },
 }));
 vi.mock("@/lib/observability/reportar-falla", () => ({
   reportarFalla: (error: unknown, contexto: unknown) => sim.reportes.push({ error, contexto }),
@@ -67,6 +72,9 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 import * as React from "react";
+import { SIN_ORGANIZACION_VINCULADA } from "@/lib/auth/bootstrap";
+import { CUENTA_DESACTIVADA_MESSAGE } from "@/lib/auth/cuenta-desactivada";
+import { ErrorEsperable } from "@/lib/server/error-esperable";
 import {
   EXPERIENCIA_SI_FALLA,
   getOrganizationExperience,
@@ -161,10 +169,32 @@ describe("getOrganizationExperience: falla de lectura", () => {
     expect((sim.reportes[0].error as Error).message).not.toContain("otra");
   });
 
-  it("sin organización activa (demo, sesión vencida) devuelve full sin consultar ni reportar", async () => {
-    sim.organizacion = null;
+  it("⭐ sin organización activa (super admin) devuelve full sin consultar ni reportar", async () => {
+    sim.organizacion = new Error(SIN_ORGANIZACION_VINCULADA);
     await expect(getOrganizationExperience()).resolves.toBe("full");
     expect(sim.consultas).toBe(0);
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("⭐ si falla resolver la organización, devuelve full y se reporta", async () => {
+    sim.organizacion = new Error("fetch failed");
+    await expect(getOrganizationExperience()).resolves.toBe("full");
+    expect(sim.consultas).toBe(0);
+    expect(sim.reportes).toHaveLength(1);
+    expect(sim.reportes[0].contexto).toEqual({ lectura: "organizacion:experiencia" });
+  });
+
+  it("⭐ una sesión no válida se relanza, no se degrada a full", async () => {
+    const sesion = new ErrorEsperable("Sesión no válida");
+    sim.organizacion = sesion;
+    await expect(getOrganizationExperience()).rejects.toBe(sesion);
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("⭐ una cuenta desactivada se relanza, no se degrada a full", async () => {
+    const desactivada = new ErrorEsperable(CUENTA_DESACTIVADA_MESSAGE);
+    sim.organizacion = desactivada;
+    await expect(getOrganizationExperience()).rejects.toBe(desactivada);
     expect(sim.reportes).toEqual([]);
   });
 

@@ -4,11 +4,11 @@
  * Imita lo justo de supabase-js para recorrer las seis altas: inserts con
  * `.select().single()`, lecturas por id, borrados, el upsert del portfolio y
  * `auth.admin`. Un insert en `organizations` sin `experience` toma
- * `DEFAULT_DE_LA_BASE`, como la columna real; el test que falla si el default
- * de la base cambia es `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`.
+ * `DEFAULT_DE_LA_BASE` (`full`), como la columna real; el test que falla si el
+ * default de la base cambia es `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`.
  */
 
-export const DEFAULT_DE_LA_BASE = "webinar";
+export const DEFAULT_DE_LA_BASE = "full";
 
 export type Fila = Record<string, unknown>;
 
