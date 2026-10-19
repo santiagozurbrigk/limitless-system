@@ -21,8 +21,17 @@ import { useCommandPalette } from "@/providers/command-palette-provider";
 import { es } from "@/lib/locale/es";
 import { paths } from "@/routes";
 import { platformNavigation } from "@/routes/navigation";
+import type { OrganizationExperience } from "@/lib/organization/experience";
+import type { PermissionModuleId } from "@/constants/permission-modules";
+import type { UserPermissions } from "@/lib/auth/get-current-permissions";
+import {
+  entradasListas,
+  pantallaDeInicio,
+} from "@/lib/navigation/rutas-por-experiencia";
+import { canSeeNavItem, usePermissions } from "@/providers/permissions-provider";
+import { useExperiencia } from "@/providers/experiencia-provider";
 
-type PaletteItem = {
+export type PaletteItem = {
   label: string;
   href: string;
   group: string;
@@ -83,21 +92,55 @@ const QUICK_ACTIONS: PaletteItem[] = [
 
 const ALL_ITEMS = [...QUICK_ACTIONS, ...flattenNav()];
 
+/**
+ * Lo que lista la paleta según la experiencia de la organización (SCRUM-524).
+ *
+ *   - `full`: lo de siempre, las acciones rápidas y todo el menú.
+ *   - `webinar`: sólo las entradas listas de su menú, filtradas por permiso con
+ *     la misma regla que la barra (`canSeeNavItem`). Sin acciones rápidas:
+ *     todas llevan a módulos que no son de Limitless Webinars.
+ */
+export function itemsDeLaPaleta(
+  experiencia: OrganizationExperience,
+  permisos: Pick<UserPermissions, "isFounder" | "modules">
+): PaletteItem[] {
+  if (experiencia === "full") return ALL_ITEMS;
+  const checkAccess = (moduleId: PermissionModuleId) =>
+    permisos.isFounder || (permisos.modules[moduleId] ?? "none") !== "none";
+  return entradasListas()
+    .filter((entrada) =>
+      canSeeNavItem(entrada.permissionId, checkAccess, permisos.isFounder)
+    )
+    .map((entrada) => ({
+      label: entrada.label,
+      href: entrada.href,
+      group: "Plataforma",
+      keywords: entrada.label,
+    }));
+}
+
 export function CommandPalette() {
   const { open, setOpen } = useCommandPalette();
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const experiencia = useExperiencia();
+  const { isFounder, modules } = usePermissions();
+
+  const items = useMemo(
+    () => itemsDeLaPaleta(experiencia, { isFounder, modules }),
+    [experiencia, isFounder, modules]
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return ALL_ITEMS;
-    return ALL_ITEMS.filter(
+    if (!q) return items;
+    return items.filter(
       (item) =>
         item.label.toLowerCase().includes(q) ||
         item.keywords?.toLowerCase().includes(q) ||
         item.group.toLowerCase().includes(q)
     );
-  }, [query]);
+  }, [query, items]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, PaletteItem[]>();
@@ -180,11 +223,11 @@ export function CommandPalette() {
             <kbd className="rounded border border-border px-1">K</kbd> en cualquier pantalla
           </span>
           <Link
-            href={paths.platform.dashboard}
+            href={pantallaDeInicio(experiencia)}
             className="hover:text-foreground transition-colors"
             onClick={() => setOpen(false)}
           >
-            {es.nav.dashboard}
+            {experiencia === "full" ? es.nav.dashboard : "Ir al inicio"}
           </Link>
         </div>
       </DialogContent>

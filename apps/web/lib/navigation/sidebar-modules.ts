@@ -1,6 +1,8 @@
 import { paths } from "@/routes/paths";
 import { ESCONDIDO } from "@/lib/release/escondido";
 import type { AddOnId } from "@/lib/auth/get-current-permissions";
+import type { OrganizationExperience } from "@/lib/organization/experience";
+import { entradasListas } from "./rutas-por-experiencia";
 import type {
   SidebarDirectModule,
   SidebarNavConfig,
@@ -335,8 +337,39 @@ export const platformSidebarNav: SidebarNavConfig = {
   rootItems: platformRootItems,
 };
 
-/** Versión con add-ons inyectados — usar en componentes que tienen acceso a enabledAddOns */
-export function buildPlatformSidebarNav(enabledAddOns: AddOnId[]): SidebarNavConfig {
+/**
+ * La barra de una organización de Limitless Webinars (SCRUM-524): sólo las
+ * entradas listas de `MENU_WEBINAR`, en su orden, como links directos con su
+ * módulo de permisos (la barra los filtra por permiso como a cualquier otro).
+ * Sin grupos: tampoco aparece Integraciones en la isla derecha, que sale del
+ * grupo `configuracion`.
+ */
+export function buildWebinarSidebarNav(): SidebarNavConfig {
+  return {
+    modulesWithChildren: {},
+    getParentFromPath: () => null,
+    rootItems: entradasListas().map((entrada) => ({
+      type: "link" as const,
+      module: {
+        label: entrada.label,
+        href: entrada.href,
+        icon: entrada.icon,
+        permissionId: entrada.permissionId,
+      },
+    })),
+  };
+}
+
+/**
+ * Versión con add-ons inyectados — usar en componentes que tienen acceso a
+ * enabledAddOns. Con `experiencia` = `webinar` devuelve el menú de Limitless
+ * Webinars; con `full` (el default), el de siempre.
+ */
+export function buildPlatformSidebarNav(
+  enabledAddOns: AddOnId[],
+  experiencia: OrganizationExperience = "full"
+): SidebarNavConfig {
+  if (experiencia === "webinar") return buildWebinarSidebarNav();
   return {
     modulesWithChildren,
     getParentFromPath,

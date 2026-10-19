@@ -28,6 +28,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { paths } from "@/routes";
 import { CUENTA_DESACTIVADA_MESSAGE } from "@/lib/auth/cuenta-desactivada";
 import { destinoDeInvitacion } from "@/lib/team/invitacion";
+import { pantallaDeInicioDeLaOrganizacionActiva } from "@/lib/organization/ruta-de-la-experiencia";
 
 const limiteRecuperacionPorEmail = rateLimit(LIMITE_RECUPERACION_POR_EMAIL);
 const limiteRecuperacionPorIp = rateLimit(LIMITE_RECUPERACION_POR_IP);
@@ -121,6 +122,10 @@ async function postAuthRedirect(invitacion: string | null = null) {
       if (accountType === "holding") {
         redirect(paths.platform.holding);
       }
+
+      // La pantalla de inicio de la experiencia de la organización (SCRUM-524):
+      // el Panel para `full`, la primera entrada lista del menú para `webinar`.
+      redirect(await pantallaDeInicioDeLaOrganizacionActiva());
     }
   }
   redirect(paths.platform.dashboard);

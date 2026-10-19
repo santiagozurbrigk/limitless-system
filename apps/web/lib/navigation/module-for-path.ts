@@ -21,6 +21,12 @@ import type { PermissionModuleId } from "@/constants/permission-modules";
  */
 const MODULE_BY_PREFIX: { prefix: string; moduleId: PermissionModuleId }[] = [
   { prefix: "/dashboard", moduleId: "dashboard" },
+  // Menú de Limitless Webinars (SCRUM-524): las pantallas todavía no existen
+  // (`/inicio` es de SCRUM-534; `/leads` y `/llamadas`, de SCRUM-537), pero el
+  // módulo queda decidido acá y en `lib/navigation/menu-webinar.ts`.
+  { prefix: "/inicio", moduleId: "dashboard" },
+  { prefix: "/leads", moduleId: "sales" },
+  { prefix: "/llamadas", moduleId: "sales" },
   { prefix: "/workboard", moduleId: "workboard" },
 
   { prefix: "/agent", moduleId: "agent" },

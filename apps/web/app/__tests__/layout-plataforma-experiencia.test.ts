@@ -1,0 +1,114 @@
+/**
+ * SCRUM-524 · El layout de la plataforma le pasa a la barra y a la paleta la
+ * experiencia de la organización activa, leída en cada pedido.
+ *
+ * Mismo armado que `layout-plataforma-lecturas.test.ts`: el layout real con
+ * `renderToStaticMarkup` y los providers reemplazados por envoltorios. El de
+ * la experiencia anota el valor que recibe, y el de los permisos anota si
+ * envuelve a `AppProviders` (ahí adentro se dibuja la paleta).
+ */
+
+import { createElement, Fragment, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { emptyPermissions } from "@/constants/permission-modules";
+import type { UserPermissions } from "@/lib/auth/get-current-permissions";
+
+const sim = vi.hoisted(() => ({
+  experiencia: "full" as "full" | "webinar",
+  recibidas: [] as unknown[],
+  orden: [] as string[],
+}));
+
+const PERMISOS: UserPermissions = {
+  role: "member",
+  isFounder: false,
+  modules: { ...emptyPermissions(), team: "full" },
+  hasRoleConfigured: true,
+  enabledAddOns: [],
+};
+
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ "x-pathname": "/team" }),
+}));
+vi.mock("@/lib/auth/get-current-permissions", () => ({
+  getCurrentUserPermissions: async () => PERMISOS,
+}));
+vi.mock("@/lib/holding/session", () => ({
+  getHoldingSessionState: async () => ({ isHolding: false, viewingBusiness: false, businesses: [] }),
+}));
+vi.mock("@/lib/onboarding/current", () => ({
+  getCurrentOnboardingContext: async () => ({ state: null, toursSeen: [] }),
+}));
+vi.mock("@/lib/fechas/organizacion-activa", () => ({
+  zonaDeLaOrganizacionActiva: async () => null,
+}));
+vi.mock("@/lib/organization/experience", () => ({
+  getOrganizationExperience: async () => sim.experiencia,
+}));
+
+function envoltorio(nombre: string) {
+  return function Envoltorio({ children }: { children?: ReactNode }) {
+    sim.orden.push(nombre);
+    return createElement(Fragment, null, children);
+  };
+}
+function nada() {
+  return null;
+}
+
+vi.mock("@/providers", () => ({ AppProviders: envoltorio("app") }));
+vi.mock("@/components/platform/welcome-gate", () => ({ WelcomeGate: envoltorio("welcome") }));
+vi.mock("@/components/holding/holding-platform-provider", () => ({
+  HoldingPlatformProvider: envoltorio("holding"),
+}));
+vi.mock("@/layouts", () => ({ PlatformLayout: envoltorio("marco") }));
+vi.mock("@/providers/permissions-provider", () => ({ PermissionsProvider: envoltorio("permisos") }));
+vi.mock("@/providers/onboarding-provider", () => ({ OnboardingProvider: envoltorio("onboarding") }));
+vi.mock("@/providers/experiencia-provider", () => ({
+  ExperienciaProvider: ({ experiencia, children }: { experiencia: unknown; children?: ReactNode }) => {
+    sim.recibidas.push(experiencia);
+    sim.orden.push("experiencia");
+    return createElement(Fragment, null, children);
+  },
+}));
+vi.mock("@/components/onboarding/tour-runner", () => ({ TourRunner: nada }));
+vi.mock("@/components/platform/aviso-clave-ia", () => ({ AvisoClaveIa: nada }));
+
+import PlatformRouteLayout from "../(platform)/layout";
+
+async function render(): Promise<string> {
+  const arbol = await PlatformRouteLayout({ children: createElement("p", null, "pantalla") });
+  return renderToStaticMarkup(arbol);
+}
+
+beforeEach(() => {
+  sim.experiencia = "full";
+  sim.recibidas = [];
+  sim.orden = [];
+});
+
+describe("⭐ la experiencia llega al menú", () => {
+  it("full y webinar llegan tal cual al provider de la barra y la paleta", async () => {
+    await render();
+    sim.experiencia = "webinar";
+    await render();
+    expect(sim.recibidas).toEqual(["full", "webinar"]);
+  });
+
+  it("⭐ se lee en cada pedido: cambiar de organización activa recalcula el menú", async () => {
+    sim.experiencia = "webinar";
+    await render();
+    sim.experiencia = "full";
+    await render();
+    sim.experiencia = "webinar";
+    await render();
+    expect(sim.recibidas).toEqual(["webinar", "full", "webinar"]);
+  });
+
+  it("los permisos y la experiencia envuelven a AppProviders (la paleta vive ahí adentro)", async () => {
+    await render();
+    expect(sim.orden.indexOf("experiencia")).toBeLessThan(sim.orden.indexOf("app"));
+    expect(sim.orden.indexOf("permisos")).toBeLessThan(sim.orden.indexOf("app"));
+  });
+});

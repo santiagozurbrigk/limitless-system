@@ -27,6 +27,7 @@ import {
   useEnabledAddOns,
   usePermissions,
 } from "@/providers/permissions-provider";
+import { useExperiencia } from "@/providers/experiencia-provider";
 import { NotchNav, type NotchNavItem } from "./notch-nav";
 
 /**
@@ -47,6 +48,7 @@ import { NotchNav, type NotchNavItem } from "./notch-nav";
 export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) {
   const pathname = usePathname();
   const enabledAddOns = useEnabledAddOns();
+  const experiencia = useExperiencia();
   const { isFounder, modules } = usePermissions();
   const { isHolding } = useHoldingSession();
   const { clients } = usePlatformData();
@@ -55,8 +57,8 @@ export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) 
     isFounder || (modules[moduleId] ?? "none") !== "none";
 
   const config = useMemo(
-    () => buildPlatformSidebarNav(enabledAddOns),
-    [enabledAddOns]
+    () => buildPlatformSidebarNav(enabledAddOns, experiencia),
+    [enabledAddOns, experiencia]
   );
   const activeParent = config.getParentFromPath(pathname);
 
