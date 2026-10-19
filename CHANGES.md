@@ -54,7 +54,6 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Riesgos / deuda técnica pendiente:**
 - No hay forma de pasar una organización nueva a `full` sin SQL (`[ORG-EXPERIENCIA-CAMBIO]`, nuevo en `PENDIENTES.md`). Pesa cuando SCRUM-524 use el dato para el menú.
-- `foto_estructura.sql` de SCRUM-532 mira los permisos de la tabla (`relacl`) y no los de columna (`attacl`): el `grant select (experience)` no cambia la huella por sí solo (lo cubre `scrum-523/02_verificacion.sql`). Anotado en el LEEME.
 
 ### 2026-10-13 — Marketing, contenido: errores esperables como valor (SCRUM-502)
 
