@@ -167,10 +167,20 @@ export const lecturasDeFinanzas = {
     ),
 };
 
+/**
+ * Si el provider trabaja con las filas de Finanzas (y calcula los totales acá)
+ * o con el resumen que manda el servidor. Sólo con Finanzas: con Ventas, el
+ * detalle no llega y los totales tienen que venir del resumen (AR 2 de
+ * SCRUM-540, Y4).
+ */
+export function usaElDetalleDeFinanzas(permisos: PermisosDeModulo): boolean {
+  return puedeLeerDelMarco(permisos, "detalleDeFinanzas");
+}
+
 export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
   const permisos = usePermisosDeModulo();
-  const conDetalle = puedeLeerDelMarco(permisos, "detalleDeFinanzas");
+  const conDetalle = usaElDetalleDeFinanzas(permisos);
   const { clients, closingCalls, clientsLoading, closingCallsLoading } =
     usePlatformData();
   // Sin Finanzas: los totales calculados en el servidor (SCRUM-540).
@@ -194,7 +204,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
   const refreshClientPayments = useCallback(async () => {
     if (!useSupabase) return;
-    if (!puedeLeerDelMarco(permisos, "detalleDeFinanzas")) {
+    if (!usaElDetalleDeFinanzas(permisos)) {
       // Sin Finanzas no llegan los cobros: se vuelve a pedir el resumen, que
       // los incluye ya sumados.
       const resultado = await lecturasDeFinanzas.resumen(permisos);

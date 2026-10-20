@@ -68,7 +68,7 @@ vi.mock("@/app/marketing/actions", async (o) => ({
 }));
 
 import { lecturasDeLaPlataforma } from "@/providers/platform-data-provider";
-import { lecturasDeFinanzas } from "@/providers/finance-data-provider";
+import { lecturasDeFinanzas, usaElDetalleDeFinanzas } from "@/providers/finance-data-provider";
 import { leerInstagramDelMarco } from "@/providers/marketing-data-provider";
 
 function member(modulos: Partial<UserPermissions["modules"]>): UserPermissions {
@@ -170,6 +170,16 @@ describe("FinanceDataProvider", () => {
     await lecturasDeFinanzas.cobros(founder);
     await lecturasDeFinanzas.metricasImportadas(founder);
     expect(sim.pedidos).toEqual(["finanzas", "cobros", "metricas"]);
+  });
+});
+
+describe("FinanceDataProvider: filas o resumen (AR 2, Y4)", () => {
+  it("⭐ sólo con Finanzas (o founder o sin rol) trabaja con las filas; con Ventas, con el resumen del servidor", () => {
+    expect(usaElDetalleDeFinanzas(member({ finance: "view" }))).toBe(true);
+    expect(usaElDetalleDeFinanzas(founder)).toBe(true);
+    expect(usaElDetalleDeFinanzas({ ...member({}), hasRoleConfigured: false })).toBe(true);
+    expect(usaElDetalleDeFinanzas(member({ sales: "full" }))).toBe(false);
+    expect(usaElDetalleDeFinanzas(member({ settings: "view", dashboard: "full" }))).toBe(false);
   });
 });
 

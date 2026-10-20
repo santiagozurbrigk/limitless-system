@@ -270,7 +270,28 @@ export function codigoAlImportar(archivo: string, texto = readFileSync(archivo, 
  * la página (se tratan como un layout: si leen, llevan el guardia), y
  * `loading`, `error` y `not-found` no pueden leer nada.
  */
-export type ArchivoEspecial = { archivo: string; tipo: "template" | "default" | "loading" | "error" | "not-found" };
+export type ArchivoEspecial = {
+  archivo: string;
+  tipo: "template" | "default" | "loading" | "error" | "not-found" | "servido-aparte";
+};
+
+/**
+ * Archivos que Next sirve por su cuenta, sin la página ni el guardia (AR 2 de
+ * SCRUM-540): `route` (una API dentro de la ruta) y los de metadata con código
+ * (`opengraph-image`, `twitter-image`, `icon`, `apple-icon`, `sitemap`, `robots`,
+ * `manifest`). En una ruta con módulo no se aceptan: lo que lean llegaría a
+ * cualquiera.
+ */
+export const SERVIDOS_APARTE = [
+  "route",
+  "opengraph-image",
+  "twitter-image",
+  "icon",
+  "apple-icon",
+  "sitemap",
+  "robots",
+  "manifest",
+];
 
 export function archivosEspeciales(dir: string, out: ArchivoEspecial[] = []): ArchivoEspecial[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -282,6 +303,8 @@ export function archivosEspeciales(dir: string, out: ArchivoEspecial[] = []): Ar
     }
     const m = /^(template|default|loading|error|not-found)\.(tsx|ts|jsx|js)$/.exec(e.name);
     if (m) out.push({ archivo: ruta, tipo: m[1] as ArchivoEspecial["tipo"] });
+    const aparte = /^([a-z-]+?)\d*\.(tsx|ts|jsx|js)$/.exec(e.name);
+    if (aparte && SERVIDOS_APARTE.includes(aparte[1]!)) out.push({ archivo: ruta, tipo: "servido-aparte" });
   }
   return out;
 }
@@ -534,6 +557,51 @@ export function usosFueraDeLeerDelMarco(
         if (lectura) locales.set(el.name.text, lectura);
       }
     }
+    // `import("...")` con literal de un archivo de actions del marco (AR 2, B5): se siguen
+    // `.then((m) => ...)`, `const m = await import(...)` y `const { a } = await import(...)`;
+    // cualquier otro uso se señala, porque no se puede saber qué llama.
+    const visitarImports = (nodo: ts.Node) => {
+      if (
+        ts.isCallExpression(nodo) &&
+        nodo.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        nodo.arguments[0] &&
+        ts.isStringLiteral(nodo.arguments[0])
+      ) {
+        const destino = grafo.resolver(archivo, nodo.arguments[0].text);
+        if (destino && grafo.info(destino).directiva === "servidor") {
+          const prefijo = `${relative(raiz, destino)}#`;
+          const delMarco = [...lecturas].filter(([clave]) => clave.startsWith(prefijo));
+          if (delMarco.length > 0) {
+            const comoEspacio = (nombre: string) => {
+              for (const [clave, lectura] of delMarco) espacios.set(`${nombre}.${clave.slice(prefijo.length)}`, lectura);
+            };
+            const padre = nodo.parent;
+            const abuelo = padre?.parent;
+            const decl = ts.isAwaitExpression(padre) && ts.isVariableDeclaration(padre.parent) ? padre.parent : null;
+            const callback =
+              ts.isPropertyAccessExpression(padre) && padre.name.text === "then" && abuelo && ts.isCallExpression(abuelo)
+                ? abuelo.arguments[0]
+                : undefined;
+            if (callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) && callback.parameters[0] && ts.isIdentifier(callback.parameters[0].name)) {
+              comoEspacio(callback.parameters[0].name.text);
+            } else if (decl && ts.isIdentifier(decl.name)) {
+              comoEspacio(decl.name.text);
+            } else if (decl && ts.isObjectBindingPattern(decl.name)) {
+              for (const el of decl.name.elements) {
+                const original = (el.propertyName && ts.isIdentifier(el.propertyName) ? el.propertyName : el.name) as ts.Identifier;
+                const lectura = lecturas.get(`${prefijo}${original.text}`);
+                if (lectura && ts.isIdentifier(el.name)) locales.set(el.name.text, lectura);
+              }
+            } else {
+              const { line } = info.sf.getLineAndCharacterOfPosition(nodo.getStart(info.sf));
+              mal.push(`${relative(raiz, archivo)}:${line + 1} import() de ${relative(raiz, destino)} que no se puede seguir`);
+            }
+          }
+        }
+      }
+      ts.forEachChild(nodo, visitarImports);
+    };
+    visitarImports(info.sf);
     if (locales.size === 0 && espacios.size === 0) continue;
     const visitar = (nodo: ts.Node) => {
       const nombre =
@@ -544,7 +612,11 @@ export function usosFueraDeLeerDelMarco(
               espacios.has(`${nodo.expression.text}.${nodo.name.text}`)
             ? `${nodo.expression.text}.${nodo.name.text}`
             : null;
-      if (nombre && !dentroDeUnImport(nodo)) {
+      const esDeclaracion =
+        nodo.parent !== undefined &&
+        (ts.isBindingElement(nodo.parent) || ts.isVariableDeclaration(nodo.parent) || ts.isParameter(nodo.parent)) &&
+        (nodo.parent as ts.NamedDeclaration).name === nodo;
+      if (nombre && !esDeclaracion && !dentroDeUnImport(nodo)) {
         const esperada = (locales.get(nombre) ?? espacios.get(nombre))!;
         const envoltorio = leerDelMarcoQueEnvuelve(nodo);
         if (envoltorio !== esperada) {
@@ -579,7 +651,16 @@ export const LECTURA_DE_CADA_TABLA_EN_VIVO: Record<string, string> = {
  * la tabla que escucha (`LECTURA_DE_CADA_TABLA_EN_VIVO`). Un canal manda filas
  * nuevas al navegador sin pasar por ninguna action.
  */
-export function canalesSinChequeo(grafo: GrafoDeImports, entrada: string): string[] {
+export function canalesSinChequeo(
+  grafo: GrafoDeImports,
+  entrada: string,
+  /**
+   * Desde una página con módulo, sólo cuentan los canales de tablas del marco
+   * (las de `LECTURA_DE_CADA_TABLA_EN_VIVO`): los de las tablas de la propia
+   * pantalla ya están detrás del guardia de la página.
+   */
+  soloTablasDelMarco = false
+): string[] {
   const mal: string[] = [];
   for (const archivo of grafo.archivosDesde(entrada)) {
     const info = grafo.info(archivo);
@@ -593,6 +674,10 @@ export function canalesSinChequeo(grafo: GrafoDeImports, entrada: string): strin
         const { line } = info.sf.getLineAndCharacterOfPosition(nodo.getStart(info.sf));
         const donde = `${relative(grafo.raiz, archivo)}:${line + 1}`;
         const tablas = tablasDelCanal(nodo);
+        if (soloTablasDelMarco && !tablas.some((t) => t in LECTURA_DE_CADA_TABLA_EN_VIVO)) {
+          ts.forEachChild(nodo, visitar);
+          return;
+        }
         const esperadas = new Set<string | undefined>(tablas.map((t) => LECTURA_DE_CADA_TABLA_EN_VIVO[t]));
         const guardia = lecturaConLaQueCorta(nodo);
         if (tablas.length === 0) mal.push(`${donde} sin tabla reconocible`);

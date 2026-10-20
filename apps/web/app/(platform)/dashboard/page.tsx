@@ -63,13 +63,15 @@ export default async function DashboardPage() {
   // va sólo el resultado, no las filas de clientes, conversaciones, llamadas,
   // gastos, sueldos ni cobros. Sin Supabase (modo demo) el Panel queda vacío,
   // como antes.
-  const { pagosSinLeer, ...datos } = isSupabaseConfigured()
-    ? await leerDatosDelPanel(await requireOrganizationId(), frequentObjections.objections)
+  const organizationId = isSupabaseConfigured() ? await requireOrganizationId() : null;
+  const { pagosSinLeer, ...datos } = organizationId
+    ? await leerDatosDelPanel(organizationId, frequentObjections.objections)
     : { ...calcularDatosDelPanel(entradasVacias()), pagosSinLeer: false };
 
   return (
     <DashboardPageContent
       datos={datos}
+      organizationId={organizationId}
       pagosSinLeer={pagosSinLeer}
       zernioAnalytics={zernioAnalytics}
       customMetrics={customMetrics}

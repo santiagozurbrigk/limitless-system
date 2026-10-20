@@ -277,6 +277,9 @@ function especialMal(grafo: GrafoDeImports, appDir: string, e: ArchivoEspecial):
   const modulo = permissionModuleForPath(ruta);
   if (modulo === null) return null;
   const rel = `app/${relative(appDir, e.archivo)}`;
+  if (e.tipo === "servido-aparte") {
+    return `${rel}: Next lo sirve sin la página ni el guardia; no puede estar en una ruta con módulo`;
+  }
   if (e.tipo === "template" || e.tipo === "default") {
     if (!layoutLee(e.archivo)) return null;
     const g = guardiaDe(e.archivo);
@@ -390,6 +393,16 @@ describe("lecturas del marco de la plataforma (SCRUM-540)", () => {
     expect(grafo.archivosDesde(marco)).toContain(provider);
     expect(readFileSync(provider, "utf8")).toContain(".channel(");
     expect(canalesSinChequeo(grafo, marco)).toEqual([]);
+  });
+
+  it("⭐ también los canales en vivo de tablas del marco que abren las páginas con módulo (el del Panel, AR 2)", () => {
+    const paginas = pantallas(APP_DIR)
+      .filter((p) => permissionModuleForPath(p.ruta) !== null)
+      .map((p) => join(APP_DIR, p.archivo));
+    const panel = join(APP_DIR, "(platform)", "dashboard", "page.tsx");
+    expect(grafo.archivosDesde(panel)).toContain(join(WEB, "lib", "dashboard", "panel-en-vivo.ts"));
+    const mal = [...new Set(paginas.flatMap((p) => canalesSinChequeo(grafo, p, true)))];
+    expect(mal).toEqual([]);
   });
 
   it("⭐ quien pide con leerDelMarco toma los permisos con identidad estable (usePermisosDeModulo), no con usePermissions", () => {
@@ -572,14 +585,27 @@ import * as acciones from "@/app/datos/actions";
 export const bien = (p) => leerDelMarco(p, "clientes", acciones.listDatosAction, []);
 export const directo = () => acciones.listDatosAction();`
     );
+    archivo(
+      "marco/providers/dinamico.tsx",
+      `"use client";
+export const mal = () => import("@/app/datos/actions").then((m) => m.listDatosAction());
+export const bien = (p) => import("@/app/datos/actions").then((m) => leerDelMarco(p, "clientes", m.listDatosAction, []));
+export async function conAwait() { const m = await import("@/app/datos/actions"); return m.listDatosAction(); }
+export async function desarmado() { const { listDatosAction: l } = await import("@/app/datos/actions"); return l(); }
+export const raro = (x) => x(import("@/app/datos/actions"));`
+    );
     const layout = archivo(
       "marco/app/(platform)/layout.tsx",
-      `import "@/providers/bien";\nimport "@/providers/mal";\nimport "@/providers/espacio";\nexport default function L() { return null; }`
+      `import "@/providers/bien";\nimport "@/providers/mal";\nimport "@/providers/espacio";\nimport "@/providers/dinamico";\nexport default function L() { return null; }`
     );
     const grafo = new GrafoDeImports(join(raiz, "marco"));
     const accion = "app/datos/actions.ts#listDatosAction";
     expect(grafo.chequeoDeLaAccion(accion, LLAMADA_DEL_MARCO)).toBe("clientes");
     expect(usosFueraDeLeerDelMarco(grafo, layout, new Map([[accion, "clientes"]])).sort()).toEqual([
+      "providers/dinamico.tsx:2 m.listDatosAction fuera de leerDelMarco",
+      "providers/dinamico.tsx:4 m.listDatosAction fuera de leerDelMarco",
+      "providers/dinamico.tsx:5 l fuera de leerDelMarco",
+      "providers/dinamico.tsx:6 import() de app/datos/actions.ts que no se puede seguir",
       "providers/espacio.tsx:4 acciones.listDatosAction fuera de leerDelMarco",
       "providers/mal.tsx:3 listar fuera de leerDelMarco",
       'providers/mal.tsx:4 listar con "reportesEjecutivos" en vez de "clientes"',
@@ -659,6 +685,15 @@ export default async function P() {
       `import { createClient } from "@/lib/supabase/server";\nexport default async function L() { await createClient(); return null; }`
     );
     archivo("esp/app/(platform)/workboard/error.tsx", `"use client";\nexport default function E() { return null; }`);
+    archivo(
+      "esp/app/(platform)/sops/[id]/opengraph-image.tsx",
+      `export default async function Imagen({ params }) { return leerSop(params); }`
+    );
+    archivo(
+      "esp/app/(platform)/finance/exportar/route.ts",
+      `import { createClient } from "@/lib/supabase/server";\nexport async function GET() { return Response.json(await createClient()); }`
+    );
+    archivo("esp/app/opengraph-image.tsx", `export default function Imagen() { return null; }`);
     const grafo = new GrafoDeImports(join(raiz, "esp"));
     const mal = archivosEspeciales(app)
       .map((e) => especialMal(grafo, app, e))
@@ -668,7 +703,9 @@ export default async function P() {
       "app/(platform)/finance/error.tsx: alcanza app/finance/actions.ts#loadDatosAction",
       expect.stringMatching(/^app\/\(platform\)\/finance\/expenses\/loading\.tsx: lee la base/),
       expect.stringMatching(/^app\/\(platform\)\/finance\/expenses\/template\.tsx: lee y es un componente de cliente/),
+      expect.stringMatching(/^app\/\(platform\)\/finance\/exportar\/route\.ts: Next lo sirve sin la página/),
       expect.stringMatching(/^app\/\(platform\)\/finance\/template\.tsx: lee y no arranca con/),
+      expect.stringMatching(/^app\/\(platform\)\/sops\/\[id\]\/opengraph-image\.tsx: Next lo sirve sin la página/),
     ]);
   });
 
