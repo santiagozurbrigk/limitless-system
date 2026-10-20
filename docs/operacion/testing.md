@@ -13,7 +13,7 @@
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
 | Build | `next build` de `apps/web` | `apps/web` | sí (job `web-build`) |
-| Backlog | `pendientes_a_jira.py --check`, `historias_a_jira.py --check` | `PENDIENTES.md`, `docs/backlog/historias.md` | sí (job `backlog`) |
+| Backlog | `pendientes_a_jira.py --check`, `historias_a_jira.py --check` | `PENDIENTES.md`, `docs/backlog/historias.md`, que `historias-jira.csv` esté al día y que `FUNCIONAL.md` no cite tareas cerradas | sí (job `backlog`) |
 
 En web, `next lint` revisa las carpetas de `eslint.dirs` de `next.config.ts`: además de las de siempre (`app`, `components`, `lib`), `providers`, `hooks`, `layouts`, `constants`, `mocks`, `routes`, `types`, `scripts`, `workspaces` y `e2e` (SCRUM-503: un error en un test de `providers/` no lo veía nadie). Hoy deja 13 avisos de `react-hooks/exhaustive-deps` en `providers/finance-data-provider.tsx`, que ya estaban.
 

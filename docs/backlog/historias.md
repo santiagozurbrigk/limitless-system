@@ -31,7 +31,7 @@ Armado el 2026-09-23 para Martín (backlog en Jira) y Agustín (qué entra en oc
 ## Para Jira
 
 ```bash
-python3 docs/backlog/historias_a_jira.py --check   # valida
+python3 docs/backlog/historias_a_jira.py --check   # valida; también falla si historias-jira.csv está viejo o FUNCIONAL.md cita una tarea cerrada
 python3 docs/backlog/historias_a_jira.py           # escribe historias-jira.csv
 ```
 

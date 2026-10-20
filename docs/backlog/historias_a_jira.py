@@ -9,12 +9,17 @@ La columna "Octubre" se lee de FUNCIONAL.md, donde la completa Agustín.
 Uso (desde la raíz del repo):
 
     python3 docs/backlog/historias_a_jira.py           # valida y escribe el CSV
-    python3 docs/backlog/historias_a_jira.py --check   # sólo valida
+    python3 docs/backlog/historias_a_jira.py --check   # sólo valida, no escribe
+
+--check también falla si historias-jira.csv no es el que generaría el script (alguien cambió
+PENDIENTES.md, historias.md o FUNCIONAL.md y no lo regeneró) o si FUNCIONAL.md cita una tarea
+técnica que ya no está en PENDIENTES.md.
 
 Sólo usa la biblioteca estándar.
 """
 
 import csv
+import io
 import re
 import sys
 from pathlib import Path
@@ -44,6 +49,7 @@ def leer_funcional():
         if re.match(r"^\| F-[A-Z]+-\d+ \|", linea):
             cols = [c.strip() for c in linea.split("|")[1:-1]]
             filas[cols[0]] = {"area": area, "funcionalidad": cols[1], "estado": cols[2],
+                              "tareas": re.findall(r"`([A-Z0-9][A-Z0-9-]*)`", cols[3]),
                               "octubre": cols[5] if len(cols) > 5 else ""}
     return filas
 
@@ -119,6 +125,10 @@ def validar(historias, funcional, tareas):
         for tid in ids_tareas(" ".join(c.get("Tareas técnicas", []))):
             if tid not in tareas:
                 errores.append(f"{h['id']}: la tarea [{tid}] no existe en PENDIENTES.md")
+    for fid, d in sorted(funcional.items()):
+        for tid in d["tareas"]:
+            if tid not in tareas:
+                errores.append(f"{fid}: FUNCIONAL.md cita la tarea {tid}, que no está en PENDIENTES.md (¿se cerró?)")
     for fid in sorted(esperadas - set(vistas)):
         errores.append(f"{fid} ({funcional[fid]['estado']}) no tiene historia")
     return errores
@@ -169,6 +179,23 @@ def fila(h, calc, tareas):
             calc["octubre"]]
 
 
+def generar_csv(historias, funcional, tareas):
+    """El contenido de historias-jira.csv, y el conteo por prioridad calculada."""
+    calcs = {h["id"]: calcular(h, tareas, funcional) for h in historias}
+    orden = lambda h: (ORDEN_PRIORIDAD.index(calcs[h["id"]]["prioridad"]) if calcs[h["id"]]["prioridad"] else 9, h["id"])
+    f = io.StringIO(newline="")
+    w = csv.writer(f)
+    w.writerow(["Summary", "Issue Type", "Priority", "Labels", "Labels", "Labels", "Labels", "Labels", "Labels",
+                "Description", "ID Historia", "Épica (área)", "Prioridad calculada", "Severidad calculada",
+                "Tareas técnicas", "Octubre"])
+    for h in sorted(historias, key=orden):
+        w.writerow(fila(h, calcs[h["id"]], tareas))
+    conteo = {}
+    for c in calcs.values():
+        conteo[c["prioridad"] or "a definir"] = conteo.get(c["prioridad"] or "a definir", 0) + 1
+    return f.getvalue(), conteo
+
+
 def main():
     historias = parsear()
     funcional = leer_funcional()
@@ -179,21 +206,21 @@ def main():
     if errores:
         print("\n".join(errores), file=sys.stderr)
         sys.exit(1)
+
+    contenido, conteo = generar_csv(historias, funcional, tareas)
     if "--check" in sys.argv:
+        # El CSV se versiona: si una tarea técnica cambia (se cierra, cambia de prioridad o de título)
+        # y nadie regenera, el CSV queda con el estado viejo sin que nada avise (QA de SCRUM-540).
+        # newline="": el CSV termina las líneas en \r\n y read_text las convertiría.
+        actual = OUT.open(encoding="utf-8", newline="").read() if OUT.exists() else ""
+        if actual != contenido:
+            print(f"{OUT.relative_to(ROOT)} está desactualizado: regenéralo con "
+                  "python3 docs/backlog/historias_a_jira.py", file=sys.stderr)
+            sys.exit(1)
         return
 
-    calcs = {h["id"]: calcular(h, tareas, funcional) for h in historias}
-    orden = lambda h: (ORDEN_PRIORIDAD.index(calcs[h["id"]]["prioridad"]) if calcs[h["id"]]["prioridad"] else 9, h["id"])
     with OUT.open("w", encoding="utf-8", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["Summary", "Issue Type", "Priority", "Labels", "Labels", "Labels", "Labels", "Labels", "Labels",
-                    "Description", "ID Historia", "Épica (área)", "Prioridad calculada", "Severidad calculada",
-                    "Tareas técnicas", "Octubre"])
-        for h in sorted(historias, key=orden):
-            w.writerow(fila(h, calcs[h["id"]], tareas))
-    conteo = {}
-    for c in calcs.values():
-        conteo[c["prioridad"] or "a definir"] = conteo.get(c["prioridad"] or "a definir", 0) + 1
+        f.write(contenido)
     print("Prioridad calculada: " + " · ".join(f"{k}: {v}" for k, v in sorted(conteo.items())))
     print(f"Escrito {OUT.relative_to(ROOT)}")
 
