@@ -10,7 +10,7 @@
  */
 
 import { dirname, join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyPermissions } from "@/constants/permission-modules";
 import type { UserPermissions } from "@/lib/auth/get-current-permissions";
 import { permissionModuleForPath } from "@/lib/navigation/module-for-path";
@@ -93,6 +93,33 @@ beforeEach(() => {
   sim.permisos = sinNada();
 });
 
+type Acciones = Record<string, (...args: unknown[]) => Promise<unknown>>;
+const cargados = new Map<string, Acciones>();
+
+/**
+ * Los archivos de actions se importan una vez, todos juntos, antes de los casos. Cargar uno trae
+ * sus dependencias (el SDK de OpenAI, Google, el lector de PDF...) y eso lo pagaba el primer caso
+ * de cada archivo: hasta 3,9 s en la suite contra los 5 s por caso (QA de SCRUM-540). Juntos,
+ * en paralelo, tardan menos que uno detrás de otro, y cada caso queda en milisegundos. El
+ * timeout del hook es explícito porque es una carga de ~40 archivos con todo su grafo, no un
+ * caso: con la máquina cargada tarda varias veces lo normal.
+ */
+beforeAll(async () => {
+  const archivos = [...new Set([...chequeadas, ...delMarco].map((a) => a.accion.split("#")[0]!))];
+  await Promise.all(
+    archivos.map(async (archivo) => {
+      cargados.set(archivo, (await import(/* @vite-ignore */ join(WEB, archivo))) as Acciones);
+    })
+  );
+}, 60_000);
+
+function accionDe(accion: string): (...args: unknown[]) => Promise<unknown> {
+  const [archivo, nombre] = accion.split("#") as [string, string];
+  const fn = cargados.get(archivo)?.[nombre];
+  if (!fn) throw new Error(`${accion} no se cargó`);
+  return fn;
+}
+
 describe("lecturas que chequean el módulo", () => {
   it("son las de la entrega (la de Inteligencia, la de los SOP y las de Ventas, entre otras)", () => {
     const nombres = chequeadas.map((a) => a.accion);
@@ -105,12 +132,7 @@ describe("lecturas que chequean el módulo", () => {
   it.each(chequeadas.map((a) => [a.accion, a.modulo] as const))(
     "⭐ %s: sin %s devuelve el rechazo y no lee",
     async (accion, modulo) => {
-      const [archivo, nombre] = accion.split("#") as [string, string];
-      const mod = (await import(/* @vite-ignore */ join(WEB, archivo))) as Record<
-        string,
-        (...args: unknown[]) => Promise<unknown>
-      >;
-      const resultado = await mod[nombre]!("x", "y", "z");
+      const resultado = await accionDe(accion)("x", "y", "z");
       expect(resultado).toMatchObject({ success: false, motivo: "sin-acceso", moduleId: modulo });
       expect(sim.lecturas).toEqual([]);
     }
@@ -138,12 +160,7 @@ describe("lecturas del marco que chequean el módulo", () => {
   it.each(delMarco.map((a) => [a.accion, a.lectura] as const))(
     "⭐ %s (%s): sin ningún módulo devuelve el rechazo y no lee",
     async (accion, lectura) => {
-      const [archivo, nombre] = accion.split("#") as [string, string];
-      const mod = (await import(/* @vite-ignore */ join(WEB, archivo))) as Record<
-        string,
-        (...args: unknown[]) => Promise<unknown>
-      >;
-      const resultado = await mod[nombre]!();
+      const resultado = await accionDe(accion)();
       expect(resultado).toMatchObject({
         success: false,
         motivo: "sin-acceso",

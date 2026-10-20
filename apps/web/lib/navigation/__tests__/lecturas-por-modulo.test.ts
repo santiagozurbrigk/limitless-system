@@ -16,6 +16,7 @@ import {
   archivosEspeciales,
   codigoAlImportar,
   exportsQueCorrenAparte,
+  archivosDeAcciones,
   type ArchivoEspecial,
 } from "./lecturas-de-app";
 import { MODULOS_DE_LAS_LECTURAS_DEL_MARCO } from "@/lib/auth/lecturas-del-marco";
@@ -34,7 +35,11 @@ import { MODULOS_DE_LAS_LECTURAS_DEL_MARCO } from "@/lib/auth/lecturas-del-marco
  *      navegación y banderas) también.
  *   3. Toda Server Action de lectura que sólo alcanzan pantallas de un módulo
  *      arranca con `rechazoPorModulo("<módulo>")`, salvo las de la lista de
- *      deuda conocida, que tiene que achicarse y nunca crecer.
+ *      deuda conocida, que tiene que achicarse y nunca crecer. Y toda action
+ *      de lectura que todavía no alcanza ninguna pantalla (QA de SCRUM-540)
+ *      arranca con `rechazoPorModulo` o `rechazoDeLecturaDelMarco`, con el
+ *      módulo de su archivo si las otras lecturas del archivo son de uno solo,
+ *      salvo las de su propia lista de deuda.
  *   4. Toda Server Action de lectura que alcanza el marco de la plataforma
  *      (el layout de `(platform)`: providers, barra, menú del celular) arranca
  *      con `rechazoDeLecturaDelMarco("<lectura>")`, y en el cliente del marco
@@ -55,6 +60,9 @@ import { MODULOS_DE_LAS_LECTURAS_DEL_MARCO } from "@/lib/auth/lecturas-del-marco
  *     (`NOMBRE_DE_LECTURA`; el ataque A6 de la AR);
  *   - una action que alcanzan pantallas de dos módulos o una ruta libre (las
  *     del marco sí, por el punto 4);
+ *   - en una action que todavía no alcanza ninguna pantalla, si chequea el
+ *     módulo correcto cuando las otras lecturas de su archivo son de varios
+ *     módulos o de ninguno (se ve en cuanto una pantalla la importa);
  *   - en el cliente del marco, si `leerDelMarco` recibe los permisos reales:
  *     eso lo prueban los tests de cada provider;
  *   - una action del marco que un archivo de cliente importa a través de un
@@ -69,6 +77,8 @@ import { MODULOS_DE_LAS_LECTURAS_DEL_MARCO } from "@/lib/auth/lecturas-del-marco
 
 const WEB = process.cwd();
 const APP_DIR = join(WEB, "app");
+/** Un solo grafo para todo el archivo: cada archivo de la app se parsea una vez (QA de SCRUM-540, tests lentos). */
+const GRAFO = new GrafoDeImports(WEB);
 
 function rutaDeCarpeta(appDir: string, carpeta: string): string {
   const partes = relative(appDir, carpeta).split(sep).filter(Boolean);
@@ -162,6 +172,83 @@ const LECTURAS_SIN_CHEQUEO_CONOCIDAS: string[] = [
   "app/webinarjam/actions.ts#getWebinarJamStatusAction",
 ];
 
+/**
+ * ⭐ Deuda conocida: Server Actions de lectura que hoy no alcanza ninguna pantalla (las llama otro
+ * código de servidor, o nadie) y no chequean el permiso. Una action sin referencias de una pantalla
+ * no recibe ID en el build, pero en cuanto una pantalla la importe se vuelve invocable a mano. Las
+ * nuevas tienen que nacer con el chequeo, aunque nadie las importe todavía. Ítem
+ * `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (SCRUM-541). Al chequear una, o si una pantalla la empieza
+ * a usar, sacala de acá: el test falla si queda una que ya no corresponde.
+ */
+const LECTURAS_SIN_LLAMADOR_CONOCIDAS: string[] = [
+  "app/agent/graph-proposal-actions.ts#listPendingProposalsByConversationAction",
+  "app/agent/graph-proposal-actions.ts#listProposalsByMessageAction",
+  "app/clients/checkpoint-actions.ts#listCheckpointsAction",
+  "app/clients/checkpoint-actions.ts#listJourneyStagesAction",
+  "app/clients/checkpoint-derived-actions.ts#getClientsJourneyStatusAction",
+  "app/clients/checkpoint-event-actions.ts#listCheckpointEventsAction",
+  "app/clients/plan-duration-actions.ts#listPlanDurationsAction",
+  "app/clients/revenue-actions.ts#getRevenueByClientAction",
+  "app/clients/stage-actions.ts#getManualStagesAction",
+  "app/clients/tracking-actions.ts#listClientTrackingAction",
+  "app/clients/win-actions.ts#listClientBaselinesAction",
+  "app/clients/win-actions.ts#listClientNichesAction",
+  "app/conversations/actions.ts#getConversationIdByExternalRef",
+  "app/discord/actions.ts#getDiscordIntegrationStatusAction",
+  "app/fathom/actions.ts#getFathomIntegrationStatusAction",
+  "app/forms/actions.ts#getTypeformIntegrationStatusAction",
+  "app/hyros/actions.ts#getHyrosLeadJourneyAction",
+  "app/integrations/zernio/actions.ts#getZernioPostCommentsAction",
+  "app/lanzamientos/actions.ts#getLaunchAction",
+  "app/lanzamientos/actions.ts#getLaunchesAction",
+  "app/lanzamientos/actions.ts#getProductsForLaunchAction",
+  "app/marketing/actions.ts#getContentAssetByIdAction",
+  "app/marketing/actions.ts#getContentLabelDistributionAction",
+  "app/marketing/actions.ts#getContentPatternsAnalysisAction",
+  "app/marketing/actions.ts#getYoutubeIntegrationStatusAction",
+  "app/marketing/content/drive-actions.ts#getDriveFileAction",
+  "app/marketing/content/drive-actions.ts#getDriveFolderPathAction",
+  "app/marketing/content/drive-actions.ts#searchDriveFilesAction",
+  "app/marketing/content/reel-music-actions.ts#getReelMusicPathAction",
+  "app/marketing/content/reel-variation-actions.ts#getReelVariationJobAction",
+  "app/marketing/utm-actions.ts#getUTMLeadsAction",
+  "app/marketing/utm-actions.ts#getUtmBaseUrlAction",
+  "app/mercadopago/actions.ts#getMercadoPagoBalanceAction",
+  "app/mercadopago/actions.ts#getMercadoPagoIntegrationStatusAction",
+  "app/mercadopago/actions.ts#getMercadoPagoPaymentDetailAction",
+  "app/mercadopago/actions.ts#getMercadoPagoTransactionsAction",
+  "app/operations/actions.ts#countWeeklyInputsForWeek",
+  "app/product/actions.ts#getAvatarsAction",
+  "app/product/actions.ts#getProductContextForAgentAction",
+  "app/product/actions.ts#getProductContextForOrg",
+  "app/product/actions.ts#getProductContextTextForOrg",
+  "app/product/actions.ts#getProductsAction",
+  "app/product/actions.ts#getValueLadderAction",
+  "app/product/actions.ts#getValuePropositionAction",
+  "app/sales/actions.ts#getMockCallAnalysisKeysAction",
+  "app/sales/closer-actions.ts#getCloserCallsAction",
+  "app/sales/closer-actions.ts#getClosersWithCalendlyStatusAction",
+  "app/sales/follow-up-options-actions.ts#getFollowUpCatalogAction",
+  "app/sales/lead-actions.ts#getLeadThreadAction",
+  "app/sops/actions.ts#getSOPsAction",
+  "app/sops/video-actions.ts#listSopVideoJobsAction",
+  "app/stripe/actions.ts#getStripeBalanceAction",
+  "app/stripe/actions.ts#getStripeIntegrationStatusAction",
+  "app/stripe/actions.ts#getStripeTransactionDetailAction",
+  "app/stripe/actions.ts#getStripeTransactionsAction",
+  "app/super-admin/actions.ts#getAICostsAction",
+  "app/super-admin/actions.ts#getAllUsersAction",
+  "app/super-admin/actions.ts#getClientHealthAction",
+  "app/super-admin/actions.ts#getOrganizationDetailAction",
+  "app/team/actions.ts#getPendingInvitationsAction",
+  "app/team/actions.ts#getTeamRolesAction",
+  "app/unipile/actions.ts#countUnipileConversationsAction",
+  "app/unipile/actions.ts#getUnipileIntegrationStatusAction",
+  "app/workboard/actions.ts#getActiveSprintAction",
+  "app/workboard/actions.ts#listWorkboardMembersAction",
+  "app/workboard/actions.ts#listWorkboardTasksAction",
+];
+
 describe("guardia en páginas y layouts con módulo", () => {
   const todas = pantallas(APP_DIR);
   const conModulo = todas.filter((p) => permissionModuleForPath(p.ruta) !== null);
@@ -212,7 +299,7 @@ describe("guardia en páginas y layouts con módulo", () => {
 });
 
 describe("Server Actions de lectura de un módulo", () => {
-  const grafo = new GrafoDeImports(WEB);
+  const grafo = GRAFO;
   const entradas = entradasDeApp(APP_DIR);
 
   /** Por cada action de lectura, los módulos de las entradas que la alcanzan ("fuera" si no hay). */
@@ -260,6 +347,58 @@ describe("Server Actions de lectura de un módulo", () => {
     expect(sobran).toEqual([]);
   });
 
+  /**
+   * Las actions de lectura que ninguna entrada de `app/` alcanza, con los módulos de las otras lecturas
+   * de su archivo (un archivo de un solo módulo dice cuál tendría que chequear).
+   */
+  const sinLlamador = archivosDeAcciones(grafo, WEB).flatMap((f) => {
+    const rel = relative(WEB, f);
+    const exportadas = grafo.exportsDeAcciones(f);
+    const delArchivo = new Set(exportadas.flatMap((n) => [...(modulosPorAccion.get(`${rel}#${n}`) ?? [])]));
+    const moduloDelArchivo = delArchivo.size === 1 && !delArchivo.has("fuera") ? [...delArchivo][0]! : null;
+    return exportadas
+      .filter((n) => NOMBRE_DE_LECTURA.test(n) && !modulosPorAccion.has(`${rel}#${n}`))
+      .map((n) => ({ accion: `${rel}#${n}`, moduloDelArchivo }));
+  });
+  const chequeoDe = (accion: string) => ({
+    modulo: grafo.chequeoDeLaAccion(accion),
+    marco: grafo.chequeoDeLaAccion(accion, LLAMADA_DEL_MARCO),
+  });
+
+  it("el recorrido encuentra las lecturas que ninguna pantalla alcanza", () => {
+    const nombres = sinLlamador.map((a) => a.accion);
+    expect(nombres).toContain("app/stripe/actions.ts#getStripeBalanceAction");
+    expect(sinLlamador.find((a) => a.accion === "app/sops/actions.ts#getSOPsAction")?.moduloDelArchivo).toBe("operations");
+    // Las que alcanza alguna entrada no están.
+    expect(nombres).not.toContain("app/sops/actions.ts#getSOPVersionsAction");
+  });
+
+  it("⭐ toda action de lectura que ninguna pantalla alcanza todavía nace con el chequeo, y con el módulo de su archivo", () => {
+    const mal = sinLlamador
+      .map((a) => {
+        const { modulo, marco } = chequeoDe(a.accion);
+        if (modulo === null && marco === null) {
+          if (LECTURAS_SIN_LLAMADOR_CONOCIDAS.includes(a.accion)) return null;
+          return `${a.accion}: ninguna pantalla la usa todavía y no arranca con rechazoPorModulo("${a.moduloDelArchivo ?? "<módulo>"}")`;
+        }
+        if (a.moduloDelArchivo !== null && modulo !== null && modulo !== a.moduloDelArchivo) {
+          return `${a.accion}: chequea ${modulo}, las otras lecturas de su archivo son de ${a.moduloDelArchivo}`;
+        }
+        return null;
+      })
+      .filter(Boolean);
+    expect(mal).toEqual([]);
+  });
+
+  it("la lista de deuda sin llamador sólo tiene lecturas que existen, que nadie alcanza y que no chequean", () => {
+    const vigentes = new Set(sinLlamador.map((a) => a.accion));
+    const sobran = LECTURAS_SIN_LLAMADOR_CONOCIDAS.filter((a) => {
+      const { modulo, marco } = vigentes.has(a) ? chequeoDe(a) : { modulo: null, marco: null };
+      return !vigentes.has(a) || modulo !== null || marco !== null;
+    });
+    expect(sobran).toEqual([]);
+  });
+
   it("una action que chequea un módulo lo hace con el mismo módulo que sus pantallas", () => {
     const mal = deUnModulo
       .map((a) => ({ ...a, chequeo: grafo.chequeoDeLaAccion(a.accion) }))
@@ -296,7 +435,7 @@ function especialMal(grafo: GrafoDeImports, appDir: string, e: ArchivoEspecial):
 }
 
 describe("lo que Next ejecuta aparte de la página (AR 1 de SCRUM-540)", () => {
-  const grafo = new GrafoDeImports(WEB);
+  const grafo = GRAFO;
   const todas = pantallas(APP_DIR);
 
   it("⭐ ninguna página ni layout con módulo exporta generateMetadata ni generateViewport (corren aunque la página corte)", () => {
@@ -350,7 +489,7 @@ const LECTURAS_DEL_MARCO_SIN_MODULO: Record<string, string> = {
 };
 
 describe("lecturas del marco de la plataforma (SCRUM-540)", () => {
-  const grafo = new GrafoDeImports(WEB);
+  const grafo = GRAFO;
   const marco = join(APP_DIR, "(platform)", "layout.tsx");
   const delMarco = [...grafo.accionesDesde(marco)]
     .filter((a) => NOMBRE_DE_LECTURA.test(a.split("#")[1]!))

@@ -318,11 +318,26 @@ type InfoDeArchivo = { directiva: "cliente" | "servidor" | null; imports: Import
 
 export class GrafoDeImports {
   private cache = new Map<string, InfoDeArchivo>();
+  /**
+   * Resultados ya calculados por archivo (los canales de cada uno, por ejemplo). Los
+   * tests recorren las 68 pantallas con módulo y casi todas comparten los mismos
+   * componentes y providers: sin esto, cada archivo compartido se volvía a visitar
+   * entero una vez por pantalla (QA de SCRUM-540: 3,3 s en la suite).
+   */
+  private memos = new Map<string, unknown>();
 
   constructor(private readonly raizWeb: string) {}
 
   get raiz(): string {
     return this.raizWeb;
+  }
+
+  /** `calcular()` una sola vez por `clave` en la vida del grafo (los archivos no cambian durante un test). */
+  recordar<T>(clave: string, calcular: () => T): T {
+    if (this.memos.has(clave)) return this.memos.get(clave) as T;
+    const valor = calcular();
+    this.memos.set(clave, valor);
+    return valor;
   }
 
   /** Todos los archivos que alcanza `entrada` siguiendo imports, sin entrar a los `"use server"`. */
@@ -663,34 +678,41 @@ export function canalesSinChequeo(
 ): string[] {
   const mal: string[] = [];
   for (const archivo of grafo.archivosDesde(entrada)) {
-    const info = grafo.info(archivo);
-    if (info.directiva === "servidor") continue;
-    const visitar = (nodo: ts.Node) => {
-      if (
-        ts.isCallExpression(nodo) &&
-        ts.isPropertyAccessExpression(nodo.expression) &&
-        nodo.expression.name.text === "channel"
-      ) {
-        const { line } = info.sf.getLineAndCharacterOfPosition(nodo.getStart(info.sf));
-        const donde = `${relative(grafo.raiz, archivo)}:${line + 1}`;
-        const tablas = tablasDelCanal(nodo);
-        if (soloTablasDelMarco && !tablas.some((t) => t in LECTURA_DE_CADA_TABLA_EN_VIVO)) {
-          ts.forEachChild(nodo, visitar);
-          return;
-        }
-        const esperadas = new Set<string | undefined>(tablas.map((t) => LECTURA_DE_CADA_TABLA_EN_VIVO[t]));
-        const guardia = lecturaConLaQueCorta(nodo);
-        if (tablas.length === 0) mal.push(`${donde} sin tabla reconocible`);
-        else if (esperadas.has(undefined)) mal.push(`${donde} escucha ${tablas.join(", ")}, sin lectura del marco`);
-        else if (guardia === null) mal.push(`${donde} sin chequeo`);
-        else if (esperadas.size !== 1 || !esperadas.has(guardia)) {
-          mal.push(`${donde} chequea "${guardia}" y escucha ${tablas.join(", ")}`);
-        }
-      }
-      ts.forEachChild(nodo, visitar);
-    };
-    visitar(info.sf);
+    mal.push(...grafo.recordar(`canales|${soloTablasDelMarco}|${archivo}`, () => canalesDelArchivo(grafo, archivo, soloTablasDelMarco)));
   }
+  return mal;
+}
+
+/** Los canales sin chequeo de un solo archivo (ver `canalesSinChequeo`). */
+function canalesDelArchivo(grafo: GrafoDeImports, archivo: string, soloTablasDelMarco: boolean): string[] {
+  const mal: string[] = [];
+  const info = grafo.info(archivo);
+  if (info.directiva === "servidor") return mal;
+  const visitar = (nodo: ts.Node) => {
+    if (
+      ts.isCallExpression(nodo) &&
+      ts.isPropertyAccessExpression(nodo.expression) &&
+      nodo.expression.name.text === "channel"
+    ) {
+      const { line } = info.sf.getLineAndCharacterOfPosition(nodo.getStart(info.sf));
+      const donde = `${relative(grafo.raiz, archivo)}:${line + 1}`;
+      const tablas = tablasDelCanal(nodo);
+      if (soloTablasDelMarco && !tablas.some((t) => t in LECTURA_DE_CADA_TABLA_EN_VIVO)) {
+        ts.forEachChild(nodo, visitar);
+        return;
+      }
+      const esperadas = new Set<string | undefined>(tablas.map((t) => LECTURA_DE_CADA_TABLA_EN_VIVO[t]));
+      const guardia = lecturaConLaQueCorta(nodo);
+      if (tablas.length === 0) mal.push(`${donde} sin tabla reconocible`);
+      else if (esperadas.has(undefined)) mal.push(`${donde} escucha ${tablas.join(", ")}, sin lectura del marco`);
+      else if (guardia === null) mal.push(`${donde} sin chequeo`);
+      else if (esperadas.size !== 1 || !esperadas.has(guardia)) {
+        mal.push(`${donde} chequea "${guardia}" y escucha ${tablas.join(", ")}`);
+      }
+    }
+    ts.forEachChild(nodo, visitar);
+  };
+  visitar(info.sf);
   return mal;
 }
 
@@ -784,6 +806,23 @@ export function entradasDeApp(appDir: string, dir = appDir, out: string[] = []):
       entradasDeApp(appDir, ruta, out);
     } else if (/^(page|layout|route|template|default|error|loading|not-found|global-error)\.(tsx|ts|jsx|js)$/.test(e.name)) {
       out.push(ruta);
+    }
+  }
+  return out;
+}
+
+/**
+ * Los archivos `"use server"` de `dir` (y sus carpetas), sin `node_modules`, `.next` ni tests.
+ * Sólo se parsean los que mencionan la directiva, para no recorrer el AST de toda la app.
+ */
+export function archivosDeAcciones(grafo: GrafoDeImports, dir: string, out: string[] = []): string[] {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const ruta = join(dir, e.name);
+    if (e.isDirectory()) {
+      if (e.name === "__tests__" || e.name === "node_modules" || e.name.startsWith(".")) continue;
+      archivosDeAcciones(grafo, ruta, out);
+    } else if (/\.(tsx|ts|jsx|js)$/.test(e.name) && !/\.test\.tsx?$/.test(e.name)) {
+      if (readFileSync(ruta, "utf8").includes("use server") && grafo.info(ruta).directiva === "servidor") out.push(ruta);
     }
   }
   return out;
