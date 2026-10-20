@@ -31,11 +31,12 @@ al terminar cada bloque de trabajo, aunque sea chico.
 ### 2026-10-20 — Las páginas y el marco de la plataforma chequean el módulo antes de leer, con mínimo privilegio (SCRUM-540)
 
 **Rama:** `fix/SCRUM-540-permisos-lecturas-por-modulo` (base `main` `4a542e5e`)
-**Commit(s):** páginas: `57d8e2b1`, `6a079eda`, `722d5aba`, `8647980b`, `96c6ac91`; marco: `660f44c5`, `c5e2dc89`, `1edca076`, `33d58374`, `15cdffb8`; AR pasada 1: `09a6fe09`, `7b26452e`, `6818c645`, `47bc4ef0`, `7e6edbe9`; y este (docs)
+**Commit(s):** páginas: `57d8e2b1`, `6a079eda`, `722d5aba`, `8647980b`, `96c6ac91`; marco: `660f44c5`, `c5e2dc89`, `1edca076`, `33d58374`, `15cdffb8`; AR pasada 1: `09a6fe09`, `7b26452e`, `6818c645`, `47bc4ef0`, `7e6edbe9`, `ec600caf`; AR pasada 2: `13377920`, `7ffdfba2`, `a32a2d84`, `1084b621`, `a936a241`, `e3735fad`, `bce52c26`, `3e18396f`; y este (docs)
 **Módulo(s) afectado(s):** Plataforma, permisos.
 - Páginas: `lib/auth/acceso-a-modulo.ts` (`exigirModuloDeLaPagina`), las 68 `page.tsx` con módulo de `app/(platform)` (`/clients` pasó a página de servidor con `clients-page-cliente.tsx`), `agent/layout.tsx` (+ `agent-layout-cliente.tsx`) y 49 Server Actions de lectura.
 - Marco: `lib/auth/regla-de-modulo.ts`, `lib/auth/lecturas-del-marco.ts`, `lib/marco/lecturas-de-servidor.ts`, `lib/finance/leer-configuracion.ts`, `lib/finance/resumen-financiero.ts` (nuevos); `rechazoDeLecturaDelMarco` en `acceso-a-modulo.ts`; `permisosEstables` y `usePermisosDeModulo` en `providers/permissions-provider.tsx`; el orden de los providers en el layout de `(platform)`; `PlatformDataProvider`, `FinanceDataProvider`, `MarketingDataProvider`, `ReportsPanel`, `MobileNav`; 10 actions del marco y `getResumenFinancieroAction` (nueva).
-- Panel: `lib/dashboard/datos-del-panel.ts` y `leer-datos-del-panel.ts` (nuevos), `dashboard/page.tsx`, `DashboardPageContent`, `DashboardOverview`, `SalesFunnelStrip`.
+- Panel: `lib/dashboard/datos-del-panel.ts`, `leer-datos-del-panel.ts` y `panel-en-vivo.ts` (nuevos), `dashboard/page.tsx`, `DashboardPageContent`, `DashboardOverview`, `SalesFunnelStrip`.
+- Fechas (AR 2): `deriveFinanceSummary`, `enrichTeamCompensationWithCommissions` y `deriveDashboardData` reciben el "hoy" (`deriveMonthlySeries` ya lo recibía); `getResumenFinancieroAction` lee la zona de la org.
 - Tests nuevos: `lecturas-por-modulo.test.ts` (+ `lecturas-de-app.ts`), `paginas-cortan-antes-de-leer.test.ts`, `lecturas-rechazan-sin-modulo.test.ts`, `lecturas-del-marco.test.ts`, `lecturas-del-marco-de-los-providers.test.ts`, `campos-del-marco-por-modulo.test.ts`, `datos-del-panel.test.ts`, `permisos-estables.test.ts`, `layout-plataforma-orden-de-providers.test.ts`.
 
 **Qué se hizo:** cierra `[PERMISOS-LAYOUT-NAV-SUAVE]` y `[PERMISOS-PROVIDERS-GLOBALES]`.
@@ -51,12 +52,17 @@ al terminar cada bloque de trabajo, aunque sea chico.
   - las métricas importadas, con Finanzas y Ventas; el estado de Instagram, con Marketing e Integraciones; los reportes ejecutivos, con Operaciones; el contador de llamadas pendientes, con Clientes.
   - El servidor chequea con `rechazoDeLecturaDelMarco("<lectura>")` y los providers no piden sin el módulo (`leerDelMarco`), con permisos de identidad estable para no volver a pedir en cada `router.refresh()`.
 - **El Panel, calculado en el servidor.** La página del Panel lee y calcula en el servidor (`leerDatosDelPanel`, con las mismas funciones que usaba el navegador) y manda sólo `DashboardData` y las etapas del embudo. Quien sólo tiene el Panel no recibe filas de nadie.
+  - **"Este mes" es el de la organización** (AR pasada 2, BLOQUEANTE-1). En el servidor, el Panel y el resumen de Ventas calculan con `diaLocal(hoy)`, con `hoy` en la zona de la org (regla de SCRUM-493). Eso decide el período de la facturación (MRR), los clientes nuevos del mes, las comisiones del mes y la serie de 6 meses. Con el reloj del proceso (UTC en Vercel), en las últimas horas de cada mes una org de América veía el mes siguiente: MRR en 0, sin clientes nuevos y gastos sin comisiones. En el navegador (Finanzas) sigue el reloj de quien mira, como en `main`.
+  - **Sigue en vivo** (AR pasada 2, MENOR-1). Si quien mira puede leer conversaciones (founder, sin rol o con Ventas), el Panel escucha el canal de `conversations` de su org y, ante un cambio, hace `router.refresh()` sin usar la fila del evento (`suscribirPanelEnVivo`). Hay un solo canal por org y se abre con la sesión ya leída. Con sólo el Panel no se abre el canal: el Panel se actualiza al recargar o navegar (en `main` se actualizaba porque le llegaban las conversaciones).
 - **Test de inventario** (`lecturas-por-modulo`). Además de lo anterior (guardia en páginas y layouts que leen, actions de un módulo, lecturas del marco y su par en el cliente), ahora:
   - ve `import * as` de las actions en el cliente del marco;
   - exige que el canal en vivo corte con la lectura de la tabla que escucha;
   - prohíbe `generateMetadata`, `generateViewport` y código que corra al importar en páginas y layouts con módulo;
   - trata `template` y `default` como layouts;
-  - exige que `loading`, `error` y `not-found` no alcancen ninguna lectura.
+  - exige que `loading`, `error` y `not-found` no alcancen ninguna lectura;
+  - no acepta `route` ni archivos de metadata con código (`opengraph-image`, `twitter-image`, `icon`, `apple-icon`, `sitemap`, `robots`, `manifest`) en una ruta con módulo (AR 2);
+  - sigue los `import("...")` con literal de las actions del marco (AR 2);
+  - exige el chequeo de la lectura también en los canales de tablas del marco que abre una página con módulo (el del Panel).
 
 **Por qué / finalidad:** el permiso sólo se aplicaba en el layout de `(platform)`, que decide qué se dibuja pero no frena la página. Los datos viajaban en el HTML y el payload RSC aunque dijera «No tenés acceso», y en una navegación del cliente se veía la pantalla entera. Además el marco mandaba clientes, gastos, sueldos, cobros, conversaciones y reportes a cualquier miembro en cualquier pantalla.
 
@@ -77,10 +83,7 @@ Medido con la sonda de la AR (`ar-p1/scripts/sonda-ar.mjs`, copiada a la evidenc
 **Decisiones de diseño relevantes:**
 - Guardia por página, no por layout de segmento: un layout no frena la página y no se vuelve a ejecutar al moverse dentro del segmento. No usa `x-pathname` ni redirige.
 - Totales en el servidor en vez de filas: la cuenta es la misma en el navegador (Finanzas), en el resumen de Ventas y en el Panel (`lib/finance/resumen-financiero.ts`, puras). Un test compara el Panel nuevo con el cálculo de antes.
-- Lo que cambia para quien sí ve el Panel:
-  - no se actualiza en vivo con una conversación nueva (se ve al recargar o navegar);
-  - el mes en curso se calcula con el reloj del servidor;
-  - en modo demo sigue vacío.
+- Para quien ve el Panel con Ventas o como founder, nada cambia: mismos totales, el mismo mes y en vivo. Con sólo el Panel deja de actualizarse en vivo, porque eso le mandaba las conversaciones. En modo demo sigue vacío, como antes.
 - Con SCRUM-524 (sin mergear): el merge de prueba tiene los mismos 4 conflictos chicos de código (los dos archivos del Agente, el layout de `(platform)`, donde se toma el de 524, y los imports de `mobile-nav.tsx`) más un cambio de 6 líneas en su `bloqueo-por-experiencia.test.ts`. Con eso, `tsc` en 0 y 289 archivos y 4.504 tests en verde.
 
 **Riesgos / deuda técnica pendiente:**
