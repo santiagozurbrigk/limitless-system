@@ -14,6 +14,7 @@ import {
   usosFueraDeLeerDelMarco,
   canalesSinChequeo,
   archivosEspeciales,
+  codigoAlImportar,
   exportsQueCorrenAparte,
   type ArchivoEspecial,
 } from "./lecturas-de-app";
@@ -296,6 +297,22 @@ describe("lo que Next ejecuta aparte de la página (AR 1 de SCRUM-540)", () => {
       .map((f) => ({ f, e: exportsQueCorrenAparte(f) }))
       .filter((x) => x.e.length > 0)
       .map((x) => `app/${relative(APP_DIR, x.f)}: ${x.e.join(", ")}`);
+    expect(mal).toEqual([]);
+  });
+
+  it("⭐ ninguna página ni layout con módulo ejecuta código al importarse (correría antes que el guardia)", () => {
+    const archivos = new Set<string>();
+    for (const p of todas) {
+      if (permissionModuleForPath(p.ruta) === null) continue;
+      archivos.add(join(APP_DIR, p.archivo));
+      for (const l of p.layouts) {
+        if (permissionModuleForPath(rutaDeCarpeta(APP_DIR, dirname(l))) !== null) archivos.add(l);
+      }
+    }
+    const mal = [...archivos]
+      .map((f) => ({ f, l: codigoAlImportar(f) }))
+      .filter((x) => x.l.length > 0)
+      .map((x) => `app/${relative(APP_DIR, x.f)}: líneas ${x.l.join(", ")}`);
     expect(mal).toEqual([]);
   });
 
@@ -643,5 +660,22 @@ export default async function P() {
       expect.stringMatching(/^app\/\(platform\)\/finance\/expenses\/template\.tsx: lee y es un componente de cliente/),
       expect.stringMatching(/^app\/\(platform\)\/finance\/template\.tsx: lee y no arranca con/),
     ]);
+  });
+
+  it("⭐ código al importar: una lectura en el nivel de arriba sí; constantes, funciones y tipos no", () => {
+    const f = archivo(
+      "importar/page.tsx",
+      `import { x } from "y";
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Hola" };
+const LIMITE = 10;
+type T = { a: number };
+function ayuda() { return leer(); }
+const flecha = async () => leer();
+const lecturaTemprana = (async () => (await import("@/lib/supabase/server")).createClient())();
+void leer();
+export default async function P() { return null; }`
+    );
+    expect(codigoAlImportar(f)).toEqual([8, 9]);
   });
 });

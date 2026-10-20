@@ -231,6 +231,40 @@ export function exportsQueCorrenAparte(archivo: string, texto = readFileSync(arc
 }
 
 /**
+ * Código de una página o un layout que corre al importar el archivo, fuera de
+ * cualquier función (AR 1 de SCRUM-540, ataque A8): una lectura ahí corre antes
+ * que el guardia. Devuelve las líneas con una llamada, un `await` o un `new`
+ * en el nivel de arriba (fuera de funciones). Las constantes con literales, las
+ * funciones y los tipos no cuentan.
+ */
+export function codigoAlImportar(archivo: string, texto = readFileSync(archivo, "utf8")): number[] {
+  const sf = parsear(archivo, texto);
+  const lineas: number[] = [];
+  const ejecuta = (nodo: ts.Node): boolean => {
+    if (ts.isFunctionLike(nodo) || ts.isClassLike(nodo)) return false;
+    if (ts.isCallExpression(nodo) || ts.isAwaitExpression(nodo) || ts.isNewExpression(nodo) || ts.isTaggedTemplateExpression(nodo)) {
+      return true;
+    }
+    return ts.forEachChild(nodo, ejecuta) ?? false;
+  };
+  for (const st of sf.statements) {
+    if (
+      ts.isImportDeclaration(st) ||
+      ts.isExportDeclaration(st) ||
+      ts.isFunctionDeclaration(st) ||
+      ts.isInterfaceDeclaration(st) ||
+      ts.isTypeAliasDeclaration(st) ||
+      ts.isClassDeclaration(st)
+    ) {
+      continue;
+    }
+    if (ts.isExpressionStatement(st) && ts.isStringLiteral(st.expression)) continue; // "use client"
+    if (ejecuta(st)) lineas.push(sf.getLineAndCharacterOfPosition(st.getStart(sf)).line + 1);
+  }
+  return lineas;
+}
+
+/**
  * Los archivos especiales del App Router que no son `page` ni `layout` y se
  * dibujan dentro de una ruta: `template` y `default` envuelven o reemplazan a
  * la página (se tratan como un layout: si leen, llevan el guardia), y

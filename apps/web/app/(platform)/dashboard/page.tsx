@@ -15,19 +15,21 @@ import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 import { leerDatosDelPanel } from "@/lib/dashboard/leer-datos-del-panel";
 import { calcularDatosDelPanel, type EntradasDelPanel } from "@/lib/dashboard/datos-del-panel";
 
-const ENTRADAS_VACIAS: EntradasDelPanel = {
-  clients: [],
-  closingCalls: [],
-  conversations: [],
-  fixedExpenses: [],
-  subscriptions: [],
-  teamCompensation: [],
-  paymentPlatforms: [],
-  payments: [],
-  metricasImportadas: null,
-  hoy: new Date().toISOString().slice(0, 10),
-  frequentObjections: [],
-};
+function entradasVacias(): EntradasDelPanel {
+  return {
+    clients: [],
+    closingCalls: [],
+    conversations: [],
+    fixedExpenses: [],
+    subscriptions: [],
+    teamCompensation: [],
+    paymentPlatforms: [],
+    payments: [],
+    metricasImportadas: null,
+    hoy: new Date().toISOString().slice(0, 10),
+    frequentObjections: [],
+  };
+}
 
 async function loadFrequentObjections(): Promise<FrequentObjectionsResult> {
   if (!isSupabaseConfigured()) {
@@ -63,7 +65,7 @@ export default async function DashboardPage() {
   // como antes.
   const { pagosSinLeer, ...datos } = isSupabaseConfigured()
     ? await leerDatosDelPanel(await requireOrganizationId(), frequentObjections.objections)
-    : { ...calcularDatosDelPanel(ENTRADAS_VACIAS), pagosSinLeer: false };
+    : { ...calcularDatosDelPanel(entradasVacias()), pagosSinLeer: false };
 
   return (
     <DashboardPageContent
