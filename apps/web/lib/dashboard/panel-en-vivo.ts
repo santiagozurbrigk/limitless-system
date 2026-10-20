@@ -29,9 +29,10 @@ type ClienteDeRealtime = ReturnType<typeof createClient>;
  */
 type Entrada = {
   supabase: ClienteDeRealtime;
-  canal: ReturnType<ClienteDeRealtime["channel"]>;
+  canal: ReturnType<ClienteDeRealtime["channel"]> | null;
   oyentes: Set<() => void>;
   cierre: ReturnType<typeof setTimeout> | null;
+  cerrado: boolean;
 };
 const canales = new Map<string, Entrada>();
 export const ESPERA_PARA_CERRAR_MS = 5000;
@@ -53,19 +54,27 @@ export function suscribirPanelEnVivo(opciones: {
   if (!entrada) {
     const supabase = opciones.cliente();
     const oyentes = new Set<() => void>();
-    // El evento trae la fila: no se usa. Sólo se avisa a cada Panel abierto.
-    const canal = supabase
-      .channel(`panel:conversations:${organizationId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "conversations", filter: `organization_id=eq.${organizationId}` },
-        () => {
-          for (const avisar of oyentes) avisar();
-        }
-      )
-      .subscribe();
-    entrada = { supabase, canal, oyentes, cierre: null };
-    canales.set(organizationId, entrada);
+    const nueva: Entrada = { supabase, canal: null, oyentes, cierre: null, cerrado: false };
+    canales.set(organizationId, nueva);
+    // Se abre después de tener la sesión: si el canal se une con la clave
+    // anónima, la RLS de `conversations` no le manda nada (medido: la mitad de
+    // las cargas el Panel no se enteraba).
+    void (async () => {
+      await supabase.auth.getSession();
+      if (nueva.cerrado) return;
+      // El evento trae la fila: no se usa. Sólo se avisa a cada Panel abierto.
+      nueva.canal = supabase
+        .channel(`panel:conversations:${organizationId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "conversations", filter: `organization_id=eq.${organizationId}` },
+          () => {
+            for (const avisar of oyentes) avisar();
+          }
+        )
+        .subscribe();
+    })();
+    entrada = nueva;
   }
   if (entrada.cierre) {
     clearTimeout(entrada.cierre);
@@ -78,7 +87,8 @@ export function suscribirPanelEnVivo(opciones: {
     actual.oyentes.delete(avisar);
     if (actual.oyentes.size > 0) return;
     actual.cierre = setTimeout(() => {
-      void actual.supabase.removeChannel(actual.canal);
+      actual.cerrado = true;
+      if (actual.canal) void actual.supabase.removeChannel(actual.canal);
       canales.delete(organizationId);
     }, ESPERA_PARA_CERRAR_MS);
   };

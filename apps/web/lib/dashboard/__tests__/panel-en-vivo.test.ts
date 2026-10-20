@@ -23,6 +23,7 @@ function clienteFalso() {
     },
   };
   const cliente = {
+    auth: { getSession: async () => ({ data: { session: { access_token: "x" } } }) },
     channel(nombre: string) {
       sim.canales.push(nombre);
       return canal;
@@ -37,6 +38,8 @@ function clienteFalso() {
 const permisos = (modulos: Record<string, string>, extra: Record<string, unknown> = {}) =>
   ({ isFounder: false, hasRoleConfigured: true, modules: { ...emptyPermissions(), ...modulos }, ...extra }) as never;
 const founder = permisos({}, { isFounder: true });
+/** El canal se abre después de leer la sesión (asíncrono). */
+const esperar = () => new Promise((r) => setImmediate(r));
 
 afterEach(() => vi.useRealTimers());
 
@@ -47,11 +50,13 @@ describe("suscribirPanelEnVivo", () => {
     expect(sim.canales).toEqual([]);
   });
 
-  it("⭐ con Ventas (o el founder) escucha las conversaciones de su org y, ante un cambio, sólo pide el Panel de nuevo", () => {
+  it("⭐ con Ventas (o el founder) escucha las conversaciones de su org, después de tener la sesión, y ante un cambio sólo pide el Panel de nuevo", async () => {
     for (const [p, org] of [[permisos({ dashboard: "full", sales: "view" }), "org-b"], [founder, "org-c"]] as const) {
       const { sim, cliente } = clienteFalso();
       const alCambiar = vi.fn();
       suscribirPanelEnVivo({ permisos: p, organizationId: org, cliente, alCambiar });
+      expect(sim.canales).toEqual([]);
+      await esperar();
       expect(sim.canales).toEqual([`panel:conversations:${org}`]);
       expect(sim.filtros).toEqual([
         { event: "*", schema: "public", table: "conversations", filter: `organization_id=eq.${org}` },
@@ -62,14 +67,15 @@ describe("suscribirPanelEnVivo", () => {
     }
   });
 
-  it("⭐ dos montajes seguidos comparten un canal; se cierra unos segundos después del último, y no si vuelve otro antes", () => {
-    vi.useFakeTimers();
+  it("⭐ dos montajes seguidos comparten un canal; se cierra unos segundos después del último, y no si vuelve otro antes", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { sim, cliente } = clienteFalso();
     const a = vi.fn();
     const b = vi.fn();
     const cortarA = suscribirPanelEnVivo({ permisos: founder, organizationId: "org-d", cliente, alCambiar: a })!;
     cortarA();
     const cortarB = suscribirPanelEnVivo({ permisos: founder, organizationId: "org-d", cliente, alCambiar: b })!;
+    await esperar();
     vi.advanceTimersByTime(ESPERA_PARA_CERRAR_MS * 2);
     expect(sim.canales).toHaveLength(1);
     expect(sim.quitados).toBe(0);
