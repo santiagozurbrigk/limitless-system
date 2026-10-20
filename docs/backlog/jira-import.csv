@@ -258,23 +258,6 @@ Fuente: PENDIENTES.md [AUTH-MFA-Y-POLITICA] · Doc del área: docs/areas/platafo
 *Dónde:* {{apps/web/lib/auth/require-super-admin.ts}}, {{apps/web/app/team/actions.ts}}, {{apps/web/app/(platform)/holding/actions.ts}}, {{apps/web/app/super-admin/actions.ts}}, {{super_admin_users}} (migración).
 
 Fuente: PENDIENTES.md [AUTH-ALTA-EMAIL-AJENO] · Doc del área: docs/areas/plataforma.md",AUTH-ALTA-EMAIL-AJENO,Plataforma,P1,Crítica,seguridad
-[PERMISOS-PROVIDERS-GLOBALES] Los providers del marco piden datos de varios módulos en toda pantalla (nuevo),Bug,High,plataforma,p1,sev-alta,seguridad,,,"*Tipo:* seguridad
-
-*Severidad:* Alta
-
-*Estado verificado:* medido el 2026-10-19 en SCRUM-540 con {{next start}} contra un Supabase local (evidencia {{scrum-540/sonda/}}). {{AppProviders}} ({{apps/web/providers/index.tsx}}), que monta el layout de {{app/(platform)}} en toda pantalla, incluye {{PlatformDataProvider}} y {{FinanceDataProvider}}. Al montarse piden por Server Action {{listClientsAction}}, {{listClosingCallsAction}}, {{listConversationsAction}}, {{loadFinanceConfigAction}}, {{listOrganizationPaymentsAction}} y {{getSalesMetricsSnapshotsAction}}, y la barra pide {{getLatestReportsByCadenceAction}} (reportes ejecutivos), sin mirar el módulo. En la sonda, la carga de {{/team}} de un miembro sin ninguno de esos módulos lee 13 tablas de datos ({{clients}}, {{closing_calls}}, {{conversations}}, {{client_payments}}, {{fixed_expenses}}, {{subscriptions}}, {{team_compensation}}, {{payment_platforms}}, {{executive_reports}}, {{metrics_snapshots}} y 3 de integraciones), igual en {{main}} y en la rama, y en las respuestas de esas actions aparecieron las marcas del cliente, del gasto fijo y del reporte ejecutivo (la captura por la red no es estable: cada corrida vio un subconjunto). No es la página ni su payload RSC (eso lo cerró SCRUM-540): son pedidos aparte, y las lecturas las usan pantallas de varios módulos (Panel, Ventas, Clientes, Finanzas), así que no hay un único módulo que exigir en la action. Sólo datos de la propia organización.
-
-*Riesgo:* Si un miembro con un rol sin Clientes, Ventas, Finanzas u Operaciones abre cualquier pantalla de la plataforma, entonces su navegador recibe la lista de clientes, las llamadas de cierre, las conversaciones, la configuración de Finanzas, los cobros y los últimos reportes ejecutivos de la organización, visibles en DevTools sin ningún conocimiento especial.
-
-*Impacto:* Toda organización con roles limitados: datos de clientes y finanzas expuestos a miembros a los que el rol se los niega; no cruza organizaciones (RLS).
-
-*Qué hay que hacer:* que cada provider pida sólo lo que el rol permite (por ejemplo, con {{usePermissions}} en el cliente para no pedir, y en cada action un chequeo de ""alguno de estos módulos"" sobre {{puedeEntrarAlModulo}}), o mover esas lecturas a las pantallas que las usan, detrás de su guardia.
-
-*Criterio de aceptación:* Un miembro sin Clientes, Ventas, Finanzas ni Operaciones que carga cualquier pantalla no recibe en ninguna respuesta (HTML, RSC ni Server Actions) los clientes, llamadas, conversaciones, gastos, cobros ni reportes ejecutivos de su organización; el founder y un rol con esos módulos ven el Panel, Ventas, Clientes y Finanzas igual que antes; hay un test que falla si un provider del marco vuelve a pedir una lectura sin chequeo
-
-*Dónde:* {{apps/web/providers/platform-data-provider.tsx}}, {{apps/web/providers/finance-data-provider.tsx}}, la barra ({{getLatestReportsByCadenceAction}}, {{app/executive-reports/actions.ts}}), {{apps/web/app/clients/actions.ts}}, {{apps/web/app/closing/actions.ts}}, {{apps/web/app/conversations/actions.ts}}, {{apps/web/app/finance/actions.ts}}, {{apps/web/app/sales/payment-actions.ts}}, {{apps/web/app/sales/metrics-actions.ts}}.
-
-Fuente: PENDIENTES.md [PERMISOS-PROVIDERS-GLOBALES] · Doc del área: docs/areas/plataforma.md",PERMISOS-PROVIDERS-GLOBALES,Plataforma,P1,Alta,seguridad
 [HOLDING-PORTFOLIO-ROL] El portfolio del holding no mira el rol,Bug,High,plataforma,p1,sev-critica,seguridad,,,"*Tipo:* seguridad
 
 *Severidad:* Crítica
@@ -1446,11 +1429,11 @@ Fuente: PENDIENTES.md [GLASS-TOKENS-PISADOS] · Doc del área: docs/areas/plataf
 *Dónde:* {{apps/web/components/**}}.
 
 Fuente: PENDIENTES.md [UI-EMOJIS] · Doc del área: docs/areas/plataforma.md",UI-EMOJIS,Plataforma,P2,,deuda técnica
-[PERMISOS-ACTIONS-LECTURA-SIN-MODULO] 73 Server Actions de lectura de un módulo no chequean el módulo (nuevo),Bug,Medium,plataforma,p2,sev-media,seguridad,deuda-tecnica,,"*Tipo:* seguridad / deuda técnica
+"[PERMISOS-ACTIONS-LECTURA-SIN-MODULO] 73 Server Actions de lectura de un módulo no chequean el módulo (nuevo, SCRUM-541)",Bug,Medium,plataforma,p2,sev-media,seguridad,deuda-tecnica,,"*Tipo:* seguridad / deuda técnica
 
 *Severidad:* Media
 
-*Estado verificado:* SCRUM-540 (2026-10-19) puso {{rechazoPorModulo}} en las 49 lecturas de un solo módulo que devolvían {{MutationResult}}. Las otras 73 devuelven el dato directo (un arreglo, un objeto o {{null}}), y sumarles el rechazo cambia la forma que esperan sus pantallas. Están en {{LECTURAS_SIN_CHEQUEO_CONOCIDAS}} de {{apps/web/lib/navigation/__tests__/lecturas-por-modulo.test.ts}}, que falla si aparece una nueva sin chequeo o si una de la lista ya chequea. Sus pantallas no se dibujan sin el módulo (guardia de la página), así que sólo se alcanzan invocándolas a mano con el ID de la action, que está en el JavaScript del cliente. Ejemplos: {{getSopVideoJobAction}}, {{listExecutiveReportsAction}}, {{getWinsPageDataAction}}, {{listFormsAction}}. Inventario por ruta en la evidencia de SCRUM-540 ({{inventario.md}}).
+*Estado verificado:* ticket SCRUM-541. SCRUM-540 (2026-10-19) puso {{rechazoPorModulo}} en las 49 lecturas de un solo módulo que devolvían {{MutationResult}}. Las otras 73 devuelven el dato directo (un arreglo, un objeto o {{null}}), y sumarles el rechazo cambia la forma que esperan sus pantallas. Están en {{LECTURAS_SIN_CHEQUEO_CONOCIDAS}} de {{apps/web/lib/navigation/__tests__/lecturas-por-modulo.test.ts}}, que falla si aparece una nueva sin chequeo o si una de la lista ya chequea. Sus pantallas no se dibujan sin el módulo (guardia de la página), así que sólo se alcanzan invocándolas a mano con el ID de la action, que está en el JavaScript del cliente. Ejemplos: {{getSopVideoJobAction}}, {{listExecutiveReportsAction}}, {{getWinsPageDataAction}}, {{listFormsAction}}. Fuera de la lista del test quedan 11 lecturas más sin chequeo, que no son de un solo módulo: 6 las usan pantallas de dos o tres módulos (por ejemplo {{getTeamMembersAction}}, Finanzas y Ventas, o {{getTeamRankingAction}}) y 5 también una ruta libre o una API; necesitan la regla de ""alguno de estos módulos"" de las lecturas del marco. Inventario por ruta en la evidencia de SCRUM-540 ({{inventario.md}}).
 
 *Qué hay que hacer:* pasar cada una a {{MutationResult}} (o a un tipo con el rechazo) y que su pantalla lo trate, módulo por módulo, sacándola de la lista.
 

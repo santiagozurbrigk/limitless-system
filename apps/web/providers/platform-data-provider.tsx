@@ -51,7 +51,7 @@ import { mockClosingCalls } from "@/mocks/closing";
 import { mockClients } from "@/mocks/clients";
 import { mockConversations } from "@/mocks/sales";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { usePermissions } from "@/providers/permissions-provider";
+import { usePermisosDeModulo } from "@/providers/permissions-provider";
 import {
   leerDelMarco,
   puedeLeerDelMarco,
@@ -249,7 +249,7 @@ export const lecturasDeLaPlataforma = {
 
 export function PlatformDataProvider({ children }: { children: ReactNode }) {
   const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
-  const permisos = usePermissions();
+  const permisos = usePermisosDeModulo();
   const [conversations, setConversations] = useState<Conversation[]>(() =>
     useSupabase ? [] : mockConversations.map((c) => ({ ...c }))
   );

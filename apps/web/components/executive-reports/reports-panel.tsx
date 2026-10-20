@@ -16,7 +16,7 @@ import {
   TabsTrigger,
 } from "@ai-coo/ui";
 import { getLatestReportsByCadenceAction } from "@/app/executive-reports/actions";
-import { usePermissions } from "@/providers/permissions-provider";
+import { usePermisosDeModulo } from "@/providers/permissions-provider";
 import { leerDelMarco } from "@/lib/auth/lecturas-del-marco";
 import { ReportBody } from "./report-body";
 import { REPORT_CADENCES } from "@/lib/executive-reports/cadences";
@@ -84,7 +84,7 @@ export function ReportsPanel() {
 
   // Los reportes son de Operaciones: sin el módulo no se piden (SCRUM-540) y,
   // sin reportes, el botón no aparece.
-  const permisos = usePermissions();
+  const permisos = usePermisosDeModulo();
 
   useEffect(() => {
     let vigente = true;

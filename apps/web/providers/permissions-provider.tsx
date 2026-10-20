@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import type { UserPermissions, AddOnId } from "@/lib/auth/get-current-permissions";
 import { emptyPermissions } from "@/constants/permission-modules";
 import type { PermissionModuleId } from "@/constants/permission-modules";
@@ -28,6 +28,27 @@ export function PermissionsProvider({
 
 export function usePermissions() {
   return useContext(PermissionsCtx);
+}
+
+/**
+ * Los permisos de módulo con una identidad estable (SCRUM-540): el mismo objeto
+ * mientras no cambien el rol ni los módulos.
+ *
+ * El layout de la plataforma vuelve a mandar los permisos en cada
+ * `router.refresh()`, como un objeto nuevo con los mismos valores. Un provider
+ * del marco que dependiera de `usePermissions()` volvería a pedir todos sus
+ * datos en cada refresco; con este hook sólo si de verdad cambió algo.
+ */
+export function usePermisosDeModulo(): Pick<
+  UserPermissions,
+  "isFounder" | "hasRoleConfigured" | "modules"
+> {
+  const { isFounder, hasRoleConfigured, modules } = useContext(PermissionsCtx);
+  const clave = JSON.stringify({ isFounder, hasRoleConfigured, modules });
+  return useMemo(
+    () => JSON.parse(clave) as Pick<UserPermissions, "isFounder" | "hasRoleConfigured" | "modules">,
+    [clave]
+  );
 }
 
 export function useModuleAccess(moduleId: PermissionModuleId): PermissionLevel {

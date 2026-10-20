@@ -11,7 +11,7 @@ import { paths } from "@/routes";
 import { buildPlatformSidebarNav } from "@/lib/navigation/sidebar-modules";
 import type { SidebarDirectModule } from "@/lib/navigation/sidebar-nav-config";
 import { isPathActive } from "@/lib/navigation/active-path";
-import { useEnabledAddOns, usePermissions } from "@/providers/permissions-provider";
+import { useEnabledAddOns, usePermisosDeModulo } from "@/providers/permissions-provider";
 import { leerDelMarco } from "@/lib/auth/lecturas-del-marco";
 import { SidebarTwoLevelNavigation } from "@/components/navigation/sidebar-two-level-navigation";
 import { NavIcon } from "@/components/navigation/nav-icons";
@@ -28,7 +28,7 @@ export function MobileNav() {
 
   // El contador de llamadas sin asignar es de Clientes: sin el módulo no se
   // pide (SCRUM-540) y el ítem queda sin número.
-  const permisos = usePermissions();
+  const permisos = usePermisosDeModulo();
   useEffect(() => {
     if (!open) return;
     leerDelMarco(permisos, "llamadasPendientes", countPendingFathomCallsAction, 0)

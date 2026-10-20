@@ -38,7 +38,7 @@ import { enrichTeamCompensationWithCommissions } from "@/lib/metrics/enrich-team
 import { deriveFinanceSummary } from "@/lib/metrics/derive-finance-summary";
 import { deriveMonthlySeries } from "@/lib/metrics/derive-monthly-series";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { usePermissions } from "@/providers/permissions-provider";
+import { usePermisosDeModulo } from "@/providers/permissions-provider";
 import { leerDelMarco } from "@/lib/auth/lecturas-del-marco";
 import type { PermisosDeModulo } from "@/lib/auth/regla-de-modulo";
 import type { FinanceConfigPayload } from "@/app/finance/actions";
@@ -150,7 +150,7 @@ export const lecturasDeFinanzas = {
 
 export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
-  const permisos = usePermissions();
+  const permisos = usePermisosDeModulo();
   const { clients, closingCalls, clientsLoading, closingCallsLoading } =
     usePlatformData();
 

@@ -311,6 +311,20 @@ describe("lecturas del marco de la plataforma (SCRUM-540)", () => {
     expect(canalesSinChequeo(grafo, marco)).toEqual([]);
   });
 
+  it("⭐ quien pide con leerDelMarco toma los permisos con identidad estable (usePermisosDeModulo), no con usePermissions", () => {
+    // Con `usePermissions()` los providers volverían a pedir todo en cada `router.refresh()`: el layout
+    // manda los permisos como un objeto nuevo aunque no cambien.
+    const conLeer = grafo
+      .archivosDesde(marco)
+      .filter((f) => grafo.info(f).directiva !== "servidor")
+      .filter((f) => /\bleerDelMarco\s*[<(]/.test(readFileSync(f, "utf8")));
+    expect(conLeer.length).toBeGreaterThanOrEqual(5);
+    const mal = conLeer
+      .filter((f) => /\busePermissions\(\)/.test(readFileSync(f, "utf8")))
+      .map((f) => relative(WEB, f));
+    expect(mal).toEqual([]);
+  });
+
   it("la lista de las que no son de ningún módulo sólo tiene lecturas del marco que no chequean", () => {
     const sobran = Object.keys(LECTURAS_DEL_MARCO_SIN_MODULO).filter(
       (a) => !delMarco.includes(a) || lecturaDe.has(a)

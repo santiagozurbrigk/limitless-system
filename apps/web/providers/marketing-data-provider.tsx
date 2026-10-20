@@ -11,7 +11,7 @@ import {
 } from "react";
 import { getInstagramIntegrationStatusAction } from "@/app/marketing/actions";
 import { leerConMotivo } from "@/lib/client/correr-accion";
-import { usePermissions } from "@/providers/permissions-provider";
+import { usePermisosDeModulo } from "@/providers/permissions-provider";
 import { leerDelMarco } from "@/lib/auth/lecturas-del-marco";
 import type { PermisosDeModulo } from "@/lib/auth/regla-de-modulo";
 
@@ -50,7 +50,7 @@ const MarketingDataContext = createContext<MarketingDataContextValue | null>(nul
 
 export function MarketingDataProvider({ children }: { children: ReactNode }) {
   const [instagramConnected, setInstagramConnected] = useState<boolean | null>(false);
-  const permisos = usePermissions();
+  const permisos = usePermisosDeModulo();
 
   useEffect(() => {
     void leerInstagramDelMarco(permisos).then(setInstagramConnected);

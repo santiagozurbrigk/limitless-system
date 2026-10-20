@@ -22,6 +22,7 @@ permisos por módulo sólo cortan el render de pantallas**.
 | Permisos por módulo | `apps/web/lib/auth/get-current-permissions.ts`, `apps/web/constants/permission-modules.ts`, `apps/web/lib/team/mapper.ts` | Rol → mapa de 13 módulos con nivel `none/view/full` |
 | Gate de pantallas | `apps/web/app/(platform)/layout.tsx` + `apps/web/lib/navigation/module-for-path.ts` | Si el módulo de la ruta está en `none`, renderiza `SinAcceso` |
 | Guardia de cada página | `apps/web/lib/auth/acceso-a-modulo.ts` → `exigirModuloDeLaPagina(moduleId)` | Primera línea de toda página con módulo (y de un layout de segmento que lee): sin el módulo devuelve `SinAcceso` antes de cualquier lectura, también en navegación del cliente (SCRUM-540) |
+| Lecturas del marco | `apps/web/lib/auth/lecturas-del-marco.ts` (`leerDelMarco`), `acceso-a-modulo.ts` → `rechazoDeLecturaDelMarco(lectura)` | Los providers que se montan en toda pantalla piden cada dato sólo con alguno de los módulos que lo usan, y la action lo vuelve a chequear (SCRUM-540) |
 | Add-ons | `apps/web/lib/auth/add-on-ids.ts`, `apps/web/lib/auth/add-ons.ts` | `organizations.enabled_add_ons`; `requireAddOn()` en server actions |
 | Super admin | `apps/web/lib/auth/require-super-admin.ts` | Allowlist por email en `super_admin_users`. Alta y baja: [`operacion/alta-super-admin.md`](../operacion/alta-super-admin.md) (primero la cuenta, después la lista) |
 | Rate limit | `apps/web/lib/rate-limit.ts` | RPC `consume_rate_limit` (Postgres), fallback en memoria |
@@ -227,16 +228,35 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
     action de lectura de un módulo: un export de un archivo `"use server"` con nombre de lectura (`get`,
     `list`, `fetch`, `load`, `preview`...) que sólo alcanzan, siguiendo los `import` desde `app/`, páginas y
     layouts de ese módulo. **No ve:** una lectura con otro nombre; una action que alcanzan pantallas de dos
-    módulos, una ruta libre, una API o el marco de la plataforma; un `import` dinámico sin literal; funciones
+    módulos, una ruta libre o una API (las del marco, sí: ver abajo); un `import` dinámico sin literal; funciones
     de servidor que no son actions (`lib/<dominio>/queries.ts`, que sólo llaman componentes de servidor y
     quedan cortadas por el guardia de la página). `app/__tests__/lecturas-rechazan-sin-modulo.test.ts` llama
     de verdad a cada action que el detector da por chequeada.
-  - **Lo que todavía viaja: los providers del marco.** `AppProviders` (en el layout de `(platform)`) monta en
-    toda pantalla `PlatformDataProvider` y `FinanceDataProvider`, que piden al cargar clientes, llamadas de
-    cierre, conversaciones, la configuración de Finanzas, cobros y métricas de ventas, y el panel de reportes
-    de la barra pide los últimos reportes ejecutivos, todo sin mirar el módulo.
-    No es la página ni su payload: son pedidos de Server Actions aparte, y los alcanzan pantallas de varios
-    módulos, así que no hay un único módulo que exigir. Queda en `[PERMISOS-PROVIDERS-GLOBALES]`.
+  - **Las lecturas del marco.** `AppProviders` (en el layout de `(platform)`) monta en toda pantalla
+    `PlatformDataProvider` (clientes, llamadas de cierre, conversaciones, cuentas de Unipile y el canal en
+    vivo de conversaciones), `FinanceDataProvider` (configuración de Finanzas, cobros, métricas importadas) y
+    `MarketingDataProvider` (estado de Instagram); la barra monta el panel de reportes ejecutivos y el menú del
+    celular pide el contador de llamadas sin asignar de Clientes. Hasta SCRUM-540 todo eso se pedía para
+    cualquier miembro, sin mirar el módulo: alguien sin Clientes ni Finanzas recibía los clientes, los gastos
+    y los reportes en cualquier pantalla. Ahora:
+    - `lib/auth/lecturas-del-marco.ts` (sin dependencias de servidor) dice qué módulos abren cada lectura: los
+      de las pantallas que usan el dato (los clientes, Clientes, Ventas, Finanzas y el Panel; los reportes,
+      Operaciones; las plataformas de cobro, también Ajustes). Con cualquiera de ellos todo sigue igual.
+    - En el servidor, cada action arranca con `rechazoDeLecturaDelMarco("<lectura>")` (founder pasa, sin rol
+      no se bloquea, una falla de permisos lanza). Las que devolvían el dato directo ahora pueden devolver
+      `RechazoPorModulo` en su lugar (`esRechazoPorModulo`, `sinRechazo`). `loadFinanceConfigAction` arma la
+      respuesta por partes: con Ajustes y sin Finanzas, Ventas ni el Panel, sólo las plataformas de cobro, y
+      los gastos, suscripciones y sueldos ni se leen.
+    - En el cliente, cada provider pide con `leerDelMarco(permisos, "<lectura>", accion, vacio)`: sin el
+      módulo no hay pedido y el componente queda vacío (el botón de reportes no aparece, el contador queda sin
+      número), sin error. Para eso los permisos (`PermissionsProvider`) envuelven a `AppProviders` en el
+      layout. El canal en vivo de conversaciones no se abre sin la lectura de conversaciones.
+    - `lecturas-por-modulo.test.ts` exige que toda action de lectura que alcanza el marco arranque con
+      `rechazoDeLecturaDelMarco` (salvo el id de la org y el perfil propio, listados con su motivo), que en el
+      cliente del marco se pida sólo dentro de `leerDelMarco` con la misma lectura, y que todo canal en vivo
+      del marco corte antes con `puedeLeerDelMarco`. **No ve:** si el provider le pasa a `leerDelMarco` los
+      permisos reales (lo prueban los tests de cada provider) ni una lectura con un nombre que no empieza con
+      un verbo de lectura.
   - **Con SCRUM-524** (menú por experiencia): ese cambio deja pasar `children` en el layout de `(platform)`
     fuera de la experiencia y pone en cada segmento de primer nivel un `layout.tsx` con
     `await exigirRutaDeLaExperiencia("/<segmento>")`. No chocan: los guardias de esta entrega están en las
@@ -308,10 +328,9 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
   permiso antes de leer, así que una navegación del cliente (un `<Link>`, la paleta) muestra «No tenés
   acceso» igual que tipear la URL, y los datos no viajan en la respuesta. Medido con `next start` contra un
   Supabase local, al cargar y al navegar.
-- `[PERMISOS-PROVIDERS-GLOBALES]` (nuevo) Los providers del marco (`PlatformDataProvider`,
-  `FinanceDataProvider`) piden clientes, llamadas, conversaciones, Finanzas y cobros en toda pantalla, sin
-  mirar el módulo.
-- `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (nuevo) 73 Server Actions de lectura de un solo módulo devuelven
+- `[PERMISOS-PROVIDERS-GLOBALES]` resuelto el 2026-10-19 (SCRUM-540): los providers del marco piden cada
+  dato sólo si la persona tiene alguno de los módulos que lo usan, y las actions lo chequean en el servidor.
+- `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (nuevo, SCRUM-541) 73 Server Actions de lectura de un solo módulo devuelven
   el dato directo y no chequean el módulo; se alcanzan llamándolas a mano.
 - `[PERMISOS-FOUNDER-AREA]` resuelto el 2026-10-05 (SCRUM-18): `/founder` vive en `app/(platform)/founder` y
   pasa por el mismo bloqueo que el resto; la action que lee su resumen exige Operaciones.
@@ -339,7 +358,8 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
 | `apps/web/lib/navigation/__tests__/module-for-path.test.ts` | Ruta → módulo; toda ruta de `(platform)` decidida |
 | `apps/web/lib/navigation/__tests__/lecturas-por-modulo.test.ts` | Toda página y layout que lee con el guardia del módulo de su ruta; toda action de lectura de un solo módulo con `rechazoPorModulo` (o en la deuda) |
 | `apps/web/lib/auth/__tests__/acceso-a-modulo.test.ts` | La regla y el guardia: founder, sin rol, con y sin módulo, falla de permisos que se relanza |
-| `apps/web/app/__tests__/paginas-cortan-antes-de-leer.test.ts`, `lecturas-rechazan-sin-modulo.test.ts` | Las páginas de SOP y el layout del Agente no leen sin el módulo; cada action chequeada rechaza sin leer |
+| `apps/web/app/__tests__/paginas-cortan-antes-de-leer.test.ts`, `lecturas-rechazan-sin-modulo.test.ts` | Las páginas de SOP y el layout del Agente no leen sin el módulo; cada action chequeada (también las del marco) rechaza sin leer |
+| `apps/web/lib/auth/__tests__/lecturas-del-marco.test.ts`, `apps/web/providers/__tests__/lecturas-del-marco-de-los-providers.test.ts` | Qué módulos abren cada lectura del marco; los providers de la plataforma, Finanzas y Marketing no piden sin el módulo y piden igual que antes con él |
 | `apps/web/constants/__tests__/permission-modules.test.ts`, `permisos-consolidados.test.ts` | Consolidación de claves viejas, nivel más alto |
 | `apps/web/lib/onboarding/__tests__/gate-routing.test.ts` | Combinaciones del redirect al gate |
 | `apps/web/lib/security/__tests__/*` | Cifrado AES-GCM y comparación en tiempo constante |

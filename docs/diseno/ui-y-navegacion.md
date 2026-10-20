@@ -54,7 +54,7 @@ en `lib/navigation/module-for-path.ts` (el test lo exige) → título en `lib/na
 | `notch-profile-menu.tsx` | Menú de perfil: Ajustes, cerrar sesión |
 
 Isla derecha: `NotchSetupIndicator` (pasos de onboarding abiertos), `HoldingBusinessSwitcher`, acceso a
-Integraciones (si hay permiso), `ReportsPanel` (reportes ejecutivos), `ThemeToggle`, perfil. Ajustes **no**
+Integraciones (si hay permiso), `ReportsPanel` (reportes ejecutivos; sólo con Operaciones desde SCRUM-540: sin el módulo no los pide ni aparece), `ThemeToggle`, perfil. Ajustes **no**
 está en la barra. Holding sin negocio activo: la barra va sin ítems.
 
 Mobile: `components/layout/mobile-nav.tsx` (drawer) reutiliza `components/navigation/sidebar-*`, que
