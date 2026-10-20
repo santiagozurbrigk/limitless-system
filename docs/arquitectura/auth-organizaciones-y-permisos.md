@@ -289,10 +289,15 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
       (corren aunque la página corte), que `template` y `default` lleven el guardia si leen, que
       `loading`, `error` y `not-found` no alcancen ninguna lectura, y que no haya `route` ni archivos de
       metadata con código (`opengraph-image`, `twitter-image`, `icon`, `apple-icon`, `sitemap`, `robots`,
-      `manifest`): Next los sirve sin la página ni el guardia. **No ve:** si el provider le pasa a
-      `leerDelMarco` los permisos reales (lo prueban los tests de cada provider y el del orden de los
-      providers en el layout), una lectura con un nombre que no empieza con un verbo de lectura, ni una
-      action del marco importada a través de un archivo que la reexporta.
+      `manifest`): Next los sirve sin la página ni el guardia. Una action de lectura que todavía no importa
+      ninguna pantalla también tiene que arrancar con `rechazoPorModulo` o `rechazoDeLecturaDelMarco`, con el
+      módulo de su archivo si las otras lecturas del archivo son de uno solo (QA de SCRUM-540); las 66 que hay
+      hoy sin chequeo están en `LECTURAS_SIN_LLAMADOR_CONOCIDAS`, que sólo se achica. **No ve:** si el
+      provider le pasa a `leerDelMarco` los permisos reales (lo prueban los tests de cada provider y el del
+      orden de los providers en el layout), una lectura con un nombre que no empieza con un verbo de lectura,
+      una action del marco importada a través de un archivo que la reexporta, ni, en una action que todavía
+      no importa ninguna pantalla y cuyo archivo es de varios módulos o de ninguno, si el módulo que chequea
+      es el correcto (se ve en cuanto una pantalla la importa).
   - **Con SCRUM-524** (menú por experiencia): ese cambio deja pasar `children` en el layout de `(platform)`
     fuera de la experiencia y pone en cada segmento de primer nivel un `layout.tsx` con
     `await exigirRutaDeLaExperiencia("/<segmento>")`. No chocan: los guardias de esta entrega están en las
