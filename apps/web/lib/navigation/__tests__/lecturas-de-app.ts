@@ -198,6 +198,60 @@ export function layoutLee(archivo: string, texto = readFileSync(archivo, "utf8")
   return false;
 }
 
+/**
+ * Exports de una página o un layout que Next ejecuta por su cuenta, aunque la
+ * función por defecto corte con el guardia: su resultado va en el `<head>` y
+ * en el payload (AR 1 de SCRUM-540). En una ruta con módulo no se aceptan; el
+ * `metadata` estático (un objeto, sin lecturas) sí.
+ */
+export const EXPORTS_QUE_CORREN_APARTE = ["generateMetadata", "generateViewport"];
+
+export function exportsQueCorrenAparte(archivo: string, texto = readFileSync(archivo, "utf8")): string[] {
+  const sf = parsear(archivo, texto);
+  const encontrados: string[] = [];
+  for (const st of sf.statements) {
+    const exportada = (ts.getModifiers(st as ts.HasModifiers) ?? []).some(
+      (m) => m.kind === ts.SyntaxKind.ExportKeyword
+    );
+    if (ts.isFunctionDeclaration(st) && exportada && st.name && EXPORTS_QUE_CORREN_APARTE.includes(st.name.text)) {
+      encontrados.push(st.name.text);
+    }
+    if (ts.isVariableStatement(st) && exportada) {
+      for (const d of st.declarationList.declarations) {
+        if (ts.isIdentifier(d.name) && EXPORTS_QUE_CORREN_APARTE.includes(d.name.text)) encontrados.push(d.name.text);
+      }
+    }
+    if (ts.isExportDeclaration(st) && st.exportClause && ts.isNamedExports(st.exportClause)) {
+      for (const el of st.exportClause.elements) {
+        if (EXPORTS_QUE_CORREN_APARTE.includes(el.name.text)) encontrados.push(el.name.text);
+      }
+    }
+  }
+  return encontrados;
+}
+
+/**
+ * Los archivos especiales del App Router que no son `page` ni `layout` y se
+ * dibujan dentro de una ruta: `template` y `default` envuelven o reemplazan a
+ * la página (se tratan como un layout: si leen, llevan el guardia), y
+ * `loading`, `error` y `not-found` no pueden leer nada.
+ */
+export type ArchivoEspecial = { archivo: string; tipo: "template" | "default" | "loading" | "error" | "not-found" };
+
+export function archivosEspeciales(dir: string, out: ArchivoEspecial[] = []): ArchivoEspecial[] {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const ruta = join(dir, e.name);
+    if (e.isDirectory()) {
+      if (e.name === "__tests__" || e.name === "node_modules" || e.name.startsWith("_")) continue;
+      archivosEspeciales(ruta, out);
+      continue;
+    }
+    const m = /^(template|default|loading|error|not-found)\.(tsx|ts|jsx|js)$/.exec(e.name);
+    if (m) out.push({ archivo: ruta, tipo: m[1] as ArchivoEspecial["tipo"] });
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ */
 /* 2. Las Server Actions de lectura que alcanza cada pantalla           */
 /* ------------------------------------------------------------------ */
@@ -340,6 +394,36 @@ export class GrafoDeImports {
   }
 
   /**
+   * Si `entrada`, ejecutada en el servidor, alcanza un archivo que lee la base
+   * (importa el cliente de Supabase de servidor o el admin). No entra a los
+   * componentes de cliente ni a los archivos `"use server"`.
+   */
+  leeEnElServidor(entrada: string): boolean {
+    if (this.info(entrada).directiva === "cliente") return false;
+    const vistos = new Set<string>();
+    const cola = [entrada];
+    while (cola.length > 0) {
+      const archivo = cola.pop()!;
+      if (vistos.has(archivo)) continue;
+      vistos.add(archivo);
+      const info = this.info(archivo);
+      if (archivo !== entrada && info.directiva !== null) continue;
+      for (const st of info.sf.statements) {
+        if (
+          ts.isImportDeclaration(st) &&
+          ts.isStringLiteral(st.moduleSpecifier) &&
+          /^@\/lib\/supabase\/(server|admin)$/.test(st.moduleSpecifier.text) &&
+          !st.importClause?.isTypeOnly
+        ) {
+          return true;
+        }
+      }
+      for (const imp of info.imports) cola.push(imp.archivo);
+    }
+    return false;
+  }
+
+  /**
    * El módulo con el que arranca la action (`const r = await
    * rechazoPorModulo("<módulo>"); if (r) return r;` sin ningún `await`
    * antes), o null si no lo chequea así.
@@ -395,11 +479,20 @@ export function usosFueraDeLeerDelMarco(
     const info = grafo.info(archivo);
     if (info.directiva === "servidor") continue;
     const locales = new Map<string, string>();
+    const espacios = new Map<string, string>();
     for (const st of info.sf.statements) {
       if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier)) continue;
       const destino = grafo.resolver(archivo, st.moduleSpecifier.text);
       if (!destino || grafo.info(destino).directiva !== "servidor") continue;
       const nb = st.importClause?.namedBindings;
+      if (nb && ts.isNamespaceImport(nb)) {
+        // `import * as acciones from "..."`: cuenta cada `acciones.<lectura>`.
+        const prefijo = `${relative(raiz, destino)}#`;
+        for (const [clave, lectura] of lecturas) {
+          if (clave.startsWith(prefijo)) espacios.set(`${nb.name.text}.${clave.slice(prefijo.length)}`, lectura);
+        }
+        continue;
+      }
       if (!nb || !ts.isNamedImports(nb)) continue;
       for (const el of nb.elements) {
         const clave = `${relative(raiz, destino)}#${(el.propertyName ?? el.name).text}`;
@@ -407,15 +500,23 @@ export function usosFueraDeLeerDelMarco(
         if (lectura) locales.set(el.name.text, lectura);
       }
     }
-    if (locales.size === 0) continue;
+    if (locales.size === 0 && espacios.size === 0) continue;
     const visitar = (nodo: ts.Node) => {
-      if (ts.isIdentifier(nodo) && locales.has(nodo.text) && !dentroDeUnImport(nodo)) {
-        const esperada = locales.get(nodo.text)!;
+      const nombre =
+        ts.isIdentifier(nodo) && locales.has(nodo.text)
+          ? nodo.text
+          : ts.isPropertyAccessExpression(nodo) &&
+              ts.isIdentifier(nodo.expression) &&
+              espacios.has(`${nodo.expression.text}.${nodo.name.text}`)
+            ? `${nodo.expression.text}.${nodo.name.text}`
+            : null;
+      if (nombre && !dentroDeUnImport(nodo)) {
+        const esperada = (locales.get(nombre) ?? espacios.get(nombre))!;
         const envoltorio = leerDelMarcoQueEnvuelve(nodo);
         if (envoltorio !== esperada) {
           const { line } = info.sf.getLineAndCharacterOfPosition(nodo.getStart(info.sf));
           mal.push(
-            `${relative(raiz, archivo)}:${line + 1} ${nodo.text} ${
+            `${relative(raiz, archivo)}:${line + 1} ${nombre} ${
               envoltorio === null ? `fuera de ${LECTURA_DEL_MARCO_EN_EL_CLIENTE}` : `con "${envoltorio}" en vez de "${esperada}"`
             }`
           );
@@ -429,10 +530,20 @@ export function usosFueraDeLeerDelMarco(
 }
 
 /**
+ * Las tablas que el marco escucha en vivo y la lectura que las abre. Un canal
+ * de otra tabla no se acepta hasta sumarla acá.
+ */
+export const LECTURA_DE_CADA_TABLA_EN_VIVO: Record<string, string> = {
+  conversations: "conversaciones",
+};
+
+/**
  * Canales en vivo de Supabase (`.channel(...)`) que abre el cliente del marco
- * sin chequear la lectura: cada uno tiene que estar dentro de una función que
- * corta antes con `if (!puedeLeerDelMarco(permisos, "<lectura>")) return;`.
- * Un canal manda filas nuevas al navegador sin pasar por ninguna action.
+ * sin chequear la lectura de su tabla: cada uno tiene que estar dentro de una
+ * función que corta antes con
+ * `if (!puedeLeerDelMarco(permisos, "<lectura>")) return;`, con la lectura de
+ * la tabla que escucha (`LECTURA_DE_CADA_TABLA_EN_VIVO`). Un canal manda filas
+ * nuevas al navegador sin pasar por ninguna action.
  */
 export function canalesSinChequeo(grafo: GrafoDeImports, entrada: string): string[] {
   const mal: string[] = [];
@@ -443,11 +554,19 @@ export function canalesSinChequeo(grafo: GrafoDeImports, entrada: string): strin
       if (
         ts.isCallExpression(nodo) &&
         ts.isPropertyAccessExpression(nodo.expression) &&
-        nodo.expression.name.text === "channel" &&
-        !cortaAntesConLaLectura(nodo)
+        nodo.expression.name.text === "channel"
       ) {
         const { line } = info.sf.getLineAndCharacterOfPosition(nodo.getStart(info.sf));
-        mal.push(`${relative(grafo.raiz, archivo)}:${line + 1}`);
+        const donde = `${relative(grafo.raiz, archivo)}:${line + 1}`;
+        const tablas = tablasDelCanal(nodo);
+        const esperadas = new Set<string | undefined>(tablas.map((t) => LECTURA_DE_CADA_TABLA_EN_VIVO[t]));
+        const guardia = lecturaConLaQueCorta(nodo);
+        if (tablas.length === 0) mal.push(`${donde} sin tabla reconocible`);
+        else if (esperadas.has(undefined)) mal.push(`${donde} escucha ${tablas.join(", ")}, sin lectura del marco`);
+        else if (guardia === null) mal.push(`${donde} sin chequeo`);
+        else if (esperadas.size !== 1 || !esperadas.has(guardia)) {
+          mal.push(`${donde} chequea "${guardia}" y escucha ${tablas.join(", ")}`);
+        }
       }
       ts.forEachChild(nodo, visitar);
     };
@@ -456,7 +575,33 @@ export function canalesSinChequeo(grafo: GrafoDeImports, entrada: string): strin
   return mal;
 }
 
-function cortaAntesConLaLectura(nodo: ts.Node): boolean {
+/** Las tablas (`table: "..."`) de los `.on(...)` encadenados al canal. */
+function tablasDelCanal(canal: ts.CallExpression): string[] {
+  const tablas: string[] = [];
+  let n: ts.Node = canal;
+  while (n.parent && (ts.isPropertyAccessExpression(n.parent) || ts.isCallExpression(n.parent))) {
+    n = n.parent;
+    if (ts.isCallExpression(n)) {
+      for (const arg of n.arguments) {
+        if (!ts.isObjectLiteralExpression(arg)) continue;
+        for (const prop of arg.properties) {
+          if (
+            ts.isPropertyAssignment(prop) &&
+            ts.isIdentifier(prop.name) &&
+            prop.name.text === "table" &&
+            ts.isStringLiteral(prop.initializer)
+          ) {
+            tablas.push(prop.initializer.text);
+          }
+        }
+      }
+    }
+  }
+  return tablas;
+}
+
+/** La lectura del `if (!puedeLeerDelMarco(_, "<lectura>")) return;` que corta antes, o null. */
+function lecturaConLaQueCorta(nodo: ts.Node): string | null {
   for (let n: ts.Node | undefined = nodo.parent; n; n = n.parent) {
     if (!ts.isFunctionLike(n)) continue;
     const cuerpo = (n as ts.FunctionLikeDeclaration).body;
@@ -473,11 +618,12 @@ function cortaAntesConLaLectura(nodo: ts.Node): boolean {
         (ts.isReturnStatement(st.thenStatement) ||
           (ts.isBlock(st.thenStatement) && st.thenStatement.statements.some(ts.isReturnStatement)))
       ) {
-        return true;
+        const arg = st.expression.operand.arguments[1];
+        return arg && ts.isStringLiteral(arg) ? arg.text : "(sin literal)";
       }
     }
   }
-  return false;
+  return null;
 }
 
 /** Un uso que no llama a nada: el import mismo o una posición de tipo (`typeof accion`). */

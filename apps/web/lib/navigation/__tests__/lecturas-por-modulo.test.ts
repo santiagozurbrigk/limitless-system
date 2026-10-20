@@ -13,6 +13,9 @@ import {
   layoutLee,
   usosFueraDeLeerDelMarco,
   canalesSinChequeo,
+  archivosEspeciales,
+  exportsQueCorrenAparte,
+  type ArchivoEspecial,
 } from "./lecturas-de-app";
 import { MODULOS_DE_LAS_LECTURAS_DEL_MARCO } from "@/lib/auth/lecturas-del-marco";
 
@@ -254,6 +257,57 @@ describe("Server Actions de lectura de un módulo", () => {
 });
 
 /**
+ * Lo que un archivo especial de una ruta con módulo tiene mal, o null.
+ * `template` y `default` se tratan como un layout; `loading`, `error` y
+ * `not-found` no pueden leer (ni una action de lectura ni la base).
+ */
+function especialMal(grafo: GrafoDeImports, appDir: string, e: ArchivoEspecial): string | null {
+  const ruta = rutaDeCarpeta(appDir, dirname(e.archivo));
+  const modulo = permissionModuleForPath(ruta);
+  if (modulo === null) return null;
+  const rel = `app/${relative(appDir, e.archivo)}`;
+  if (e.tipo === "template" || e.tipo === "default") {
+    if (!layoutLee(e.archivo)) return null;
+    const g = guardiaDe(e.archivo);
+    if (g.estado === "falta") return `${rel}: lee y ${g.motivo}`;
+    if (g.modulo !== modulo) return `${rel}: pide ${g.modulo}, la ruta es de ${modulo}`;
+    return null;
+  }
+  const lecturas = [...grafo.accionesDesde(e.archivo)].filter((a) => NOMBRE_DE_LECTURA.test(a.split("#")[1]!));
+  if (lecturas.length > 0) return `${rel}: alcanza ${lecturas.join(", ")}`;
+  if (grafo.leeEnElServidor(e.archivo)) return `${rel}: lee la base en el servidor`;
+  return null;
+}
+
+describe("lo que Next ejecuta aparte de la página (AR 1 de SCRUM-540)", () => {
+  const grafo = new GrafoDeImports(WEB);
+  const todas = pantallas(APP_DIR);
+
+  it("⭐ ninguna página ni layout con módulo exporta generateMetadata ni generateViewport (corren aunque la página corte)", () => {
+    const archivos = new Set<string>();
+    for (const p of todas) {
+      if (permissionModuleForPath(p.ruta) === null) continue;
+      archivos.add(join(APP_DIR, p.archivo));
+      for (const l of p.layouts) {
+        if (permissionModuleForPath(rutaDeCarpeta(APP_DIR, dirname(l))) !== null) archivos.add(l);
+      }
+    }
+    const mal = [...archivos]
+      .map((f) => ({ f, e: exportsQueCorrenAparte(f) }))
+      .filter((x) => x.e.length > 0)
+      .map((x) => `app/${relative(APP_DIR, x.f)}: ${x.e.join(", ")}`);
+    expect(mal).toEqual([]);
+  });
+
+  it("⭐ todo template, default, loading, error y not-found de una ruta con módulo cumple su regla", () => {
+    const especiales = archivosEspeciales(APP_DIR);
+    // El recorrido ve los que hay (los error.tsx de los segmentos).
+    expect(especiales.some((e) => e.tipo === "error" && e.archivo.includes("workboard"))).toBe(true);
+    expect(especiales.map((e) => especialMal(grafo, APP_DIR, e)).filter(Boolean)).toEqual([]);
+  });
+});
+
+/**
  * Lecturas que alcanza el marco y no son de ningún módulo, con el porqué.
  * Agregar una exige decir por qué cualquier miembro puede recibirla.
  */
@@ -484,43 +538,110 @@ import { listDatosAction as listar } from "@/app/datos/actions";
 export const directo = () => listar();
 export const otra = (p) => leerDelMarco(p, "reportesEjecutivos", listar, []);`
     );
+    archivo(
+      "marco/providers/espacio.tsx",
+      `"use client";
+import * as acciones from "@/app/datos/actions";
+export const bien = (p) => leerDelMarco(p, "clientes", acciones.listDatosAction, []);
+export const directo = () => acciones.listDatosAction();`
+    );
     const layout = archivo(
       "marco/app/(platform)/layout.tsx",
-      `import "@/providers/bien";\nimport "@/providers/mal";\nexport default function L() { return null; }`
+      `import "@/providers/bien";\nimport "@/providers/mal";\nimport "@/providers/espacio";\nexport default function L() { return null; }`
     );
     const grafo = new GrafoDeImports(join(raiz, "marco"));
     const accion = "app/datos/actions.ts#listDatosAction";
     expect(grafo.chequeoDeLaAccion(accion, LLAMADA_DEL_MARCO)).toBe("clientes");
-    expect(usosFueraDeLeerDelMarco(grafo, layout, new Map([[accion, "clientes"]]))).toEqual([
+    expect(usosFueraDeLeerDelMarco(grafo, layout, new Map([[accion, "clientes"]])).sort()).toEqual([
+      "providers/espacio.tsx:4 acciones.listDatosAction fuera de leerDelMarco",
       "providers/mal.tsx:3 listar fuera de leerDelMarco",
       'providers/mal.tsx:4 listar con "reportesEjecutivos" en vez de "clientes"',
     ]);
   });
 
-  it("⭐ el marco: señala un canal en vivo que no corta antes con puedeLeerDelMarco", () => {
+  it("⭐ el marco: señala un canal en vivo sin chequeo, con el chequeo tarde o con la lectura de otra tabla", () => {
+    const canal = (tabla: string) =>
+      `supabase.channel("x").on("postgres_changes", { event: "INSERT", schema: "public", table: "${tabla}" }, () => {})`;
     archivo(
       "canal/providers/p.tsx",
       `"use client";
 export function bien(permisos, supabase) {
   useEffect(() => {
     if (!puedeLeerDelMarco(permisos, "conversaciones")) return;
-    void (async () => { supabase.channel("x"); })();
+    void (async () => { ${canal("conversations")}; })();
   }, []);
 }
 export function mal(supabase) {
   useEffect(() => {
-    void (async () => { supabase.channel("y"); })();
+    void (async () => { ${canal("conversations")}; })();
   }, []);
 }
 export function tarde(permisos, supabase) {
-  supabase.channel("z");
+  ${canal("conversations")};
   if (!puedeLeerDelMarco(permisos, "conversaciones")) return;
+}
+export function otraLectura(permisos, supabase) {
+  if (!puedeLeerDelMarco(permisos, "clientes")) return;
+  ${canal("conversations")};
+}
+export function tablaSinLectura(permisos, supabase) {
+  if (!puedeLeerDelMarco(permisos, "clientes")) return;
+  ${canal("fixed_expenses")};
 }`
     );
     const layout = archivo("canal/app/layout.tsx", `import "@/providers/p";\nexport default function L() { return null; }`);
     expect(canalesSinChequeo(new GrafoDeImports(join(raiz, "canal")), layout)).toEqual([
-      "providers/p.tsx:10",
-      "providers/p.tsx:14",
+      "providers/p.tsx:10 sin chequeo",
+      "providers/p.tsx:14 sin chequeo",
+      'providers/p.tsx:19 chequea "clientes" y escucha conversations',
+      "providers/p.tsx:23 escucha fixed_expenses, sin lectura del marco",
+    ]);
+  });
+
+
+  it("⭐ lo que corre aparte: generateMetadata, un template que lee, uno de cliente, y un error o un loading que leen", () => {
+    const app = join(raiz, "esp", "app");
+    const meta = archivo(
+      "esp/app/(platform)/sops/[id]/page.tsx",
+      `import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+export async function generateMetadata({ params }) { return { title: (await leerSop(params)).title }; }
+export default async function P() {
+  const sinAcceso = await exigirModuloDeLaPagina("operations");
+  if (sinAcceso) return sinAcceso;
+  return null;
+}`
+    );
+    expect(exportsQueCorrenAparte(meta)).toEqual(["generateMetadata"]);
+    expect(exportsQueCorrenAparte(archivo("esp/static/page.tsx", `export const metadata = { title: "X" };\nexport default function P() { return null; }`))).toEqual([]);
+    archivo("esp/app/finance/actions.ts", `"use server";\nexport async function loadDatosAction() { return []; }`);
+    archivo("esp/lib/supabase/server.ts", `export async function createClient() { return null; }`);
+    archivo(
+      "esp/app/(platform)/finance/template.tsx",
+      `import { createClient } from "@/lib/supabase/server";\nexport default async function T({ children }) { await createClient(); return children; }`
+    );
+    archivo(
+      "esp/app/(platform)/finance/expenses/template.tsx",
+      `"use client";\nimport { loadDatosAction } from "@/app/finance/actions";\nexport default function T({ children }) { void loadDatosAction(); return children; }`
+    );
+    archivo(
+      "esp/app/(platform)/finance/error.tsx",
+      `"use client";\nimport { loadDatosAction } from "@/app/finance/actions";\nexport default function E() { void loadDatosAction(); return null; }`
+    );
+    archivo(
+      "esp/app/(platform)/finance/expenses/loading.tsx",
+      `import { createClient } from "@/lib/supabase/server";\nexport default async function L() { await createClient(); return null; }`
+    );
+    archivo("esp/app/(platform)/workboard/error.tsx", `"use client";\nexport default function E() { return null; }`);
+    const grafo = new GrafoDeImports(join(raiz, "esp"));
+    const mal = archivosEspeciales(app)
+      .map((e) => especialMal(grafo, app, e))
+      .filter(Boolean)
+      .sort();
+    expect(mal).toEqual([
+      "app/(platform)/finance/error.tsx: alcanza app/finance/actions.ts#loadDatosAction",
+      expect.stringMatching(/^app\/\(platform\)\/finance\/expenses\/loading\.tsx: lee la base/),
+      expect.stringMatching(/^app\/\(platform\)\/finance\/expenses\/template\.tsx: lee y es un componente de cliente/),
+      expect.stringMatching(/^app\/\(platform\)\/finance\/template\.tsx: lee y no arranca con/),
     ]);
   });
 });
