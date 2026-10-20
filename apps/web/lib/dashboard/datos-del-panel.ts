@@ -14,6 +14,7 @@
 import { buildSalesFunnel, type SalesFunnel } from "@/lib/metrics/build-sales-funnel-stages";
 import { deriveDashboardData } from "@/lib/metrics/derive-dashboard-data";
 import { deriveSalesMetrics } from "@/lib/metrics/derive-sales-metrics";
+import { diaLocal } from "@/lib/fechas/calendario";
 import {
   resumenConMetricasImportadas,
   resumenDeGastos,
@@ -59,9 +60,11 @@ export function calcularDatosDelPanel(entradas: EntradasDelPanel): DatosDelPanel
     deriveSalesMetrics(entradas.conversations, entradas.closingCalls),
     entradas.metricasImportadas
   );
-  const gastos = resumenDeGastos(entradas);
+  // "Este mes" es el de la organización, no el del reloj del servidor (AR 2).
+  const ahora = diaLocal(entradas.hoy);
+  const gastos = resumenDeGastos(entradas, ahora);
   const financeSummary = resumenConMetricasImportadas(
-    resumenEnVivo(entradas, gastos),
+    resumenEnVivo(entradas, gastos, ahora),
     entradas.metricasImportadas
   );
   const derived = deriveDashboardData(

@@ -55,20 +55,31 @@ export const GASTOS_EN_CERO: ExpensesSummary = {
   totalMonthly: 0,
 };
 
+/*
+ * ⭐ `ahora` es el "hoy" con el que se decide "este mes" (comisiones, período de
+ * la facturación, la serie de 6 meses). En el navegador (Finanzas) se deja el
+ * reloj de quien mira, como en `main`. En el servidor (el Panel y el resumen de
+ * Ventas) hay que pasar el día de la organización, `diaLocal(hoy)` con `hoy` en
+ * su zona: el reloj del proceso (UTC en Vercel) cambia de mes horas antes que
+ * una org de América (AR 2 de SCRUM-540, regla de SCRUM-493).
+ */
+
 export function resumenDeGastos(
-  entradas: Pick<EntradasDelResumen, "fixedExpenses" | "subscriptions" | "teamCompensation" | "closingCalls">
+  entradas: Pick<EntradasDelResumen, "fixedExpenses" | "subscriptions" | "teamCompensation" | "closingCalls">,
+  ahora: Date = new Date()
 ): ExpensesSummary {
   return computeExpensesSummary(
     entradas.fixedExpenses,
     entradas.subscriptions,
-    enrichTeamCompensationWithCommissions(entradas.teamCompensation, entradas.closingCalls)
+    enrichTeamCompensationWithCommissions(entradas.teamCompensation, entradas.closingCalls, ahora)
   );
 }
 
 /** El resumen "en vivo" (sin métricas importadas), sólo con los campos de `FinanceSummary`. */
 export function resumenEnVivo(
   entradas: Pick<EntradasDelResumen, "clients" | "closingCalls" | "paymentPlatforms" | "payments">,
-  gastos: ExpensesSummary
+  gastos: ExpensesSummary,
+  ahora: Date = new Date()
 ): FinanceSummary {
   const {
     facturacion,
@@ -85,7 +96,8 @@ export function resumenEnVivo(
     gastos,
     entradas.paymentPlatforms,
     undefined,
-    entradas.payments
+    entradas.payments,
+    ahora
   );
   return {
     facturacion,
@@ -99,12 +111,15 @@ export function resumenEnVivo(
   };
 }
 
-export function calcularResumenFinanciero(entradas: EntradasDelResumen): ResumenFinanciero {
-  const expensesSummary = resumenDeGastos(entradas);
+export function calcularResumenFinanciero(
+  entradas: EntradasDelResumen,
+  ahora: Date = new Date()
+): ResumenFinanciero {
+  const expensesSummary = resumenDeGastos(entradas, ahora);
   return {
     expensesSummary,
-    financeSummary: resumenEnVivo(entradas, expensesSummary),
-    monthlySeries: deriveMonthlySeries(entradas.clients, expensesSummary, entradas.payments),
+    financeSummary: resumenEnVivo(entradas, expensesSummary, ahora),
+    monthlySeries: deriveMonthlySeries(entradas.clients, expensesSummary, entradas.payments, ahora),
   };
 }
 

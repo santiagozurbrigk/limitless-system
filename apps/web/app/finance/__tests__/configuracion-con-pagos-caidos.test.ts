@@ -21,6 +21,8 @@ const sim = vi.hoisted(() => ({
 }));
 
 // SCRUM-540: las lecturas del marco chequean el módulo; acá quien llama lo tiene.
+// SCRUM-540: el resumen de Ventas lee la zona de la org, que importa `server-only`.
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
   rechazoDeLecturaDelMarco: async () => null,

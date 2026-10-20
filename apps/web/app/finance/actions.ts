@@ -29,6 +29,8 @@ import {
   type RechazoPorModulo,
 } from "@/lib/auth/acceso-a-modulo";
 import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
+import { diaLocal, fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { zonaDeLaOrganizacionActiva } from "@/lib/fechas/organizacion-activa";
 import {
   EMPTY_FINANCE_CONFIG,
   leerConfiguracionDeFinanzas,
@@ -136,9 +138,18 @@ export async function getResumenFinancieroAction(): Promise<
   return mutacionConErroresEsperables("[getResumenFinanciero]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
-    const { entradas, pagosSinLeer } = await leerEntradasDelResumen(supabase, organizationId);
-    // Como en el navegador con Finanzas: sin cobros, los totales sin ellos y el aviso.
-    return { ...resumenParaVentas(calcularResumenFinanciero(entradas)), pagosSinLeer };
+    const [{ entradas, pagosSinLeer }, zona] = await Promise.all([
+      leerEntradasDelResumen(supabase, organizationId),
+      // Si la zona no se puede leer, la de por defecto, como el layout (SCRUM-108).
+      zonaDeLaOrganizacionActiva().catch((e: unknown) => {
+        registrarFallaDeAccion("[getResumenFinanciero] zona", e);
+        return null;
+      }),
+    ]);
+    // "Este mes" es el de la organización, no el del reloj del servidor (AR 2,
+    // regla de SCRUM-493). Sin cobros, los totales sin ellos y el aviso.
+    const ahora = diaLocal(fechaDeHoyEnZona(zona));
+    return { ...resumenParaVentas(calcularResumenFinanciero(entradas, ahora)), pagosSinLeer };
   });
 }
 
