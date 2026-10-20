@@ -1440,6 +1440,17 @@ Fuente: PENDIENTES.md [UI-EMOJIS] · Doc del área: docs/areas/plataforma.md",UI
 *Dónde:* la lista del test; {{apps/web/app/<dominio>/*actions.ts}}.
 
 Fuente: PENDIENTES.md [PERMISOS-ACTIONS-LECTURA-SIN-MODULO] · Doc del área: docs/areas/plataforma.md",PERMISOS-ACTIONS-LECTURA-SIN-MODULO,Plataforma,P2,Media,seguridad / deuda técnica
+[PANEL-EN-VIVO-SOLO-PANEL] El Panel no se actualiza en vivo para quien tiene sólo el Panel (nuevo),Task,Medium,plataforma,p2,mejora,decision-de-producto,,,"*Tipo:* mejora / decisión de producto
+
+*Estado verificado:*  - Desde SCRUM-540 el Panel se calcula en el servidor. Se actualiza en vivo ({{lib/dashboard/panel-en-vivo.ts}}) sólo para quien puede leer conversaciones: founder, sin rol o con Ventas. El canal manda la fila de {{conversations}} al navegador, y quien tiene sólo el Panel no debe recibirla. - Para esa persona el Panel se actualiza al recargar o navegar. En {{main}} sí se actualizaba, porque le llegaban todas las conversaciones. - Hoy no se nota: {{conversations}} (el inbox viejo) está vacía en producción desde que el inbox pasó a Zernio (ver {{[MKT-SALES-CONN-VACIA]}}), y no hay una bandera en {{lib/release/escondido.ts}} que lo vuelva a encender.
+
+*Qué hay que hacer:* cuando {{conversations}} vuelva a recibir filas (el inbox de Ventas sobre esa tabla, Unipile o ManyChat), darle al Panel un aviso sin datos. La AR 3 de SCRUM-540 propone dos formas: 1. Un trigger en {{conversations}} que publique por Realtime Broadcast un aviso vacío en un tema {{panel:<org>}}, con una política de Realtime que deje escucharlo a quien tenga el Panel. 2. Refrescar el Panel cada N minutos mientras la pestaña está visible ({{document.visibilityState}}).
+
+*Criterio de aceptación:*  - Con una conversación nueva, un miembro con sólo el Panel ve el Panel actualizado sin recargar, en el tiempo que se decida. - Su navegador no recibe ninguna fila de {{conversations}} (medido mirando el websocket de Realtime y las respuestas). - Una ráfaga de cambios produce como mucho un {{router.refresh()}} por intervalo, como hoy.
+
+*Dónde:* {{apps/web/lib/dashboard/panel-en-vivo.ts}}, {{apps/web/components/dashboard/dashboard-page-content.tsx}}, migración (trigger y política de Realtime) si se elige Broadcast.
+
+Fuente: PENDIENTES.md [PANEL-EN-VIVO-SOLO-PANEL] · Doc del área: docs/areas/plataforma.md",PANEL-EN-VIVO-SOLO-PANEL,Plataforma,P2,,mejora / decisión de producto
 [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo),Bug,Medium,plataforma,p2,bug,,,,"*Tipo:* bug
 
 *Estado verificado:* {{components/navigation/command-palette.tsx}} usa {{platformNavigation}} estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos {{hidden}} del menú ({{lib/navigation/build-platform-navigation.ts}}); permisos y add-ons siguen sin filtrarse. Desde SCRUM-540 (2026-10-19) elegir un módulo bloqueado desde la paleta muestra «No tenés acceso» y no trae los datos de la pantalla: lo que queda es que la paleta ofrece entradas que no se pueden abrir. SCRUM-524 (sin mergear) la filtra por permisos sólo en la experiencia {{webinar}}; para {{full}} no se tocó en SCRUM-540 porque ese cambio reescribe el mismo archivo.

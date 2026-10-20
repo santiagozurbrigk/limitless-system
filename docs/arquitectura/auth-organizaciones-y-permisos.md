@@ -264,7 +264,8 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
       `deriveMonthlySeries` y `enrichTeamCompensationWithCommissions` reciben ese `ahora`, y
       `getResumenFinancieroAction` lee la zona como el Panel (AR 2; en el navegador, para Finanzas, siguen con
       el reloj de quien mira, como en `main`). El Panel sigue en vivo para quien puede leer conversaciones
-      (`suscribirPanelEnVivo`: escucha el canal y pide el Panel de nuevo, sin usar la fila). Quien tiene Finanzas
+      (`suscribirPanelEnVivo`: escucha el canal y pide el Panel de nuevo, sin usar la fila, como mucho una vez
+      cada 2,5 s); para quien tiene sólo el Panel queda `[PANEL-EN-VIVO-SOLO-PANEL]`. Quien tiene Finanzas
       recibe todo como antes, y la cuenta de los totales es la misma en los tres lugares
       (`lib/finance/resumen-financiero.ts`, funciones puras).
     - En el servidor, cada action arranca con `rechazoDeLecturaDelMarco("<lectura>")` (founder pasa, sin rol

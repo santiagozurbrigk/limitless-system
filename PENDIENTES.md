@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 10 | 32 | 18 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 10 | 33 | 18 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
@@ -337,6 +337,21 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Estado verificado:** ticket SCRUM-541. SCRUM-540 (2026-10-19) puso `rechazoPorModulo` en las 49 lecturas de un solo módulo que devolvían `MutationResult`. Las otras 73 devuelven el dato directo (un arreglo, un objeto o `null`), y sumarles el rechazo cambia la forma que esperan sus pantallas. Están en `LECTURAS_SIN_CHEQUEO_CONOCIDAS` de `apps/web/lib/navigation/__tests__/lecturas-por-modulo.test.ts`, que falla si aparece una nueva sin chequeo o si una de la lista ya chequea. Sus pantallas no se dibujan sin el módulo (guardia de la página), así que sólo se alcanzan invocándolas a mano con el ID de la action, que está en el JavaScript del cliente. Ejemplos: `getSopVideoJobAction`, `listExecutiveReportsAction`, `getWinsPageDataAction`, `listFormsAction`. Fuera de la lista del test quedan 11 lecturas más sin chequeo, que no son de un solo módulo: 6 las usan pantallas de dos o tres módulos (por ejemplo `getTeamMembersAction`, Finanzas y Ventas, o `getTeamRankingAction`) y 5 también una ruta libre o una API; necesitan la regla de "alguno de estos módulos" de las lecturas del marco. Inventario por ruta en la evidencia de SCRUM-540 (`inventario.md`).
 - **Qué hay que hacer:** pasar cada una a `MutationResult` (o a un tipo con el rechazo) y que su pantalla lo trate, módulo por módulo, sacándola de la lista.
 - **Dónde:** la lista del test; `apps/web/app/<dominio>/*actions.ts`.
+
+#### [PANEL-EN-VIVO-SOLO-PANEL] El Panel no se actualiza en vivo para quien tiene sólo el Panel (nuevo)
+- **Tipo:** mejora / decisión de producto
+- **Estado verificado:**
+  - Desde SCRUM-540 el Panel se calcula en el servidor. Se actualiza en vivo (`lib/dashboard/panel-en-vivo.ts`) sólo para quien puede leer conversaciones: founder, sin rol o con Ventas. El canal manda la fila de `conversations` al navegador, y quien tiene sólo el Panel no debe recibirla.
+  - Para esa persona el Panel se actualiza al recargar o navegar. En `main` sí se actualizaba, porque le llegaban todas las conversaciones.
+  - Hoy no se nota: `conversations` (el inbox viejo) está vacía en producción desde que el inbox pasó a Zernio (ver `[MKT-SALES-CONN-VACIA]`), y no hay una bandera en `lib/release/escondido.ts` que lo vuelva a encender.
+- **Qué hay que hacer:** cuando `conversations` vuelva a recibir filas (el inbox de Ventas sobre esa tabla, Unipile o ManyChat), darle al Panel un aviso sin datos. La AR 3 de SCRUM-540 propone dos formas:
+  1. Un trigger en `conversations` que publique por Realtime Broadcast un aviso vacío en un tema `panel:<org>`, con una política de Realtime que deje escucharlo a quien tenga el Panel.
+  2. Refrescar el Panel cada N minutos mientras la pestaña está visible (`document.visibilityState`).
+- **Criterio de aceptación:**
+  - Con una conversación nueva, un miembro con sólo el Panel ve el Panel actualizado sin recargar, en el tiempo que se decida.
+  - Su navegador no recibe ninguna fila de `conversations` (medido mirando el websocket de Realtime y las respuestas).
+  - Una ráfaga de cambios produce como mucho un `router.refresh()` por intervalo, como hoy.
+- **Dónde:** `apps/web/lib/dashboard/panel-en-vivo.ts`, `apps/web/components/dashboard/dashboard-page-content.tsx`, migración (trigger y política de Realtime) si se elige Broadcast.
 
 #### [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo)
 - **Tipo:** bug

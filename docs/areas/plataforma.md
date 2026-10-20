@@ -98,8 +98,9 @@ y el cálculo era en el navegador. "Este mes" (MRR, clientes nuevos, comisiones,
 `hoy` de la organización (`diaLocal(hoy)` en su zona, regla de SCRUM-493), no del reloj del servidor. Sigue
 en vivo: si quien mira puede leer conversaciones (founder, sin rol o con Ventas), `DashboardPageContent` escucha
 el canal de `conversations` de la org y ante un cambio hace `router.refresh()`, sin usar la fila del evento
-(`lib/dashboard/panel-en-vivo.ts`); con sólo el Panel no abre el canal y el Panel se actualiza al recargar o
-navegar. Si no hay clientes, conversaciones ni llamadas, muestra `DashboardEmptyState`. El `SetupChecklist` va **arriba y por fuera** de `DashboardOverview` porque ese
+(`lib/dashboard/panel-en-vivo.ts`), como mucho una vez cada 2,5 s (una ráfaga de cambios se junta en un aviso
+al principio y otro al final); con sólo el Panel no abre el canal y el Panel se actualiza al recargar o
+navegar (`[PANEL-EN-VIVO-SOLO-PANEL]`). Si no hay clientes, conversaciones ni llamadas, muestra `DashboardEmptyState`. El `SetupChecklist` va **arriba y por fuera** de `DashboardOverview` porque ese
 componente hace early return al empty state, que es justo donde está una cuenta nueva.
 
 ### Onboarding del founder

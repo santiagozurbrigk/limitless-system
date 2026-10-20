@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyPermissions } from "@/constants/permission-modules";
-import { ESPERA_PARA_CERRAR_MS, suscribirPanelEnVivo } from "@/lib/dashboard/panel-en-vivo";
+import {
+  ESPERA_PARA_CERRAR_MS,
+  INTERVALO_ENTRE_AVISOS_MS,
+  suscribirPanelEnVivo,
+} from "@/lib/dashboard/panel-en-vivo";
 
 /**
  * SCRUM-540 · AR pasada 2 (MENOR-1): el Panel vuelve a actualizarse en vivo,
@@ -94,5 +98,62 @@ describe("suscribirPanelEnVivo", () => {
     const { sim, cliente } = clienteFalso();
     expect(suscribirPanelEnVivo({ permisos: founder, organizationId: null, cliente, alCambiar: vi.fn() })).toBeNull();
     expect(sim.canales).toEqual([]);
+  });
+
+  it("⭐ una ráfaga de 31 cambios seguidos pide el Panel 2 veces: enseguida y una al final (AR 3)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { sim, cliente } = clienteFalso();
+    const alCambiar = vi.fn();
+    suscribirPanelEnVivo({ permisos: founder, organizationId: "org-e", cliente, alCambiar });
+    await esperar();
+    for (let i = 0; i < 31; i++) {
+      sim.handler!({});
+      vi.advanceTimersByTime(30);
+    }
+    expect(alCambiar).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(INTERVALO_ENTRE_AVISOS_MS);
+    expect(alCambiar).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(INTERVALO_ENTRE_AVISOS_MS * 4);
+    expect(alCambiar).toHaveBeenCalledTimes(2);
+  });
+
+  it("⭐ un cambio solo sigue pidiendo el Panel enseguida, y otro un rato después también", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { sim, cliente } = clienteFalso();
+    const alCambiar = vi.fn();
+    suscribirPanelEnVivo({ permisos: founder, organizationId: "org-f", cliente, alCambiar });
+    await esperar();
+    sim.handler!({});
+    expect(alCambiar).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(INTERVALO_ENTRE_AVISOS_MS + 100);
+    sim.handler!({});
+    expect(alCambiar).toHaveBeenCalledTimes(2);
+  });
+
+  it("⭐ el último cambio de una ráfaga siempre termina en la pantalla, aunque llegue justo antes del aviso del final", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { sim, cliente } = clienteFalso();
+    const alCambiar = vi.fn();
+    suscribirPanelEnVivo({ permisos: founder, organizationId: "org-g", cliente, alCambiar });
+    await esperar();
+    sim.handler!({});
+    vi.advanceTimersByTime(INTERVALO_ENTRE_AVISOS_MS - 1);
+    sim.handler!({});
+    vi.advanceTimersByTime(1);
+    expect(alCambiar).toHaveBeenCalledTimes(2);
+  });
+
+  it("si el canal se cierra con un aviso esperando, ese aviso no sale", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { sim, cliente } = clienteFalso();
+    const alCambiar = vi.fn();
+    const cortar = suscribirPanelEnVivo({ permisos: founder, organizationId: "org-h", cliente, alCambiar })!;
+    await esperar();
+    sim.handler!({});
+    sim.handler!({});
+    cortar();
+    vi.advanceTimersByTime(ESPERA_PARA_CERRAR_MS + INTERVALO_ENTRE_AVISOS_MS);
+    expect(sim.quitados).toBe(1);
+    expect(alCambiar).toHaveBeenCalledTimes(1);
   });
 });

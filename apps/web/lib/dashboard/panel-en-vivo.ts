@@ -33,9 +33,39 @@ type Entrada = {
   oyentes: Set<() => void>;
   cierre: ReturnType<typeof setTimeout> | null;
   cerrado: boolean;
+  /** Cuándo se avisó por última vez, y el aviso del final de una ráfaga, si hay uno esperando. */
+  ultimoAviso: number;
+  avisoPendiente: ReturnType<typeof setTimeout> | null;
 };
 const canales = new Map<string, Entrada>();
 export const ESPERA_PARA_CERRAR_MS = 5000;
+
+/**
+ * ⭐ Como mucho un aviso cada este tiempo (AR 3 de SCRUM-540). Cada aviso hace
+ * que el servidor vuelva a calcular el Panel entero; un webhook que actualiza
+ * muchas conversaciones juntas mandaba un evento por fila y el Panel pedía un
+ * `router.refresh()` por cada uno (31 cambios, 35 pedidos). Ahora el primer
+ * evento avisa enseguida y los que llegan dentro del intervalo se juntan en un
+ * aviso al final, así el último cambio siempre termina en la pantalla.
+ */
+export const INTERVALO_ENTRE_AVISOS_MS = 2500;
+
+function avisarAgrupado(entrada: Entrada): void {
+  if (entrada.avisoPendiente) return; // ya hay un aviso esperando el final de la ráfaga
+  const avisarATodos = () => {
+    entrada.ultimoAviso = Date.now();
+    for (const avisar of entrada.oyentes) avisar();
+  };
+  const falta = entrada.ultimoAviso + INTERVALO_ENTRE_AVISOS_MS - Date.now();
+  if (falta <= 0) {
+    avisarATodos();
+    return;
+  }
+  entrada.avisoPendiente = setTimeout(() => {
+    entrada.avisoPendiente = null;
+    if (!entrada.cerrado) avisarATodos();
+  }, falta);
+}
 
 /**
  * Se suscribe y devuelve cómo cortar, o `null` si quien mira no puede leer
@@ -54,7 +84,15 @@ export function suscribirPanelEnVivo(opciones: {
   if (!entrada) {
     const supabase = opciones.cliente();
     const oyentes = new Set<() => void>();
-    const nueva: Entrada = { supabase, canal: null, oyentes, cierre: null, cerrado: false };
+    const nueva: Entrada = {
+      supabase,
+      canal: null,
+      oyentes,
+      cierre: null,
+      cerrado: false,
+      ultimoAviso: 0,
+      avisoPendiente: null,
+    };
     canales.set(organizationId, nueva);
     // Se abre después de tener la sesión: si el canal se une con la clave
     // anónima, la RLS de `conversations` no le manda nada (medido: la mitad de
@@ -68,9 +106,7 @@ export function suscribirPanelEnVivo(opciones: {
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "conversations", filter: `organization_id=eq.${organizationId}` },
-          () => {
-            for (const avisar of oyentes) avisar();
-          }
+          () => avisarAgrupado(nueva)
         )
         .subscribe();
     })();
@@ -88,6 +124,7 @@ export function suscribirPanelEnVivo(opciones: {
     if (actual.oyentes.size > 0) return;
     actual.cierre = setTimeout(() => {
       actual.cerrado = true;
+      if (actual.avisoPendiente) clearTimeout(actual.avisoPendiente);
       if (actual.canal) void actual.supabase.removeChannel(actual.canal);
       canales.delete(organizationId);
     }, ESPERA_PARA_CERRAR_MS);
