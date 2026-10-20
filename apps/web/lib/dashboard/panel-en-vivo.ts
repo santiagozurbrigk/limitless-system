@@ -36,8 +36,11 @@ export function suscribirPanelEnVivo(opciones: {
   const filtro = `organization_id=eq.${opciones.organizationId}`;
   // El evento trae la fila: no se usa. Sólo se pide el Panel de nuevo.
   const avisar = () => opciones.alCambiar();
+  // Un nombre propio por suscripción: si el efecto se vuelve a montar, quitar el
+  // canal viejo no puede dar de baja al nuevo (con el mismo nombre, el segundo
+  // `channel()` quedaba sin eventos).
   const canal = supabase
-    .channel(`panel:conversations:${opciones.organizationId}`)
+    .channel(`panel:conversations:${opciones.organizationId}:${Math.random().toString(36).slice(2)}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "conversations", filter: filtro }, avisar)
     .subscribe();
   return () => {

@@ -48,6 +48,7 @@ describe("suscribirPanelEnVivo", () => {
       const alCambiar = vi.fn();
       const cortar = suscribirPanelEnVivo({ permisos: p, organizationId: "org-1", cliente, alCambiar });
       expect(sim.canales).toHaveLength(1);
+      expect(sim.canales[0]).toMatch(/^panel:conversations:org-1:/);
       expect(sim.filtros).toEqual([
         { event: "*", schema: "public", table: "conversations", filter: "organization_id=eq.org-1" },
       ]);
@@ -63,5 +64,13 @@ describe("suscribirPanelEnVivo", () => {
     const { sim, cliente } = clienteFalso();
     expect(suscribirPanelEnVivo({ permisos: permisos({}, { isFounder: true }), organizationId: null, cliente, alCambiar: vi.fn() })).toBeNull();
     expect(sim.canales).toEqual([]);
+  });
+
+  it("cada suscripción tiene su propio canal, para que cortar una no deje sin eventos a la siguiente", () => {
+    const { sim, cliente } = clienteFalso();
+    const p = permisos({}, { isFounder: true });
+    suscribirPanelEnVivo({ permisos: p, organizationId: "org-1", cliente, alCambiar: vi.fn() })!();
+    suscribirPanelEnVivo({ permisos: p, organizationId: "org-1", cliente, alCambiar: vi.fn() });
+    expect(new Set(sim.canales).size).toBe(2);
   });
 });
