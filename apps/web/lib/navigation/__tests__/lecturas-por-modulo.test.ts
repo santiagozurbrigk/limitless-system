@@ -39,14 +39,16 @@ import { MODULOS_DE_LAS_LECTURAS_DEL_MARCO } from "@/lib/auth/lecturas-del-marco
  *      (el layout de `(platform)`: providers, barra, menú del celular) arranca
  *      con `rechazoDeLecturaDelMarco("<lectura>")`, y en el cliente del marco
  *      se pide sólo dentro de `leerDelMarco(permisos, "<lectura>", ...)` con
- *      la misma lectura (también con `import * as`), con permisos de identidad
- *      estable, y todo canal en vivo corta antes con la lectura de su tabla,
- *      salvo las pocas lecturas que no son de ningún módulo.
+ *      la misma lectura (también con `import * as` e `import("...")`), con
+ *      permisos de identidad estable, y todo canal en vivo de una tabla del marco
+ *      (en el marco o en una página con módulo) corta antes con la lectura de su
+ *      tabla, salvo las pocas lecturas que no son de ningún módulo.
  *   5. Lo que Next ejecuta aparte de la página (AR 1 de SCRUM-540): ninguna
  *      página ni layout con módulo exporta `generateMetadata` ni
  *      `generateViewport` ni ejecuta código al importarse; `template` y
  *      `default` se tratan como un layout; `loading`, `error` y `not-found` no
- *      alcanzan ninguna lectura.
+ *      alcanzan ninguna lectura; y no hay `route` ni archivos de metadata con
+ *      código (`opengraph-image`, `icon`, `sitemap`...) en una ruta con módulo.
  *
  * Lo que NO ve (documentado en `docs/arquitectura/auth-organizaciones-y-permisos.md`):
  *   - una action de lectura cuyo nombre no empieza con un verbo de lectura

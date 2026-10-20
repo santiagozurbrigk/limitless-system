@@ -259,7 +259,12 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
       | `llamadasPendientes` | Clientes | Un número |
 
       El Panel no abre ninguna: su página calcula los totales en el servidor (`leerDatosDelPanel`) y manda
-      sólo `DashboardData` y las etapas del embudo (ver `docs/areas/plataforma.md`). Quien tiene Finanzas
+      sólo `DashboardData` y las etapas del embudo (ver `docs/areas/plataforma.md`). "Este mes" sale del
+      día de la organización (`diaLocal(hoy)`), no del reloj del servidor: `deriveFinanceSummary`,
+      `deriveMonthlySeries` y `enrichTeamCompensationWithCommissions` reciben ese `ahora`, y
+      `getResumenFinancieroAction` lee la zona como el Panel (AR 2; en el navegador, para Finanzas, siguen con
+      el reloj de quien mira, como en `main`). El Panel sigue en vivo para quien puede leer conversaciones
+      (`suscribirPanelEnVivo`: escucha el canal y pide el Panel de nuevo, sin usar la fila). Quien tiene Finanzas
       recibe todo como antes, y la cuenta de los totales es la misma en los tres lugares
       (`lib/finance/resumen-financiero.ts`, funciones puras).
     - En el servidor, cada action arranca con `rechazoDeLecturaDelMarco("<lectura>")` (founder pasa, sin rol
@@ -276,11 +281,14 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
     - `lecturas-por-modulo.test.ts` exige que toda action de lectura que alcanza el marco arranque con
       `rechazoDeLecturaDelMarco` (salvo el id de la org y el perfil propio, listados con su motivo); que en el
       cliente del marco se pida sólo dentro de `leerDelMarco` con la misma lectura (también por
-      `import * as`); que los lectores no usen `usePermissions()`; y que todo canal en vivo del marco corte
-      antes con la lectura de la tabla que escucha. También exige, para toda ruta con módulo, que ninguna
+      `import * as` e `import("...")` con literal); que los lectores no usen `usePermissions()`; y que todo
+      canal en vivo del marco, y todo canal de una tabla del marco que abra una página con módulo (el del Panel),
+      corte antes con la lectura de la tabla que escucha. También exige, para toda ruta con módulo, que ninguna
       página ni layout exporte `generateMetadata` ni `generateViewport` ni ejecute código al importarse
-      (corren aunque la página corte), que `template` y `default` lleven el guardia si leen, y que
-      `loading`, `error` y `not-found` no alcancen ninguna lectura. **No ve:** si el provider le pasa a
+      (corren aunque la página corte), que `template` y `default` lleven el guardia si leen, que
+      `loading`, `error` y `not-found` no alcancen ninguna lectura, y que no haya `route` ni archivos de
+      metadata con código (`opengraph-image`, `twitter-image`, `icon`, `apple-icon`, `sitemap`, `robots`,
+      `manifest`): Next los sirve sin la página ni el guardia. **No ve:** si el provider le pasa a
       `leerDelMarco` los permisos reales (lo prueban los tests de cada provider y el del orden de los
       providers en el layout), una lectura con un nombre que no empieza con un verbo de lectura, ni una
       action del marco importada a través de un archivo que la reexporta.

@@ -71,6 +71,33 @@ describe("el mes del Panel y del resumen de Ventas es el de la organización", (
     expect(r.expensesSummary.totalMonthly).toBe(1100);
   });
 
+  it("⭐ un cobro con fecha de noviembre no entra al MRR mientras en la org siga siendo octubre (el total precalculado también usa el día de la org)", () => {
+    const hoy = a("2026-11-01T03:00:00Z");
+    const soloNoviembre = {
+      ...ENTRADAS,
+      clients: ENTRADAS.clients.map((c) => ({ ...c, joinDate: "2026-09-01" })),
+      payments: [{ ...ENTRADAS.payments[0]!, paymentDate: "2026-11-01" }],
+    };
+    const { data } = calcularDatosDelPanel({
+      ...soloNoviembre,
+      conversations: [],
+      metricasImportadas: null,
+      hoy,
+      frequentObjections: [],
+    });
+    const mrrDeOctubre = Object.fromEntries(data.revenueMetrics.map((m) => [m.label, m.value]))["MRR"];
+    const conLaOrgEnNoviembre = calcularDatosDelPanel({
+      ...soloNoviembre,
+      conversations: [],
+      metricasImportadas: null,
+      hoy: "2026-11-01",
+      frequentObjections: [],
+    });
+    expect(mrrDeOctubre).not.toBe(
+      Object.fromEntries(conLaOrgEnNoviembre.data.revenueMetrics.map((m) => [m.label, m.value]))["MRR"]
+    );
+  });
+
   it("cuando en Honduras ya es 1 de noviembre, noviembre", () => {
     const hoy = a("2026-11-01T07:00:00Z");
     expect(hoy).toBe("2026-11-01");
