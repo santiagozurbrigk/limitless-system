@@ -13,6 +13,10 @@ import {
 import { repairClosingConversationLinks } from "@/lib/conversations/repair-links";
 import { getGHLIntegrationForOrg } from "@/lib/ghl/integration";
 import { createClient } from "@/lib/supabase/server";
+import {
+  rechazoDeLecturaDelMarco,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   ErrorEsperable,
@@ -56,8 +60,11 @@ function errorDeEscritura(error: { message: string; code?: string | null }): Err
   return new FallaDeLaBase(error);
 }
 
-export async function listClosingCallsAction(): Promise<ClosingCall[]> {
+export async function listClosingCallsAction(): Promise<ClosingCall[] | RechazoPorModulo> {
   if (!isSupabaseConfigured()) return [];
+
+  const rechazo = await rechazoDeLecturaDelMarco("llamadasDeCierre");
+  if (rechazo) return rechazo;
 
   const organizationId = await tryRequireOrganizationId();
   if (!organizationId) return [];

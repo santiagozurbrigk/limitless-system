@@ -123,8 +123,13 @@ export default async function PlatformRouteLayout({
 
   return (
     <ZonaDeLaOrganizacionProvider zona={zona}>
-      <AppProviders>
-        <PermissionsProvider value={permissions}>
+      {/*
+        Los permisos envuelven a `AppProviders` (SCRUM-540): los providers del
+        marco (clientes, Finanzas, conversaciones) piden sus datos sólo si la
+        persona tiene alguno de los módulos que los usan (`leerDelMarco`).
+      */}
+      <PermissionsProvider value={permissions}>
+        <AppProviders>
           <HoldingPlatformProvider value={holdingSession}>
             <OnboardingProvider value={onboarding}>
               <WelcomeGate>
@@ -149,8 +154,8 @@ export default async function PlatformRouteLayout({
               <TourRunner />
             </OnboardingProvider>
           </HoldingPlatformProvider>
-        </PermissionsProvider>
-      </AppProviders>
+        </AppProviders>
+      </PermissionsProvider>
     </ZonaDeLaOrganizacionProvider>
   );
 }

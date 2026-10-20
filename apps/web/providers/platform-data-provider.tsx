@@ -51,6 +51,12 @@ import { mockClosingCalls } from "@/mocks/closing";
 import { mockClients } from "@/mocks/clients";
 import { mockConversations } from "@/mocks/sales";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { usePermissions } from "@/providers/permissions-provider";
+import {
+  leerDelMarco,
+  puedeLeerDelMarco,
+} from "@/lib/auth/lecturas-del-marco";
+import type { PermisosDeModulo } from "@/lib/auth/regla-de-modulo";
 import type { Client, ClientStatus } from "@/types/clients";
 import type {
   ClosePaymentPayload,
@@ -217,8 +223,33 @@ function buildClientFromPayment(
   };
 }
 
+/**
+ * ⭐ Las lecturas de este provider, cada una con su permiso (SCRUM-540).
+ *
+ * El provider cuelga del marco de la plataforma, así que se monta en toda
+ * pantalla: sin alguno de los módulos que usan cada dato, no lo pide
+ * (`leerDelMarco`) y queda vacío. Las actions chequean lo mismo del lado del
+ * servidor (`rechazoDeLecturaDelMarco`).
+ */
+export const lecturasDeLaPlataforma = {
+  clientes: (permisos: PermisosDeModulo) =>
+    leerDelMarco<Client[]>(permisos, "clientes", listClientsAction, []),
+  llamadasDeCierre: (permisos: PermisosDeModulo) =>
+    leerDelMarco<ClosingCall[]>(permisos, "llamadasDeCierre", listClosingCallsAction, []),
+  conversaciones: (permisos: PermisosDeModulo) =>
+    leerDelMarco<Conversation[]>(permisos, "conversaciones", listConversationsAction, []),
+  cuentasDeUnipile: (permisos: PermisosDeModulo) =>
+    leerDelMarco<ConnectedUnipileAccount[]>(
+      permisos,
+      "conversaciones",
+      getConnectedUnipileAccountsAction,
+      []
+    ),
+};
+
 export function PlatformDataProvider({ children }: { children: ReactNode }) {
   const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const permisos = usePermissions();
   const [conversations, setConversations] = useState<Conversation[]>(() =>
     useSupabase ? [] : mockConversations.map((c) => ({ ...c }))
   );
@@ -248,35 +279,35 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
     if (!useSupabase) return;
     setClientsLoading(true);
     try {
-      const list = await listClientsAction();
+      const list = await lecturasDeLaPlataforma.clientes(permisos);
       setClients(list);
     } catch (e) {
       console.error("[PlatformDataProvider] listClients", e);
     } finally {
       setClientsLoading(false);
     }
-  }, []);
+  }, [permisos]);
 
   const refreshClosingCalls = useCallback(async () => {
     if (!useSupabase) return;
     setClosingCallsLoading(true);
     try {
-      const list = await listClosingCallsAction();
+      const list = await lecturasDeLaPlataforma.llamadasDeCierre(permisos);
       setClosingCalls(list);
     } catch (e) {
       console.error("[PlatformDataProvider] listClosingCalls", e);
     } finally {
       setClosingCallsLoading(false);
     }
-  }, []);
+  }, [permisos]);
 
   const refreshConversations = useCallback(async () => {
     if (!useSupabase) return;
     setConversationsLoading(true);
     try {
       const [list, connectedAccounts] = await Promise.all([
-        listConversationsAction(),
-        getConnectedUnipileAccountsAction(),
+        lecturasDeLaPlataforma.conversaciones(permisos),
+        lecturasDeLaPlataforma.cuentasDeUnipile(permisos),
       ]);
       connectedUnipileAccountsRef.current = connectedAccounts;
       setConversations(list);
@@ -285,7 +316,7 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setConversationsLoading(false);
     }
-  }, []);
+  }, [permisos]);
 
   useEffect(() => {
     if (!useSupabase) return;
@@ -302,6 +333,9 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!useSupabase) return;
+    // Sin Ventas ni el Panel no se abre el canal en vivo de conversaciones: le
+    // mandaría al navegador cada conversación nueva de la org (SCRUM-540).
+    if (!puedeLeerDelMarco(permisos, "conversaciones")) return;
 
     let cancelled = false;
     const supabase = createClient();
@@ -312,7 +346,7 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
       if (!organizationId || cancelled) return;
 
       connectedUnipileAccountsRef.current =
-        await getConnectedUnipileAccountsAction();
+        await lecturasDeLaPlataforma.cuentasDeUnipile(permisos);
 
       const nextChannel = supabase
         .channel(`conversations:org:${organizationId}`)
@@ -393,7 +427,7 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
         void supabase.removeChannel(channel);
       }
     };
-  }, []);
+  }, [permisos]);
 
   const persistConversationTag = useCallback(
     async (conversationId: string, tag: ConversationTagId | null) => {
@@ -686,7 +720,7 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
             }),
           "[markCallClosed] pago"
         );
-        const { data: refreshed } = await listClientsAction().then((list) => ({
+        const { data: refreshed } = await lecturasDeLaPlataforma.clientes(permisos).then((list) => ({
           data: list.find((c) => c.id === client.id) ?? client,
         }));
         setClients((prev) =>
@@ -701,6 +735,7 @@ export function PlatformDataProvider({ children }: { children: ReactNode }) {
       addClient,
       clients,
       closingCalls,
+      permisos,
       syncConversationTagForCall,
       updateClosingCall,
       zonaDeLaOrganizacion,

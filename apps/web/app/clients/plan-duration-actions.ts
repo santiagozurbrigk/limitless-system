@@ -13,6 +13,7 @@ import {
 } from "@/lib/clients/plan-duration-mapper";
 import { leerPagosDeLaOrganizacion } from "@/lib/sales/pagos";
 import { listClientsAction } from "@/app/clients/actions";
+import { sinRechazo } from "@/lib/auth/regla-de-modulo";
 import { extractPlanDurationsFromRAG } from "@/lib/rag/extract-plan-durations";
 import {
   ErrorEsperable,
@@ -178,7 +179,7 @@ export async function resolvePlanDurationsAction(
 
     const names =
       planNames?.map((n) => n.trim()).filter(Boolean) ??
-      distinctPlanNames(await listClientsAction());
+      distinctPlanNames(sinRechazo(await listClientsAction(), []));
 
     if (!names.length) {
       throw new ErrorEsperable("No hay planes para inferir. Asigná productos a los clientes primero.");

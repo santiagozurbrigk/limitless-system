@@ -29,7 +29,10 @@ import { paths } from "@/routes";
 import type { Client, ClientInstallment } from "@/types/clients";
 import type { ClientPayment } from "@/types/clients";
 import { assertOrgStoragePath, isOrgStoragePath } from "@/lib/storage/org-path";
-import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
+import {
+  rechazoPorModulo,
+  rechazoDeLecturaDelMarco,
+} from "@/lib/auth/acceso-a-modulo";
 
 /*
  * SCRUM-504: las acciones de Cobros devuelven sus errores como valor
@@ -320,6 +323,9 @@ export async function recordClientPaymentAction(
 export async function listOrganizationPaymentsAction(): Promise<
   MutationResult<ClientPayment[]>
 > {
+  const rechazo = await rechazoDeLecturaDelMarco("cobros");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listOrganizationPayments]", async () => {
     const organizationId = await requireOrganizationId();
     return leerPagosDeLaOrganizacion(await createClient(), organizationId);

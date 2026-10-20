@@ -32,6 +32,7 @@ import { ultimoHitoPorCliente } from "@/lib/checkpoints/fecha-del-hito";
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { deriveClientCase, groupWinsByClient } from "@/lib/wins";
 import { listClientsAction } from "@/app/clients/actions";
+import { sinRechazo } from "@/lib/auth/regla-de-modulo";
 import { leerEstadosDelRecorrido } from "@/lib/checkpoints/lecturas-del-recorrido";
 import { listClientBaselinesAction, listWinsAction } from "@/app/clients/win-actions";
 import {
@@ -137,7 +138,7 @@ export async function getWeeklyReviewAction(): Promise<MutationResult<WeeklyRevi
      */
     const [clients, statuses, wins, baselines, tracking, checkpointEvents, zona] =
       await Promise.all([
-        listClientsAction(),
+        listClientsAction().then((r) => sinRechazo(r, [])),
         leerEstadosDelRecorrido(supabase, organizationId),
         listWinsAction(),
         listClientBaselinesAction(),

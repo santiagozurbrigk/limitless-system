@@ -37,7 +37,10 @@ import { paths } from "@/routes";
 import { getRetentionAtCTA } from "@/lib/youtube/analytics";
 import { getUTMLinksAction } from "./utm-actions";
 import type { UTMLinkRow } from "@/types/utm";
-import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
+import {
+  rechazoPorModulo,
+  rechazoDeLecturaDelMarco,
+} from "@/lib/auth/acceso-a-modulo";
 
 export type YouTubePlatformMetadataView = {
   view_count: number;
@@ -560,6 +563,9 @@ export type EstadoDeInstagram = {
 export async function getInstagramIntegrationStatusAction(): Promise<
   MutationResult<EstadoDeInstagram>
 > {
+  const rechazo = await rechazoDeLecturaDelMarco("instagram");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getInstagramIntegrationStatus]", async () => {
     const organizationId = await requireOrganizationId();
     const admin = createAdminClient();

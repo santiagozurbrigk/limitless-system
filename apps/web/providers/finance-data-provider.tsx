@@ -38,6 +38,12 @@ import { enrichTeamCompensationWithCommissions } from "@/lib/metrics/enrich-team
 import { deriveFinanceSummary } from "@/lib/metrics/derive-finance-summary";
 import { deriveMonthlySeries } from "@/lib/metrics/derive-monthly-series";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { usePermissions } from "@/providers/permissions-provider";
+import { leerDelMarco } from "@/lib/auth/lecturas-del-marco";
+import type { PermisosDeModulo } from "@/lib/auth/regla-de-modulo";
+import type { FinanceConfigPayload } from "@/app/finance/actions";
+import type { MutationResult } from "@/lib/server/action-result";
+import type { MetricsSnapshot } from "@/app/sales/metrics-actions";
 import { usePlatformData } from "@/providers/platform-data-provider";
 import type {
   ExpensesSummary,
@@ -109,8 +115,42 @@ type FinanceDataContextValue = {
 
 const FinanceDataContext = createContext<FinanceDataContextValue | null>(null);
 
+/**
+ * ⭐ Las lecturas de este provider, cada una con su permiso (SCRUM-540).
+ *
+ * Sin alguno de los módulos que usan cada dato no se piden (`leerDelMarco`):
+ * la configuración queda en `null` (el provider sigue con las listas vacías) y
+ * los cobros y las métricas importadas, vacíos y sin error. La configuración
+ * viene por partes del servidor: con Ajustes y sin Finanzas, Ventas ni el
+ * Panel, sólo las plataformas de cobro.
+ */
+export const lecturasDeFinanzas = {
+  configuracion: (permisos: PermisosDeModulo) =>
+    leerDelMarco<FinanceConfigPayload | null>(
+      permisos,
+      "plataformasDePago",
+      loadFinanceConfigAction,
+      null
+    ),
+  cobros: (permisos: PermisosDeModulo) =>
+    leerDelMarco<MutationResult<ClientPayment[]>>(
+      permisos,
+      "cobros",
+      listOrganizationPaymentsAction,
+      { success: true, data: [] }
+    ),
+  metricasImportadas: (permisos: PermisosDeModulo) =>
+    leerDelMarco<MutationResult<MetricsSnapshot[]>>(
+      permisos,
+      "metricasImportadas",
+      getSalesMetricsSnapshotsAction,
+      { success: true, data: [] }
+    ),
+};
+
 export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const permisos = usePermissions();
   const { clients, closingCalls, clientsLoading, closingCallsLoading } =
     usePlatformData();
 
@@ -133,7 +173,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const refreshClientPayments = useCallback(async () => {
     if (!useSupabase) return;
     const lectura = await leerConMotivo(
-      listOrganizationPaymentsAction,
+      () => lecturasDeFinanzas.cobros(permisos),
       "[FinanceDataProvider] pagos"
     );
     if (lectura.ok) {
@@ -142,7 +182,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     } else {
       setClientPaymentsError(lectura.motivo);
     }
-  }, []);
+  }, [permisos]);
 
   const [totalesDePlataformasSinLeer, setTotalesDePlataformasSinLeer] = useState(false);
 
@@ -150,7 +190,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     if (!useSupabase) return;
     setFinanceConfigLoading(true);
     try {
-      const config = await loadFinanceConfigAction();
+      const config = await lecturasDeFinanzas.configuracion(permisos);
+      if (!config) return;
       setPaymentPlatforms(config.paymentPlatforms);
       setFixedExpenses(config.fixedExpenses);
       setSubscriptions(config.subscriptions);
@@ -161,23 +202,25 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setFinanceConfigLoading(false);
     }
-  }, []);
+  }, [permisos]);
 
   useEffect(() => {
     if (useSupabase) {
       void refreshFinanceConfig();
       void refreshClientPayments();
     } else {
-      void loadFinanceConfigAction().then((config) => {
+      void lecturasDeFinanzas.configuracion(permisos).then((config) => {
+        if (!config) return;
         setPaymentPlatforms(config.paymentPlatforms);
         setFixedExpenses(config.fixedExpenses);
         setSubscriptions(config.subscriptions);
         setTeamCompensation(config.teamCompensation);
       });
     }
-    // Las dos funciones son estables (`useCallback` sin dependencias): sumar
-    // `refreshClientPayments` no cambia cuándo corre el efecto.
-  }, [refreshFinanceConfig, refreshClientPayments]);
+    // Las dos funciones sólo cambian si cambian los permisos (que vienen del
+    // servidor, con la pantalla): sumar `refreshClientPayments` no cambia
+    // cuándo corre el efecto.
+  }, [refreshFinanceConfig, refreshClientPayments, permisos]);
 
   useEffect(() => {
     if (useSupabase && !clientsLoading) {
@@ -191,7 +234,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     // El baseline es opcional y no tiene pantalla propia: si no se puede leer,
     // queda registrado en la consola como antes (SCRUM-504: ahora el motivo
     // vuelve como valor).
-    getSalesMetricsSnapshotsAction()
+    lecturasDeFinanzas
+      .metricasImportadas(permisos)
       .then((resultado) => {
         if (!resultado.success) {
           console.error("[FinanceDataProvider] baseline load", resultado.error);
@@ -202,7 +246,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch((e) => console.error("[FinanceDataProvider] baseline load", e));
-  }, []);
+  }, [permisos]);
 
   const runFinanceMutation = useCallback(
     async (result: { success: boolean; error?: string }) => {

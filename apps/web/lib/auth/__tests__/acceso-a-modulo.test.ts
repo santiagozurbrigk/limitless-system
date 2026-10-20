@@ -25,6 +25,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { FallaDeLaBase } from "@/lib/server/action-result";
 import {
   exigirModuloDeLaPagina,
+  puedeLeerDelMarcoEnElServidor,
+  rechazoDeLecturaDelMarco,
   moduloBloqueadoParaRuta,
   puedeEntrarAlModulo,
   rechazoPorModulo,
@@ -177,5 +179,52 @@ describe("exigirModuloDeLaPagina (SCRUM-540)", () => {
     sim.permisos = conOperaciones;
     await exigirModuloDeLaPagina("operations");
     expect(sim.lecturas).toBe(1);
+  });
+});
+
+describe("rechazoDeLecturaDelMarco (SCRUM-540)", () => {
+  beforeEach(() => {
+    sim.permisos = null;
+    sim.falla = null;
+    sim.lecturas = 0;
+  });
+
+  it("⭐ sin ninguno de los módulos de la lectura, el rechazo con el primero de la lista", async () => {
+    sim.permisos = member({ team: "full", settings: "view" });
+    await expect(rechazoDeLecturaDelMarco("clientes")).resolves.toEqual({
+      success: false,
+      error: "No tenés acceso a Clientes.",
+      motivo: "sin-acceso",
+      moduleId: "clients",
+    });
+    await expect(rechazoDeLecturaDelMarco("reportesEjecutivos")).resolves.toMatchObject({
+      moduleId: "operations",
+    });
+  });
+
+  it("con cualquiera de los módulos de la lectura pasa (los clientes, con sólo el Panel)", async () => {
+    sim.permisos = member({ dashboard: "view" });
+    await expect(rechazoDeLecturaDelMarco("clientes")).resolves.toBeNull();
+    await expect(rechazoDeLecturaDelMarco("cobros")).resolves.toBeNull();
+    await expect(rechazoDeLecturaDelMarco("llamadasPendientes")).resolves.not.toBeNull();
+  });
+
+  it("el founder y alguien sin rol pasan siempre", async () => {
+    for (const permisos of [founder, sinRol]) {
+      sim.permisos = permisos;
+      await expect(rechazoDeLecturaDelMarco("configuracionDeFinanzas")).resolves.toBeNull();
+    }
+  });
+
+  it("⭐ una falla al leer los permisos se relanza: nunca abre", async () => {
+    sim.falla = new FallaDeLaBase({ message: "connection refused", code: "08006" });
+    await expect(rechazoDeLecturaDelMarco("clientes")).rejects.toBeInstanceOf(FallaDeLaBase);
+    await expect(puedeLeerDelMarcoEnElServidor("clientes")).rejects.toBeInstanceOf(FallaDeLaBase);
+  });
+
+  it("Ajustes abre las plataformas de cobro pero no los gastos", async () => {
+    sim.permisos = member({ settings: "view" });
+    await expect(puedeLeerDelMarcoEnElServidor("plataformasDePago")).resolves.toBe(true);
+    await expect(puedeLeerDelMarcoEnElServidor("configuracionDeFinanzas")).resolves.toBe(false);
   });
 });

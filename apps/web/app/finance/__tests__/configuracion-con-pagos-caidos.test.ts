@@ -17,8 +17,15 @@ const sim = vi.hoisted(() => ({
   errores: {} as Record<string, { message: string } | null>,
   filtrosOrg: {} as Record<string, unknown[]>,
   updates: [] as string[],
+  conGastos: true,
 }));
 
+// SCRUM-540: las lecturas del marco chequean el módulo; acá quien llama lo tiene.
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  rechazoDeLecturaDelMarco: async () => null,
+  puedeLeerDelMarcoEnElServidor: async () => sim.conGastos,
+}));
 vi.mock("@/lib/observability/reportar-falla", () => ({
   reportarFalla: (error: unknown, contexto: unknown) => sim.reportes.push({ error, contexto }),
 }));
@@ -77,6 +84,13 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 import { loadFinanceConfigAction, updatePaymentPlatformAction } from "../actions";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+
+/** El dato de una lectura del marco; un rechazo acá es un error del test (SCRUM-540). */
+function dato<T>(valor: T | RechazoPorModulo): T {
+  if (esRechazoPorModulo(valor)) throw new Error(`rechazo inesperado: ${valor.error}`);
+  return valor;
+}
 
 let consola: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -84,6 +98,7 @@ beforeEach(() => {
   sim.errores = {};
   sim.filtrosOrg = {};
   sim.updates = [];
+  sim.conGastos = true;
   sim.tablas = {
     fixed_expenses: [{ id: "g1", organization_id: "org-1", name: "Oficina", category: "x", amount: 10, currency: "USD", frequency: "monthly", status: "active" }],
     subscriptions: [{ id: "s1", organization_id: "org-1", name: "Herramienta", status: "active", amount: 5, currency: "USD" }],
@@ -100,7 +115,7 @@ afterEach(() => consola.mockRestore());
 
 describe("loadFinanceConfigAction", () => {
   it("con todo bien trae la configuración y los totales por plataforma", async () => {
-    const r = await loadFinanceConfigAction();
+    const r = dato(await loadFinanceConfigAction());
     expect(r.pagosSinLeer).toBe(false);
     expect(r.fixedExpenses.map((g) => g.id)).toEqual(["g1"]);
     expect(r.paymentPlatforms.map((p) => [p.id, p.totalReceived])).toEqual([["p1", 100]]);
@@ -110,7 +125,7 @@ describe("loadFinanceConfigAction", () => {
 
   it("⭐ con client_payments caído, el resto llega igual, la falla se reporta una vez y se avisa", async () => {
     sim.errores.client_payments = { message: "TypeError: fetch failed" };
-    const r = await loadFinanceConfigAction();
+    const r = dato(await loadFinanceConfigAction());
     expect(r.fixedExpenses.map((g) => g.id)).toEqual(["g1"]);
     expect(r.subscriptions.map((s) => s.id)).toEqual(["s1"]);
     expect(r.teamCompensation.map((t) => t.id)).toEqual(["t1"]);
@@ -146,5 +161,18 @@ describe("updatePaymentPlatformAction (AR pasada 3, MENOR-2)", () => {
   it("con los pagos bien, devuelve el total recibido", async () => {
     const r = await updatePaymentPlatformAction("p1", { name: "Stripe US" });
     expect(r.success && r.data.totalReceived).toBe(100);
+  });
+
+  it("⭐ con Ajustes y sin Finanzas, Ventas ni el Panel: sólo las plataformas; gastos, suscripciones y sueldos ni se leen (SCRUM-540)", async () => {
+    sim.conGastos = false;
+    const r = dato(await loadFinanceConfigAction());
+    expect(r.paymentPlatforms.map((p) => [p.id, p.totalReceived])).toEqual([["p1", 100]]);
+    expect(r.fixedExpenses).toEqual([]);
+    expect(r.subscriptions).toEqual([]);
+    expect(r.teamCompensation).toEqual([]);
+    expect(sim.filtrosOrg.payment_platforms).toEqual(["org-1"]);
+    for (const tabla of ["fixed_expenses", "subscriptions", "team_compensation"]) {
+      expect(sim.filtrosOrg[tabla]).toBeUndefined();
+    }
   });
 });

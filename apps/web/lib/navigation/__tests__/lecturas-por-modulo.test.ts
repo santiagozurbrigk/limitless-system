@@ -6,11 +6,14 @@ import { permissionModuleForPath } from "@/lib/navigation/module-for-path";
 import { pantallas, segmentosAlEntrar } from "./pantallas-de-app";
 import {
   GrafoDeImports,
+  LLAMADA_DEL_MARCO,
   NOMBRE_DE_LECTURA,
   entradasDeApp,
   guardiaDe,
   layoutLee,
+  usosFueraDeLeerDelMarco,
 } from "./lecturas-de-app";
+import { MODULOS_DE_LAS_LECTURAS_DEL_MARCO } from "@/lib/auth/lecturas-del-marco";
 
 /**
  * SCRUM-540 · Las lecturas de las pantallas chequean el módulo antes de leer.
@@ -27,13 +30,19 @@ import {
  *   3. Toda Server Action de lectura que sólo alcanzan pantallas de un módulo
  *      arranca con `rechazoPorModulo("<módulo>")`, salvo las de la lista de
  *      deuda conocida, que tiene que achicarse y nunca crecer.
+ *   4. Toda Server Action de lectura que alcanza el marco de la plataforma
+ *      (el layout de `(platform)`: providers, barra, menú del celular) arranca
+ *      con `rechazoDeLecturaDelMarco("<lectura>")`, y en el cliente del marco
+ *      se pide sólo dentro de `leerDelMarco(permisos, "<lectura>", ...)` con
+ *      la misma lectura, salvo las pocas que no son de ningún módulo.
  *
  * Lo que NO ve (documentado en `docs/arquitectura/auth-organizaciones-y-permisos.md`):
  *   - una action de lectura cuyo nombre no empieza con un verbo de lectura
  *     (`NOMBRE_DE_LECTURA`);
- *   - una action que alcanzan pantallas de dos módulos, una ruta libre o el
- *     marco de la plataforma (`(platform)/layout.tsx`: la barra, la paleta y
- *     los providers globales): ahí no hay un único módulo que exigir;
+ *   - una action que alcanzan pantallas de dos módulos o una ruta libre (las
+ *     del marco sí, por el punto 4);
+ *   - en el cliente del marco, si `leerDelMarco` recibe los permisos reales:
+ *     eso lo prueban los tests de cada provider;
  *   - una import que no es estático ni `import("literal")`, o un alias que no
  *     es `@/`;
  *   - funciones de servidor que no son Server Actions (`lib/<dominio>/queries.ts`):
@@ -243,6 +252,64 @@ describe("Server Actions de lectura de un módulo", () => {
   });
 });
 
+/**
+ * Lecturas que alcanza el marco y no son de ningún módulo, con el porqué.
+ * Agregar una exige decir por qué cualquier miembro puede recibirla.
+ */
+const LECTURAS_DEL_MARCO_SIN_MODULO: Record<string, string> = {
+  "app/conversations/actions.ts#getOrganizationIdAction":
+    "sólo el id de la organización activa; el canal en vivo que lo usa se abre con la lectura de conversaciones",
+  "app/profile/actions.ts#getProfileAreaDataAction": "el perfil de quien entra, para su propio menú",
+};
+
+describe("lecturas del marco de la plataforma (SCRUM-540)", () => {
+  const grafo = new GrafoDeImports(WEB);
+  const marco = join(APP_DIR, "(platform)", "layout.tsx");
+  const delMarco = [...grafo.accionesDesde(marco)]
+    .filter((a) => NOMBRE_DE_LECTURA.test(a.split("#")[1]!))
+    .sort();
+  const lecturaDe = new Map(
+    delMarco
+      .map((a) => [a, grafo.chequeoDeLaAccion(a, LLAMADA_DEL_MARCO)] as const)
+      .filter((par): par is readonly [string, string] => par[1] !== null)
+  );
+
+  it("el recorrido encuentra las de los providers, la barra y el menú del celular", () => {
+    expect(delMarco).toEqual(
+      expect.arrayContaining([
+        "app/clients/actions.ts#listClientsAction",
+        "app/finance/actions.ts#loadFinanceConfigAction",
+        "app/executive-reports/actions.ts#getLatestReportsByCadenceAction",
+        "app/fathom/actions.ts#countPendingFathomCallsAction",
+      ])
+    );
+  });
+
+  it("⭐ toda lectura del marco arranca con rechazoDeLecturaDelMarco de una lectura de la tabla, o no es de ningún módulo", () => {
+    const mal = delMarco
+      .filter((a) => !(a in LECTURAS_DEL_MARCO_SIN_MODULO))
+      .map((a) => {
+        const lectura = lecturaDe.get(a);
+        if (!lectura) return `${a}: no arranca con ${LLAMADA_DEL_MARCO}("<lectura>")`;
+        if (!(lectura in MODULOS_DE_LAS_LECTURAS_DEL_MARCO)) return `${a}: "${lectura}" no está en la tabla`;
+        return null;
+      })
+      .filter(Boolean);
+    expect(mal).toEqual([]);
+  });
+
+  it("⭐ en el cliente del marco, cada lectura se pide dentro de leerDelMarco con la misma lectura que chequea el servidor", () => {
+    expect(usosFueraDeLeerDelMarco(grafo, marco, lecturaDe)).toEqual([]);
+  });
+
+  it("la lista de las que no son de ningún módulo sólo tiene lecturas del marco que no chequean", () => {
+    const sobran = Object.keys(LECTURAS_DEL_MARCO_SIN_MODULO).filter(
+      (a) => !delMarco.includes(a) || lecturaDe.has(a)
+    );
+    expect(sobran).toEqual([]);
+  });
+});
+
 describe("el detector, contra archivos armados a mano", () => {
   const raiz = mkdtempSync(join(tmpdir(), "scrum-540-app-"));
   afterAll(() => rmSync(raiz, { recursive: true, force: true }));
@@ -368,5 +435,42 @@ export async function listarSinChequeoAction() {
     expect(grafo.chequeoDeLaAccion("app/ops/actions.ts#listarBienAction")).toBe("operations");
     expect(grafo.chequeoDeLaAccion("app/ops/actions.ts#listarTardeAction")).toBeNull();
     expect(grafo.chequeoDeLaAccion("app/ops/actions.ts#listarSinChequeoAction")).toBeNull();
+  });
+
+  it("⭐ el marco: señala una lectura pedida fuera de leerDelMarco o con otra lectura", () => {
+    archivo(
+      "marco/app/datos/actions.ts",
+      `"use server";
+export async function listDatosAction() {
+  const rechazo = await rechazoDeLecturaDelMarco("clientes");
+  if (rechazo) return rechazo;
+  return [];
+}`
+    );
+    archivo(
+      "marco/providers/bien.tsx",
+      `"use client";
+import { listDatosAction } from "@/app/datos/actions";
+export const leer = (p) => leerDelMarco(p, "clientes", listDatosAction, []);
+export const leerEnvuelto = (p) => leerDelMarco(p, "clientes", () => listDatosAction(), []);`
+    );
+    archivo(
+      "marco/providers/mal.tsx",
+      `"use client";
+import { listDatosAction as listar } from "@/app/datos/actions";
+export const directo = () => listar();
+export const otra = (p) => leerDelMarco(p, "reportesEjecutivos", listar, []);`
+    );
+    const layout = archivo(
+      "marco/app/(platform)/layout.tsx",
+      `import "@/providers/bien";\nimport "@/providers/mal";\nexport default function L() { return null; }`
+    );
+    const grafo = new GrafoDeImports(join(raiz, "marco"));
+    const accion = "app/datos/actions.ts#listDatosAction";
+    expect(grafo.chequeoDeLaAccion(accion, LLAMADA_DEL_MARCO)).toBe("clientes");
+    expect(usosFueraDeLeerDelMarco(grafo, layout, new Map([[accion, "clientes"]]))).toEqual([
+      "providers/mal.tsx:3 listar fuera de leerDelMarco",
+      'providers/mal.tsx:4 listar con "reportesEjecutivos" en vez de "clientes"',
+    ]);
   });
 });

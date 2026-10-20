@@ -11,7 +11,8 @@ import { paths } from "@/routes";
 import { buildPlatformSidebarNav } from "@/lib/navigation/sidebar-modules";
 import type { SidebarDirectModule } from "@/lib/navigation/sidebar-nav-config";
 import { isPathActive } from "@/lib/navigation/active-path";
-import { useEnabledAddOns } from "@/providers/permissions-provider";
+import { useEnabledAddOns, usePermissions } from "@/providers/permissions-provider";
+import { leerDelMarco } from "@/lib/auth/lecturas-del-marco";
 import { SidebarTwoLevelNavigation } from "@/components/navigation/sidebar-two-level-navigation";
 import { NavIcon } from "@/components/navigation/nav-icons";
 import { AppBrandHeader } from "@/components/brand";
@@ -25,12 +26,15 @@ export function MobileNav() {
 
   const close = () => setOpen(false);
 
+  // El contador de llamadas sin asignar es de Clientes: sin el módulo no se
+  // pide (SCRUM-540) y el ítem queda sin número.
+  const permisos = usePermissions();
   useEffect(() => {
     if (!open) return;
-    countPendingFathomCallsAction()
+    leerDelMarco(permisos, "llamadasPendientes", countPendingFathomCallsAction, 0)
       .then(setPendingCalls)
       .catch(() => setPendingCalls(0));
-  }, [pathname, open]);
+  }, [pathname, open, permisos]);
 
   const mapDirectModules = useCallback(
     (modules: SidebarDirectModule[]) =>

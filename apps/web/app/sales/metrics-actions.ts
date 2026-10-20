@@ -11,7 +11,10 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
-import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
+import {
+  rechazoPorModulo,
+  rechazoDeLecturaDelMarco,
+} from "@/lib/auth/acceso-a-modulo";
 
 /*
  * SCRUM-504: las lecturas de métricas de Ventas devuelven sus errores como
@@ -36,6 +39,9 @@ export async function getSalesMetricsSnapshotsAction(): Promise<
 > {
   // Sin Supabase no hay métricas importadas (lo que antes resolvía la página).
   if (!isSupabaseConfigured()) return { success: true, data: [] };
+
+  const rechazo = await rechazoDeLecturaDelMarco("metricasImportadas");
+  if (rechazo) return rechazo;
 
   return mutacionConErroresEsperables("[getSalesMetricsSnapshots]", async () => {
     const organizationId = await requireOrganizationId();

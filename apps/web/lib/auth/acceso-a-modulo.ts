@@ -1,44 +1,27 @@
 import { createElement, type ReactElement } from "react";
-import {
-  getCurrentUserPermissions,
-  type UserPermissions,
-} from "@/lib/auth/get-current-permissions";
+import { getCurrentUserPermissions } from "@/lib/auth/get-current-permissions";
 import {
   getPermissionModuleLabel,
   type PermissionModuleId,
 } from "@/constants/permission-modules";
 import { permissionModuleForPath } from "@/lib/navigation/module-for-path";
 import { SinAcceso } from "@/components/platform/sin-acceso";
+import {
+  puedeEntrarAlModulo,
+  type PermisosDeModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/regla-de-modulo";
+import {
+  MODULOS_DE_LAS_LECTURAS_DEL_MARCO,
+  puedeLeerDelMarco,
+  type LecturaDelMarco,
+} from "@/lib/auth/lecturas-del-marco";
 
-type PermisosDeModulo = Pick<
-  UserPermissions,
-  "isFounder" | "hasRoleConfigured" | "modules"
->;
-
-/**
- * ⭐ La regla de acceso a un módulo, en un solo lugar (SCRUM-18).
- *
- * La usan el layout de la plataforma, que decide si una pantalla se muestra,
- * las páginas y los layouts que leen (`exigirModuloDeLaPagina`, SCRUM-540), que
- * cortan sus lecturas antes de que corran, y las Server Actions
- * (`rechazoPorModulo`), que se pueden llamar a mano sin pasar por ninguna
- * pantalla. Si cada uno tuviera su copia, alcanzaría con
- * que una se desactualice para que la pantalla diga "no" y la action diga "sí".
- *
- *   - El founder pasa siempre: `getCurrentUserPermissions` le da todo en `full`.
- *   - Sin rol cargado no hay nada que hacer cumplir (ver `hasRoleConfigured`):
- *     un invitado sin rol tiene el mapa entero en `none` y bloquearlo lo dejaría
- *     sin ninguna pantalla.
- *   - Con rol, entra si el módulo no está en `none`.
- */
-export function puedeEntrarAlModulo(
-  permisos: PermisosDeModulo,
-  moduleId: PermissionModuleId
-): boolean {
-  if (permisos.isFounder) return true;
-  if (!permisos.hasRoleConfigured) return true;
-  return (permisos.modules[moduleId] ?? "none") !== "none";
-}
+export {
+  puedeEntrarAlModulo,
+  esRechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/regla-de-modulo";
 
 /**
  * El módulo que le falta a esta persona para ver `pathname`, o `null` si puede
@@ -58,19 +41,6 @@ export function moduloBloqueadoParaRuta(
 export function mensajeSinAccesoAlModulo(moduleId: PermissionModuleId): string {
   return `No tenés acceso a ${getPermissionModuleLabel(moduleId)}.`;
 }
-
-/**
- * Por qué una Server Action no siguió: quien la llama no puede entrar a
- * `moduleId`. Tiene la forma del caso de error de `MutationResult`, así que una
- * mutación la puede devolver tal cual, y `motivo` + `moduleId` le alcanzan a
- * una pantalla para dibujar `SinAcceso`.
- */
-export type RechazoPorModulo = {
-  success: false;
-  error: string;
-  motivo: "sin-acceso";
-  moduleId: PermissionModuleId;
-};
 
 /**
  * El rechazo si quien llama no puede entrar a `moduleId`, o `null` si puede.
@@ -127,4 +97,38 @@ export async function exigirModuloDeLaPagina(
   return createElement(SinAcceso, {
     moduleLabel: getPermissionModuleLabel(rechazo.moduleId),
   });
+}
+
+/**
+ * ⭐ El chequeo de las lecturas del marco de la plataforma (SCRUM-540).
+ *
+ * Los providers de `AppProviders` y la barra se montan en toda pantalla y piden
+ * datos que usan pantallas de varios módulos (los clientes los usan Clientes,
+ * Ventas, Finanzas y el Panel). Cada lectura pasa si quien llama puede entrar a
+ * **alguno** de sus módulos (`MODULOS_DE_LAS_LECTURAS_DEL_MARCO`), con la regla
+ * de siempre; si no, el rechazo como valor, con el primero de la lista. Una
+ * falla al leer los permisos lanza, como en `rechazoPorModulo`.
+ *
+ * Va primero en la action, como `rechazoPorModulo`:
+ *     const rechazo = await rechazoDeLecturaDelMarco("clientes");
+ *     if (rechazo) return rechazo;
+ * y del lado del cliente el provider no la pide (`leerDelMarco`).
+ */
+export async function rechazoDeLecturaDelMarco(
+  lectura: LecturaDelMarco
+): Promise<RechazoPorModulo | null> {
+  const permisos = await getCurrentUserPermissions();
+  if (puedeLeerDelMarco(permisos, lectura)) return null;
+  const moduleId = MODULOS_DE_LAS_LECTURAS_DEL_MARCO[lectura][0];
+  return {
+    success: false,
+    error: mensajeSinAccesoAlModulo(moduleId),
+    motivo: "sin-acceso",
+    moduleId,
+  };
+}
+
+/** Si quien llama puede leer `lectura`, para una action que arma su respuesta por partes. */
+export async function puedeLeerDelMarcoEnElServidor(lectura: LecturaDelMarco): Promise<boolean> {
+  return puedeLeerDelMarco(await getCurrentUserPermissions(), lectura);
 }

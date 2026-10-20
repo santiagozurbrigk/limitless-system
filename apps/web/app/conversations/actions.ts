@@ -19,6 +19,10 @@ import {
 import { scoreConversation } from "@/lib/manychat/score-conversation";
 import { sendUnipileChatMessage, UnipileApiError } from "@/lib/unipile/client";
 import { createClient } from "@/lib/supabase/server";
+import {
+  rechazoDeLecturaDelMarco,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   firstZodError,
@@ -48,9 +52,12 @@ export async function getOrganizationIdAction(): Promise<string | null> {
 }
 
 export async function getConnectedUnipileAccountsAction(): Promise<
-  ConnectedUnipileAccount[]
+  ConnectedUnipileAccount[] | RechazoPorModulo
 > {
   if (!isSupabaseConfigured()) return [];
+
+  const rechazo = await rechazoDeLecturaDelMarco("conversaciones");
+  if (rechazo) return rechazo;
 
   const organizationId = await tryRequireOrganizationId();
   if (!organizationId) return [];
@@ -59,8 +66,11 @@ export async function getConnectedUnipileAccountsAction(): Promise<
   return fetchConnectedUnipileAccounts(supabase, organizationId);
 }
 
-export async function listConversationsAction(): Promise<Conversation[]> {
+export async function listConversationsAction(): Promise<Conversation[] | RechazoPorModulo> {
   if (!isSupabaseConfigured()) return [];
+
+  const rechazo = await rechazoDeLecturaDelMarco("conversaciones");
+  if (rechazo) return rechazo;
 
   const organizationId = await tryRequireOrganizationId();
   if (!organizationId) return [];

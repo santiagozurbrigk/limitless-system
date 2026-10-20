@@ -20,6 +20,9 @@ import ts from "typescript";
 
 export const LLAMADA_AL_GUARDIA = "exigirModuloDeLaPagina";
 export const LLAMADA_DE_LA_ACTION = "rechazoPorModulo";
+/** El chequeo de una lectura del marco en el servidor y su par en el cliente (SCRUM-540). */
+export const LLAMADA_DEL_MARCO = "rechazoDeLecturaDelMarco";
+export const LECTURA_DEL_MARCO_EN_EL_CLIENTE = "leerDelMarco";
 
 /**
  * Lo que puede ir antes del guardia en un layout: la redirección por
@@ -207,6 +210,24 @@ export class GrafoDeImports {
 
   constructor(private readonly raizWeb: string) {}
 
+  get raiz(): string {
+    return this.raizWeb;
+  }
+
+  /** Todos los archivos que alcanza `entrada` siguiendo imports, sin entrar a los `"use server"`. */
+  archivosDesde(entrada: string): string[] {
+    const vistos = new Set<string>();
+    const cola = [entrada];
+    while (cola.length > 0) {
+      const archivo = cola.pop()!;
+      if (vistos.has(archivo)) continue;
+      vistos.add(archivo);
+      if (this.info(archivo).directiva === "servidor" && archivo !== entrada) continue;
+      for (const imp of this.info(archivo).imports) cola.push(imp.archivo);
+    }
+    return [...vistos];
+  }
+
   resolver(desde: string, spec: string): string | null {
     let base: string;
     if (spec.startsWith("@/")) base = join(this.raizWeb, spec.slice(2));
@@ -323,7 +344,7 @@ export class GrafoDeImports {
    * rechazoPorModulo("<módulo>"); if (r) return r;` sin ningún `await`
    * antes), o null si no lo chequea así.
    */
-  chequeoDeLaAccion(accion: string): string | null {
+  chequeoDeLaAccion(accion: string, llamada: string = LLAMADA_DE_LA_ACTION): string | null {
     const [rel, nombre] = accion.split("#") as [string, string];
     const { sf } = this.info(join(this.raizWeb, rel));
     let cuerpo: ts.Block | null = null;
@@ -346,12 +367,90 @@ export class GrafoDeImports {
     if (!cuerpo) return null;
     const sentencias = cuerpo.statements;
     for (let i = 0; i < sentencias.length; i += 1) {
-      const modulo = patronDeCorte(sentencias, i, LLAMADA_DE_LA_ACTION);
+      const modulo = patronDeCorte(sentencias, i, llamada);
       if (modulo !== null) return modulo;
       if (tieneAwait(sentencias[i]!)) return null;
     }
     return null;
   }
+}
+
+/**
+ * Lecturas del marco que se piden fuera de `leerDelMarco` en los archivos que
+ * alcanza `entrada` (el layout de la plataforma): cada uso de una action de
+ * `lecturas` (nombre de la action → la lectura con la que la chequea el
+ * servidor) tiene que estar dentro de los argumentos de
+ * `leerDelMarco(permisos, "<lectura>", ...)` con esa misma lectura. Si no, el
+ * provider la pediría aunque la persona no tenga el módulo (un pedido de más,
+ * rechazado en el servidor, o un dato si el servidor no chequeara).
+ */
+export function usosFueraDeLeerDelMarco(
+  grafo: GrafoDeImports,
+  entrada: string,
+  lecturas: Map<string, string>
+): string[] {
+  const raiz = grafo.raiz;
+  const mal: string[] = [];
+  for (const archivo of grafo.archivosDesde(entrada)) {
+    const info = grafo.info(archivo);
+    if (info.directiva === "servidor") continue;
+    const locales = new Map<string, string>();
+    for (const st of info.sf.statements) {
+      if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier)) continue;
+      const destino = grafo.resolver(archivo, st.moduleSpecifier.text);
+      if (!destino || grafo.info(destino).directiva !== "servidor") continue;
+      const nb = st.importClause?.namedBindings;
+      if (!nb || !ts.isNamedImports(nb)) continue;
+      for (const el of nb.elements) {
+        const clave = `${relative(raiz, destino)}#${(el.propertyName ?? el.name).text}`;
+        const lectura = lecturas.get(clave);
+        if (lectura) locales.set(el.name.text, lectura);
+      }
+    }
+    if (locales.size === 0) continue;
+    const visitar = (nodo: ts.Node) => {
+      if (ts.isIdentifier(nodo) && locales.has(nodo.text) && !dentroDeUnImport(nodo)) {
+        const esperada = locales.get(nodo.text)!;
+        const envoltorio = leerDelMarcoQueEnvuelve(nodo);
+        if (envoltorio !== esperada) {
+          const { line } = info.sf.getLineAndCharacterOfPosition(nodo.getStart(info.sf));
+          mal.push(
+            `${relative(raiz, archivo)}:${line + 1} ${nodo.text} ${
+              envoltorio === null ? `fuera de ${LECTURA_DEL_MARCO_EN_EL_CLIENTE}` : `con "${envoltorio}" en vez de "${esperada}"`
+            }`
+          );
+        }
+      }
+      ts.forEachChild(nodo, visitar);
+    };
+    visitar(info.sf);
+  }
+  return mal;
+}
+
+/** Un uso que no llama a nada: el import mismo o una posición de tipo (`typeof accion`). */
+function dentroDeUnImport(nodo: ts.Node): boolean {
+  for (let n: ts.Node | undefined = nodo; n; n = n.parent) {
+    if (ts.isImportDeclaration(n) || ts.isTypeNode(n)) return true;
+  }
+  return false;
+}
+
+/** La lectura del `leerDelMarco(_, "<lectura>", ...)` en cuyos argumentos está `nodo`, o null. */
+function leerDelMarcoQueEnvuelve(nodo: ts.Node): string | null {
+  for (let n: ts.Node = nodo; n.parent; n = n.parent) {
+    const padre = n.parent;
+    if (
+      ts.isCallExpression(padre) &&
+      padre.arguments.includes(n as ts.Expression) &&
+      ts.isIdentifier(padre.expression) &&
+      padre.expression.text === LECTURA_DEL_MARCO_EN_EL_CLIENTE
+    ) {
+      const lectura = padre.arguments[1];
+      return lectura && ts.isStringLiteral(lectura) ? lectura.text : "(sin literal)";
+    }
+  }
+  return null;
 }
 
 function tieneAwait(nodo: ts.Node): boolean {

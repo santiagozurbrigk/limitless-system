@@ -28,6 +28,8 @@ const sim = vi.hoisted(() => ({
 vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
   rechazoPorModulo: async () => null,
+  rechazoDeLecturaDelMarco: async () => null,
+  puedeLeerDelMarcoEnElServidor: async () => true,
 }));
 vi.mock("@/lib/observability/reportar-falla", () => ({
   reportarFalla: (error: unknown, contexto: unknown) => sim.reportes.push({ error, contexto }),

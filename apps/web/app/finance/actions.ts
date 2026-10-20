@@ -22,6 +22,11 @@ import {
   type TeamCompensationRow,
 } from "@/lib/expenses/mapper";
 import { createClient } from "@/lib/supabase/server";
+import {
+  puedeLeerDelMarcoEnElServidor,
+  rechazoDeLecturaDelMarco,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { leerPagosDeLaOrganizacion } from "@/lib/sales/pagos";
@@ -101,19 +106,40 @@ const EMPTY_FINANCE_CONFIG: FinanceConfigPayload = {
   pagosSinLeer: false,
 };
 
-export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
-  if (!isSupabaseConfigured()) {
-    const { mockFixedExpenses, mockSubscriptions, mockTeamCompensation } =
-      await import("@/mocks/expenses");
-    const { mockPaymentPlatforms } = await import("@/mocks/finance");
-    return {
-      fixedExpenses: mockFixedExpenses.map((e) => ({ ...e })),
-      subscriptions: mockSubscriptions.map((s) => ({ ...s })),
-      teamCompensation: mockTeamCompensation.map((t) => ({ ...t })),
-      paymentPlatforms: mockPaymentPlatforms.map((p) => ({ ...p })),
-      pagosSinLeer: false,
-    };
-  }
+async function configDeDemostracion(): Promise<FinanceConfigPayload> {
+  const { mockFixedExpenses, mockSubscriptions, mockTeamCompensation } =
+    await import("@/mocks/expenses");
+  const { mockPaymentPlatforms } = await import("@/mocks/finance");
+  return {
+    fixedExpenses: mockFixedExpenses.map((e) => ({ ...e })),
+    subscriptions: mockSubscriptions.map((s) => ({ ...s })),
+    teamCompensation: mockTeamCompensation.map((t) => ({ ...t })),
+    paymentPlatforms: mockPaymentPlatforms.map((p) => ({ ...p })),
+    pagosSinLeer: false,
+  };
+}
+
+/** Lo que devuelve una tabla que no se lee porque el rol no la abre (SCRUM-540). */
+const SIN_LEER = { data: [], error: null } as const;
+
+/**
+ * La configuración de Finanzas que pide el provider del marco en toda pantalla.
+ *
+ * ⭐ Por partes según el rol (SCRUM-540): las plataformas de cobro (con sus
+ * totales) las usan Finanzas, Ventas, el Panel y Ajustes; los gastos fijos,
+ * las suscripciones y los sueldos, sólo Finanzas, Ventas y el Panel. Sin
+ * ninguno de esos módulos, el rechazo; con Ajustes y sin los otros, sólo las
+ * plataformas (las otras tablas no se leen).
+ */
+export async function loadFinanceConfigAction(): Promise<
+  FinanceConfigPayload | RechazoPorModulo
+> {
+  if (!isSupabaseConfigured()) return configDeDemostracion();
+
+  const rechazo = await rechazoDeLecturaDelMarco("plataformasDePago");
+  if (rechazo) return rechazo;
+
+  const conGastos = await puedeLeerDelMarcoEnElServidor("configuracionDeFinanzas");
 
   try {
     const organizationId = await tryRequireOrganizationId();
@@ -136,22 +162,28 @@ export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
     }
 
   const [fixedRes, subsRes, teamRes, platRes, hoy] = await Promise.all([
-    supabase
-      .from("fixed_expenses")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("name"),
-    supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .eq("status", "active")
-      .order("name"),
-    supabase
-      .from("team_compensation")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("member_name"),
+    conGastos
+      ? supabase
+          .from("fixed_expenses")
+          .select("*")
+          .eq("organization_id", organizationId)
+          .order("name")
+      : SIN_LEER,
+    conGastos
+      ? supabase
+          .from("subscriptions")
+          .select("*")
+          .eq("organization_id", organizationId)
+          .eq("status", "active")
+          .order("name")
+      : SIN_LEER,
+    conGastos
+      ? supabase
+          .from("team_compensation")
+          .select("*")
+          .eq("organization_id", organizationId)
+          .order("member_name")
+      : SIN_LEER,
     supabase
       .from("payment_platforms")
       .select("*")

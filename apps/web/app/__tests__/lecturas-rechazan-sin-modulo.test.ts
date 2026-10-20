@@ -17,9 +17,14 @@ import { permissionModuleForPath } from "@/lib/navigation/module-for-path";
 import { segmentosAlEntrar } from "@/lib/navigation/__tests__/pantallas-de-app";
 import {
   GrafoDeImports,
+  LLAMADA_DEL_MARCO,
   NOMBRE_DE_LECTURA,
   entradasDeApp,
 } from "@/lib/navigation/__tests__/lecturas-de-app";
+import {
+  MODULOS_DE_LAS_LECTURAS_DEL_MARCO,
+  type LecturaDelMarco,
+} from "@/lib/auth/lecturas-del-marco";
 
 const sim = vi.hoisted(() => ({
   permisos: null as unknown as UserPermissions,
@@ -107,6 +112,43 @@ describe("lecturas que chequean el módulo", () => {
       >;
       const resultado = await mod[nombre]!("x", "y", "z");
       expect(resultado).toMatchObject({ success: false, motivo: "sin-acceso", moduleId: modulo });
+      expect(sim.lecturas).toEqual([]);
+    }
+  );
+});
+
+// Las del marco de la plataforma (SCRUM-540): las que el detector da por
+// chequeadas con `rechazoDeLecturaDelMarco`, llamadas de verdad.
+const delMarco = [...grafo.accionesDesde(join(APP_DIR, "(platform)", "layout.tsx"))]
+  .map((accion) => ({ accion, lectura: grafo.chequeoDeLaAccion(accion, LLAMADA_DEL_MARCO) }))
+  .filter((a): a is { accion: string; lectura: LecturaDelMarco } => a.lectura !== null);
+
+describe("lecturas del marco que chequean el módulo", () => {
+  it("son las de los providers, la barra y el menú del celular", () => {
+    expect(delMarco.map((a) => a.accion)).toEqual(
+      expect.arrayContaining([
+        "app/clients/actions.ts#listClientsAction",
+        "app/finance/actions.ts#loadFinanceConfigAction",
+        "app/executive-reports/actions.ts#getLatestReportsByCadenceAction",
+      ])
+    );
+    expect(delMarco.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it.each(delMarco.map((a) => [a.accion, a.lectura] as const))(
+    "⭐ %s (%s): sin ningún módulo devuelve el rechazo y no lee",
+    async (accion, lectura) => {
+      const [archivo, nombre] = accion.split("#") as [string, string];
+      const mod = (await import(/* @vite-ignore */ join(WEB, archivo))) as Record<
+        string,
+        (...args: unknown[]) => Promise<unknown>
+      >;
+      const resultado = await mod[nombre]!();
+      expect(resultado).toMatchObject({
+        success: false,
+        motivo: "sin-acceso",
+        moduleId: MODULOS_DE_LAS_LECTURAS_DEL_MARCO[lectura][0],
+      });
       expect(sim.lecturas).toEqual([]);
     }
   );

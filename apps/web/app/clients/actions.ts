@@ -13,6 +13,10 @@ import {
 import { revalidatePath } from "next/cache";
 import { paths } from "@/routes";
 import { createClient } from "@/lib/supabase/server";
+import {
+  rechazoDeLecturaDelMarco,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   ErrorEsperable,
@@ -106,8 +110,11 @@ function exigirSupabase() {
   if (!isSupabaseConfigured()) throw new ErrorEsperable(SUPABASE_NO_CONFIGURADO);
 }
 
-export async function listClientsAction(): Promise<Client[]> {
+export async function listClientsAction(): Promise<Client[] | RechazoPorModulo> {
   if (!isSupabaseConfigured()) return [];
+
+  const rechazo = await rechazoDeLecturaDelMarco("clientes");
+  if (rechazo) return rechazo;
 
   const supabase = await createClient();
   const { data, error } = await supabase

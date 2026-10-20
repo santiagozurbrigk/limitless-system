@@ -16,6 +16,8 @@ import {
   TabsTrigger,
 } from "@ai-coo/ui";
 import { getLatestReportsByCadenceAction } from "@/app/executive-reports/actions";
+import { usePermissions } from "@/providers/permissions-provider";
+import { leerDelMarco } from "@/lib/auth/lecturas-del-marco";
 import { ReportBody } from "./report-body";
 import { REPORT_CADENCES } from "@/lib/executive-reports/cadences";
 import { paths } from "@/routes/paths";
@@ -80,9 +82,13 @@ export function ReportsPanel() {
   const [reports, setReports] =
     useState<Record<ReportPeriod, ExecutiveReport | null>>(SIN_REPORTES);
 
+  // Los reportes son de Operaciones: sin el módulo no se piden (SCRUM-540) y,
+  // sin reportes, el botón no aparece.
+  const permisos = usePermissions();
+
   useEffect(() => {
     let vigente = true;
-    getLatestReportsByCadenceAction()
+    leerDelMarco(permisos, "reportesEjecutivos", getLatestReportsByCadenceAction, SIN_REPORTES)
       .then((data) => {
         if (vigente) setReports(data);
       })
@@ -92,7 +98,7 @@ export function ReportsPanel() {
     return () => {
       vigente = false;
     };
-  }, []);
+  }, [permisos]);
 
   // El reporte más reciente de cualquier cadencia es el que enciende el punto.
   const newest = REPORT_CADENCES.map((c) => reports[c.id])
