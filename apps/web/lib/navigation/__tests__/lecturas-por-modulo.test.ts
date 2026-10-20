@@ -51,10 +51,6 @@ function rutaDeCarpeta(appDir: string, carpeta: string): string {
   return `/${segmentos.join("/")}`;
 }
 
-function esLayout(archivo: string): boolean {
-  return /[\\/]layout\.(tsx|ts|jsx|js)$/.test(archivo);
-}
-
 /**
  * ⭐ Deuda conocida: Server Actions de lectura de un solo módulo que todavía
  * no chequean el permiso (devuelven el dato directo, sin `MutationResult`, y
