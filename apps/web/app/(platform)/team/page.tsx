@@ -2,8 +2,12 @@ import { TeamOverview } from "@/components/team/team-overview";
 import { getTeamPageContextAction } from "@/app/team/actions";
 import { EmptyState } from "@/components/shared/empty-state";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function TeamPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("team");
+  if (sinAcceso) return sinAcceso;
+
   if (!isSupabaseConfigured()) {
     return (
       <TeamOverview

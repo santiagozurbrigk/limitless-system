@@ -11,6 +11,7 @@ import { DashboardPageContent } from "@/components/dashboard/dashboard-page-cont
 import type { FrequentObjectionsResult } from "@/types/sales";
 import { redirect } from "next/navigation";
 import { paths } from "@/routes";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 async function loadFrequentObjections(): Promise<FrequentObjectionsResult> {
   if (!isSupabaseConfigured()) {
@@ -25,6 +26,9 @@ async function loadFrequentObjections(): Promise<FrequentObjectionsResult> {
 }
 
 export default async function DashboardPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("dashboard");
+  if (sinAcceso) return sinAcceso;
+
   const holdingSession = await getHoldingSessionState();
   if (holdingSession.isHolding && !holdingSession.viewingBusiness) {
     redirect(paths.platform.holding);

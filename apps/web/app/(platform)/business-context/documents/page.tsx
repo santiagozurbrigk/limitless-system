@@ -9,8 +9,12 @@ import {
 import { getGoogleFormsIntegrationStatusAction } from "@/app/forms/actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { ContextDocument, FathomKnowledgeCall, CustomCategory } from "@/types/business-context";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function BusinessContextDocumentsPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("knowledge_base");
+  if (sinAcceso) return sinAcceso;
+
   let documents: ContextDocument[] = [];
   let contextCalls: FathomKnowledgeCall[] = [];
   let clientMeetingCalls: FathomKnowledgeCall[] = [];

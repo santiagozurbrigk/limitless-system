@@ -1,3 +1,4 @@
+import { createElement, type ReactElement } from "react";
 import {
   getCurrentUserPermissions,
   type UserPermissions,
@@ -7,6 +8,7 @@ import {
   type PermissionModuleId,
 } from "@/constants/permission-modules";
 import { permissionModuleForPath } from "@/lib/navigation/module-for-path";
+import { SinAcceso } from "@/components/platform/sin-acceso";
 
 type PermisosDeModulo = Pick<
   UserPermissions,
@@ -16,9 +18,11 @@ type PermisosDeModulo = Pick<
 /**
  * ⭐ La regla de acceso a un módulo, en un solo lugar (SCRUM-18).
  *
- * La usan el layout de la plataforma, que decide si una pantalla se muestra, y
- * las Server Actions (`rechazoPorModulo`), que se pueden llamar a mano sin pasar
- * por ninguna pantalla. Si cada uno tuviera su copia, alcanzaría con
+ * La usan el layout de la plataforma, que decide si una pantalla se muestra,
+ * las páginas y los layouts que leen (`exigirModuloDeLaPagina`, SCRUM-540), que
+ * cortan sus lecturas antes de que corran, y las Server Actions
+ * (`rechazoPorModulo`), que se pueden llamar a mano sin pasar por ninguna
+ * pantalla. Si cada uno tuviera su copia, alcanzaría con
  * que una se desactualice para que la pantalla diga "no" y la action diga "sí".
  *
  *   - El founder pasa siempre: `getCurrentUserPermissions` le da todo en `full`.
@@ -88,4 +92,39 @@ export async function rechazoPorModulo(
     motivo: "sin-acceso",
     moduleId,
   };
+}
+
+/**
+ * ⭐ El guardia de las páginas y de los layouts que leen (SCRUM-540).
+ *
+ * Devuelve `SinAcceso` si quien entra no puede ver `moduleId`, o `null` si
+ * puede. Va en la primera línea de la página, antes de cualquier lectura:
+ *
+ *     const sinAcceso = await exigirModuloDeLaPagina("operations");
+ *     if (sinAcceso) return sinAcceso;
+ *
+ * Por qué en la página y no sólo en el layout de la plataforma: en el App
+ * Router la página se ejecuta en el servidor aunque un layout de arriba no
+ * dibuje `children`, así que sus lecturas corren y sus datos viajan en el HTML
+ * y en el payload RSC. Además ese layout no se vuelve a ejecutar en una
+ * navegación del cliente; la página sí, siempre. Lo único que corta las
+ * lecturas es que el chequeo corra antes que ellas en la misma función.
+ *
+ * No usa `x-pathname` ni el layout: recibe el módulo escrito en la página, y
+ * el test `lecturas-por-modulo.test.ts` compara ese módulo con el de
+ * `module-for-path` para la ruta en disco. No redirige: dibuja lo mismo que
+ * el layout de la plataforma, sin riesgo de bucles.
+ *
+ * La regla es la de `rechazoPorModulo` (founder pasa, sin rol no se bloquea),
+ * y una falla al leer los permisos lanza, igual que ahí: la página cae en su
+ * boundary de error, nunca se abre.
+ */
+export async function exigirModuloDeLaPagina(
+  moduleId: PermissionModuleId
+): Promise<ReactElement | null> {
+  const rechazo = await rechazoPorModulo(moduleId);
+  if (!rechazo) return null;
+  return createElement(SinAcceso, {
+    moduleLabel: getPermissionModuleLabel(rechazo.moduleId),
+  });
 }

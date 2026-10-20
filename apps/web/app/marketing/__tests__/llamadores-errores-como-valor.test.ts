@@ -16,6 +16,11 @@ const sim = vi.hoisted(() => ({
   youtube: null as unknown,
 }));
 
+// SCRUM-540: la página arranca con el guardia del módulo; acá entra alguien con el módulo.
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  exigirModuloDeLaPagina: async () => null,
+}));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/release/escondido", () => ({ ESCONDIDO: { marketingOverview: false } }));
 vi.mock("@/app/marketing/actions", () => ({

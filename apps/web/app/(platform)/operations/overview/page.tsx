@@ -9,6 +9,7 @@ import { mockOperationsOverview } from "@/mocks/operations-overview";
 import { OperationsOverview } from "@/components/operations/operations-overview";
 import { PageHeader } from "@/components/shared/page-header";
 import type { OperationsDepartment } from "@/types/operations-overview";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 async function loadDepartments(): Promise<OperationsDepartment[]> {
   if (!isSupabaseConfigured()) {
@@ -30,6 +31,9 @@ async function loadDepartments(): Promise<OperationsDepartment[]> {
 }
 
 export default async function OperationsOverviewPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("operations");
+  if (sinAcceso) return sinAcceso;
+
   const [weeklyReport, departments, profile] = await Promise.all([
     getWeeklyReportAction(),
     loadDepartments(),

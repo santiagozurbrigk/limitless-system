@@ -6,12 +6,16 @@ import { PageHeader } from "@/components/shared/page-header";
 import { getExecutiveReportByIdAction } from "@/app/executive-reports/actions";
 import { getReportCadence } from "@/lib/executive-reports/cadences";
 import { paths } from "@/routes/paths";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function ExecutiveReportDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const sinAcceso = await exigirModuloDeLaPagina("operations");
+  if (sinAcceso) return sinAcceso;
+
   const { id } = await params;
   const report = await getExecutiveReportByIdAction(id);
   if (!report) notFound();

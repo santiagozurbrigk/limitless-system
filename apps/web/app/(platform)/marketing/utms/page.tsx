@@ -6,8 +6,12 @@ import {
   getOrganizationWebsiteAction,
   getUTMLinksAction,
 } from "@/app/marketing/utm-actions";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function MarketingUTMsPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("marketing");
+  if (sinAcceso) return sinAcceso;
+
   const [links, assets, orgWebsiteUrl] = await Promise.all([
     getUTMLinksAction(),
     listContentAssetsAction(),

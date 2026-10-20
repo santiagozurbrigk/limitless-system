@@ -1,20 +1,9 @@
-"use client";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { ClientsPageCliente } from "./clients-page-cliente";
 
-import { ClientsList } from "@/components/clients";
-import { PageHeader } from "@/components/shared/page-header";
-import { usePlatformData } from "@/providers";
+export default async function ClientsPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("clients");
+  if (sinAcceso) return sinAcceso;
 
-export default function ClientsPage() {
-  const { clients, clientsLoading } = usePlatformData();
-
-  return (
-    <div className="space-y-6">
-      <PageHeader description="Seguimiento desde el cierre hasta caso de éxito" />
-      {clientsLoading ? (
-        <p className="text-sm text-muted-foreground">Cargando clientes…</p>
-      ) : (
-        <ClientsList clients={clients} />
-      )}
-    </div>
-  );
+  return <ClientsPageCliente />;
 }

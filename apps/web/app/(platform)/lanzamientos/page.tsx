@@ -4,8 +4,12 @@ import { Button } from "@ai-coo/ui";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { paths } from "@/routes";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
-export default function LanzamientosPage() {
+export default async function LanzamientosPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("funnels");
+  if (sinAcceso) return sinAcceso;
+
   return (
     <div className="space-y-8">
       <PageHeader title="Lanzamientos" />

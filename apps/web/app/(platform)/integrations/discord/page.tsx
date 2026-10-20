@@ -5,8 +5,12 @@ import { Button } from "@ai-coo/ui";
 import { getDiscordSettingsAction } from "@/app/discord/actions";
 import { DiscordSettings } from "@/components/integrations/discord-settings";
 import { paths } from "@/routes";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function DiscordIntegrationPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("integrations");
+  if (sinAcceso) return sinAcceso;
+
   const data = await getDiscordSettingsAction();
 
   if (!data.integration || data.integration.status !== "connected") {
