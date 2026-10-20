@@ -45,6 +45,7 @@ import {
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 const recordSchema = z.object({
   clientId: z.string().uuid(),
@@ -88,6 +89,9 @@ export async function listCheckpointEventsAction(
 export async function getClientJourneyAction(
   clientId: string
 ): Promise<MutationResult<RecorridoDelCliente>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getClientJourney]", async () => {
     const organizationId = await requireOrganizationId();
     return leerRecorridoDelCliente(await createClient(), organizationId, clientId);

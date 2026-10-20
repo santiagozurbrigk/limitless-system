@@ -11,6 +11,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 /*
  * SCRUM-504: las lecturas de métricas de Ventas devuelven sus errores como
@@ -92,6 +93,9 @@ export async function getSalesPerformanceMetricsAction(
   period: SalesMetricsPeriod = "month",
   dateRange?: SalesMetricsDateRange
 ): Promise<MutationResult<SalesPerformanceMetrics>> {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getSalesPerformanceMetrics]", () =>
     calcularMetricasDeRendimiento(period, dateRange)
   );

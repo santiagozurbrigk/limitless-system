@@ -28,6 +28,7 @@ import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import type { PlanDuration } from "@/types/plan-durations";
 import { esTablaAusente } from "@/lib/server/tabla-ausente";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 const updatePlanDurationSchema = z.object({
   planName: z.string().trim().min(1, "Falta el nombre del plan.").max(500, "El nombre del plan es demasiado largo."),
@@ -125,6 +126,9 @@ export async function getClientsTableEnrichmentAction(): Promise<
     isFounder: boolean;
   }>
 > {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getClientsTableEnrichment]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

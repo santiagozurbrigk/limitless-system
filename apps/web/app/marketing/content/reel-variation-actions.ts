@@ -23,6 +23,7 @@ import {
   type MutationResult,
 } from "@/lib/server/action-result";
 import { uuidSchema } from "@/lib/validations";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -267,6 +268,9 @@ export async function getReelVariationJobAction(
 export async function listReelVariationJobsForPieceAction(
   contentPieceId: string
 ): Promise<MutationResult<ReelVariationJob[]>> {
+  const rechazo = await rechazoPorModulo("marketing");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listReelVariationJobsForPiece]", async () => {
     const idDePieza = exigirUuid(contentPieceId);
     const organizationId = await requireOrgId();

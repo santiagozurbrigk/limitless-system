@@ -31,6 +31,7 @@ import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import type { CustomFieldValues, FieldDefinition } from "@/types/custom-fields";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 const updateSchema = z.object({
   clientId: z.string().uuid(),
@@ -48,6 +49,9 @@ export type UpdateClientCustomFieldsInput = z.input<typeof updateSchema>;
 export async function listClientFieldDefinitionsAction(): Promise<
   MutationResult<FieldDefinition[]>
 > {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listClientFieldDefinitions]", async () => {
     const organizationId = await requireOrganizationId();
     return leerColumnas(await createClient(), organizationId, "client");

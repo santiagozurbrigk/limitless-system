@@ -44,6 +44,7 @@ import { lecturaDegradable, valorSiNoEsFalla } from "@/lib/server/lectura-degrad
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 type TrackingRow = {
   id: string;
@@ -121,6 +122,9 @@ export type WeeklyReviewPageData = {
  * una cuota que vence hoy salía como atrasada (SCRUM-493).
  */
 export async function getWeeklyReviewAction(): Promise<MutationResult<WeeklyReviewPageData>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getWeeklyReview]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

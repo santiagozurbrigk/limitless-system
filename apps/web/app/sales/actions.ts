@@ -27,6 +27,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 type CallAnalysisRow = {
   closer_id: string | null;
@@ -150,6 +151,9 @@ async function leerRankingDelEquipo(): Promise<TeamRankingEntry[]> {
 export async function getCloserEvolutionAction(
   closerName: string
 ): Promise<MutationResult<number[]>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   if (!isSupabaseConfigured()) {
     return { success: true, data: mockCloserEvolutionForName(closerName) };
   }
@@ -178,6 +182,9 @@ export async function getCloserEvolutionAction(
 }
 
 export async function getTeamAverageEvolutionAction(): Promise<MutationResult<number[]>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   if (!isSupabaseConfigured()) {
     return { success: true, data: getTeamAverageEvolution() };
   }
@@ -216,6 +223,9 @@ export async function getLeadJourneyAction(
   conversationId: string,
   context?: LeadJourneyContext
 ): Promise<MutationResult<RecorridoDelLead>> {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   if (!isSupabaseConfigured()) return { success: true, data: { pasos: [], faltan: [] } };
 
   // Antes atrapaba todo y devolvía `[]`: sin sesión o con una falla, el panel
@@ -235,6 +245,9 @@ export async function getZernioLeadJourneyAction(
   participantId: string,
   participantName: string
 ): Promise<MutationResult<RecorridoDelLead>> {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   if (!isSupabaseConfigured()) return { success: true, data: { pasos: [], faltan: [] } };
 
   return mutacionConErroresEsperables("[getZernioLeadJourney]", async () => {
@@ -250,6 +263,9 @@ export async function getZernioLeadJourneyAction(
 export async function getFrequentObjectionsAction(): Promise<
   MutationResult<FrequentObjectionsResult>
 > {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   if (!isSupabaseConfigured()) {
     return {
       success: true,

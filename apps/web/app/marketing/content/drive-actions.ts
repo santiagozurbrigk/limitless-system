@@ -16,6 +16,7 @@ import {
   type MutationResult,
 } from "@/lib/server/action-result";
 import { updateContentPieceAction } from "./actions";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Drive de Marketing (SCRUM-519): cada acción devuelve sus errores esperables
@@ -113,6 +114,9 @@ async function listarArchivos(params?: ParametrosDeListado): Promise<DriveFileLi
 export async function listDriveFilesAction(
   params?: ParametrosDeListado
 ): Promise<MutationResult<DriveFileListItem[]>> {
+  const rechazo = await rechazoPorModulo("marketing");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listDriveFiles]", () => listarArchivos(params));
 }
 

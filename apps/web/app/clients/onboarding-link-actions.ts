@@ -48,6 +48,7 @@ import type { CustomFieldValues } from "@/types/custom-fields";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import { esTablaAusente } from "@/lib/server/tabla-ausente";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 const ADD_ON = "growth_partners" as const;
 const idSchema = uuidSchema;
@@ -103,6 +104,9 @@ export type OnboardingStatus = {
 export async function getOnboardingStatusAction(
   subClientId: string
 ): Promise<MutationResult<OnboardingStatus>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getOnboardingStatus]", async () => {
     const vacio: OnboardingStatus = { link: null, submissions: [] };
     if (!idSchema.safeParse(subClientId).success) return vacio;
@@ -227,6 +231,9 @@ export type GeneralOnboarding = {
 
 /** El link general de la organización y su bandeja «sin asignar». */
 export async function getGeneralOnboardingAction(): Promise<MutationResult<GeneralOnboarding>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getGeneralOnboarding]", async () => {
     const vacio: GeneralOnboarding = { link: null, pending: [] };
     const organizationId = await requireOrganizationId();
