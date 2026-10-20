@@ -11,7 +11,7 @@ El detalle de sesión, organización efectiva, holding y permisos por módulo es
 | Aislamiento entre orgs | RLS por `organization_id` con `get_my_organization_id()` | migraciones; ver `docs/arquitectura/base-de-datos.md` |
 | Sesión | Supabase Auth con cookies (`@supabase/ssr`), refresco en el middleware | `apps/web/lib/supabase/middleware.ts` |
 | Rutas | Todo requiere sesión salvo la lista de `isPublicPath` | `apps/web/lib/supabase/public-paths.ts` |
-| Permisos por rol | Bloqueo del **render** por módulo en el layout de plataforma | `apps/web/app/(platform)/layout.tsx`, `lib/auth/get-current-permissions.ts` |
+| Permisos por rol | Bloqueo por módulo en el layout de plataforma y, antes de cualquier lectura, en cada página con módulo (SCRUM-540) | `apps/web/app/(platform)/layout.tsx`, `lib/auth/acceso-a-modulo.ts`, `lib/auth/get-current-permissions.ts` |
 | Super-admin | `requireSuperAdmin()` en todas sus acciones | `apps/web/lib/auth/require-super-admin.ts` |
 | Secretos de integraciones | Tablas sin lectura para el usuario + service role en servidor + AES-256-GCM | `lib/supabase/admin.ts`, `lib/security/encryption.ts` |
 | Jobs | `CRON_SECRET`, `WORKER_AUTH_SECRET`, firma QStash, comparación en tiempo constante | `lib/integrations/cron-auth.ts`, `lib/queue/verify-queue-request.ts`, `lib/security/safe-equal.ts` |
@@ -32,7 +32,8 @@ El detalle de sesión, organización efectiva, holding y permisos por módulo es
 
 - Roles del sistema en `constants/roles.ts`; roles custom en `team_roles.permissions`, agrupados en 13 módulos (`constants/permission-modules.ts`).
 - El layout de `(platform)` calcula el módulo de la URL (`lib/navigation/module-for-path.ts`) y, si el rol lo tiene en `none`, muestra `<SinAcceso/>`. El founder pasa siempre; un usuario sin rol cargado navega todo (a propósito).
-- **Es una barrera de navegación, no de datos**: salvo el UPDATE de `profiles` (`Founders update org profiles`, founder/admin), ninguna policy RLS filtra por rol y las Server Actions no chequean permisos. Abierto como `[PERMISOS-SERVER-ACTIONS]`.
+- Desde SCRUM-540 cada página con módulo arranca con `exigirModuloDeLaPagina`: sin el módulo no lee nada, así que los datos de la pantalla no viajan en el HTML ni en el payload RSC, al cargar ni al navegar (el layout no frena la página y no se vuelve a ejecutar en una navegación del cliente). Las Server Actions de lectura de un solo módulo que devuelven `MutationResult` chequean con `rechazoPorModulo`; quedan las que devuelven el dato directo (`[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]`) y las de los providers del marco, que piden clientes y Finanzas en toda pantalla (`[PERMISOS-PROVIDERS-GLOBALES]`).
+- **Fuera de esas lecturas, es una barrera de navegación, no de datos**: salvo el UPDATE de `profiles` (`Founders update org profiles`, founder/admin), ninguna policy RLS filtra por rol y las Server Actions de escritura no chequean el módulo. Abierto como `[PERMISOS-SERVER-ACTIONS]`.
 
 ## Service role y cliente
 

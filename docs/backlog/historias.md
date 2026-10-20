@@ -79,7 +79,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un miembro sin acceso a Operaciones, cuando abre el Área del fundador, entonces ve "No tenés acceso"; el founder la sigue viendo.
   - Dado un miembro invitado sin rol asignado, cuando entra, entonces el menú y el bloqueo de pantallas se comportan con una misma regla (no puede abrir por dirección lo que el menú no le muestra, ni al revés).
   - Se probó con una segunda cuenta con rol limitado y el resultado de cada paso quedó anotado.
-- **Tareas técnicas:** `[PERMISOS-LAYOUT-NAV-SUAVE]`, `[NAV-PALETA-PERMISOS]`, PERMISOS-FOUNDER-AREA (resuelta en SCRUM-18), `[PERMISOS-SIN-ROL-NAV]`, `[PERMISOS-VERIFICAR-SESION]`
+- **Tareas técnicas:** PERMISOS-LAYOUT-NAV-SUAVE (resuelta en SCRUM-540), `[PERMISOS-PROVIDERS-GLOBALES]`, `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]`, `[NAV-PALETA-PERMISOS]`, PERMISOS-FOUNDER-AREA (resuelta en SCRUM-18), `[PERMISOS-SIN-ROL-NAV]`, `[PERMISOS-VERIFICAR-SESION]`
 - **Para confirmar:** Agustín: un miembro sin rol asignado, ¿ve todo en modo lectura o se obliga a elegir un rol al sumarlo?
 
 ### [H-PLA-08] Navegar con un menú que muestre sólo lo que tengo

@@ -21,6 +21,7 @@ permisos por módulo sólo cortan el render de pantallas**.
 | Contexto para API routes | `apps/web/lib/auth/require-auth.ts` → `requireAuth()` / `requireAuthContext()` | Devuelve `{ user, orgId, role, supabase, isHoldingView }` |
 | Permisos por módulo | `apps/web/lib/auth/get-current-permissions.ts`, `apps/web/constants/permission-modules.ts`, `apps/web/lib/team/mapper.ts` | Rol → mapa de 13 módulos con nivel `none/view/full` |
 | Gate de pantallas | `apps/web/app/(platform)/layout.tsx` + `apps/web/lib/navigation/module-for-path.ts` | Si el módulo de la ruta está en `none`, renderiza `SinAcceso` |
+| Guardia de cada página | `apps/web/lib/auth/acceso-a-modulo.ts` → `exigirModuloDeLaPagina(moduleId)` | Primera línea de toda página con módulo (y de un layout de segmento que lee): sin el módulo devuelve `SinAcceso` antes de cualquier lectura, también en navegación del cliente (SCRUM-540) |
 | Add-ons | `apps/web/lib/auth/add-on-ids.ts`, `apps/web/lib/auth/add-ons.ts` | `organizations.enabled_add_ons`; `requireAddOn()` en server actions |
 | Super admin | `apps/web/lib/auth/require-super-admin.ts` | Allowlist por email en `super_admin_users`. Alta y baja: [`operacion/alta-super-admin.md`](../operacion/alta-super-admin.md) (primero la cuenta, después la lista) |
 | Rate limit | `apps/web/lib/rate-limit.ts` | RPC `consume_rate_limit` (Postgres), fallback en memoria |
@@ -95,8 +96,13 @@ Browser ──► middleware (updateSession)
    getHoldingSessionState · getCurrentOnboardingContext · zona (degradables, SCRUM-108)
    módulo = permissionModuleForPath(x-pathname)
    no founder + rol cargado + módulo en "none" → <SinAcceso/>
+   (en una navegación del cliente este layout no se vuelve a ejecutar)
    ▼
-page.tsx / Server Actions → requireOrganizationId() → createClient() (RLS) o createAdminClient()
+page.tsx  [corre siempre, en paralelo con los layouts y en cada navegación]
+   exigirModuloDeLaPagina("<módulo>")  → sin el módulo: <SinAcceso/> y no lee nada (SCRUM-540)
+   ▼
+lecturas de la página / Server Actions (rechazoPorModulo si son de lectura de un módulo)
+   → requireOrganizationId() → createClient() (RLS) o createAdminClient()
 ```
 
 ### Alta de cuentas
@@ -186,21 +192,65 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
   nada abre el acceso. Antes el error se descartaba y un miembro con rol limitado quedaba sin bloqueo durante
   una degradación de la base.
 - La regla (founder pasa siempre, sin rol no se bloquea, con rol entra si el módulo no está en `none`) vive
-  en `lib/auth/acceso-a-modulo.ts`: `moduloBloqueadoParaRuta` la usa el layout de `(platform)` y
-  `rechazoPorModulo` la aplica en una Server Action (hoy, `getIntelligenceSnapshotAction`, que exige
-  `operations` desde SCRUM-18). El rechazo vuelve como valor (`RechazoPorModulo`: la forma del error de
-  `MutationResult` más `motivo: "sin-acceso"` y `moduleId`), no como excepción: así `/founder` e
-  `/intelligence` dibujan `SinAcceso` también cuando se llega con una navegación del cliente, donde el layout
-  no se vuelve a ejecutar y la página sí.
-- El layout decide qué se dibuja, no qué se ejecuta: Next ejecuta la página del segmento aunque el layout
-  muestre `SinAcceso`. Por eso una lectura que no tiene que llegarle a alguien sin el módulo chequea el permiso
-  por su cuenta.
+  en `lib/auth/acceso-a-modulo.ts` y tiene tres usos, todos sobre `puedeEntrarAlModulo`:
+  - `moduloBloqueadoParaRuta`: el layout de `(platform)`, con `x-pathname`.
+  - `exigirModuloDeLaPagina(moduleId)` (SCRUM-540): el guardia de las páginas y de los layouts de segmento
+    que leen. Devuelve `SinAcceso` o `null` y va primero:
+    `const sinAcceso = await exigirModuloDeLaPagina("operations"); if (sinAcceso) return sinAcceso;`.
+  - `rechazoPorModulo(moduleId)`: las Server Actions de lectura. El rechazo vuelve como valor
+    (`RechazoPorModulo`: la forma del error de `MutationResult` más `motivo: "sin-acceso"` y `moduleId`), no
+    como excepción.
+  Una falla al leer los permisos lanza en los tres (nunca abre).
+- **El layout decide qué se dibuja, no qué se ejecuta.** En el App Router la página se ejecuta en el
+  servidor en paralelo con los layouts, aunque un layout no dibuje `children`: sus lecturas corren y sus
+  datos viajan en el HTML y en el payload RSC. Y en una navegación del cliente el layout de `(platform)` no se
+  vuelve a ejecutar; la página sí, siempre. Medido en la AR de SCRUM-524: un miembro sin Operaciones recibía
+  el título y el contenido de los SOP con «No tenés acceso» en pantalla. Por eso, desde SCRUM-540:
+  - **Guardia por página, no por layout.** Lo único que corta las lecturas es que el chequeo corra antes que
+    ellas en la misma función. Un layout de segmento con el guardia no frena la página de abajo (que corre
+    en paralelo) y además no se vuelve a ejecutar al moverse dentro del segmento. Cada `page.tsx` con módulo
+    (67) arranca con el guardia; recibe el módulo escrito en el archivo, no usa `x-pathname`, así que vale
+    igual al cargar y al navegar, y no redirige (misma pantalla que el layout, sin riesgo de bucles).
+  - **Layouts de segmento, sólo si leen.** Un layout que importa algo más que navegación y banderas (por
+    ejemplo `agent/layout.tsx`, que monta un provider de cliente que pide las conversaciones al montarse)
+    también lleva el guardia. Por eso `agent/layout.tsx` pasó a ser de servidor y la parte de cliente vive en
+    `agent-layout-cliente.tsx`. `/clients` era una página de cliente (`"use client"`): ahora la página es de
+    servidor y la pantalla vive en `clients-page-cliente.tsx`.
+  - **Server Actions de lectura de un módulo** arrancan con `rechazoPorModulo("<módulo>")`, porque se pueden
+    llamar a mano sin abrir la pantalla. Hoy lo hacen 50 (las que ya devolvían `MutationResult`, donde el
+    rechazo entra sin cambiar la forma). Las otras 73 devuelven el dato directo: quedan en la lista de deuda
+    del test (`[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]`). Sus pantallas ya no se dibujan sin el módulo.
+  - El test `lib/navigation/__tests__/lecturas-por-modulo.test.ts` exige todo esto leyendo el código con el
+    parser de TypeScript: que cada página con módulo arranque con el guardia y el módulo de su ruta, que cada
+    layout con módulo que lee también, y que cada action de lectura de un solo módulo arranque con
+    `rechazoPorModulo` de ese módulo (o esté en la lista de deuda, que sólo puede achicarse). Qué cuenta como
+    action de lectura de un módulo: un export de un archivo `"use server"` con nombre de lectura (`get`,
+    `list`, `fetch`, `load`, `preview`...) que sólo alcanzan, siguiendo los `import` desde `app/`, páginas y
+    layouts de ese módulo. **No ve:** una lectura con otro nombre; una action que alcanzan pantallas de dos
+    módulos, una ruta libre, una API o el marco de la plataforma; un `import` dinámico sin literal; funciones
+    de servidor que no son actions (`lib/<dominio>/queries.ts`, que sólo llaman componentes de servidor y
+    quedan cortadas por el guardia de la página). `app/__tests__/lecturas-rechazan-sin-modulo.test.ts` llama
+    de verdad a cada action que el detector da por chequeada.
+  - **Lo que todavía viaja: los providers del marco.** `AppProviders` (en el layout de `(platform)`) monta en
+    toda pantalla `PlatformDataProvider` y `FinanceDataProvider`, que piden al cargar clientes, llamadas de
+    cierre, conversaciones, la configuración de Finanzas, cobros y métricas de ventas, y el panel de reportes
+    de la barra pide los últimos reportes ejecutivos, todo sin mirar el módulo.
+    No es la página ni su payload: son pedidos de Server Actions aparte, y los alcanzan pantallas de varios
+    módulos, así que no hay un único módulo que exigir. Queda en `[PERMISOS-PROVIDERS-GLOBALES]`.
+  - **Con SCRUM-524** (menú por experiencia): ese cambio deja pasar `children` en el layout de `(platform)`
+    fuera de la experiencia y pone en cada segmento de primer nivel un `layout.tsx` con
+    `await exigirRutaDeLaExperiencia("/<segmento>")`. No chocan: los guardias de esta entrega están en las
+    páginas, que corren en paralelo y devuelven `SinAcceso` mientras el layout del segmento redirige (gana la
+    redirección), y ninguno redirige. En un layout que tenga los dos, primero va `exigirRutaDeLaExperiencia`
+    y después el guardia (el test lo permite antes del guardia y nada más): si el guardia fuera primero, una
+    organización webinar vería «No tenés acceso» en vez de ir a su pantalla de inicio.
 - Mapeo ruta → módulo: tabla explícita `MODULE_BY_PREFIX` en `lib/navigation/module-for-path.ts`, gana el
   prefijo más largo. `/product`, `/sops`, `/intelligence`, `/executive-reports`, `/founder` → `operations`;
   `/lanzamientos` → `funnels`; `/comentarios` → `marketing`. Libres: `/onboarding`, `/holding`,
   `/redesign-preview`. El test (`lib/navigation/__tests__/module-for-path.test.ts`) recorre `app/` entero en
   disco y falla si una ruta de `(platform)` no tiene módulo ni es libre, o si una ruta con módulo cuelga de un
-  layout que no llama `moduloBloqueadoParaRuta` (así quedó afuera `/founder` hasta SCRUM-18).
+  layout que no llama `moduloBloqueadoParaRuta` (así quedó afuera `/founder` hasta SCRUM-18). El de
+  `lecturas-por-modulo` compara además el módulo que pide cada página con el de esta tabla.
 - Navegación: `canSeeNavItem()` en `providers/permissions-provider.tsx`. Un item **sin** `permissionId`
   (Producto, Inteligencia, Área del fundador) sólo lo ve el founder.
 - Nivel `view` vs `full`: no hay enforcement central. Algunas pantallas lo consultan con
@@ -216,7 +266,7 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
 | `requireFounder()` | `app/clients/custom-field-actions.ts`, `checkpoint-actions.ts`, `plan-duration-actions.ts` | Configuración de clientes |
 | rol founder (chequeo inline) | `app/clients/signals-actions.ts` | Cambiar el aviso de señales |
 | rol founder | `app/executive-reports/report-generation-actions.ts` | Generar reportes |
-| `rechazoPorModulo(moduleId)` (`lib/auth/acceso-a-modulo.ts`) | `app/intelligence/actions.ts` (`getIntelligenceSnapshotAction`) | Leer el resumen de Inteligencia que muestran `/intelligence` y `/founder`: módulo Operaciones, con la misma regla que el layout. Devuelve el rechazo como valor y las dos páginas dibujan `SinAcceso` |
+| `rechazoPorModulo(moduleId)` (`lib/auth/acceso-a-modulo.ts`) | `app/intelligence/actions.ts` (`getIntelligenceSnapshotAction`, SCRUM-18) y, desde SCRUM-540, 49 lecturas más de Clientes, Ventas, Marketing, Tablero, Operaciones (`getSOPVersionsAction`), Integraciones, Base de conocimiento, Equipo y Ajustes (lista en el test `lecturas-por-modulo`) | Leer los datos de una pantalla de un módulo con la misma regla que el layout. Devuelve el rechazo como valor |
 | `requireHoldingProfile()` | `app/(platform)/holding/actions.ts` | founder o `is_holding_admin` |
 | `requireAddOn()` | `app/clients/sub-client-actions.ts`, `onboarding-link-actions.ts`, `custom-field-actions.ts`, `revenue-actions.ts`, `signals-actions.ts` | Add-on `growth_partners` |
 | `requireSuperAdmin()` | todo `app/super-admin/*` y `lib/super-admin/queries.ts` | Panel interno |
@@ -254,10 +304,15 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
   parte A (29-sep) el equipo, la configuración de la org, la clave de Claude, desconectar integraciones y
   borrar clientes piden rol; un member "sólo lectura" todavía puede, entre otras,
   `updateCloserCommissionAction`, los `connect*`/`save*` de integraciones y escribir finanzas por PostgREST.
-- `[PERMISOS-LAYOUT-NAV-SUAVE]` (nuevo) El chequeo vive en el **layout** de `(platform)`. En App Router los
-  layouts no se vuelven a renderizar en navegaciones del lado del cliente entre páginas del mismo grupo:
-  un `<Link>` o la paleta de comandos (`routes/navigation.ts`, sin filtro de permisos) llevarían a un módulo
-  bloqueado sin pasar por `SinAcceso`. Tipear la URL sí lo bloquea. **Verificar en navegador**.
+- `[PERMISOS-LAYOUT-NAV-SUAVE]` resuelto el 2026-10-19 (SCRUM-540): cada página con módulo chequea el
+  permiso antes de leer, así que una navegación del cliente (un `<Link>`, la paleta) muestra «No tenés
+  acceso» igual que tipear la URL, y los datos no viajan en la respuesta. Medido con `next start` contra un
+  Supabase local, al cargar y al navegar.
+- `[PERMISOS-PROVIDERS-GLOBALES]` (nuevo) Los providers del marco (`PlatformDataProvider`,
+  `FinanceDataProvider`) piden clientes, llamadas, conversaciones, Finanzas y cobros en toda pantalla, sin
+  mirar el módulo.
+- `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (nuevo) 73 Server Actions de lectura de un solo módulo devuelven
+  el dato directo y no chequean el módulo; se alcanzan llamándolas a mano.
 - `[PERMISOS-FOUNDER-AREA]` resuelto el 2026-10-05 (SCRUM-18): `/founder` vive en `app/(platform)/founder` y
   pasa por el mismo bloqueo que el resto; la action que lee su resumen exige Operaciones.
 - `[PERMISOS-SIN-ROL-NAV]` (nuevo) Un member sin rol pasa el gate de pantallas, pero la notch nav le
@@ -282,6 +337,9 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
 |---|---|
 | `apps/web/lib/supabase/__tests__/public-paths.test.ts` | Qué rutas pasan sin sesión |
 | `apps/web/lib/navigation/__tests__/module-for-path.test.ts` | Ruta → módulo; toda ruta de `(platform)` decidida |
+| `apps/web/lib/navigation/__tests__/lecturas-por-modulo.test.ts` | Toda página y layout que lee con el guardia del módulo de su ruta; toda action de lectura de un solo módulo con `rechazoPorModulo` (o en la deuda) |
+| `apps/web/lib/auth/__tests__/acceso-a-modulo.test.ts` | La regla y el guardia: founder, sin rol, con y sin módulo, falla de permisos que se relanza |
+| `apps/web/app/__tests__/paginas-cortan-antes-de-leer.test.ts`, `lecturas-rechazan-sin-modulo.test.ts` | Las páginas de SOP y el layout del Agente no leen sin el módulo; cada action chequeada rechaza sin leer |
 | `apps/web/constants/__tests__/permission-modules.test.ts`, `permisos-consolidados.test.ts` | Consolidación de claves viejas, nivel más alto |
 | `apps/web/lib/onboarding/__tests__/gate-routing.test.ts` | Combinaciones del redirect al gate |
 | `apps/web/lib/security/__tests__/*` | Cifrado AES-GCM y comparación en tiempo constante |

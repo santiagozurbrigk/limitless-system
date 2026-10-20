@@ -141,7 +141,8 @@ servidor, `client.ts` los `"use client"`; nunca importar un barrel con clientes 
 - `[NAV-2]` Renombrar `sidebar-modules.ts` a `platform-modules.ts` (cosmético: 3 imports y algunas menciones en comentarios).
 - `[NAV-3]` La etiqueta "Fase 1 · Beta" se perdió con el sidebar; decidir si vuelve.
 - `[NAV-PALETA-PERMISOS]` (nuevo) La paleta ⌘K ofrece todos los módulos aunque el rol o el add-on no los
-  incluya. Junto con `[PERMISOS-LAYOUT-NAV-SUAVE]` (ver arquitectura) puede abrir un módulo bloqueado.
+  incluya. Desde SCRUM-540 elegir uno bloqueado muestra «No tenés acceso» (cada página chequea el módulo,
+  ver arquitectura): ya no abre la pantalla, pero la ofrece.
 - `[NAV-ISLAS-1280]` Con 10 módulos las islas se superponen a 1280 px; medir antes de activar Operaciones
   y Producto juntos.
 - `[UI-EMOJIS]` (nuevo) 20 archivos de `components/` tienen emojis o símbolos (✓, ✗, ⚠) en JSX o strings de UI

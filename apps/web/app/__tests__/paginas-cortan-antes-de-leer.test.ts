@@ -20,6 +20,9 @@ const sim = vi.hoisted(() => ({
   lecturas: [] as string[],
 }));
 
+// Hoy nada de esta cadena importa `server-only`; con SCRUM-524 el layout del
+// Agente sí (la redirección por experiencia), y en Vitest ese paquete no existe.
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/get-current-permissions", () => ({
   getCurrentUserPermissions: async () => sim.permisos,
 }));

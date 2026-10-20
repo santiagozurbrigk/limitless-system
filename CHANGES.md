@@ -28,6 +28,37 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-19 — Las páginas chequean el módulo antes de leer (SCRUM-540)
+
+**Rama:** `fix/SCRUM-540-permisos-lecturas-por-modulo` (base `main` `4a542e5e`)
+**Commit(s):** `57d8e2b1`, `6a079eda`, `722d5aba`, `8647980b` (código y tests) y este (docs)
+**Módulo(s) afectado(s):** Plataforma, permisos: `lib/auth/acceso-a-modulo.ts` (`exigirModuloDeLaPagina`), las 67 `page.tsx` con módulo de `app/(platform)`, `agent/layout.tsx` (+ `agent-layout-cliente.tsx`), `clients/page.tsx` (+ `clients-page-cliente.tsx`), 49 Server Actions de lectura de Clientes, Ventas, Marketing, Tablero, Operaciones, Integraciones, Base de conocimiento, Equipo y Ajustes; tests nuevos `lib/navigation/__tests__/lecturas-por-modulo.test.ts` (+ `lecturas-de-app.ts`), `app/__tests__/paginas-cortan-antes-de-leer.test.ts`, `app/__tests__/lecturas-rechazan-sin-modulo.test.ts`.
+
+**Qué se hizo:** cierra `[PERMISOS-LAYOUT-NAV-SUAVE]`.
+- `exigirModuloDeLaPagina(moduleId)` devuelve `SinAcceso` o `null` con la regla de siempre (`rechazoPorModulo` → `puedeEntrarAlModulo`: founder pasa, sin rol no bloquea, una falla de permisos lanza). Va en la primera línea de cada página con módulo: `const sinAcceso = await exigirModuloDeLaPagina("<módulo>"); if (sinAcceso) return sinAcceso;`. Las 67 páginas lo tienen, con el módulo de su ruta en `module-for-path`.
+- `/agent` tenía un layout de cliente que monta `AgentDataProvider`, que pide las conversaciones al montarse: el layout pasó a ser de servidor con el guardia, y la parte de cliente vive en `agent-layout-cliente.tsx`. `/clients` era una página `"use client"`: ahora es de servidor con el guardia y la pantalla vive en `clients-page-cliente.tsx`.
+- `rechazoPorModulo("<módulo>")` al principio de las 49 Server Actions de lectura de un solo módulo que ya devolvían `MutationResult` (el rechazo entra sin cambiar la forma ni las pantallas). Con `getIntelligenceSnapshotAction` son 50.
+- Test de inventario: recorre `app/` con el parser de TypeScript y falla si una página con módulo, o un layout con módulo que lee, no arranca con el guardia del módulo de su ruta, o si una action de lectura de un solo módulo no arranca con `rechazoPorModulo` de ese módulo y no está en la lista de deuda (73 hoy, que sólo puede achicarse).
+- Inventario por ruta (páginas, layouts, lecturas de servidor, actions alcanzadas y su estado) en la evidencia de la tarea.
+
+**Por qué / finalidad:** el permiso sólo se aplicaba en el layout de `(platform)`, que decide qué se dibuja pero no frena la página: Next la ejecuta en paralelo y sus datos viajan en el HTML y en el payload RSC aunque en pantalla diga «No tenés acceso». En una navegación del cliente ese layout ni se vuelve a ejecutar y se veía la pantalla entera. Medido con `next start` contra un Supabase local con datos marcados (un SOP, un reporte ejecutivo, un cliente, una tarea, un gasto, una pieza de contenido y un documento), en las 68 rutas con módulo, al cargar, con `router.push` y con `push` + `refresh()`:
+- Miembro sin los 11 módulos de datos: en `main` las marcas viajaban en 43 de 204 respuestas (11 cargas con «No tenés acceso» en pantalla, 19 navegaciones del cliente que mostraban la pantalla entera y 13 `push` + `refresh`), y 136 de 204 ventanas leían tablas de la página. En la rama: 0 respuestas con marcas, «No tenés acceso» también al navegar, y sólo lee las tablas de las pantallas que su rol sí ve (`/settings`).
+- Miembro con todos los módulos (204 ventanas) y founder (30, en 10 rutas): 0 diferencias con `main` en estado, ruta final, «No tenés acceso», marcas y tablas de la página leídas, ventana por ventana.
+- Sin bucles: como mucho 5 pedidos `?_rsc=` en 4 s tras `push` + `refresh()`, igual que en `main`, y con la barra siempre dibujada.
+
+**Decisiones de diseño relevantes:**
+- Guardia por página, no por layout de segmento: un layout no frena la página (corren en paralelo) y no se vuelve a ejecutar al moverse dentro del segmento. Lo que corta las lecturas es que el chequeo corra antes que ellas en la misma función. Un layout de segmento lleva el guardia sólo si lee (importa algo más que navegación, banderas y guardias, o es de cliente): hoy, sólo el del Agente.
+- No usa `x-pathname` ni redirige: el módulo va escrito en la página (el test lo compara con la tabla), y dibuja lo mismo que el layout, sin riesgo de bucles. El layout de `(platform)` sigue igual.
+- Las actions que devuelven el dato directo no se tocaron: sumarles el rechazo cambia la forma que esperan 73 pantallas y componentes. Sus pantallas ya no se dibujan sin el módulo; quedan en `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]`.
+- La paleta ⌘K no se filtró para `full`: SCRUM-524 reescribe ese archivo. Elegir un módulo bloqueado desde la paleta ahora muestra «No tenés acceso» (`[NAV-PALETA-PERMISOS]` actualizado).
+- Con SCRUM-524 (sin mergear): merge de prueba en un clon descartable con 2 conflictos chicos (el comentario de `agent-layout-cliente.tsx` y `agent/layout.tsx`, donde va primero `exigirRutaDeLaExperiencia` y después el guardia) y una línea en su test `bloqueo-por-experiencia.test.ts`, que contaba lecturas de permisos de los layouts; con eso `tsc` en 0 y 283 archivos, 4.440 tests en verde.
+
+**Riesgos / deuda técnica pendiente:**
+- `[PERMISOS-PROVIDERS-GLOBALES]` (nuevo, P1): los providers del marco (`PlatformDataProvider`, `FinanceDataProvider` y el panel de reportes de la barra) piden clientes, llamadas, conversaciones, Finanzas, cobros y reportes ejecutivos en toda pantalla, sin mirar el módulo. Pasaba igual antes; no es la página ni su payload.
+- `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (nuevo, P2): 73 actions de lectura de un solo módulo sin chequeo, en la lista de deuda del test.
+- El test de inventario no ve lecturas con nombres que no empiezan con un verbo de lectura, actions que alcanzan pantallas de dos módulos o el marco, ni `import()` sin literal (documentado en `docs/arquitectura/auth-organizaciones-y-permisos.md`).
+- Tests: 269 archivos y 4.306 casos (`main`: 266 y 4.226), también con `TZ=UTC`; `tsc` en 0; lint sin avisos nuevos contra `4a542e5e`; `next build` sin «Dynamic server usage». 10 mutantes muertos por el control que les corresponde. Falta el paso 5 del bloque de permisos de `verificacion-manual.md` con cuentas reales (`[PERMISOS-VERIFICAR-SESION]`).
+
 ### 2026-10-13 — Marketing, contenido: errores esperables como valor (SCRUM-502)
 
 **Rama:** `fix/SCRUM-502-marketing-contenido-errores` (base `main` `0353ec05`)
