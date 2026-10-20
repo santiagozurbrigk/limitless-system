@@ -21,6 +21,22 @@ import type { createClient } from "@/lib/supabase/client";
 type ClienteDeRealtime = ReturnType<typeof createClient>;
 
 /**
+ * Un solo canal por organización, compartido. Medido con la sonda de la AR 2:
+ * el Panel se monta dos veces seguidas al cargar, y cortar un canal y abrir
+ * otro en el mismo instante dejaba al nuevo sin eventos. Así el canal se abre
+ * una vez, cada montaje suma un oyente, y se cierra unos segundos después de
+ * que se va el último (si vuelve otro antes, sigue el mismo canal).
+ */
+type Entrada = {
+  supabase: ClienteDeRealtime;
+  canal: ReturnType<ClienteDeRealtime["channel"]>;
+  oyentes: Set<() => void>;
+  cierre: ReturnType<typeof setTimeout> | null;
+};
+const canales = new Map<string, Entrada>();
+export const ESPERA_PARA_CERRAR_MS = 5000;
+
+/**
  * Se suscribe y devuelve cómo cortar, o `null` si quien mira no puede leer
  * conversaciones (no se abre ningún canal).
  */
@@ -31,19 +47,39 @@ export function suscribirPanelEnVivo(opciones: {
   alCambiar: () => void;
 }): (() => void) | null {
   if (!puedeLeerDelMarco(opciones.permisos, "conversaciones")) return null;
-  if (!opciones.organizationId) return null;
-  const supabase = opciones.cliente();
-  const filtro = `organization_id=eq.${opciones.organizationId}`;
-  // El evento trae la fila: no se usa. Sólo se pide el Panel de nuevo.
+  const organizationId = opciones.organizationId;
+  if (!organizationId) return null;
+  let entrada = canales.get(organizationId);
+  if (!entrada) {
+    const supabase = opciones.cliente();
+    const oyentes = new Set<() => void>();
+    // El evento trae la fila: no se usa. Sólo se avisa a cada Panel abierto.
+    const canal = supabase
+      .channel(`panel:conversations:${organizationId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversations", filter: `organization_id=eq.${organizationId}` },
+        () => {
+          for (const avisar of oyentes) avisar();
+        }
+      )
+      .subscribe();
+    entrada = { supabase, canal, oyentes, cierre: null };
+    canales.set(organizationId, entrada);
+  }
+  if (entrada.cierre) {
+    clearTimeout(entrada.cierre);
+    entrada.cierre = null;
+  }
+  const actual = entrada;
   const avisar = () => opciones.alCambiar();
-  // Un nombre propio por suscripción: si el efecto se vuelve a montar, quitar el
-  // canal viejo no puede dar de baja al nuevo (con el mismo nombre, el segundo
-  // `channel()` quedaba sin eventos).
-  const canal = supabase
-    .channel(`panel:conversations:${opciones.organizationId}:${Math.random().toString(36).slice(2)}`)
-    .on("postgres_changes", { event: "*", schema: "public", table: "conversations", filter: filtro }, avisar)
-    .subscribe();
+  actual.oyentes.add(avisar);
   return () => {
-    void supabase.removeChannel(canal);
+    actual.oyentes.delete(avisar);
+    if (actual.oyentes.size > 0) return;
+    actual.cierre = setTimeout(() => {
+      void actual.supabase.removeChannel(actual.canal);
+      canales.delete(organizationId);
+    }, ESPERA_PARA_CERRAR_MS);
   };
 }

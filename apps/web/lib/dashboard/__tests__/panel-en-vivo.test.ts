@@ -1,11 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyPermissions } from "@/constants/permission-modules";
-import { suscribirPanelEnVivo } from "@/lib/dashboard/panel-en-vivo";
+import { ESPERA_PARA_CERRAR_MS, suscribirPanelEnVivo } from "@/lib/dashboard/panel-en-vivo";
 
 /**
  * SCRUM-540 · AR pasada 2 (MENOR-1): el Panel vuelve a actualizarse en vivo,
  * pero sólo abre el canal de conversaciones si quien mira puede leerlas, y
- * ante un cambio vuelve a pedir el Panel al servidor sin usar la fila.
+ * ante un cambio vuelve a pedir el Panel al servidor sin usar la fila. El
+ * canal es uno por organización y se cierra después del último Panel.
+ * Cada test usa otra organización: el canal compartido vive en el módulo.
  */
 
 function clienteFalso() {
@@ -34,43 +36,54 @@ function clienteFalso() {
 
 const permisos = (modulos: Record<string, string>, extra: Record<string, unknown> = {}) =>
   ({ isFounder: false, hasRoleConfigured: true, modules: { ...emptyPermissions(), ...modulos }, ...extra }) as never;
+const founder = permisos({}, { isFounder: true });
+
+afterEach(() => vi.useRealTimers());
 
 describe("suscribirPanelEnVivo", () => {
   it("⭐ con sólo el Panel no abre ningún canal", () => {
     const { sim, cliente } = clienteFalso();
-    expect(suscribirPanelEnVivo({ permisos: permisos({ dashboard: "full" }), organizationId: "org", cliente, alCambiar: vi.fn() })).toBeNull();
+    expect(suscribirPanelEnVivo({ permisos: permisos({ dashboard: "full" }), organizationId: "org-a", cliente, alCambiar: vi.fn() })).toBeNull();
     expect(sim.canales).toEqual([]);
   });
 
   it("⭐ con Ventas (o el founder) escucha las conversaciones de su org y, ante un cambio, sólo pide el Panel de nuevo", () => {
-    for (const p of [permisos({ dashboard: "full", sales: "view" }), permisos({}, { isFounder: true })]) {
+    for (const [p, org] of [[permisos({ dashboard: "full", sales: "view" }), "org-b"], [founder, "org-c"]] as const) {
       const { sim, cliente } = clienteFalso();
       const alCambiar = vi.fn();
-      const cortar = suscribirPanelEnVivo({ permisos: p, organizationId: "org-1", cliente, alCambiar });
-      expect(sim.canales).toHaveLength(1);
-      expect(sim.canales[0]).toMatch(/^panel:conversations:org-1:/);
+      suscribirPanelEnVivo({ permisos: p, organizationId: org, cliente, alCambiar });
+      expect(sim.canales).toEqual([`panel:conversations:${org}`]);
       expect(sim.filtros).toEqual([
-        { event: "*", schema: "public", table: "conversations", filter: "organization_id=eq.org-1" },
+        { event: "*", schema: "public", table: "conversations", filter: `organization_id=eq.${org}` },
       ]);
       sim.handler!({ new: { lead_name: "MARCA" } });
       expect(alCambiar).toHaveBeenCalledTimes(1);
       expect(alCambiar).toHaveBeenCalledWith();
-      cortar!();
-      expect(sim.quitados).toBe(1);
     }
+  });
+
+  it("⭐ dos montajes seguidos comparten un canal; se cierra unos segundos después del último, y no si vuelve otro antes", () => {
+    vi.useFakeTimers();
+    const { sim, cliente } = clienteFalso();
+    const a = vi.fn();
+    const b = vi.fn();
+    const cortarA = suscribirPanelEnVivo({ permisos: founder, organizationId: "org-d", cliente, alCambiar: a })!;
+    cortarA();
+    const cortarB = suscribirPanelEnVivo({ permisos: founder, organizationId: "org-d", cliente, alCambiar: b })!;
+    vi.advanceTimersByTime(ESPERA_PARA_CERRAR_MS * 2);
+    expect(sim.canales).toHaveLength(1);
+    expect(sim.quitados).toBe(0);
+    sim.handler!({});
+    expect(a).not.toHaveBeenCalled();
+    expect(b).toHaveBeenCalledTimes(1);
+    cortarB();
+    vi.advanceTimersByTime(ESPERA_PARA_CERRAR_MS);
+    expect(sim.quitados).toBe(1);
   });
 
   it("sin organización no se suscribe", () => {
     const { sim, cliente } = clienteFalso();
-    expect(suscribirPanelEnVivo({ permisos: permisos({}, { isFounder: true }), organizationId: null, cliente, alCambiar: vi.fn() })).toBeNull();
+    expect(suscribirPanelEnVivo({ permisos: founder, organizationId: null, cliente, alCambiar: vi.fn() })).toBeNull();
     expect(sim.canales).toEqual([]);
-  });
-
-  it("cada suscripción tiene su propio canal, para que cortar una no deje sin eventos a la siguiente", () => {
-    const { sim, cliente } = clienteFalso();
-    const p = permisos({}, { isFounder: true });
-    suscribirPanelEnVivo({ permisos: p, organizationId: "org-1", cliente, alCambiar: vi.fn() })!();
-    suscribirPanelEnVivo({ permisos: p, organizationId: "org-1", cliente, alCambiar: vi.fn() });
-    expect(new Set(sim.canales).size).toBe(2);
   });
 });
