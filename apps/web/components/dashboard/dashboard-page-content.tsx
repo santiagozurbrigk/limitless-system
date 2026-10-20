@@ -7,10 +7,11 @@ import { SetupChecklist } from "@/components/onboarding/setup-checklist";
 import { DashboardOverview } from "./dashboard-overview";
 import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { ERROR_INESPERADO } from "@/lib/client/correr-accion";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { usePermisosDeModulo } from "@/providers/permissions-provider";
 import { suscribirPanelEnVivo } from "@/lib/dashboard/panel-en-vivo";
+import { puedeLeerDelMarco } from "@/lib/auth/lecturas-del-marco";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -42,16 +43,27 @@ export function DashboardPageContent({
   // abre el canal (`suscribirPanelEnVivo`).
   const router = useRouter();
   const permisos = usePermisosDeModulo();
+  // El efecto depende sólo de si puede ver conversaciones y de la org: si se
+  // volviera a montar por otra cosa (la identidad del router o de los
+  // permisos), cortar y volver a suscribirse en el mismo instante deja al canal
+  // nuevo sin eventos (medido con la sonda de la AR 2).
+  const routerRef = useRef(router);
+  const permisosRef = useRef(permisos);
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    routerRef.current = router;
+    permisosRef.current = permisos;
+  });
+  const puedeVerConversaciones = puedeLeerDelMarco(permisos, "conversaciones");
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !puedeVerConversaciones) return;
     const cortar = suscribirPanelEnVivo({
-      permisos,
+      permisos: permisosRef.current,
       organizationId,
       cliente: createClient,
-      alCambiar: () => router.refresh(),
+      alCambiar: () => routerRef.current.refresh(),
     });
     return cortar ?? undefined;
-  }, [permisos, organizationId, router]);
+  }, [puedeVerConversaciones, organizationId]);
 
   /*
    * El checklist va acá y no dentro de `DashboardOverview` porque ese
