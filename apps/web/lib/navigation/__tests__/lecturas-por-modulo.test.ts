@@ -331,7 +331,7 @@ describe("lo que Next ejecuta aparte de la página (AR 1 de SCRUM-540)", () => {
     expect(mal).toEqual([]);
   });
 
-  it("⭐ todo template, default, loading, error y not-found de una ruta con módulo cumple su regla", () => {
+  it("⭐ todo template, default, loading, error, not-found, route y archivo de metadata de una ruta con módulo cumple su regla", () => {
     const especiales = archivosEspeciales(APP_DIR);
     // El recorrido ve los que hay (los error.tsx de los segmentos).
     expect(especiales.some((e) => e.tipo === "error" && e.archivo.includes("workboard"))).toBe(true);
