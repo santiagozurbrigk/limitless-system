@@ -17,6 +17,11 @@ function fallaSiCorresponde(): void {
   if (sim.falla) throw sim.falla;
 }
 
+// SCRUM-540: la página arranca con el guardia del módulo; acá entra alguien con el módulo.
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  exigirModuloDeLaPagina: async () => null,
+}));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
 vi.mock("@/lib/auth/bootstrap", () => ({
   requireOrganizationId: vi.fn(async () => {

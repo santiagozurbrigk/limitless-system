@@ -10,6 +10,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sim = vi.hoisted(() => ({ tabla: null as unknown }));
 
+// SCRUM-540: la página arranca con el guardia del módulo; acá entra alguien con el módulo.
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  exigirModuloDeLaPagina: async () => null,
+}));
 vi.mock("@/app/ghl/actions", () => ({
   getGHLIntegrationStatusAction: async () => ({ connected: false, selectedCalendarIds: [] }),
 }));
@@ -29,7 +34,9 @@ import ClosingPage from "../page";
 
 /** La página envuelve el contenido en Suspense: se renderiza el hijo async. */
 async function contenido(): Promise<string> {
-  const pagina = ClosingPage() as { props: { children: { type: () => Promise<unknown> } } };
+  const pagina = (await ClosingPage()) as unknown as {
+    props: { children: { type: () => Promise<unknown> } };
+  };
   return renderToStaticMarkup((await pagina.props.children.type()) as never);
 }
 

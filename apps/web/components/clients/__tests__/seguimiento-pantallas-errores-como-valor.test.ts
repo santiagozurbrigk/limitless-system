@@ -25,6 +25,11 @@ function resto(nombres: string[]) {
   return Object.fromEntries(nombres.map((n) => [n, () => responder(n)]));
 }
 
+// SCRUM-540: la página arranca con el guardia del módulo; acá entra alguien con el módulo.
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  exigirModuloDeLaPagina: async () => null,
+}));
 vi.mock("server-only", () => ({}));
 vi.mock("@/app/clients/checkpoint-actions", () => ({
   getJourneyPageDataAction: () => responder("journeyPage"),

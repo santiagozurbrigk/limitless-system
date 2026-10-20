@@ -11,6 +11,25 @@ import { DashboardPageContent } from "@/components/dashboard/dashboard-page-cont
 import type { FrequentObjectionsResult } from "@/types/sales";
 import { redirect } from "next/navigation";
 import { paths } from "@/routes";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { leerDatosDelPanel } from "@/lib/dashboard/leer-datos-del-panel";
+import { calcularDatosDelPanel, type EntradasDelPanel } from "@/lib/dashboard/datos-del-panel";
+
+function entradasVacias(): EntradasDelPanel {
+  return {
+    clients: [],
+    closingCalls: [],
+    conversations: [],
+    fixedExpenses: [],
+    subscriptions: [],
+    teamCompensation: [],
+    paymentPlatforms: [],
+    payments: [],
+    metricasImportadas: null,
+    hoy: new Date().toISOString().slice(0, 10),
+    frequentObjections: [],
+  };
+}
 
 async function loadFrequentObjections(): Promise<FrequentObjectionsResult> {
   if (!isSupabaseConfigured()) {
@@ -25,6 +44,9 @@ async function loadFrequentObjections(): Promise<FrequentObjectionsResult> {
 }
 
 export default async function DashboardPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("dashboard");
+  if (sinAcceso) return sinAcceso;
+
   const holdingSession = await getHoldingSessionState();
   if (holdingSession.isHolding && !holdingSession.viewingBusiness) {
     redirect(paths.platform.holding);
@@ -37,9 +59,20 @@ export default async function DashboardPage() {
       isSupabaseConfigured() ? getCustomMetricsAction("dashboard") : Promise.resolve([]),
     ]);
 
+  // ⭐ Los totales se calculan acá, en el servidor (SCRUM-540): al navegador
+  // va sólo el resultado, no las filas de clientes, conversaciones, llamadas,
+  // gastos, sueldos ni cobros. Sin Supabase (modo demo) el Panel queda vacío,
+  // como antes.
+  const organizationId = isSupabaseConfigured() ? await requireOrganizationId() : null;
+  const { pagosSinLeer, ...datos } = organizationId
+    ? await leerDatosDelPanel(organizationId, frequentObjections.objections)
+    : { ...calcularDatosDelPanel(entradasVacias()), pagosSinLeer: false };
+
   return (
     <DashboardPageContent
-      frequentObjections={frequentObjections}
+      datos={datos}
+      organizationId={organizationId}
+      pagosSinLeer={pagosSinLeer}
       zernioAnalytics={zernioAnalytics}
       customMetrics={customMetrics}
     />

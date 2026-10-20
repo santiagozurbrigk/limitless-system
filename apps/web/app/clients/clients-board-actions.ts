@@ -38,6 +38,7 @@ import { loadLastOneOnOneByClient } from "@/lib/fathom/one-on-ones";
 import type { LastOneOnOne } from "@/lib/fathom/one-on-one-types";
 import type { Checkpoint, ClientJourneyStatus } from "@/types/checkpoints";
 import type { FieldDefinition } from "@/types/custom-fields";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 export type ClientsBoardData = {
   /** Etapa actual, progreso y próximo hito de cada cliente. */
@@ -76,6 +77,9 @@ export type ClientsBoardData = {
 };
 
 export async function getClientsBoardAction(): Promise<MutationResult<ClientsBoardData>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getClientsBoard]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

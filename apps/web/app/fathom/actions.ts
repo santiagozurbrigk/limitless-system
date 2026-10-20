@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  rechazoDeLecturaDelMarco,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { requireAuthContext } from "@/lib/auth/require-auth";
 import {
   integrationRateLimit,
@@ -140,7 +144,10 @@ export async function getFathomIntegrationStatusAction(): Promise<{
   }
 }
 
-export async function countPendingFathomCallsAction(): Promise<number> {
+export async function countPendingFathomCallsAction(): Promise<number | RechazoPorModulo> {
+  const rechazo = await rechazoDeLecturaDelMarco("llamadasPendientes");
+  if (rechazo) return rechazo;
+
   const organizationId = await requireOrganizationId();
   const admin = createAdminClient();
   const { count } = await admin

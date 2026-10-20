@@ -25,6 +25,7 @@ import { ManyChatSettings } from "@/components/integrations/settings/manychat-se
 import { PageHeader } from "@/components/shared/page-header";
 import type { IntegrationProvider } from "@/constants/integrations";
 import { paths } from "@/routes";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Integraciones.
@@ -35,6 +36,9 @@ import { paths } from "@/routes";
  * abra: no hay más paneles apilados que se cargan siempre y se leen nunca.
  */
 export default async function IntegrationsPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("integrations");
+  if (sinAcceso) return sinAcceso;
+
   const [
     overview,
     paymentIntegrations,

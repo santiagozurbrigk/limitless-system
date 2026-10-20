@@ -53,6 +53,7 @@ import { paths } from "@/routes/paths";
 import type { CustomRole, PermissionLevel, TeamInvitation, TeamMember } from "@/types/team";
 import type { UserRole } from "@ai-coo/types";
 import type { z } from "zod";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 function revalidateTeam() {
   revalidatePath(paths.platform.team.root);
@@ -289,6 +290,9 @@ export type TeamPageContext = {
 export async function getTeamPageContextAction(): Promise<
   MutationResult<TeamPageContext>
 > {
+  const rechazo = await rechazoPorModulo("team");
+  if (rechazo) return rechazo;
+
   if (!isSupabaseConfigured()) {
     return {
       success: true,

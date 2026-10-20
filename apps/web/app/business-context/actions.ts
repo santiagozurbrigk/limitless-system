@@ -40,6 +40,7 @@ import {
 import type { ContextDocument, FathomKnowledgeCall } from "@/types/business-context";
 import { paths } from "@/routes";
 import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 const ROW_COLUMNS =
   "id, organization_id, title, category, source, content_text, content_markdown, storage_path, mime_type, status, index_error, external_source_id, uploaded_by, created_at, updated_at";
@@ -584,6 +585,9 @@ export async function getDocumentByIdAction(
 export async function getDocumentOriginalFileUrlAction(
   input: unknown
 ): Promise<MutationResult<{ url: string; mimeType: string | null }>> {
+  const rechazo = await rechazoPorModulo("knowledge_base");
+  if (rechazo) return rechazo;
+
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: "Identificador inválido" };

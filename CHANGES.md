@@ -28,6 +28,82 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-10-20 — Las páginas y el marco de la plataforma chequean el módulo antes de leer, con mínimo privilegio (SCRUM-540)
+
+**Rama:** `fix/SCRUM-540-permisos-lecturas-por-modulo` (base `main` `4a542e5e`)
+**Commit(s):** páginas: `57d8e2b1`, `6a079eda`, `722d5aba`, `8647980b`, `96c6ac91`; marco: `660f44c5`, `c5e2dc89`, `1edca076`, `33d58374`, `15cdffb8`; AR pasada 1: `09a6fe09`, `7b26452e`, `6818c645`, `47bc4ef0`, `7e6edbe9`, `ec600caf`; AR pasada 2: `13377920`, `7ffdfba2`, `a32a2d84`, `1084b621`, `a936a241`, `e3735fad`, `bce52c26`, `3e18396f`, `3de95fd5`, `06efbe47`; AR pasada 3: `ed144603`, `3f287c58`; QA final: `8ea8982a`, `d01aa74f` y este (docs)
+**Módulo(s) afectado(s):** Plataforma, permisos.
+- Páginas: `lib/auth/acceso-a-modulo.ts` (`exigirModuloDeLaPagina`), las 68 `page.tsx` con módulo de `app/(platform)` (`/clients` pasó a página de servidor con `clients-page-cliente.tsx`), `agent/layout.tsx` (+ `agent-layout-cliente.tsx`) y 49 Server Actions de lectura.
+- Marco: `lib/auth/regla-de-modulo.ts`, `lib/auth/lecturas-del-marco.ts`, `lib/marco/lecturas-de-servidor.ts`, `lib/finance/leer-configuracion.ts`, `lib/finance/resumen-financiero.ts` (nuevos); `rechazoDeLecturaDelMarco` en `acceso-a-modulo.ts`; `permisosEstables` y `usePermisosDeModulo` en `providers/permissions-provider.tsx`; el orden de los providers en el layout de `(platform)`; `PlatformDataProvider`, `FinanceDataProvider`, `MarketingDataProvider`, `ReportsPanel`, `MobileNav`; 10 actions del marco y `getResumenFinancieroAction` (nueva).
+- Panel: `lib/dashboard/datos-del-panel.ts`, `leer-datos-del-panel.ts` y `panel-en-vivo.ts` (nuevos), `dashboard/page.tsx`, `DashboardPageContent`, `DashboardOverview`, `SalesFunnelStrip`.
+- Fechas (AR 2): `deriveFinanceSummary`, `enrichTeamCompensationWithCommissions` y `deriveDashboardData` reciben el "hoy" (`deriveMonthlySeries` ya lo recibía); `getResumenFinancieroAction` lee la zona de la org.
+- Tests nuevos: `lecturas-por-modulo.test.ts` (+ `lecturas-de-app.ts`), `paginas-cortan-antes-de-leer.test.ts`, `lecturas-rechazan-sin-modulo.test.ts`, `lecturas-del-marco.test.ts`, `lecturas-del-marco-de-los-providers.test.ts`, `campos-del-marco-por-modulo.test.ts`, `datos-del-panel.test.ts`, `permisos-estables.test.ts`, `layout-plataforma-orden-de-providers.test.ts`.
+
+**Qué se hizo:** cierra `[PERMISOS-LAYOUT-NAV-SUAVE]` y `[PERMISOS-PROVIDERS-GLOBALES]`.
+- **Páginas.** `exigirModuloDeLaPagina(moduleId)` devuelve `SinAcceso` o `null` con la regla de siempre (founder pasa, sin rol no bloquea, una falla de permisos lanza) y va en la primera línea de cada página con módulo. `/agent` tiene un layout de servidor con el guardia, porque su provider de cliente pide las conversaciones al montarse.
+- **Server Actions de una pantalla.** `rechazoPorModulo("<módulo>")` al principio de las 49 lecturas de un solo módulo que devolvían `MutationResult` (50 con la de Inteligencia). Las 73 que devuelven el dato directo quedan para SCRUM-541.
+- **Marco de la plataforma, con mínimo privilegio** (AR pasada 1). Cada lectura se abre sólo con los módulos cuyas pantallas *muestran* ese dato:
+  - las filas de clientes, con Clientes, Ventas y Finanzas;
+  - las llamadas de cierre, con Ventas y Finanzas;
+  - las conversaciones y su canal en vivo, con Ventas;
+  - el detalle de Finanzas (gastos fijos, suscripciones, sueldos y comisiones por persona, cada cobro y lo cobrado por plataforma), sólo con Finanzas;
+  - las plataformas de cobro sin lo cobrado ni la fecha del último cobro, con Finanzas, Ventas y Ajustes; sin Finanzas no se leen los cobros;
+  - los totales que muestra Ventas, calculados en el servidor y recortados a lo que dibuja su pantalla: facturación, cobrado, gastos y margen, y por mes facturación y cobrado (`getResumenFinancieroAction`, `resumenParaVentas`);
+  - las métricas importadas, con Finanzas y Ventas; el estado de Instagram, con Marketing e Integraciones; los reportes ejecutivos, con Operaciones; el contador de llamadas pendientes, con Clientes.
+  - El servidor chequea con `rechazoDeLecturaDelMarco("<lectura>")` y los providers no piden sin el módulo (`leerDelMarco`), con permisos de identidad estable para no volver a pedir en cada `router.refresh()`.
+- **El Panel, calculado en el servidor.** La página del Panel lee y calcula en el servidor (`leerDatosDelPanel`, con las mismas funciones que usaba el navegador) y manda sólo `DashboardData` y las etapas del embudo. Quien sólo tiene el Panel no recibe filas de nadie.
+  - **"Este mes" es el de la organización** (AR pasada 2, BLOQUEANTE-1). En el servidor, el Panel y el resumen de Ventas calculan con `diaLocal(hoy)`, con `hoy` en la zona de la org (regla de SCRUM-493). Eso decide el período de la facturación (MRR), los clientes nuevos del mes, las comisiones del mes y la serie de 6 meses. Con el reloj del proceso (UTC en Vercel), en las últimas horas de cada mes una org de América veía el mes siguiente: MRR en 0, sin clientes nuevos y gastos sin comisiones. En el navegador (Finanzas) sigue el reloj de quien mira, como en `main`.
+  - **Sigue en vivo** (AR pasada 2, MENOR-1). Si quien mira puede leer conversaciones (founder, sin rol o con Ventas), el Panel escucha el canal de `conversations` de su org y, ante un cambio, hace `router.refresh()` sin usar la fila del evento (`suscribirPanelEnVivo`). Hay un solo canal por org y se abre con la sesión ya leída. Avisa como mucho una vez cada 2,5 s (AR pasada 3): el primer cambio de una ráfaga refresca enseguida y los demás se juntan en un refresco al final, así el último cambio siempre llega a la pantalla. Antes, 31 cambios seguidos pedían 35 veces el Panel entero al servidor; ahora lo piden 2 veces en 20 s (medido 2 de 2 corridas, y el cambio suelto sigue llegando sin recargar). Con sólo el Panel no se abre el canal: el Panel se actualiza al recargar o navegar (en `main` se actualizaba porque le llegaban las conversaciones). Queda en `[PANEL-EN-VIVO-SOLO-PANEL]` (nuevo), con dos formas sin datos: Broadcast por org o refresco con la pestaña visible.
+- **Test de inventario** (`lecturas-por-modulo`). Además de lo anterior (guardia en páginas y layouts que leen, actions de un módulo, lecturas del marco y su par en el cliente), ahora:
+  - ve `import * as` de las actions en el cliente del marco;
+  - exige que el canal en vivo corte con la lectura de la tabla que escucha;
+  - prohíbe `generateMetadata`, `generateViewport` y código que corra al importar en páginas y layouts con módulo;
+  - trata `template` y `default` como layouts;
+  - exige que `loading`, `error` y `not-found` no alcancen ninguna lectura;
+  - no acepta `route` ni archivos de metadata con código (`opengraph-image`, `twitter-image`, `icon`, `apple-icon`, `sitemap`, `robots`, `manifest`) en una ruta con módulo (AR 2);
+  - sigue los `import("...")` con literal de las actions del marco (AR 2);
+  - exige el chequeo de la lectura también en los canales de tablas del marco que abre una página con módulo (el del Panel).
+
+**Por qué / finalidad:** el permiso sólo se aplicaba en el layout de `(platform)`, que decide qué se dibuja pero no frena la página. Los datos viajaban en el HTML y el payload RSC aunque dijera «No tenés acceso», y en una navegación del cliente se veía la pantalla entera. Además el marco mandaba clientes, gastos, sueldos, cobros, conversaciones y reportes a cualquier miembro en cualquier pantalla.
+
+La AR pasada 1 mostró que la primera versión del marco abría de más:
+- con Ajustes viajaban lo cobrado por plataforma y su fecha;
+- con Ventas o el Panel viajaban los sueldos por persona y cada gasto.
+
+Por decisión de Fernando (mínimo privilegio), cada módulo recibe sólo lo que sus pantallas muestran.
+
+Medido con la sonda de la AR pasada 2 (`ar-p2/scripts/sonda-ar.mjs`, copiada a la evidencia del dev en `ar2-dev/`). Usé builds de producción de la rama y de `main` contra un Supabase local con la siembra de la AR: datos marcados, la org en `America/Tegucigalpa` y `conversations` en la publicación de Realtime. Ocho cuentas, 217 ventanas cada una: 72 rutas al cargar, con `router.push` y con `push` + `refresh()`, más el marco.
+- **Sin módulos:** 0 ventanas con marcas (en `main`, 75) y 0 con el canal en vivo abierto (en `main`, 73). Pidió 76 actions (en `main`, 955).
+- **Sólo Ajustes:** sólo el nombre de la plataforma de cobro (que muestra Ajustes).
+- **Sólo el Panel:** 0 marcas (en `main`, 79 ventanas con todas las marcas) y ningún canal en vivo.
+- **Sólo Ventas:** clientes, llamadas, conversaciones y el nombre de la plataforma; el monto de un cobro sólo en `/sales/cobros`, que lo muestra. Ningún sueldo, gasto ni suscripción.
+- **Sólo Finanzas:** filas de Finanzas, clientes y llamadas; ni conversaciones ni canal en vivo.
+- **Todos los módulos, founder y sin rol:** la misma cantidad de actions que en `main` (1039, 1046 y 1037) y la misma unión de marcas. Las pocas diferencias ventana por ventana son marcas del payload RSC que caen en la ventana vecina, en las dos direcciones.
+- **Sin bucles:** 0 pedidos `?_rsc=` en 5 s de reposo en todas las cuentas y los dos builds.
+- **Pantallas con totales** (`/dashboard`, `/sales/metrics`, `/sales/closing`, `/sales/cobros`, `/finance`, `/finance/expenses`, `/settings`) para siete cuentas: 49 de 49 iguales a `main` (`ar2-dev/pantallas/comparacion.txt`).
+- **En el cambio de mes:** tests con el proceso en `TZ=UTC` y el reloj en 2026-11-01T03:00Z para una org en Honduras dan octubre en el Panel y en el resumen de Ventas, como el navegador en `main`.
+- **Panel en vivo** (medición de la AR): founder, cambió sin recargar en 2 de 2 corridas, como en `main`; sólo el Panel, no cambia hasta recargar (en `main` sí, porque recibía las conversaciones).
+
+**Decisiones de diseño relevantes:**
+- Guardia por página, no por layout de segmento: un layout no frena la página y no se vuelve a ejecutar al moverse dentro del segmento. No usa `x-pathname` ni redirige.
+- Totales en el servidor en vez de filas: la cuenta es la misma en el navegador (Finanzas), en el resumen de Ventas y en el Panel (`lib/finance/resumen-financiero.ts`, puras). Un test compara el Panel nuevo con el cálculo de antes.
+- Para quien ve el Panel con Ventas o como founder, nada cambia: mismos totales, el mismo mes y en vivo. Con sólo el Panel deja de actualizarse en vivo, porque eso le mandaba las conversaciones. En modo demo sigue vacío, como antes.
+- Con SCRUM-524 (sin mergear): el merge de prueba tiene los mismos 4 conflictos chicos de código (los dos archivos del Agente, el layout de `(platform)`, donde se toma el de 524, y los imports de `mobile-nav.tsx`) más un cambio de 6 líneas en su `bloqueo-por-experiencia.test.ts`, que sin él falla («organización full»: el layout del Agente lee los permisos una vez). Con eso, `tsc` en 0 y 292 archivos y 4.523 tests en verde, también con `TZ=UTC` (QA midió 4.520 sobre `3f287c58`; los 3 de más son los casos nuevos del inventario).
+- QA final (4 MENORES, arreglados en esta rama):
+  - El inventario no veía una action de lectura nueva que todavía no importa ninguna pantalla. Ahora toda lectura sin llamador tiene que arrancar con `rechazoPorModulo` o `rechazoDeLecturaDelMarco`, con el módulo de su archivo si las otras lecturas del archivo son de uno solo; las 66 que hay hoy sin chequeo quedan en `LECTURAS_SIN_LLAMADOR_CONOCIDAS` (deuda de SCRUM-541, sólo se achica).
+  - `historias-jira.csv` y `FUNCIONAL.md` (F-PLA-08) seguían con `[PERMISOS-PROVIDERS-GLOBALES]` y `PERMISOS-LAYOUT-NAV-SUAVE` abiertas. Regenerados, y `historias_a_jira.py --check` ahora falla si el CSV no es el que generaría o si `FUNCIONAL.md` cita una tarea que ya no está en `PENDIENTES.md`.
+  - Los dos tests lentos: el inventario usa un solo grafo de imports y recuerda los canales de cada archivo (el caso de los canales bajó de 1,8 a 2,6 s en la suite a 0,13 a 0,18 s), y el de las lecturas que rechazan precarga los archivos de actions en paralelo en un `beforeAll` con timeout explícito de 60 s (el archivo entero bajó de 5,1 a 7,7 s a 1,6 a 1,9 s, y cada caso a milisegundos).
+  - El número del merge con SCRUM-524, corregido arriba.
+
+**Riesgos / deuda técnica pendiente:**
+- `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (SCRUM-541): quedan sin chequeo 73 actions de lectura de un solo módulo, más 11 que usan pantallas de varios módulos o una ruta libre, y 66 que hoy no importa ninguna pantalla.
+- El inventario no ve una lectura con un nombre que no empiece con un verbo de lectura, ni una action del marco importada a través de un archivo que la reexporta, ni si un provider le pasa a `leerDelMarco` los permisos reales (lo cubren los tests de cada provider y el del orden de los providers), ni, en una lectura sin llamador de un archivo de varios módulos, si chequea el módulo correcto (se ve en cuanto una pantalla la importa).
+- Verificación:
+  - Tests: 278 archivos y 4.389 casos (`main`: 266 y 4.226), también con `TZ=UTC`; `tsc` en 0; lint sin avisos nuevos contra `4a542e5e`; `next build` sin «Dynamic server usage».
+  - Mutantes: 40 de 40 muertos con la suite completa (los de las AR, X1 a X4 e Y4, incluidos), y 7 de 7 de la AR pasada 3 (Q1 a Q4 sobre la agrupación de avisos, más L1, L4 y L5). De los arreglos de QA, 6 de 6 muertos, cada uno por el test nuevo que lo tiene que ver (U1, el ataque A3 de QA; U2, módulo equivocado; U4, la lista sin limpiar; R1 y R2, lecturas antes del chequeo con la precarga; L1, canales con la memoria por archivo), y un control (U3, lectura nueva con su chequeo) que queda verde.
+  - Ataques de las AR: A1 a A5, A8 y A9, y B1 a B6, en rojo; A6 es el límite documentado.
+  - Falta el paso 5 del bloque de permisos de `verificacion-manual.md` con cuentas reales (`[PERMISOS-VERIFICAR-SESION]`).
+
 ### 2026-10-13 — Marketing, contenido: errores esperables como valor (SCRUM-502)
 
 **Rama:** `fix/SCRUM-502-marketing-contenido-errores` (base `main` `0353ec05`)

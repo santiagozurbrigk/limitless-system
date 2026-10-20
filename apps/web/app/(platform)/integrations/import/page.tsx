@@ -5,8 +5,12 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@ai-coo/ui";
 import { ArrowLeft } from "lucide-react";
 import { paths } from "@/routes";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function ImportDataPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("integrations");
+  if (sinAcceso) return sinAcceso;
+
   const ghlStatus = await getGHLIntegrationStatusAction();
 
   return (

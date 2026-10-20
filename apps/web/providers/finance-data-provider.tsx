@@ -18,6 +18,7 @@ import {
   deletePaymentPlatformAction,
   deleteSubscriptionAction,
   deleteTeamCompensationAction,
+  getResumenFinancieroAction,
   loadFinanceConfigAction,
   updateFixedExpenseAction,
   updatePaymentPlatformAction,
@@ -28,16 +29,28 @@ import { listOrganizationPaymentsAction } from "@/app/sales/payment-actions";
 import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
 import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 import { getSalesMetricsSnapshotsAction } from "@/app/sales/metrics-actions";
-import { leerConMotivo } from "@/lib/client/correr-accion";
+import { ERROR_INESPERADO, leerConMotivo } from "@/lib/client/correr-accion";
 import {
   mockFinanceSummary,
   mockMonthlySeries,
 } from "@/mocks/finance";
 import { computeExpensesSummary } from "@/lib/metrics/compute-expenses-summary";
+import {
+  GASTOS_EN_CERO,
+  resumenConMetricasImportadas,
+  resumenEnVivo,
+  serieConMetricasImportadas,
+  type ResumenFinanciero,
+} from "@/lib/finance/resumen-financiero";
 import { enrichTeamCompensationWithCommissions } from "@/lib/metrics/enrich-team-compensation";
-import { deriveFinanceSummary } from "@/lib/metrics/derive-finance-summary";
 import { deriveMonthlySeries } from "@/lib/metrics/derive-monthly-series";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { usePermisosDeModulo } from "@/providers/permissions-provider";
+import { leerDelMarco, puedeLeerDelMarco } from "@/lib/auth/lecturas-del-marco";
+import type { PermisosDeModulo } from "@/lib/auth/regla-de-modulo";
+import type { FinanceConfigPayload } from "@/app/finance/actions";
+import type { MutationResult } from "@/lib/server/action-result";
+import type { MetricsSnapshot } from "@/app/sales/metrics-actions";
 import { usePlatformData } from "@/providers/platform-data-provider";
 import type {
   ExpensesSummary,
@@ -109,10 +122,69 @@ type FinanceDataContextValue = {
 
 const FinanceDataContext = createContext<FinanceDataContextValue | null>(null);
 
+/**
+ * ⭐ Las lecturas de este provider, cada una con su permiso (SCRUM-540).
+ *
+ * Sin alguno de los módulos que muestran cada dato no se piden
+ * (`leerDelMarco`): la configuración queda en `null` (el provider sigue con las
+ * listas vacías) y los cobros, el resumen y las métricas importadas, vacíos y
+ * sin error.
+ *
+ * Mínimo privilegio (AR 1 de SCRUM-540): con Finanzas llegan las filas
+ * (gastos, sueldos, cobros) y los totales se calculan acá, como siempre; sin
+ * Finanzas, la configuración trae sólo las plataformas sin lo cobrado, y los
+ * totales que muestra Ventas llegan ya calculados (`resumen`), con la misma
+ * cuenta (`lib/finance/resumen-financiero.ts`).
+ */
+export const lecturasDeFinanzas = {
+  configuracion: (permisos: PermisosDeModulo) =>
+    leerDelMarco<FinanceConfigPayload | null>(
+      permisos,
+      "plataformasDePago",
+      loadFinanceConfigAction,
+      null
+    ),
+  cobros: (permisos: PermisosDeModulo) =>
+    leerDelMarco<MutationResult<ClientPayment[]>>(
+      permisos,
+      "cobros",
+      listOrganizationPaymentsAction,
+      { success: true, data: [] }
+    ),
+  resumen: (permisos: PermisosDeModulo) =>
+    leerDelMarco<MutationResult<ResumenFinanciero & { pagosSinLeer: boolean }> | null>(
+      permisos,
+      "resumenFinanciero",
+      getResumenFinancieroAction,
+      null
+    ),
+  metricasImportadas: (permisos: PermisosDeModulo) =>
+    leerDelMarco<MutationResult<MetricsSnapshot[]>>(
+      permisos,
+      "metricasImportadas",
+      getSalesMetricsSnapshotsAction,
+      { success: true, data: [] }
+    ),
+};
+
+/**
+ * Si el provider trabaja con las filas de Finanzas (y calcula los totales acá)
+ * o con el resumen que manda el servidor. Sólo con Finanzas: con Ventas, el
+ * detalle no llega y los totales tienen que venir del resumen (AR 2 de
+ * SCRUM-540, Y4).
+ */
+export function usaElDetalleDeFinanzas(permisos: PermisosDeModulo): boolean {
+  return puedeLeerDelMarco(permisos, "detalleDeFinanzas");
+}
+
 export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
+  const permisos = usePermisosDeModulo();
+  const conDetalle = usaElDetalleDeFinanzas(permisos);
   const { clients, closingCalls, clientsLoading, closingCallsLoading } =
     usePlatformData();
+  // Sin Finanzas: los totales calculados en el servidor (SCRUM-540).
+  const [resumenDelServidor, setResumenDelServidor] = useState<ResumenFinanciero | null>(null);
 
   const [financeConfigLoading, setFinanceConfigLoading] = useState(useSupabase);
   const [paymentPlatforms, setPaymentPlatforms] = useState<PaymentPlatformConfig[]>(
@@ -132,8 +204,21 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
   const refreshClientPayments = useCallback(async () => {
     if (!useSupabase) return;
+    if (!usaElDetalleDeFinanzas(permisos)) {
+      // Sin Finanzas no llegan los cobros: se vuelve a pedir el resumen, que
+      // los incluye ya sumados.
+      const resultado = await lecturasDeFinanzas.resumen(permisos);
+      if (!resultado) return;
+      if (resultado.success) {
+        setResumenDelServidor(resultado.data);
+        setClientPaymentsError(resultado.data.pagosSinLeer ? ERROR_INESPERADO : null);
+      } else {
+        setClientPaymentsError(resultado.error);
+      }
+      return;
+    }
     const lectura = await leerConMotivo(
-      listOrganizationPaymentsAction,
+      () => lecturasDeFinanzas.cobros(permisos),
       "[FinanceDataProvider] pagos"
     );
     if (lectura.ok) {
@@ -142,7 +227,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     } else {
       setClientPaymentsError(lectura.motivo);
     }
-  }, []);
+  }, [permisos]);
 
   const [totalesDePlataformasSinLeer, setTotalesDePlataformasSinLeer] = useState(false);
 
@@ -150,7 +235,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     if (!useSupabase) return;
     setFinanceConfigLoading(true);
     try {
-      const config = await loadFinanceConfigAction();
+      const config = await lecturasDeFinanzas.configuracion(permisos);
+      if (!config) return;
       setPaymentPlatforms(config.paymentPlatforms);
       setFixedExpenses(config.fixedExpenses);
       setSubscriptions(config.subscriptions);
@@ -161,23 +247,25 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setFinanceConfigLoading(false);
     }
-  }, []);
+  }, [permisos]);
 
   useEffect(() => {
     if (useSupabase) {
       void refreshFinanceConfig();
       void refreshClientPayments();
     } else {
-      void loadFinanceConfigAction().then((config) => {
+      void lecturasDeFinanzas.configuracion(permisos).then((config) => {
+        if (!config) return;
         setPaymentPlatforms(config.paymentPlatforms);
         setFixedExpenses(config.fixedExpenses);
         setSubscriptions(config.subscriptions);
         setTeamCompensation(config.teamCompensation);
       });
     }
-    // Las dos funciones son estables (`useCallback` sin dependencias): sumar
-    // `refreshClientPayments` no cambia cuándo corre el efecto.
-  }, [refreshFinanceConfig, refreshClientPayments]);
+    // Las dos funciones sólo cambian si cambian los permisos (que vienen del
+    // servidor, con la pantalla): sumar `refreshClientPayments` no cambia
+    // cuándo corre el efecto.
+  }, [refreshFinanceConfig, refreshClientPayments, permisos]);
 
   useEffect(() => {
     if (useSupabase && !clientsLoading) {
@@ -191,7 +279,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     // El baseline es opcional y no tiene pantalla propia: si no se puede leer,
     // queda registrado en la consola como antes (SCRUM-504: ahora el motivo
     // vuelve como valor).
-    getSalesMetricsSnapshotsAction()
+    lecturasDeFinanzas
+      .metricasImportadas(permisos)
       .then((resultado) => {
         if (!resultado.success) {
           console.error("[FinanceDataProvider] baseline load", resultado.error);
@@ -202,7 +291,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch((e) => console.error("[FinanceDataProvider] baseline load", e));
-  }, []);
+  }, [permisos]);
 
   const runFinanceMutation = useCallback(
     async (result: { success: boolean; error?: string }) => {
@@ -383,57 +472,33 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     [teamCompensation, closingCalls]
   );
 
-  const expensesSummary = useMemo(
-    () =>
-      computeExpensesSummary(
-        fixedExpenses,
-        subscriptions,
-        enrichedTeamCompensation
-      ),
-    [fixedExpenses, subscriptions, enrichedTeamCompensation]
-  );
+  const expensesSummary = useMemo(() => {
+    if (!conDetalle) return resumenDelServidor?.expensesSummary ?? GASTOS_EN_CERO;
+    return computeExpensesSummary(fixedExpenses, subscriptions, enrichedTeamCompensation);
+  }, [conDetalle, resumenDelServidor, fixedExpenses, subscriptions, enrichedTeamCompensation]);
 
   const dataReady =
     !useSupabase || (!clientsLoading && !closingCallsLoading && !financeConfigLoading);
 
   const financeSummary: FinanceSummary = useMemo(() => {
     if (!useSupabase) return mockFinanceSummary;
-    const sourceClients = dataReady ? clients : [];
-    const sourceCalls = dataReady ? closingCalls : [];
-    const live = deriveFinanceSummary(
-      sourceClients,
-      sourceCalls,
-      expensesSummary,
-      paymentPlatforms,
-      undefined,
-      dataReady ? clientPayments : []
-    );
-
-    // Si hay datos en vivo (clientes con facturación real), usarlos tal cual
-    if (live.facturacion > 0 || !salesBaselineMetrics) return live;
-
-    // Fallback a baseline: el usuario aún no tiene datos integrados,
-    // pero sí tiene métricas históricas importadas manualmente
-    const bFact = salesBaselineMetrics["facturacion"] ?? 0;
-    // Preferir gastos configurados en el módulo (live.gastosTotales) sobre el snapshot,
-    // ya que el snapshot de ventas raramente incluye un campo "gastos".
-    // El snapshot es la fuente de ingresos históricos; los gastos vienen de la config del módulo.
-    const bGastosSnapshot = salesBaselineMetrics["gastos"] ?? 0;
-    const effectiveGastos = live.gastosTotales > 0 ? live.gastosTotales : bGastosSnapshot;
-    const bCash =
-      salesBaselineMetrics["cash_collected"] != null
-        ? salesBaselineMetrics["cash_collected"]
-        : Math.max(0, bFact - effectiveGastos);
-    const bMargen = bFact > 0 ? ((bFact - effectiveGastos) / bFact) * 100 : 0;
-
-    return {
-      ...live,
-      facturacion: bFact,
-      cashCollected: bCash,
-      gastosTotales: effectiveGastos,
-      margenPercent: bMargen,
-    };
+    const live: FinanceSummary =
+      conDetalle || !resumenDelServidor
+        ? resumenEnVivo(
+            {
+              clients: conDetalle && dataReady ? clients : [],
+              closingCalls: conDetalle && dataReady ? closingCalls : [],
+              paymentPlatforms,
+              payments: conDetalle && dataReady ? clientPayments : [],
+            },
+            expensesSummary
+          )
+        : resumenDelServidor.financeSummary;
+    // Respaldo con las métricas importadas cuando no hay facturación en vivo.
+    return resumenConMetricasImportadas(live, salesBaselineMetrics);
   }, [
+    conDetalle,
+    resumenDelServidor,
     clients,
     closingCalls,
     expensesSummary,
@@ -445,41 +510,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
   const monthlySeries = useMemo(() => {
     if (!useSupabase) return mockMonthlySeries;
-    const sourceClients = dataReady ? clients : [];
-    const series = deriveMonthlySeries(
-      sourceClients,
-      expensesSummary,
-      dataReady ? clientPayments : []
-    );
-
-    // Fallback baseline: si la serie completa está en cero y hay métricas importadas,
-    // pintar el mes más reciente con los valores del snapshot para que los gráficos
-    // no muestren una línea plana en cero.
-    if (salesBaselineMetrics) {
-      const hasLiveData = series.some((m) => m.facturacion > 0);
-      if (!hasLiveData) {
-        const bFact = salesBaselineMetrics["facturacion"] ?? 0;
-        if (bFact > 0) {
-          const bGastos = expensesSummary.totalMonthly; // usar gastos configurados actuales
-          const bCash = Math.max(0, bFact - bGastos);
-          const bMargin = bFact > 0 ? (bCash / bFact) * 100 : 0;
-          const patched = [...series];
-          const last = patched[patched.length - 1];
-          if (last) {
-            patched[patched.length - 1] = {
-              ...last,
-              facturacion: bFact,
-              cashCollected: bCash,
-              marginPercent: bMargin,
-            };
-          }
-          return patched;
-        }
-      }
-    }
-
-    return series;
-  }, [clients, clientPayments, expensesSummary, dataReady, salesBaselineMetrics]);
+    const series =
+      conDetalle || !resumenDelServidor
+        ? deriveMonthlySeries(
+            conDetalle && dataReady ? clients : [],
+            expensesSummary,
+            conDetalle && dataReady ? clientPayments : []
+          )
+        : resumenDelServidor.monthlySeries;
+    return serieConMetricasImportadas(series, expensesSummary, salesBaselineMetrics);
+  }, [conDetalle, resumenDelServidor, clients, clientPayments, expensesSummary, dataReady, salesBaselineMetrics]);
 
   const value = useMemo(
     () => ({

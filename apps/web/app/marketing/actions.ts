@@ -37,6 +37,10 @@ import { paths } from "@/routes";
 import { getRetentionAtCTA } from "@/lib/youtube/analytics";
 import { getUTMLinksAction } from "./utm-actions";
 import type { UTMLinkRow } from "@/types/utm";
+import {
+  rechazoPorModulo,
+  rechazoDeLecturaDelMarco,
+} from "@/lib/auth/acceso-a-modulo";
 
 export type YouTubePlatformMetadataView = {
   view_count: number;
@@ -194,6 +198,9 @@ async function leerActivosDeContenido(organizationId: string): Promise<ContentAs
 }
 
 export async function listContentAssetsAction(): Promise<MutationResult<ContentAssetView[]>> {
+  const rechazo = await rechazoPorModulo("marketing");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listContentAssets]", async () =>
     leerActivosDeContenido(await requireOrganizationId())
   );
@@ -245,6 +252,9 @@ export type MarketingOverviewContext = {
 export async function getMarketingOverviewContextAction(): Promise<
   MutationResult<MarketingOverviewContext>
 > {
+  const rechazo = await rechazoPorModulo("marketing");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getMarketingOverviewContext]", async () => {
     const organizationId = await requireOrganizationId();
 
@@ -466,6 +476,9 @@ function leerInsightDeDistribucion(
 export async function getContentDistributionDataAction(): Promise<
   MutationResult<DistribucionDeContenido>
 > {
+  const rechazo = await rechazoPorModulo("marketing");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getContentDistributionData]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
@@ -550,6 +563,9 @@ export type EstadoDeInstagram = {
 export async function getInstagramIntegrationStatusAction(): Promise<
   MutationResult<EstadoDeInstagram>
 > {
+  const rechazo = await rechazoDeLecturaDelMarco("instagram");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getInstagramIntegrationStatus]", async () => {
     const organizationId = await requireOrganizationId();
     const admin = createAdminClient();

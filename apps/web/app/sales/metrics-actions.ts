@@ -11,6 +11,11 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
+import {
+  rechazoPorModulo,
+  rechazoDeLecturaDelMarco,
+} from "@/lib/auth/acceso-a-modulo";
+import { leerMetricasImportadas, type MetricsSnapshot } from "@/lib/marco/lecturas-de-servidor";
 
 /*
  * SCRUM-504: las lecturas de métricas de Ventas devuelven sus errores como
@@ -23,12 +28,7 @@ import {
 
 // ─── Snapshots de métricas importadas ─────────────────────────────────────────
 
-export type MetricsSnapshot = {
-  id: string;
-  periodStart: string;    // "YYYY-MM-DD"
-  periodLabel: string;    // "Enero 2025"
-  metrics: Record<string, number>;
-};
+export type { MetricsSnapshot } from "@/lib/marco/lecturas-de-servidor";
 
 export async function getSalesMetricsSnapshotsAction(): Promise<
   MutationResult<MetricsSnapshot[]>
@@ -36,25 +36,12 @@ export async function getSalesMetricsSnapshotsAction(): Promise<
   // Sin Supabase no hay métricas importadas (lo que antes resolvía la página).
   if (!isSupabaseConfigured()) return { success: true, data: [] };
 
+  const rechazo = await rechazoDeLecturaDelMarco("metricasImportadas");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getSalesMetricsSnapshots]", async () => {
     const organizationId = await requireOrganizationId();
-    const supabase = await createClient();
-
-    const { data, error } = await supabase
-      .from("metrics_snapshots")
-      .select("id, period_start, period_label, metrics")
-      .eq("organization_id", organizationId)
-      .eq("category", "sales")
-      .order("period_start", { ascending: false });
-
-    if (error) throw new FallaDeLaBase(error);
-
-    return (data ?? []).map((row) => ({
-      id:          row.id,
-      periodStart: row.period_start as string,
-      periodLabel: (row.period_label as string | null) ?? (row.period_start as string).slice(0, 7),
-      metrics:     (row.metrics as Record<string, number>) ?? {},
-    }));
+    return leerMetricasImportadas(await createClient(), organizationId);
   });
 }
 
@@ -92,6 +79,9 @@ export async function getSalesPerformanceMetricsAction(
   period: SalesMetricsPeriod = "month",
   dateRange?: SalesMetricsDateRange
 ): Promise<MutationResult<SalesPerformanceMetrics>> {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getSalesPerformanceMetrics]", () =>
     calcularMetricasDeRendimiento(period, dateRange)
   );

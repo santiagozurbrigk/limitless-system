@@ -7,10 +7,14 @@ import {
 } from "@/app/marketing/actions";
 import { ESCONDIDO } from "@/lib/release/escondido";
 import { paths } from "@/routes";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 const RESUMEN_SIN_CARGAR = "No se pudo cargar el resumen de Marketing";
 
 export default async function MarketingPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("marketing");
+  if (sinAcceso) return sinAcceso;
+
   // El Overview está escondido para el release (SCRUM-490): lee la integración
   // vieja de Instagram y casi siempre sale vacío. La entrada es Contenido.
   if (ESCONDIDO.marketingOverview) redirect(paths.platform.marketing.content);

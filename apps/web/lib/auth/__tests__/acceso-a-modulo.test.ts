@@ -7,13 +7,26 @@ import type { UserPermissions } from "@/lib/auth/get-current-permissions";
  * el layout de la plataforma (pantallas) y las Server Actions de lectura.
  */
 
-const sim = vi.hoisted(() => ({ permisos: null as UserPermissions | null }));
-
-vi.mock("@/lib/auth/get-current-permissions", () => ({
-  getCurrentUserPermissions: async () => sim.permisos,
+const sim = vi.hoisted(() => ({
+  permisos: null as UserPermissions | null,
+  falla: null as Error | null,
+  lecturas: 0,
 }));
 
+vi.mock("@/lib/auth/get-current-permissions", () => ({
+  getCurrentUserPermissions: async () => {
+    sim.lecturas += 1;
+    if (sim.falla) throw sim.falla;
+    return sim.permisos;
+  },
+}));
+
+import { renderToStaticMarkup } from "react-dom/server";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 import {
+  exigirModuloDeLaPagina,
+  puedeLeerDelMarcoEnElServidor,
+  rechazoDeLecturaDelMarco,
   moduloBloqueadoParaRuta,
   puedeEntrarAlModulo,
   rechazoPorModulo,
@@ -113,5 +126,117 @@ describe("rechazoPorModulo", () => {
       sim.permisos = permisos;
       await expect(rechazoPorModulo("operations")).resolves.toBeNull();
     }
+  });
+});
+
+describe("exigirModuloDeLaPagina (SCRUM-540)", () => {
+  beforeEach(() => {
+    sim.permisos = null;
+    sim.falla = null;
+    sim.lecturas = 0;
+  });
+
+  it("⭐ a un member sin el módulo le devuelve «No tenés acceso» con el nombre del módulo", async () => {
+    sim.permisos = sinOperaciones;
+    const sinAcceso = await exigirModuloDeLaPagina("operations");
+    expect(sinAcceso).not.toBeNull();
+    const html = renderToStaticMarkup(sinAcceso!);
+    expect(html).toContain("No tenés acceso a Operaciones");
+    expect(html).toContain("Equipo → Roles");
+  });
+
+  it("bloquea por el módulo pedido, no por otro", async () => {
+    sim.permisos = sinOperaciones;
+    await expect(exigirModuloDeLaPagina("finance")).resolves.toBeNull();
+    sim.permisos = conOperaciones;
+    const sinAcceso = await exigirModuloDeLaPagina("finance");
+    expect(renderToStaticMarkup(sinAcceso!)).toContain("No tenés acceso a Finanzas");
+  });
+
+  it("deja pasar a un member con el módulo, aunque sea sólo para ver", async () => {
+    sim.permisos = conOperaciones;
+    await expect(exigirModuloDeLaPagina("operations")).resolves.toBeNull();
+  });
+
+  it("el founder pasa siempre, aunque su mapa de módulos viniera vacío", async () => {
+    sim.permisos = founder;
+    await expect(exigirModuloDeLaPagina("operations")).resolves.toBeNull();
+  });
+
+  it("sin rol configurado no bloquea, igual que el layout de la plataforma", async () => {
+    sim.permisos = sinRol;
+    await expect(exigirModuloDeLaPagina("operations")).resolves.toBeNull();
+  });
+
+  it("⭐ si la lectura de permisos falla, relanza la falla: nunca abre ni dibuja la pantalla", async () => {
+    sim.falla = new FallaDeLaBase({ message: "connection refused", code: "08006" });
+    await expect(exigirModuloDeLaPagina("operations")).rejects.toBeInstanceOf(
+      FallaDeLaBase
+    );
+  });
+
+  it("lee los permisos una vez por llamada, con la misma función que el layout", async () => {
+    sim.permisos = conOperaciones;
+    await exigirModuloDeLaPagina("operations");
+    expect(sim.lecturas).toBe(1);
+  });
+});
+
+describe("rechazoDeLecturaDelMarco (SCRUM-540)", () => {
+  beforeEach(() => {
+    sim.permisos = null;
+    sim.falla = null;
+    sim.lecturas = 0;
+  });
+
+  it("⭐ sin ninguno de los módulos de la lectura, el rechazo con el primero de la lista", async () => {
+    sim.permisos = member({ team: "full", settings: "view" });
+    await expect(rechazoDeLecturaDelMarco("clientes")).resolves.toEqual({
+      success: false,
+      error: "No tenés acceso a Clientes.",
+      motivo: "sin-acceso",
+      moduleId: "clients",
+    });
+    await expect(rechazoDeLecturaDelMarco("reportesEjecutivos")).resolves.toMatchObject({
+      moduleId: "operations",
+    });
+  });
+
+  it("con cualquiera de los módulos de la lectura pasa (los clientes, con sólo Ventas)", async () => {
+    sim.permisos = member({ sales: "view" });
+    await expect(rechazoDeLecturaDelMarco("clientes")).resolves.toBeNull();
+    await expect(rechazoDeLecturaDelMarco("resumenFinanciero")).resolves.toBeNull();
+    await expect(rechazoDeLecturaDelMarco("cobros")).resolves.toMatchObject({ moduleId: "finance" });
+    await expect(rechazoDeLecturaDelMarco("llamadasPendientes")).resolves.not.toBeNull();
+  });
+
+  it("⭐ con sólo el Panel no se abre ninguna lectura de filas (sus totales los calcula su página)", async () => {
+    sim.permisos = member({ dashboard: "full" });
+    for (const lectura of ["clientes", "llamadasDeCierre", "conversaciones", "detalleDeFinanzas", "plataformasDePago", "resumenFinanciero", "cobros", "metricasImportadas"] as const) {
+      await expect(rechazoDeLecturaDelMarco(lectura), lectura).resolves.not.toBeNull();
+    }
+  });
+
+  it("el founder y alguien sin rol pasan siempre", async () => {
+    for (const permisos of [founder, sinRol]) {
+      sim.permisos = permisos;
+      await expect(rechazoDeLecturaDelMarco("detalleDeFinanzas")).resolves.toBeNull();
+    }
+  });
+
+  it("⭐ una falla al leer los permisos se relanza: nunca abre", async () => {
+    sim.falla = new FallaDeLaBase({ message: "connection refused", code: "08006" });
+    await expect(rechazoDeLecturaDelMarco("clientes")).rejects.toBeInstanceOf(FallaDeLaBase);
+    await expect(puedeLeerDelMarcoEnElServidor("clientes")).rejects.toBeInstanceOf(FallaDeLaBase);
+  });
+
+  it("Ajustes y Ventas abren las plataformas de cobro pero no el detalle de Finanzas", async () => {
+    for (const modulos of [{ settings: "view" }, { sales: "full" }] as const) {
+      sim.permisos = member(modulos);
+      await expect(puedeLeerDelMarcoEnElServidor("plataformasDePago")).resolves.toBe(true);
+      await expect(puedeLeerDelMarcoEnElServidor("detalleDeFinanzas")).resolves.toBe(false);
+    }
+    sim.permisos = member({ finance: "view" });
+    await expect(puedeLeerDelMarcoEnElServidor("detalleDeFinanzas")).resolves.toBe(true);
   });
 });

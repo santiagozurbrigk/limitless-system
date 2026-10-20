@@ -65,6 +65,7 @@ import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fall
 import { toggleClientTaskAction } from "@/app/clients/task-actions";
 import { getClientsDiscordActivityAction } from "@/app/discord/actions";
 import { countPendingFathomCallsAction } from "@/app/fathom/actions";
+import { sinRechazo } from "@/lib/auth/regla-de-modulo";
 import { cantidadPendienteVisible } from "@/lib/clients/llamadas-sin-asociar";
 import type { ClientActivity } from "@/lib/discord/activity";
 import {
@@ -286,7 +287,7 @@ export function ClientsList({ clients }: { clients: Client[] }) {
     let vigente = true;
     countPendingFathomCallsAction()
       .then((n) => {
-        if (vigente) setLlamadasSinAsociar(n);
+        if (vigente) setLlamadasSinAsociar(sinRechazo(n, 0));
       })
       .catch(() => {});
     return () => {

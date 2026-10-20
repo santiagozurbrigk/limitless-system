@@ -22,6 +22,11 @@ function responder(nombre: string) {
   };
 }
 
+// SCRUM-540: la página arranca con el guardia del módulo; acá entra alguien con el módulo.
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  exigirModuloDeLaPagina: async () => null,
+}));
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("NEXT_NOT_FOUND");

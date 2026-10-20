@@ -5,12 +5,16 @@ import { SopStatusBadge } from "@/components/sops";
 import { SopContentViewer } from "@/components/sops/sop-content-viewer";
 import { Panel } from "@/components/shared/panel";
 import { getSopContentById } from "@/lib/sops/queries";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function SopDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const sinAcceso = await exigirModuloDeLaPagina("operations");
+  if (sinAcceso) return sinAcceso;
+
   const { id } = await params;
   const result = await getSopContentById(id);
   if (!result) notFound();

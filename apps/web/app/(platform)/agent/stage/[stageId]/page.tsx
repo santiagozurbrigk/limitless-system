@@ -1,5 +1,9 @@
 import { AgentShell } from "@/components/agent/agent-shell";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
-export default function AgentStagePage() {
+export default async function AgentStagePage() {
+  const sinAcceso = await exigirModuloDeLaPagina("agent");
+  if (sinAcceso) return sinAcceso;
+
   return <AgentShell />;
 }
