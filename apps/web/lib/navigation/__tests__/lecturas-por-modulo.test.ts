@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { permissionModuleForPath } from "@/lib/navigation/module-for-path";
@@ -12,6 +12,7 @@ import {
   guardiaDe,
   layoutLee,
   usosFueraDeLeerDelMarco,
+  canalesSinChequeo,
 } from "./lecturas-de-app";
 import { MODULOS_DE_LAS_LECTURAS_DEL_MARCO } from "@/lib/auth/lecturas-del-marco";
 
@@ -302,6 +303,14 @@ describe("lecturas del marco de la plataforma (SCRUM-540)", () => {
     expect(usosFueraDeLeerDelMarco(grafo, marco, lecturaDe)).toEqual([]);
   });
 
+  it("⭐ todo canal en vivo de Supabase que abre el marco corta antes si la persona no puede leer", () => {
+    // El recorrido sí pasa por el canal de conversaciones del provider de la plataforma.
+    const provider = join(WEB, "providers", "platform-data-provider.tsx");
+    expect(grafo.archivosDesde(marco)).toContain(provider);
+    expect(readFileSync(provider, "utf8")).toContain(".channel(");
+    expect(canalesSinChequeo(grafo, marco)).toEqual([]);
+  });
+
   it("la lista de las que no son de ningún módulo sólo tiene lecturas del marco que no chequean", () => {
     const sobran = Object.keys(LECTURAS_DEL_MARCO_SIN_MODULO).filter(
       (a) => !delMarco.includes(a) || lecturaDe.has(a)
@@ -471,6 +480,33 @@ export const otra = (p) => leerDelMarco(p, "reportesEjecutivos", listar, []);`
     expect(usosFueraDeLeerDelMarco(grafo, layout, new Map([[accion, "clientes"]]))).toEqual([
       "providers/mal.tsx:3 listar fuera de leerDelMarco",
       'providers/mal.tsx:4 listar con "reportesEjecutivos" en vez de "clientes"',
+    ]);
+  });
+
+  it("⭐ el marco: señala un canal en vivo que no corta antes con puedeLeerDelMarco", () => {
+    archivo(
+      "canal/providers/p.tsx",
+      `"use client";
+export function bien(permisos, supabase) {
+  useEffect(() => {
+    if (!puedeLeerDelMarco(permisos, "conversaciones")) return;
+    void (async () => { supabase.channel("x"); })();
+  }, []);
+}
+export function mal(supabase) {
+  useEffect(() => {
+    void (async () => { supabase.channel("y"); })();
+  }, []);
+}
+export function tarde(permisos, supabase) {
+  supabase.channel("z");
+  if (!puedeLeerDelMarco(permisos, "conversaciones")) return;
+}`
+    );
+    const layout = archivo("canal/app/layout.tsx", `import "@/providers/p";\nexport default function L() { return null; }`);
+    expect(canalesSinChequeo(new GrafoDeImports(join(raiz, "canal")), layout)).toEqual([
+      "providers/p.tsx:10",
+      "providers/p.tsx:14",
     ]);
   });
 });

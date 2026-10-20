@@ -428,6 +428,58 @@ export function usosFueraDeLeerDelMarco(
   return mal;
 }
 
+/**
+ * Canales en vivo de Supabase (`.channel(...)`) que abre el cliente del marco
+ * sin chequear la lectura: cada uno tiene que estar dentro de una función que
+ * corta antes con `if (!puedeLeerDelMarco(permisos, "<lectura>")) return;`.
+ * Un canal manda filas nuevas al navegador sin pasar por ninguna action.
+ */
+export function canalesSinChequeo(grafo: GrafoDeImports, entrada: string): string[] {
+  const mal: string[] = [];
+  for (const archivo of grafo.archivosDesde(entrada)) {
+    const info = grafo.info(archivo);
+    if (info.directiva === "servidor") continue;
+    const visitar = (nodo: ts.Node) => {
+      if (
+        ts.isCallExpression(nodo) &&
+        ts.isPropertyAccessExpression(nodo.expression) &&
+        nodo.expression.name.text === "channel" &&
+        !cortaAntesConLaLectura(nodo)
+      ) {
+        const { line } = info.sf.getLineAndCharacterOfPosition(nodo.getStart(info.sf));
+        mal.push(`${relative(grafo.raiz, archivo)}:${line + 1}`);
+      }
+      ts.forEachChild(nodo, visitar);
+    };
+    visitar(info.sf);
+  }
+  return mal;
+}
+
+function cortaAntesConLaLectura(nodo: ts.Node): boolean {
+  for (let n: ts.Node | undefined = nodo.parent; n; n = n.parent) {
+    if (!ts.isFunctionLike(n)) continue;
+    const cuerpo = (n as ts.FunctionLikeDeclaration).body;
+    if (!cuerpo || !ts.isBlock(cuerpo)) continue;
+    for (const st of cuerpo.statements) {
+      if (st.getStart() >= nodo.getStart()) break;
+      if (
+        ts.isIfStatement(st) &&
+        ts.isPrefixUnaryExpression(st.expression) &&
+        st.expression.operator === ts.SyntaxKind.ExclamationToken &&
+        ts.isCallExpression(st.expression.operand) &&
+        ts.isIdentifier(st.expression.operand.expression) &&
+        st.expression.operand.expression.text === "puedeLeerDelMarco" &&
+        (ts.isReturnStatement(st.thenStatement) ||
+          (ts.isBlock(st.thenStatement) && st.thenStatement.statements.some(ts.isReturnStatement)))
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** Un uso que no llama a nada: el import mismo o una posición de tipo (`typeof accion`). */
 function dentroDeUnImport(nodo: ts.Node): boolean {
   for (let n: ts.Node | undefined = nodo; n; n = n.parent) {
