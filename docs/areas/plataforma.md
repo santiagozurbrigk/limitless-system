@@ -88,10 +88,15 @@ con execute sólo para `service_role` (`20260831140000`, `20260831150000`).
 
 ### Panel General
 
-`page.tsx` (server) trae objeciones frecuentes, analytics de Zernio y métricas custom; el resto sale de
-providers de cliente (`usePlatformData`, `useFinanceData`) y se deriva en
-`lib/metrics/derive-dashboard-data.ts`. Si no hay clientes, conversaciones ni llamadas, muestra
-`DashboardEmptyState`. El `SetupChecklist` va **arriba y por fuera** de `DashboardOverview` porque ese
+`page.tsx` (server) trae objeciones frecuentes, analytics de Zernio y métricas custom, y desde SCRUM-540
+calcula en el servidor todo el resto (`lib/dashboard/leer-datos-del-panel.ts` → `calcularDatosDelPanel`):
+lee clientes, conversaciones, llamadas de cierre, gastos, sueldos, cobros y métricas importadas, y deriva
+con `lib/metrics/derive-dashboard-data.ts` y el embudo con `buildSalesFunnel`. Al navegador van sólo
+`DashboardData` y las etapas del embudo, no las filas: quien sólo tiene el Panel no recibe clientes,
+conversaciones ni detalle de Finanzas (mínimo privilegio). Antes los providers del marco mandaban esas filas
+y el cálculo era en el navegador. Diferencias: el Panel no se actualiza en vivo con una conversación nueva
+(se ve al recargar o navegar), y el mes en curso se calcula con el reloj del servidor. Si no hay clientes,
+conversaciones ni llamadas, muestra `DashboardEmptyState`. El `SetupChecklist` va **arriba y por fuera** de `DashboardOverview` porque ese
 componente hace early return al empty state, que es justo donde está una cuenta nueva.
 
 ### Onboarding del founder

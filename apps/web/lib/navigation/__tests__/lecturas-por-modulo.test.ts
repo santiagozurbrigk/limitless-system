@@ -39,15 +39,25 @@ import { MODULOS_DE_LAS_LECTURAS_DEL_MARCO } from "@/lib/auth/lecturas-del-marco
  *      (el layout de `(platform)`: providers, barra, menú del celular) arranca
  *      con `rechazoDeLecturaDelMarco("<lectura>")`, y en el cliente del marco
  *      se pide sólo dentro de `leerDelMarco(permisos, "<lectura>", ...)` con
- *      la misma lectura, salvo las pocas que no son de ningún módulo.
+ *      la misma lectura (también con `import * as`), con permisos de identidad
+ *      estable, y todo canal en vivo corta antes con la lectura de su tabla,
+ *      salvo las pocas lecturas que no son de ningún módulo.
+ *   5. Lo que Next ejecuta aparte de la página (AR 1 de SCRUM-540): ninguna
+ *      página ni layout con módulo exporta `generateMetadata` ni
+ *      `generateViewport` ni ejecuta código al importarse; `template` y
+ *      `default` se tratan como un layout; `loading`, `error` y `not-found` no
+ *      alcanzan ninguna lectura.
  *
  * Lo que NO ve (documentado en `docs/arquitectura/auth-organizaciones-y-permisos.md`):
  *   - una action de lectura cuyo nombre no empieza con un verbo de lectura
- *     (`NOMBRE_DE_LECTURA`);
+ *     (`NOMBRE_DE_LECTURA`; el ataque A6 de la AR);
  *   - una action que alcanzan pantallas de dos módulos o una ruta libre (las
  *     del marco sí, por el punto 4);
  *   - en el cliente del marco, si `leerDelMarco` recibe los permisos reales:
  *     eso lo prueban los tests de cada provider;
+ *   - una action del marco que un archivo de cliente importa a través de un
+ *     archivo intermedio que la reexporta (sólo se siguen los imports directos
+ *     de un archivo `"use server"`);
  *   - una import que no es estático ni `import("literal")`, o un alias que no
  *     es `@/`;
  *   - funciones de servidor que no son Server Actions (`lib/<dominio>/queries.ts`):

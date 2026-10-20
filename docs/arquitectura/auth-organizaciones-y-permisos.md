@@ -22,7 +22,7 @@ permisos por módulo sólo cortan el render de pantallas**.
 | Permisos por módulo | `apps/web/lib/auth/get-current-permissions.ts`, `apps/web/constants/permission-modules.ts`, `apps/web/lib/team/mapper.ts` | Rol → mapa de 13 módulos con nivel `none/view/full` |
 | Gate de pantallas | `apps/web/app/(platform)/layout.tsx` + `apps/web/lib/navigation/module-for-path.ts` | Si el módulo de la ruta está en `none`, renderiza `SinAcceso` |
 | Guardia de cada página | `apps/web/lib/auth/acceso-a-modulo.ts` → `exigirModuloDeLaPagina(moduleId)` | Primera línea de toda página con módulo (y de un layout de segmento que lee): sin el módulo devuelve `SinAcceso` antes de cualquier lectura, también en navegación del cliente (SCRUM-540) |
-| Lecturas del marco | `apps/web/lib/auth/lecturas-del-marco.ts` (`leerDelMarco`), `acceso-a-modulo.ts` → `rechazoDeLecturaDelMarco(lectura)` | Los providers que se montan en toda pantalla piden cada dato sólo con alguno de los módulos que lo usan, y la action lo vuelve a chequear (SCRUM-540) |
+| Lecturas del marco | `apps/web/lib/auth/lecturas-del-marco.ts` (`leerDelMarco`), `acceso-a-modulo.ts` → `rechazoDeLecturaDelMarco(lectura)` | Los providers que se montan en toda pantalla piden cada dato sólo con alguno de los módulos que lo muestran, y la action lo vuelve a chequear; sin Finanzas, sólo totales (SCRUM-540) |
 | Add-ons | `apps/web/lib/auth/add-on-ids.ts`, `apps/web/lib/auth/add-ons.ts` | `organizations.enabled_add_ons`; `requireAddOn()` en server actions |
 | Super admin | `apps/web/lib/auth/require-super-admin.ts` | Allowlist por email en `super_admin_users`. Alta y baja: [`operacion/alta-super-admin.md`](../operacion/alta-super-admin.md) (primero la cuenta, después la lista) |
 | Rate limit | `apps/web/lib/rate-limit.ts` | RPC `consume_rate_limit` (Postgres), fallback en memoria |
@@ -210,7 +210,7 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
   - **Guardia por página, no por layout.** Lo único que corta las lecturas es que el chequeo corra antes que
     ellas en la misma función. Un layout de segmento con el guardia no frena la página de abajo (que corre
     en paralelo) y además no se vuelve a ejecutar al moverse dentro del segmento. Cada `page.tsx` con módulo
-    (67) arranca con el guardia; recibe el módulo escrito en el archivo, no usa `x-pathname`, así que vale
+    (68) arranca con el guardia; recibe el módulo escrito en el archivo, no usa `x-pathname`, así que vale
     igual al cargar y al navegar, y no redirige (misma pantalla que el layout, sin riesgo de bucles).
   - **Layouts de segmento, sólo si leen.** Un layout que importa algo más que navegación y banderas (por
     ejemplo `agent/layout.tsx`, que monta un provider de cliente que pide las conversaciones al montarse)
@@ -239,24 +239,51 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
     celular pide el contador de llamadas sin asignar de Clientes. Hasta SCRUM-540 todo eso se pedía para
     cualquier miembro, sin mirar el módulo: alguien sin Clientes ni Finanzas recibía los clientes, los gastos
     y los reportes en cualquier pantalla. Ahora:
-    - `lib/auth/lecturas-del-marco.ts` (sin dependencias de servidor) dice qué módulos abren cada lectura: los
-      de las pantallas que usan el dato (los clientes, Clientes, Ventas, Finanzas y el Panel; los reportes,
-      Operaciones; las plataformas de cobro, también Ajustes). Con cualquiera de ellos todo sigue igual.
+    - **Mínimo privilegio** (AR 1 de SCRUM-540): cada módulo recibe sólo lo que sus pantallas muestran.
+      `lib/auth/lecturas-del-marco.ts` (sin dependencias de servidor) dice qué módulos abren cada lectura,
+      contando sólo las pantallas que muestran ese dato tal cual; un módulo que sólo muestra totales los
+      recibe calculados en el servidor:
+
+      | Lectura | La abren | Qué viaja |
+      |---|---|---|
+      | `clientes` | Clientes, Ventas, Finanzas | Las filas de clientes |
+      | `llamadasDeCierre` | Ventas, Finanzas | Las filas de llamadas de cierre |
+      | `conversaciones` | Ventas | Las conversaciones, las cuentas de Unipile y el canal en vivo |
+      | `detalleDeFinanzas` | Finanzas | Gastos fijos, suscripciones, sueldos y comisiones por persona, y lo cobrado por plataforma con la fecha del último cobro |
+      | `plataformasDePago` | Finanzas, Ventas, Ajustes | Sin Finanzas: nombre, clave, moneda y etiqueta de cada plataforma; lo cobrado en 0 y la fecha vacía, sin leer `client_payments` |
+      | `resumenFinanciero` | Finanzas, Ventas | `getResumenFinancieroAction`: facturación, cobrado, gastos y margen del período, el total de gastos del mes y, por mes, facturación y cobrado (`resumenParaVentas`); nada del desglose |
+      | `cobros` | Finanzas | Cada cobro de la organización |
+      | `metricasImportadas` | Finanzas, Ventas | El snapshot de métricas importadas (son totales) |
+      | `instagram` | Marketing, Integraciones | El estado de la integración |
+      | `reportesEjecutivos` | Operaciones | Los últimos reportes |
+      | `llamadasPendientes` | Clientes | Un número |
+
+      El Panel no abre ninguna: su página calcula los totales en el servidor (`leerDatosDelPanel`) y manda
+      sólo `DashboardData` y las etapas del embudo (ver `docs/areas/plataforma.md`). Quien tiene Finanzas
+      recibe todo como antes, y la cuenta de los totales es la misma en los tres lugares
+      (`lib/finance/resumen-financiero.ts`, funciones puras).
     - En el servidor, cada action arranca con `rechazoDeLecturaDelMarco("<lectura>")` (founder pasa, sin rol
       no se bloquea, una falla de permisos lanza). Las que devolvían el dato directo ahora pueden devolver
-      `RechazoPorModulo` en su lugar (`esRechazoPorModulo`, `sinRechazo`). `loadFinanceConfigAction` arma la
-      respuesta por partes: con Ajustes y sin Finanzas, Ventas ni el Panel, sólo las plataformas de cobro, y
-      los gastos, suscripciones y sueldos ni se leen.
+      `RechazoPorModulo` en su lugar (`esRechazoPorModulo`, `sinRechazo`). Las lecturas sin chequeo viven en
+      `lib/marco/lecturas-de-servidor.ts`, `lib/finance/leer-configuracion.ts` y `lib/dashboard/`, que no son
+      `"use server"`: las usan las actions después de chequear y la página del Panel después de su guardia.
     - En el cliente, cada provider pide con `leerDelMarco(permisos, "<lectura>", accion, vacio)`: sin el
       módulo no hay pedido y el componente queda vacío (el botón de reportes no aparece, el contador queda sin
       número), sin error. Para eso los permisos (`PermissionsProvider`) envuelven a `AppProviders` en el
-      layout. El canal en vivo de conversaciones no se abre sin la lectura de conversaciones.
+      layout, y los lectores los toman con `usePermisosDeModulo` (`permisosEstables`: el mismo objeto mientras
+      no cambien, para no volver a pedir todo en cada `router.refresh()`). El canal en vivo de conversaciones
+      no se abre sin la lectura `conversaciones`.
     - `lecturas-por-modulo.test.ts` exige que toda action de lectura que alcanza el marco arranque con
-      `rechazoDeLecturaDelMarco` (salvo el id de la org y el perfil propio, listados con su motivo), que en el
-      cliente del marco se pida sólo dentro de `leerDelMarco` con la misma lectura, y que todo canal en vivo
-      del marco corte antes con `puedeLeerDelMarco`. **No ve:** si el provider le pasa a `leerDelMarco` los
-      permisos reales (lo prueban los tests de cada provider) ni una lectura con un nombre que no empieza con
-      un verbo de lectura.
+      `rechazoDeLecturaDelMarco` (salvo el id de la org y el perfil propio, listados con su motivo); que en el
+      cliente del marco se pida sólo dentro de `leerDelMarco` con la misma lectura (también por
+      `import * as`); que los lectores no usen `usePermissions()`; y que todo canal en vivo del marco corte
+      antes con la lectura de la tabla que escucha. También exige, para toda ruta con módulo, que ninguna
+      página ni layout exporte `generateMetadata` ni `generateViewport` ni ejecute código al importarse
+      (corren aunque la página corte), que `template` y `default` lleven el guardia si leen, y que
+      `loading`, `error` y `not-found` no alcancen ninguna lectura. **No ve:** si el provider le pasa a
+      `leerDelMarco` los permisos reales (lo prueban los tests de cada provider y el del orden de los
+      providers en el layout), una lectura con un nombre que no empieza con un verbo de lectura, ni una
+      action del marco importada a través de un archivo que la reexporta.
   - **Con SCRUM-524** (menú por experiencia): ese cambio deja pasar `children` en el layout de `(platform)`
     fuera de la experiencia y pone en cada segmento de primer nivel un `layout.tsx` con
     `await exigirRutaDeLaExperiencia("/<segmento>")`. No chocan: los guardias de esta entrega están en las
@@ -329,7 +356,9 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
   acceso» igual que tipear la URL, y los datos no viajan en la respuesta. Medido con `next start` contra un
   Supabase local, al cargar y al navegar.
 - `[PERMISOS-PROVIDERS-GLOBALES]` resuelto el 2026-10-19 (SCRUM-540): los providers del marco piden cada
-  dato sólo si la persona tiene alguno de los módulos que lo usan, y las actions lo chequean en el servidor.
+  dato sólo si la persona tiene alguno de los módulos que lo muestran, y las actions lo chequean en el
+  servidor; Ventas recibe los totales de Finanzas ya calculados y el Panel calcula los suyos en su página
+  (mínimo privilegio, AR 1).
 - `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (nuevo, SCRUM-541) 73 Server Actions de lectura de un solo módulo devuelven
   el dato directo y no chequean el módulo; se alcanzan llamándolas a mano.
 - `[PERMISOS-FOUNDER-AREA]` resuelto el 2026-10-05 (SCRUM-18): `/founder` vive en `app/(platform)/founder` y
