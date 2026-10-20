@@ -163,6 +163,9 @@ describe("updatePaymentPlatformAction (AR pasada 3, MENOR-2)", () => {
     expect(r.success && r.data.totalReceived).toBe(100);
   });
 
+});
+
+describe("loadFinanceConfigAction por partes según el rol (SCRUM-540)", () => {
   it("⭐ con Ajustes y sin Finanzas, Ventas ni el Panel: sólo las plataformas; gastos, suscripciones y sueldos ni se leen (SCRUM-540)", async () => {
     sim.conGastos = false;
     const r = dato(await loadFinanceConfigAction());
