@@ -28,47 +28,69 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
-### 2026-10-19 — Las páginas y el marco de la plataforma chequean el módulo antes de leer (SCRUM-540)
+### 2026-10-20 — Las páginas y el marco de la plataforma chequean el módulo antes de leer, con mínimo privilegio (SCRUM-540)
 
 **Rama:** `fix/SCRUM-540-permisos-lecturas-por-modulo` (base `main` `4a542e5e`)
-**Commit(s):** páginas: `57d8e2b1`, `6a079eda`, `722d5aba`, `8647980b`, `96c6ac91` (docs); marco: `660f44c5`, `c5e2dc89`, `1edca076`, `33d58374`; y este (docs)
+**Commit(s):** páginas: `57d8e2b1`, `6a079eda`, `722d5aba`, `8647980b`, `96c6ac91`; marco: `660f44c5`, `c5e2dc89`, `1edca076`, `33d58374`, `15cdffb8`; AR pasada 1: `09a6fe09`, `7b26452e`, `6818c645`, `47bc4ef0`, `7e6edbe9`; y este (docs)
 **Módulo(s) afectado(s):** Plataforma, permisos.
-- Páginas: `lib/auth/acceso-a-modulo.ts` (`exigirModuloDeLaPagina`), las 67 `page.tsx` con módulo de `app/(platform)`, `agent/layout.tsx` (+ `agent-layout-cliente.tsx`), `clients/page.tsx` (+ `clients-page-cliente.tsx`) y 49 Server Actions de lectura.
-- Marco: `lib/auth/regla-de-modulo.ts` y `lib/auth/lecturas-del-marco.ts` (nuevos), `rechazoDeLecturaDelMarco` en `acceso-a-modulo.ts`, `usePermisosDeModulo` en `providers/permissions-provider.tsx`, el layout de `(platform)` (orden de los providers), `PlatformDataProvider`, `FinanceDataProvider`, `MarketingDataProvider`, `ReportsPanel`, `MobileNav` y 10 actions (`listClientsAction`, `listClosingCallsAction`, `listConversationsAction`, `getConnectedUnipileAccountsAction`, `loadFinanceConfigAction`, `listOrganizationPaymentsAction`, `getSalesMetricsSnapshotsAction`, `getInstagramIntegrationStatusAction`, `getLatestReportsByCadenceAction`, `countPendingFathomCallsAction`).
-- Tests nuevos: `lecturas-por-modulo.test.ts` (+ `lecturas-de-app.ts`), `paginas-cortan-antes-de-leer.test.ts`, `lecturas-rechazan-sin-modulo.test.ts`, `lecturas-del-marco.test.ts`, `lecturas-del-marco-de-los-providers.test.ts`.
+- Páginas: `lib/auth/acceso-a-modulo.ts` (`exigirModuloDeLaPagina`), las 68 `page.tsx` con módulo de `app/(platform)` (`/clients` pasó a página de servidor con `clients-page-cliente.tsx`), `agent/layout.tsx` (+ `agent-layout-cliente.tsx`) y 49 Server Actions de lectura.
+- Marco: `lib/auth/regla-de-modulo.ts`, `lib/auth/lecturas-del-marco.ts`, `lib/marco/lecturas-de-servidor.ts`, `lib/finance/leer-configuracion.ts`, `lib/finance/resumen-financiero.ts` (nuevos); `rechazoDeLecturaDelMarco` en `acceso-a-modulo.ts`; `permisosEstables` y `usePermisosDeModulo` en `providers/permissions-provider.tsx`; el orden de los providers en el layout de `(platform)`; `PlatformDataProvider`, `FinanceDataProvider`, `MarketingDataProvider`, `ReportsPanel`, `MobileNav`; 10 actions del marco y `getResumenFinancieroAction` (nueva).
+- Panel: `lib/dashboard/datos-del-panel.ts` y `leer-datos-del-panel.ts` (nuevos), `dashboard/page.tsx`, `DashboardPageContent`, `DashboardOverview`, `SalesFunnelStrip`.
+- Tests nuevos: `lecturas-por-modulo.test.ts` (+ `lecturas-de-app.ts`), `paginas-cortan-antes-de-leer.test.ts`, `lecturas-rechazan-sin-modulo.test.ts`, `lecturas-del-marco.test.ts`, `lecturas-del-marco-de-los-providers.test.ts`, `campos-del-marco-por-modulo.test.ts`, `datos-del-panel.test.ts`, `permisos-estables.test.ts`, `layout-plataforma-orden-de-providers.test.ts`.
 
 **Qué se hizo:** cierra `[PERMISOS-LAYOUT-NAV-SUAVE]` y `[PERMISOS-PROVIDERS-GLOBALES]`.
-- **Páginas.** `exigirModuloDeLaPagina(moduleId)` devuelve `SinAcceso` o `null` con la regla de siempre (founder pasa, sin rol no bloquea, una falla de permisos lanza) y va en la primera línea de cada página con módulo: `const sinAcceso = await exigirModuloDeLaPagina("<módulo>"); if (sinAcceso) return sinAcceso;`. `/agent` pasó a un layout de servidor con el guardia (su provider de cliente pide las conversaciones al montarse) y `/clients`, que era una página `"use client"`, a una página de servidor.
-- **Server Actions de una pantalla.** `rechazoPorModulo("<módulo>")` al principio de las 49 lecturas de un solo módulo que ya devolvían `MutationResult`. Con la de Inteligencia son 50. Las otras 73 devuelven el dato directo y quedan en `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (SCRUM-541).
-- **Marco de la plataforma.** Lo que se monta en toda pantalla (los providers de `AppProviders`, el panel de reportes de la barra, el contador del menú del celular y el canal en vivo de conversaciones) pide cada dato sólo si la persona puede entrar a alguno de los módulos cuyas pantallas lo usan (`MODULOS_DE_LAS_LECTURAS_DEL_MARCO`; por ejemplo, los clientes, con Clientes, Ventas, Finanzas o el Panel; los reportes, con Operaciones).
-  - En el servidor, cada una de las 10 actions arranca con `rechazoDeLecturaDelMarco("<lectura>")`. Las que devolvían el dato directo ahora pueden devolver `RechazoPorModulo` en su lugar.
-  - `loadFinanceConfigAction` arma la respuesta por partes: con Ajustes y sin Finanzas, Ventas ni el Panel, sólo las plataformas de cobro (lo que muestra Ajustes), sin leer gastos, suscripciones ni sueldos.
-  - En el cliente, `leerDelMarco(permisos, "<lectura>", accion, vacio)`: sin el módulo no hay pedido y el componente queda vacío, sin error (el botón de reportes no aparece, el contador queda sin número). Los permisos (`PermissionsProvider`) envuelven ahora a `AppProviders`, y los lectores del marco los toman con `usePermisosDeModulo`, de identidad estable, para no volver a pedir todo en cada `router.refresh()`.
-- **Tests de inventario.** `lecturas-por-modulo` falla si una página con módulo, o un layout con módulo que lee, no arranca con el guardia del módulo de su ruta. También falla en estos casos:
-  - una action de lectura de un solo módulo no arranca con `rechazoPorModulo` de ese módulo ni está en la lista de deuda, que sólo puede achicarse;
-  - una lectura del marco no arranca con `rechazoDeLecturaDelMarco`, o en el cliente del marco se pide fuera de `leerDelMarco` o con otra lectura;
-  - un canal en vivo del marco no corta antes sin la lectura;
-  - un lector del marco usa `usePermissions()`.
-- Inventario por ruta y del marco en la evidencia de la tarea (`inventario.md`).
+- **Páginas.** `exigirModuloDeLaPagina(moduleId)` devuelve `SinAcceso` o `null` con la regla de siempre (founder pasa, sin rol no bloquea, una falla de permisos lanza) y va en la primera línea de cada página con módulo. `/agent` tiene un layout de servidor con el guardia, porque su provider de cliente pide las conversaciones al montarse.
+- **Server Actions de una pantalla.** `rechazoPorModulo("<módulo>")` al principio de las 49 lecturas de un solo módulo que devolvían `MutationResult` (50 con la de Inteligencia). Las 73 que devuelven el dato directo quedan para SCRUM-541.
+- **Marco de la plataforma, con mínimo privilegio** (AR pasada 1). Cada lectura se abre sólo con los módulos cuyas pantallas *muestran* ese dato:
+  - las filas de clientes, con Clientes, Ventas y Finanzas;
+  - las llamadas de cierre, con Ventas y Finanzas;
+  - las conversaciones y su canal en vivo, con Ventas;
+  - el detalle de Finanzas (gastos fijos, suscripciones, sueldos y comisiones por persona, cada cobro y lo cobrado por plataforma), sólo con Finanzas;
+  - las plataformas de cobro sin lo cobrado ni la fecha del último cobro, con Finanzas, Ventas y Ajustes; sin Finanzas no se leen los cobros;
+  - los totales que muestra Ventas, calculados en el servidor y recortados a lo que dibuja su pantalla: facturación, cobrado, gastos y margen, y por mes facturación y cobrado (`getResumenFinancieroAction`, `resumenParaVentas`);
+  - las métricas importadas, con Finanzas y Ventas; el estado de Instagram, con Marketing e Integraciones; los reportes ejecutivos, con Operaciones; el contador de llamadas pendientes, con Clientes.
+  - El servidor chequea con `rechazoDeLecturaDelMarco("<lectura>")` y los providers no piden sin el módulo (`leerDelMarco`), con permisos de identidad estable para no volver a pedir en cada `router.refresh()`.
+- **El Panel, calculado en el servidor.** La página del Panel lee y calcula en el servidor (`leerDatosDelPanel`, con las mismas funciones que usaba el navegador) y manda sólo `DashboardData` y las etapas del embudo. Quien sólo tiene el Panel no recibe filas de nadie.
+- **Test de inventario** (`lecturas-por-modulo`). Además de lo anterior (guardia en páginas y layouts que leen, actions de un módulo, lecturas del marco y su par en el cliente), ahora:
+  - ve `import * as` de las actions en el cliente del marco;
+  - exige que el canal en vivo corte con la lectura de la tabla que escucha;
+  - prohíbe `generateMetadata`, `generateViewport` y código que corra al importar en páginas y layouts con módulo;
+  - trata `template` y `default` como layouts;
+  - exige que `loading`, `error` y `not-found` no alcancen ninguna lectura.
 
-**Por qué / finalidad:** el permiso sólo se aplicaba en el layout de `(platform)`, que decide qué se dibuja pero no frena la página: sus datos viajaban en el HTML y en el payload RSC aunque dijera «No tenés acceso», y en una navegación del cliente se veía la pantalla entera. Además, el marco pedía clientes, gastos, cobros, conversaciones y reportes para cualquier miembro, en cualquier pantalla.
+**Por qué / finalidad:** el permiso sólo se aplicaba en el layout de `(platform)`, que decide qué se dibuja pero no frena la página. Los datos viajaban en el HTML y el payload RSC aunque dijera «No tenés acceso», y en una navegación del cliente se veía la pantalla entera. Además el marco mandaba clientes, gastos, sueldos, cobros, conversaciones y reportes a cualquier miembro en cualquier pantalla.
 
-Medido con `next start` contra un Supabase local con datos marcados (un SOP, un reporte ejecutivo, un cliente, una tarea, un gasto, una pieza de contenido y un documento). Recorrió las 68 rutas con módulo al cargar, con `router.push` y con `push` + `refresh()`, más tres cargas del marco por cuenta, y comparó contra `main`:
-- Miembro sin los 11 módulos de datos (con Equipo y Ajustes): en `main`, las marcas viajaban en 46 de 207 respuestas (las 3 cargas del marco, 11 cargas con «No tenés acceso» en pantalla, 19 navegaciones del cliente con la pantalla entera y 13 `push` + `refresh`), y el marco pedía 14 actions que leían 13 tablas de datos. En la rama: 0 de 207. El marco pide 3 actions y sólo lee las plataformas de cobro, que muestra Ajustes.
-- Miembro con todos los módulos (207 ventanas) y founder (33, en 10 rutas): 0 diferencias con `main` en estado, ruta final, «No tenés acceso», marcas, pedidos de actions y tablas leídas, ventana por ventana.
-- Sin bucles: como mucho 5 pedidos `?_rsc=` en 4 s tras `push` + `refresh()`, igual que en `main`, y con la barra siempre dibujada.
+La AR pasada 1 mostró que la primera versión del marco abría de más:
+- con Ajustes viajaban lo cobrado por plataforma y su fecha;
+- con Ventas o el Panel viajaban los sueldos por persona y cada gasto.
+
+Por decisión de Fernando (mínimo privilegio), cada módulo recibe sólo lo que sus pantallas muestran.
+
+Medido con la sonda de la AR (`ar-p1/scripts/sonda-ar.mjs`, copiada a la evidencia), con builds de producción de la rama y de `main` contra un Supabase local con datos marcados y dos cobros. Recorrió 217 ventanas por cuenta: 72 rutas al cargar, con `router.push` y con `push` + `refresh()`, más el marco.
+- **Sin módulos:** 0 ventanas con marcas en la rama (en `main`, 76) y 0 con el canal en vivo abierto (en `main`, 73). Pidió 76 actions (en `main`, 955).
+- **Sólo Ajustes:** sólo el nombre de la plataforma de cobro (que muestra Ajustes). Ni montos, ni fecha del último cobro, ni ninguna otra marca (en `main`, todas).
+- **Sólo el Panel:** 0 marcas en todo lo que recibe (en `main`, 81 ventanas con todas las marcas).
+- **Sólo Ventas:** clientes, llamadas de cierre, conversaciones y el nombre de la plataforma, que muestran sus pantallas. Ningún sueldo, gasto, suscripción, cobro suelto ni la fecha del último cobro.
+- **Todos los módulos, founder y sin rol:** misma ruta final, mismo «No tenés acceso», la misma unión de marcas en las actions y la misma cantidad de actions que en `main`. Las diferencias ventana por ventana son marcas del payload RSC que caen en la ventana vecina en las dos direcciones, igual que entre dos corridas de `main`.
+- **Sin bucles:** 0 pedidos `?_rsc=` en 5 s de reposo en todas las cuentas y los dos builds.
 
 **Decisiones de diseño relevantes:**
-- Guardia por página, no por layout de segmento: un layout no frena la página (corren en paralelo) y no se vuelve a ejecutar al moverse dentro del segmento. No usa `x-pathname` ni redirige.
-- Marco: "alguno de estos módulos" y no uno solo, porque los datos del marco los usan pantallas de varios módulos. Así nadie que hoy ve el Panel, Ventas, Clientes o Finanzas pierde nada.
-- La regla pura vive en `regla-de-modulo.ts`, sin dependencias de servidor, para que la usen también los providers; `acceso-a-modulo.ts` la reexporta.
-- La paleta ⌘K no se filtró para `full`: SCRUM-524 reescribe ese archivo. Elegir un módulo bloqueado desde la paleta ahora muestra «No tenés acceso».
-- Con SCRUM-524 (sin mergear): merge de prueba en un clon descartable con 4 conflictos chicos de código. Son los dos archivos del Agente, el layout de `(platform)` (se toma el de 524, que ya pone los permisos por fuera de `AppProviders`) y los imports de `mobile-nav.tsx`. Además hay que cambiar una línea en su test `bloqueo-por-experiencia.test.ts`. Con eso, `tsc` en 0 y 285 archivos y 4.482 tests en verde.
+- Guardia por página, no por layout de segmento: un layout no frena la página y no se vuelve a ejecutar al moverse dentro del segmento. No usa `x-pathname` ni redirige.
+- Totales en el servidor en vez de filas: la cuenta es la misma en el navegador (Finanzas), en el resumen de Ventas y en el Panel (`lib/finance/resumen-financiero.ts`, puras). Un test compara el Panel nuevo con el cálculo de antes.
+- Lo que cambia para quien sí ve el Panel:
+  - no se actualiza en vivo con una conversación nueva (se ve al recargar o navegar);
+  - el mes en curso se calcula con el reloj del servidor;
+  - en modo demo sigue vacío.
+- Con SCRUM-524 (sin mergear): el merge de prueba tiene los mismos 4 conflictos chicos de código (los dos archivos del Agente, el layout de `(platform)`, donde se toma el de 524, y los imports de `mobile-nav.tsx`) más un cambio de 6 líneas en su `bloqueo-por-experiencia.test.ts`. Con eso, `tsc` en 0 y 289 archivos y 4.504 tests en verde.
 
 **Riesgos / deuda técnica pendiente:**
-- `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (SCRUM-541): 73 actions de lectura de un solo módulo sin chequeo, más 11 que usan pantallas de varios módulos o una ruta libre.
-- Los tests de inventario no ven lecturas con nombres que no empiezan con un verbo de lectura, ni `import()` sin literal, ni si un provider le pasa a `leerDelMarco` los permisos reales (eso lo prueban los tests de cada provider).
-- Tests: 271 archivos y 4.348 casos (`main`: 266 y 4.226), también con `TZ=UTC`; `tsc` en 0; lint sin avisos nuevos contra `4a542e5e`; `next build` sin «Dynamic server usage». 21 mutantes muertos (10 de las páginas, 11 del marco). Falta el paso 5 del bloque de permisos de `verificacion-manual.md` con cuentas reales (`[PERMISOS-VERIFICAR-SESION]`).
+- `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (SCRUM-541): quedan sin chequeo 73 actions de lectura de un solo módulo, más 11 que usan pantallas de varios módulos o una ruta libre.
+- El inventario no ve una lectura con un nombre que no empiece con un verbo de lectura, ni una action del marco importada a través de un archivo que la reexporta, ni si un provider le pasa a `leerDelMarco` los permisos reales (lo cubren los tests de cada provider y el del orden de los providers).
+- Verificación:
+  - Tests: 275 archivos y 4.370 casos (`main`: 266 y 4.226), también con `TZ=UTC`; `tsc` en 0; lint sin avisos nuevos contra `4a542e5e`; `next build` sin «Dynamic server usage».
+  - Mutantes: 27 de 27 muertos con la suite completa (los de la AR, X1 a X4, incluidos).
+  - Ataques de la AR: A1 a A5, A8 y A9 en rojo.
+  - Falta el paso 5 del bloque de permisos de `verificacion-manual.md` con cuentas reales (`[PERMISOS-VERIFICAR-SESION]`).
 
 ### 2026-10-13 — Marketing, contenido: errores esperables como valor (SCRUM-502)
 
