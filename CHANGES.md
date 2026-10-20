@@ -94,8 +94,8 @@ Medido con la sonda de la AR pasada 2 (`ar-p2/scripts/sonda-ar.mjs`, copiada a l
 - `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (SCRUM-541): quedan sin chequeo 73 actions de lectura de un solo módulo, más 11 que usan pantallas de varios módulos o una ruta libre.
 - El inventario no ve una lectura con un nombre que no empiece con un verbo de lectura, ni una action del marco importada a través de un archivo que la reexporta, ni si un provider le pasa a `leerDelMarco` los permisos reales (lo cubren los tests de cada provider y el del orden de los providers).
 - Verificación:
-  - Tests: TESTS_FINAL (`main`: 266 y 4.226), también con `TZ=UTC`; `tsc` en 0; lint sin avisos nuevos contra `4a542e5e`; `next build` sin «Dynamic server usage».
-  - Mutantes: MUTANTES_FINAL muertos con la suite completa (los de las AR, X1 a X4 e Y4, incluidos).
+  - Tests: 278 archivos y 4.382 casos (`main`: 266 y 4.226), también con `TZ=UTC`; `tsc` en 0; lint sin avisos nuevos contra `4a542e5e`; `next build` sin «Dynamic server usage».
+  - Mutantes: 40 de 40 muertos con la suite completa (los de las AR, X1 a X4 e Y4, incluidos).
   - Ataques de las AR: A1 a A5, A8 y A9, y B1 a B6, en rojo; A6 es el límite documentado.
   - Falta el paso 5 del bloque de permisos de `verificacion-manual.md` con cuentas reales (`[PERMISOS-VERIFICAR-SESION]`).
 
