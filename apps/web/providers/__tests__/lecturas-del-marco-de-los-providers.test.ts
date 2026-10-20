@@ -45,6 +45,7 @@ vi.mock("@/app/conversations/actions", async (o) => ({
 }));
 vi.mock("@/app/finance/actions", async (o) => ({
   ...(await o<typeof import("@/app/finance/actions")>()),
+  getResumenFinancieroAction: accion("resumen", { success: true, data: { pagosSinLeer: false } }),
   loadFinanceConfigAction: accion("finanzas", {
     fixedExpenses: [{ id: "MARCA-GASTO" }],
     subscriptions: [],
@@ -88,7 +89,13 @@ beforeEach(() => {
 });
 
 describe("PlatformDataProvider", () => {
-  it("⭐ sin Clientes, Ventas, Finanzas ni el Panel: no pide nada y todo queda vacío", async () => {
+  it("⭐ sin Clientes, Ventas ni Finanzas (aunque tenga el Panel): no pide nada y todo queda vacío", async () => {
+    for (const p of [sinModulos, member({ dashboard: "full" })]) {
+      await lecturasDeLaPlataforma.clientes(p);
+      await lecturasDeLaPlataforma.llamadasDeCierre(p);
+      await lecturasDeLaPlataforma.conversaciones(p);
+    }
+    expect(sim.pedidos).toEqual([]);
     await expect(lecturasDeLaPlataforma.clientes(sinModulos)).resolves.toEqual([]);
     await expect(lecturasDeLaPlataforma.llamadasDeCierre(sinModulos)).resolves.toEqual([]);
     await expect(lecturasDeLaPlataforma.conversaciones(sinModulos)).resolves.toEqual([]);
@@ -122,30 +129,43 @@ describe("PlatformDataProvider", () => {
 });
 
 describe("FinanceDataProvider", () => {
-  it("⭐ sin Finanzas, Ventas, el Panel ni Ajustes: no pide la configuración, los cobros ni las métricas", async () => {
-    const sinNada = member({ team: "full" });
-    await expect(lecturasDeFinanzas.configuracion(sinNada)).resolves.toBeNull();
-    await expect(lecturasDeFinanzas.cobros(sinNada)).resolves.toEqual({ success: true, data: [] });
-    await expect(lecturasDeFinanzas.metricasImportadas(sinNada)).resolves.toEqual({ success: true, data: [] });
-    expect(sim.pedidos).toEqual([]);
+  it("⭐ sin Finanzas, Ventas ni Ajustes (con el Panel o nada): no pide la configuración, los cobros, el resumen ni las métricas", async () => {
+    for (const p of [member({ team: "full" }), member({ dashboard: "full" })]) {
+      sim.pedidos = [];
+      await expect(lecturasDeFinanzas.configuracion(p)).resolves.toBeNull();
+      await expect(lecturasDeFinanzas.cobros(p)).resolves.toEqual({ success: true, data: [] });
+      await expect(lecturasDeFinanzas.resumen(p)).resolves.toBeNull();
+      await expect(lecturasDeFinanzas.metricasImportadas(p)).resolves.toEqual({ success: true, data: [] });
+      expect(sim.pedidos).toEqual([]);
+    }
   });
 
   it("con sólo Ajustes pide la configuración (el servidor manda sólo las plataformas) y nada más", async () => {
     await lecturasDeFinanzas.configuracion(sinModulos);
     await lecturasDeFinanzas.cobros(sinModulos);
+    await lecturasDeFinanzas.resumen(sinModulos);
     await lecturasDeFinanzas.metricasImportadas(sinModulos);
     expect(sim.pedidos).toEqual(["finanzas"]);
   });
 
-  it("con Finanzas pide todo menos las métricas importadas (son del Panel y de Ventas)", async () => {
+  it("⭐ con sólo Ventas pide la configuración, el resumen y las métricas, no los cobros", async () => {
+    const p = member({ sales: "full" });
+    await lecturasDeFinanzas.configuracion(p);
+    await lecturasDeFinanzas.cobros(p);
+    await lecturasDeFinanzas.resumen(p);
+    await lecturasDeFinanzas.metricasImportadas(p);
+    expect(sim.pedidos).toEqual(["finanzas", "resumen", "metricas"]);
+  });
+
+  it("con Finanzas pide todo, como antes", async () => {
     const p = member({ finance: "view" });
     await expect(lecturasDeFinanzas.configuracion(p)).resolves.toMatchObject({ fixedExpenses: [{ id: "MARCA-GASTO" }] });
     await lecturasDeFinanzas.cobros(p);
     await lecturasDeFinanzas.metricasImportadas(p);
-    expect(sim.pedidos).toEqual(["finanzas", "cobros"]);
+    expect(sim.pedidos).toEqual(["finanzas", "cobros", "metricas"]);
   });
 
-  it("el founder pide las tres, igual que antes", async () => {
+  it("el founder pide todo, igual que antes", async () => {
     await lecturasDeFinanzas.configuracion(founder);
     await lecturasDeFinanzas.cobros(founder);
     await lecturasDeFinanzas.metricasImportadas(founder);

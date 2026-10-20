@@ -8,10 +8,11 @@
  * reportes ejecutivos de su organización en cualquier pantalla.
  *
  * Cada lectura se abre si la persona puede entrar a **alguno** de los módulos
- * cuyas pantallas la usan (la lista sale de quién consume cada dato: por
- * ejemplo, los clientes los muestran Clientes, Ventas con Cobros, Finanzas y el
- * Panel). Así, con cualquiera de esos módulos todo sigue igual, y sin ninguno
- * el dato no se pide ni viaja.
+ * cuyas pantallas **muestran** ese dato tal cual (mínimo privilegio, AR 1 de
+ * SCRUM-540). Un módulo que sólo muestra totales no recibe las filas: los
+ * recibe calculados en el servidor (Ventas, `resumenFinanciero`; el Panel, en
+ * su propia página). Así cada módulo recibe lo que sus pantallas muestran, y
+ * sin ninguno el dato no se pide ni viaja.
  *
  * Este archivo no depende del servidor: lo usan las actions
  * (`rechazoDeLecturaDelMarco` en `acceso-a-modulo.ts`) y los providers del
@@ -26,20 +27,37 @@ import {
 } from "@/lib/auth/regla-de-modulo";
 
 export const MODULOS_DE_LAS_LECTURAS_DEL_MARCO = {
-  /** `listClientsAction`: lista de Clientes, Cobros, Finanzas, Panel (y el contador de la barra). */
-  clientes: ["clients", "sales", "finance", "dashboard"],
-  /** `listClosingCallsAction`: Closing y métricas de Ventas, Finanzas, Panel. */
-  llamadasDeCierre: ["sales", "finance", "dashboard"],
-  /** `listConversationsAction`, `getConnectedUnipileAccountsAction` y su canal en vivo: Inbox y métricas de Ventas, Panel. */
-  conversaciones: ["sales", "dashboard"],
-  /** Gastos fijos, suscripciones y sueldos de `loadFinanceConfigAction`: Finanzas, Gastos, el resumen de Ventas y del Panel. */
-  configuracionDeFinanzas: ["finance", "sales", "dashboard"],
-  /** Las plataformas de cobro de `loadFinanceConfigAction`: lo mismo, más Ajustes y el cobro de Closing. */
-  plataformasDePago: ["finance", "sales", "dashboard", "settings"],
-  /** `listOrganizationPaymentsAction`: Finanzas, el resumen de Ventas y el Panel. */
-  cobros: ["finance", "sales", "dashboard"],
-  /** `getSalesMetricsSnapshotsAction`: métricas importadas del Panel y de Ventas. */
-  metricasImportadas: ["dashboard", "sales"],
+  /**
+   * `listClientsAction`: las filas de clientes. Las muestran Clientes, Ventas
+   * (Cobros, Closing) y Finanzas. El Panel no: sus totales se calculan en el
+   * servidor (`leerDatosDelPanel`).
+   */
+  clientes: ["clients", "sales", "finance"],
+  /** `listClosingCallsAction`: Closing y métricas de Ventas, y Finanzas (comisiones por closer). */
+  llamadasDeCierre: ["sales", "finance"],
+  /** `listConversationsAction`, `getConnectedUnipileAccountsAction` y su canal en vivo: Inbox y métricas de Ventas. */
+  conversaciones: ["sales"],
+  /**
+   * El detalle de Finanzas en `loadFinanceConfigAction`: gastos fijos,
+   * suscripciones, sueldos y comisiones por persona, y lo cobrado por
+   * plataforma. Sólo lo muestra Finanzas.
+   */
+  detalleDeFinanzas: ["finance"],
+  /**
+   * Las plataformas de cobro sin lo cobrado (nombre, clave, moneda, etiqueta):
+   * Finanzas, el cobro de Closing (Ventas) y Ajustes.
+   */
+  plataformasDePago: ["finance", "sales", "settings"],
+  /**
+   * `getResumenFinancieroAction`: los totales que muestra Ventas (gastos del
+   * mes, facturación, margen, por cobrar, serie mensual), calculados en el
+   * servidor. Finanzas los calcula en el navegador con el detalle.
+   */
+  resumenFinanciero: ["finance", "sales"],
+  /** `listOrganizationPaymentsAction`: cada cobro de la org. Sólo Finanzas. */
+  cobros: ["finance"],
+  /** `getSalesMetricsSnapshotsAction`: las métricas importadas, respaldo de los totales de Finanzas y de Ventas. */
+  metricasImportadas: ["finance", "sales"],
   /** `getInstagramIntegrationStatusAction`: el estado de Instagram que usan Marketing e Integraciones. */
   instagram: ["marketing", "integrations"],
   /** `getLatestReportsByCadenceAction`: el panel de reportes de la barra (los reportes son de Operaciones). */

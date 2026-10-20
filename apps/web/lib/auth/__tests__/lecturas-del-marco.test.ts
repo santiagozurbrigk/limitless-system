@@ -47,9 +47,24 @@ describe("puedeLeerDelMarco", () => {
     }
   });
 
-  it("los clientes los abren Clientes, Ventas, Finanzas y el Panel; los reportes, sólo Operaciones", () => {
-    expect(MODULOS_DE_LAS_LECTURAS_DEL_MARCO.clientes).toEqual(["clients", "sales", "finance", "dashboard"]);
-    expect(MODULOS_DE_LAS_LECTURAS_DEL_MARCO.reportesEjecutivos).toEqual(["operations"]);
+  it("⭐ la tabla de mínimo privilegio: cada módulo abre sólo lo que sus pantallas muestran", () => {
+    expect(MODULOS_DE_LAS_LECTURAS_DEL_MARCO).toEqual({
+      clientes: ["clients", "sales", "finance"],
+      llamadasDeCierre: ["sales", "finance"],
+      conversaciones: ["sales"],
+      detalleDeFinanzas: ["finance"],
+      plataformasDePago: ["finance", "sales", "settings"],
+      resumenFinanciero: ["finance", "sales"],
+      cobros: ["finance"],
+      metricasImportadas: ["finance", "sales"],
+      instagram: ["marketing", "integrations"],
+      reportesEjecutivos: ["operations"],
+      llamadasPendientes: ["clients"],
+    });
+    // El Panel no abre ninguna: sus totales los calcula su página en el servidor.
+    for (const modulos of Object.values(MODULOS_DE_LAS_LECTURAS_DEL_MARCO)) {
+      expect(modulos as readonly string[]).not.toContain("dashboard");
+    }
   });
 
   it("el founder y alguien sin rol leen todo; sin ningún módulo de datos, nada", () => {

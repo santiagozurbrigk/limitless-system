@@ -202,17 +202,25 @@ describe("rechazoDeLecturaDelMarco (SCRUM-540)", () => {
     });
   });
 
-  it("con cualquiera de los módulos de la lectura pasa (los clientes, con sólo el Panel)", async () => {
-    sim.permisos = member({ dashboard: "view" });
+  it("con cualquiera de los módulos de la lectura pasa (los clientes, con sólo Ventas)", async () => {
+    sim.permisos = member({ sales: "view" });
     await expect(rechazoDeLecturaDelMarco("clientes")).resolves.toBeNull();
-    await expect(rechazoDeLecturaDelMarco("cobros")).resolves.toBeNull();
+    await expect(rechazoDeLecturaDelMarco("resumenFinanciero")).resolves.toBeNull();
+    await expect(rechazoDeLecturaDelMarco("cobros")).resolves.toMatchObject({ moduleId: "finance" });
     await expect(rechazoDeLecturaDelMarco("llamadasPendientes")).resolves.not.toBeNull();
+  });
+
+  it("⭐ con sólo el Panel no se abre ninguna lectura de filas (sus totales los calcula su página)", async () => {
+    sim.permisos = member({ dashboard: "full" });
+    for (const lectura of ["clientes", "llamadasDeCierre", "conversaciones", "detalleDeFinanzas", "plataformasDePago", "resumenFinanciero", "cobros", "metricasImportadas"] as const) {
+      await expect(rechazoDeLecturaDelMarco(lectura), lectura).resolves.not.toBeNull();
+    }
   });
 
   it("el founder y alguien sin rol pasan siempre", async () => {
     for (const permisos of [founder, sinRol]) {
       sim.permisos = permisos;
-      await expect(rechazoDeLecturaDelMarco("configuracionDeFinanzas")).resolves.toBeNull();
+      await expect(rechazoDeLecturaDelMarco("detalleDeFinanzas")).resolves.toBeNull();
     }
   });
 
@@ -222,9 +230,13 @@ describe("rechazoDeLecturaDelMarco (SCRUM-540)", () => {
     await expect(puedeLeerDelMarcoEnElServidor("clientes")).rejects.toBeInstanceOf(FallaDeLaBase);
   });
 
-  it("Ajustes abre las plataformas de cobro pero no los gastos", async () => {
-    sim.permisos = member({ settings: "view" });
-    await expect(puedeLeerDelMarcoEnElServidor("plataformasDePago")).resolves.toBe(true);
-    await expect(puedeLeerDelMarcoEnElServidor("configuracionDeFinanzas")).resolves.toBe(false);
+  it("Ajustes y Ventas abren las plataformas de cobro pero no el detalle de Finanzas", async () => {
+    for (const modulos of [{ settings: "view" }, { sales: "full" }] as const) {
+      sim.permisos = member(modulos);
+      await expect(puedeLeerDelMarcoEnElServidor("plataformasDePago")).resolves.toBe(true);
+      await expect(puedeLeerDelMarcoEnElServidor("detalleDeFinanzas")).resolves.toBe(false);
+    }
+    sim.permisos = member({ finance: "view" });
+    await expect(puedeLeerDelMarcoEnElServidor("detalleDeFinanzas")).resolves.toBe(true);
   });
 });

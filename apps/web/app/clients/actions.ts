@@ -18,6 +18,7 @@ import {
   type RechazoPorModulo,
 } from "@/lib/auth/acceso-a-modulo";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { leerClientes } from "@/lib/marco/lecturas-de-servidor";
 import {
   ErrorEsperable,
   FallaDeLaBase,
@@ -116,29 +117,7 @@ export async function listClientsAction(): Promise<Client[] | RechazoPorModulo> 
   const rechazo = await rechazoDeLecturaDelMarco("clientes");
   if (rechazo) return rechazo;
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("clients")
-    .select(
-      // El autor de la marca de satisfacción viene embebido: mostrar "marcada
-      // el 3 de marzo" sin decir por quién deja el dato a medias — una
-      // impresión tiene dueño.
-      "*, satisfaction_author:profiles!clients_satisfaction_updated_by_fkey(full_name, email)"
-    )
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    if (isMissingTableError(error.message)) {
-      console.error(
-        "[listClients] Ejecuta supabase/migrations/20260521100000_clients.sql en el SQL Editor de Supabase."
-      );
-    } else {
-      console.error("[listClients]", error.message);
-    }
-    return [];
-  }
-
-  return (data as ClientRow[]).map(rowToClient);
+  return leerClientes(await createClient());
 }
 
 /**

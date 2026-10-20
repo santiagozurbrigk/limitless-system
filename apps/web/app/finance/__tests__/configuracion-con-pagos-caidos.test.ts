@@ -166,16 +166,29 @@ describe("updatePaymentPlatformAction (AR pasada 3, MENOR-2)", () => {
 });
 
 describe("loadFinanceConfigAction por partes según el rol (SCRUM-540)", () => {
-  it("⭐ con Ajustes y sin Finanzas, Ventas ni el Panel: sólo las plataformas; gastos, suscripciones y sueldos ni se leen (SCRUM-540)", async () => {
+  it("⭐ sin Finanzas (Ajustes o Ventas): sólo las plataformas, sin lo cobrado ni la fecha del último cobro; no se leen gastos, suscripciones, sueldos ni cobros", async () => {
     sim.conGastos = false;
     const r = dato(await loadFinanceConfigAction());
-    expect(r.paymentPlatforms.map((p) => [p.id, p.totalReceived])).toEqual([["p1", 100]]);
+    expect(r.paymentPlatforms).toEqual([
+      expect.objectContaining({ id: "p1", name: "Stripe", currency: "USD", totalReceived: 0, lastTransactionAt: "" }),
+    ]);
     expect(r.fixedExpenses).toEqual([]);
     expect(r.subscriptions).toEqual([]);
     expect(r.teamCompensation).toEqual([]);
+    expect(r.pagosSinLeer).toBe(false);
     expect(sim.filtrosOrg.payment_platforms).toEqual(["org-1"]);
-    for (const tabla of ["fixed_expenses", "subscriptions", "team_compensation"]) {
-      expect(sim.filtrosOrg[tabla]).toBeUndefined();
+    for (const tabla of ["fixed_expenses", "subscriptions", "team_compensation", "client_payments"]) {
+      expect(sim.filtrosOrg[tabla], tabla).toBeUndefined();
     }
+    // Ni el monto ni la fecha del cobro aparecen en la respuesta.
+    expect(JSON.stringify(r)).not.toContain("100");
+    expect(JSON.stringify(r)).not.toContain("2026-10-01");
+  });
+
+  it("con Finanzas, lo cobrado por plataforma y su fecha, como siempre", async () => {
+    const r = dato(await loadFinanceConfigAction());
+    expect(r.paymentPlatforms.map((p) => [p.id, p.totalReceived, p.lastTransactionAt])).toEqual([
+      ["p1", 100, "2026-10-01"],
+    ]);
   });
 });

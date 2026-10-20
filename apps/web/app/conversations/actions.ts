@@ -13,7 +13,6 @@ import {
 } from "@/lib/conversations/mapper";
 import {
   fetchConnectedUnipileAccounts,
-  filterConversationsForInbox,
   type ConnectedUnipileAccount,
 } from "@/lib/sales/unipile-inbox-filter";
 import { scoreConversation } from "@/lib/manychat/score-conversation";
@@ -24,6 +23,7 @@ import {
   type RechazoPorModulo,
 } from "@/lib/auth/acceso-a-modulo";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { leerConversaciones } from "@/lib/marco/lecturas-de-servidor";
 import {
   firstZodError,
   updateConversationTagSchema,
@@ -76,37 +76,8 @@ export async function listConversationsAction(): Promise<Conversation[] | Rechaz
   if (!organizationId) return [];
 
   const supabase = await createClient();
-
   await repairClosingConversationLinks(supabase, organizationId);
-
-  const connectedAccounts = await fetchConnectedUnipileAccounts(
-    supabase,
-    organizationId
-  );
-
-  const { data, error } = await supabase
-    .from("conversations")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .order("last_message_at", { ascending: false });
-
-  if (error) {
-    if (isMissingTableError(error.message)) {
-      console.error(
-        "[listConversations] Ejecuta supabase/migrations/20260521500000_conversations.sql"
-      );
-    } else {
-      console.error("[listConversations]", error.message);
-    }
-    return [];
-  }
-
-  const rows = filterConversationsForInbox(
-    data as ConversationRow[],
-    connectedAccounts
-  );
-
-  return rows.map(rowToConversation);
+  return leerConversaciones(supabase, organizationId);
 }
 
 export async function updateConversationTagAction(
