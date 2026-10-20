@@ -73,7 +73,10 @@ describe("suscribirPanelEnVivo", () => {
     const a = vi.fn();
     const b = vi.fn();
     const cortarA = suscribirPanelEnVivo({ permisos: founder, organizationId: "org-d", cliente, alCambiar: a })!;
+    await esperar();
     cortarA();
+    // El segundo montaje puede llegar un rato después: el canal sigue abierto.
+    vi.advanceTimersByTime(1000);
     const cortarB = suscribirPanelEnVivo({ permisos: founder, organizationId: "org-d", cliente, alCambiar: b })!;
     await esperar();
     vi.advanceTimersByTime(ESPERA_PARA_CERRAR_MS * 2);

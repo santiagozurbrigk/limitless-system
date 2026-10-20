@@ -72,13 +72,17 @@ La AR pasada 1 mostró que la primera versión del marco abría de más:
 
 Por decisión de Fernando (mínimo privilegio), cada módulo recibe sólo lo que sus pantallas muestran.
 
-Medido con la sonda de la AR (`ar-p1/scripts/sonda-ar.mjs`, copiada a la evidencia), con builds de producción de la rama y de `main` contra un Supabase local con datos marcados y dos cobros. Recorrió 217 ventanas por cuenta: 72 rutas al cargar, con `router.push` y con `push` + `refresh()`, más el marco.
-- **Sin módulos:** 0 ventanas con marcas en la rama (en `main`, 76) y 0 con el canal en vivo abierto (en `main`, 73). Pidió 76 actions (en `main`, 955).
-- **Sólo Ajustes:** sólo el nombre de la plataforma de cobro (que muestra Ajustes). Ni montos, ni fecha del último cobro, ni ninguna otra marca (en `main`, todas).
-- **Sólo el Panel:** 0 marcas en todo lo que recibe (en `main`, 81 ventanas con todas las marcas).
-- **Sólo Ventas:** clientes, llamadas de cierre, conversaciones y el nombre de la plataforma, que muestran sus pantallas. Ningún sueldo, gasto, suscripción, cobro suelto ni la fecha del último cobro.
-- **Todos los módulos, founder y sin rol:** misma ruta final, mismo «No tenés acceso», la misma unión de marcas en las actions y la misma cantidad de actions que en `main`. Las diferencias ventana por ventana son marcas del payload RSC que caen en la ventana vecina en las dos direcciones, igual que entre dos corridas de `main`.
+Medido con la sonda de la AR pasada 2 (`ar-p2/scripts/sonda-ar.mjs`, copiada a la evidencia del dev en `ar2-dev/`). Usé builds de producción de la rama y de `main` contra un Supabase local con la siembra de la AR: datos marcados, la org en `America/Tegucigalpa` y `conversations` en la publicación de Realtime. Ocho cuentas, 217 ventanas cada una: 72 rutas al cargar, con `router.push` y con `push` + `refresh()`, más el marco.
+- **Sin módulos:** 0 ventanas con marcas (en `main`, 75) y 0 con el canal en vivo abierto (en `main`, 73). Pidió 76 actions (en `main`, 955).
+- **Sólo Ajustes:** sólo el nombre de la plataforma de cobro (que muestra Ajustes).
+- **Sólo el Panel:** 0 marcas (en `main`, 79 ventanas con todas las marcas) y ningún canal en vivo.
+- **Sólo Ventas:** clientes, llamadas, conversaciones y el nombre de la plataforma; el monto de un cobro sólo en `/sales/cobros`, que lo muestra. Ningún sueldo, gasto ni suscripción.
+- **Sólo Finanzas:** filas de Finanzas, clientes y llamadas; ni conversaciones ni canal en vivo.
+- **Todos los módulos, founder y sin rol:** la misma cantidad de actions que en `main` (1039, 1046 y 1037) y la misma unión de marcas. Las pocas diferencias ventana por ventana son marcas del payload RSC que caen en la ventana vecina, en las dos direcciones.
 - **Sin bucles:** 0 pedidos `?_rsc=` en 5 s de reposo en todas las cuentas y los dos builds.
+- **Pantallas con totales** (`/dashboard`, `/sales/metrics`, `/sales/closing`, `/sales/cobros`, `/finance`, `/finance/expenses`, `/settings`) para siete cuentas: 49 de 49 iguales a `main` (`ar2-dev/pantallas/comparacion.txt`).
+- **En el cambio de mes:** tests con el proceso en `TZ=UTC` y el reloj en 2026-11-01T03:00Z para una org en Honduras dan octubre en el Panel y en el resumen de Ventas, como el navegador en `main`.
+- **Panel en vivo** (medición de la AR): founder, cambió sin recargar en 2 de 2 corridas, como en `main`; sólo el Panel, no cambia hasta recargar (en `main` sí, porque recibía las conversaciones).
 
 **Decisiones de diseño relevantes:**
 - Guardia por página, no por layout de segmento: un layout no frena la página y no se vuelve a ejecutar al moverse dentro del segmento. No usa `x-pathname` ni redirige.
@@ -90,9 +94,9 @@ Medido con la sonda de la AR (`ar-p1/scripts/sonda-ar.mjs`, copiada a la evidenc
 - `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (SCRUM-541): quedan sin chequeo 73 actions de lectura de un solo módulo, más 11 que usan pantallas de varios módulos o una ruta libre.
 - El inventario no ve una lectura con un nombre que no empiece con un verbo de lectura, ni una action del marco importada a través de un archivo que la reexporta, ni si un provider le pasa a `leerDelMarco` los permisos reales (lo cubren los tests de cada provider y el del orden de los providers).
 - Verificación:
-  - Tests: 275 archivos y 4.370 casos (`main`: 266 y 4.226), también con `TZ=UTC`; `tsc` en 0; lint sin avisos nuevos contra `4a542e5e`; `next build` sin «Dynamic server usage».
-  - Mutantes: 27 de 27 muertos con la suite completa (los de la AR, X1 a X4, incluidos).
-  - Ataques de la AR: A1 a A5, A8 y A9 en rojo.
+  - Tests: TESTS_FINAL (`main`: 266 y 4.226), también con `TZ=UTC`; `tsc` en 0; lint sin avisos nuevos contra `4a542e5e`; `next build` sin «Dynamic server usage».
+  - Mutantes: MUTANTES_FINAL muertos con la suite completa (los de las AR, X1 a X4 e Y4, incluidos).
+  - Ataques de las AR: A1 a A5, A8 y A9, y B1 a B6, en rojo; A6 es el límite documentado.
   - Falta el paso 5 del bloque de permisos de `verificacion-manual.md` con cuentas reales (`[PERMISOS-VERIFICAR-SESION]`).
 
 ### 2026-10-13 — Marketing, contenido: errores esperables como valor (SCRUM-502)
