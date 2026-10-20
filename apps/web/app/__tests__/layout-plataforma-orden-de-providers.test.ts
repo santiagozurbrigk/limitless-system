@@ -17,6 +17,8 @@ import type { UserPermissions } from "@/lib/auth/get-current-permissions";
 
 const sim = vi.hoisted(() => ({ permisos: null as unknown as UserPermissions }));
 
+// Con SCRUM-524 el layout importa la experiencia, que importa `server-only` (no existe en Vitest).
+vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-pathname": "/team" }),
 }));
