@@ -106,9 +106,10 @@ export default async function PlatformRouteLayout({
    *
    * El layout decide qué se dibuja, nada más: Next ejecuta la página del
    * segmento aunque acá no se use `children`, y en una navegación del cliente
-   * este layout no se vuelve a ejecutar. Una lectura que no tiene que llegarle
-   * a alguien sin el módulo chequea el permiso por su cuenta, como
-   * `getIntelligenceSnapshotAction` con `rechazoPorModulo`.
+   * este layout no se vuelve a ejecutar. Por eso cada página con módulo (y cada
+   * layout de segmento que lee) arranca con `exigirModuloDeLaPagina`, que corta
+   * sus lecturas antes de que corran, y las Server Actions de lectura con
+   * `rechazoPorModulo` (SCRUM-540; lo exige `lecturas-por-modulo.test.ts`).
    *
    * La regla (founder siempre pasa, sin rol no se bloquea, rutas sin módulo
    * libres) vive en `moduloBloqueadoParaRuta`. Toda pantalla mapeada en

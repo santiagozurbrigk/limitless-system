@@ -9,7 +9,9 @@ import type { PermissionModuleId } from "@/constants/permission-modules";
  * puede saltear escribiendo una URL no es un permiso, es una sugerencia.
  *
  * Esta tabla es la que usa el layout de la plataforma —en el servidor, antes de
- * renderizar nada— para decidir si la pantalla se muestra.
+ * renderizar nada— para decidir si la pantalla se muestra. Cada página repite
+ * el chequeo con su módulo (`exigirModuloDeLaPagina`, SCRUM-540), y el test
+ * `lecturas-por-modulo.test.ts` exige que ese módulo sea el de esta tabla.
  *
  * Se eligió una tabla explícita y no derivarla del sidebar porque hay pantallas
  * que no están en el menú (`/sops/[id]`, `/comentarios`, los detalles de
