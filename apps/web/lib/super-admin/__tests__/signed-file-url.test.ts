@@ -11,8 +11,8 @@ const sim = vi.hoisted(() => ({
   firmas: [] as Array<{ bucket: string; path: string; expiresIn: number }>,
 }));
 
-vi.mock("@/lib/auth/require-super-admin", () => ({
-  requireSuperAdmin: async () => {
+vi.mock("@/lib/auth/require-staff", () => ({
+  requireStaff: async () => {
     if (!sim.superAdmin) throw new Error("Sin permisos de super admin");
     return { id: "u-1", email: "staff@limitless.com" };
   },
