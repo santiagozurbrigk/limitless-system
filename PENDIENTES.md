@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 31 | 18 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 32 | 18 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
@@ -430,6 +430,16 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Estado verificado:** sin registro de verificación.
 - **Qué hay que hacer:** abrir retrospectiva de sprint, versiones de SOP, leads de UTM y llamadas del cliente.
 - **Dónde:** workboard, SOPs, UTMs, ficha de cliente.
+
+#### [ORG-EXPERIENCIA-CAMBIO] Cómo pasa a `full` o a `limitless` una organización que lo necesite
+- **Tipo:** decisión de negocio
+- **Severidad:** Media
+- **Estado verificado:** desde SCRUM-523 (`20261019120000_organizations_experience.sql`) toda organización nueva nace con `organizations.experience = 'webinar'` porque las altas lo mandan explícito (el default de la columna es `full`), salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin (`createFounderAccountAction`, `createOrganizationFromHoldingAction`, `createHoldingOrgAction` en `app/super-admin/actions.ts`) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para `authenticated`) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL). `limitless` (Limitless de gestión, decisión del PO del 28-oct-2026) no la manda ninguna alta: se asigna sólo así, con el SQL y el precheck de la guía de SCRUM-532.
+- **Riesgo:** cuando SCRUM-524 esconda el menú según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan `webinar`) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
+- **Impacto:** clientes nuevos de Limitless completo dados de alta por el super admin después del deploy de SCRUM-523.
+- **Qué hay que hacer:** que el PO decida quién y desde dónde pasa una organización a `full` o a `limitless` (por ejemplo, un selector en el detalle de la organización del super admin, con `createAdminClient` y `requireSuperAdmin`, como `updateOrgAddOnsAction`), y si el cambio de un holding se propaga a sus negocios.
+- **Criterio de aceptación:** el super admin pasa una organización entre `webinar`, `limitless` y `full` sin SQL; un usuario de la organización sigue sin poder cambiarla (`supabase/ci/tests/97_experiencia_de_la_organizacion.sql`).
+- **Dónde:** `app/super-admin/actions.ts`, `organizations.experience`, `lib/organization/experience.ts`.
 
 ### Plataforma · P3
 

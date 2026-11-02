@@ -81,7 +81,7 @@ Excepciones que **sí** son editables por cualquier miembro: `discord_integratio
 ### Columnas protegidas
 
 - `profiles`: trigger `protect_profile_columns` (`20260922100000`). Para `anon`/`authenticated` bloquea `id`, `organization_id`, `role`, `is_holding_admin` y la contraseña temporal; quien no es `founder` ni `admin` de la org sólo cambia nombre, email y avatar.
-- `organizations`: UPDATE por columna sólo en `name, industry, website_url, timezone, currency, language, country`; SELECT por columna en el repo (ver matiz de prod arriba).
+- `organizations`: UPDATE por columna sólo en `name, industry, website_url, timezone, currency, language, country`; SELECT por columna en el repo (ver matiz de prod arriba). `experience` (SCRUM-523) tiene SELECT para `authenticated` y ningún UPDATE de usuario: `20261019120000_organizations_experience.sql` se aborta si algún grant se lo diera, y lo prueba `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`.
 
 ## Funciones SQL
 
@@ -120,7 +120,7 @@ Una línea por tabla de producción. Filas = conteo aproximado de prod el 2026-0
 ### Plataforma, cuentas y permisos
 | Tabla | Propósito |
 |---|---|
-| `organizations` | Raíz multi-tenant: nombre, `account_type` (founder/holding), `status`, `enabled_add_ons`, BYOK de Claude cifrado, preferencias |
+| `organizations` | Raíz multi-tenant: nombre, `account_type` (founder/holding), `status`, `enabled_add_ons`, `experience` (`webinar`/`limitless`/`full`, default `full`; `limitless` se asigna por SQL; las altas de la app mandan `webinar` o la del holding; ver `docs/arquitectura/auth-organizaciones-y-permisos.md` § Experiencia de la organización), BYOK de Claude cifrado, preferencias |
 | `profiles` | Usuario (= `auth.users.id`) → `organization_id`, `role`, contraseña temporal, `is_holding_admin` |
 | `team_roles` | Roles custom con `permissions` por módulo |
 | `team_invitations` | Invitaciones por token (`/invite`); aceptarlas no crea cuentas (`aceptar_invitacion_de_equipo`) |
