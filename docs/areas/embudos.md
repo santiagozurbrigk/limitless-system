@@ -25,6 +25,10 @@ spend ni revenue por embudo: **las medidas de dinero y anuncios son de la org en
 **Lanzamientos** está **apagado en la UI** (placeholder "Próximamente"); ver la sección
 propia al final.
 
+Las pantallas nuevas de **Limitless Webinars** (Inicio, Lanzamientos, Leads, Ficha y Configuración del
+lanzamiento) se construyen sobre los contratos de vista de SCRUM-542: ver
+[`webinars-contratos-de-vista.md`](./webinars-contratos-de-vista.md).
+
 ## Pantallas y rutas
 
 | Ruta | Archivo | Qué muestra |

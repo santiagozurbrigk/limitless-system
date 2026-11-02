@@ -2062,6 +2062,24 @@ Fuente: PENDIENTES.md [MKT-CONTENT-LIMITE-50] · Doc del área: docs/areas/marke
 *Dónde:* {{apps/web/app/marketing/content/drive-actions.ts}}, {{app/forms/actions.ts}}
 
 Fuente: PENDIENTES.md [PERMISOS-SERVER-ACTIONS/marketing] · Doc del área: docs/areas/marketing.md",PERMISOS-SERVER-ACTIONS/marketing,Marketing,P2,,seguridad
+[WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars,Task,Medium,embudos,p2,decision-de-negocio,operativa,,,"*Tipo:* decisión de negocio / operativa
+
+*Estado verificado:* el escenario de ejemplo de Webinars (SCRUM-542) sólo lo ve la organización cuyo UUID está en {{WEBINAR_DEMO_ORGANIZATION_ID}} ({{apps/web/lib/webinar/vistas/org-de-demo.ts}}). La variable no está en Vercel ni en {{.env.example}}: hoy ninguna organización ve el ejemplo.
+
+*Qué hay que hacer:* cuando SCRUM-522 decida cuál es la org de demo y quién la crea, cargar su UUID en Vercel (Production y Preview, sólo servidor) y confirmar que ninguna org de un cliente tiene ese id.
+
+*Dónde:* {{apps/web/lib/webinar/vistas/org-de-demo.ts}}, {{docs/operacion/entorno-y-deploy.md}}, {{docs/areas/webinars-contratos-de-vista.md}}.
+
+Fuente: PENDIENTES.md [WEBINAR-ORG-DE-DEMO] · Doc del área: docs/areas/embudos.md",WEBINAR-ORG-DE-DEMO,Embudos y Lanzamientos,P2,,decisión de negocio / operativa
+[WEBINAR-VISTAS-LECTURA-REAL] Las funciones de lectura de Webinars leen la base (B4),Story,Medium,embudos,p2,feature,,,,"*Tipo:* feature
+
+*Estado verificado:* las seis funciones de {{apps/web/lib/webinar/vistas/leer.ts}} devuelven el escenario de ejemplo a la org de demo y, a cualquier otra, todo {{sin_fuente}} con {{MOTIVO_SIN_LECTURA_REAL}} ({{sin-lectura-real.ts}}) y ""no existe"" en las pantallas de un lanzamiento o un lead. Las tablas de SCRUM-526 no están migradas.
+
+*Qué hay que hacer:* después de migrar el modelo (SCRUM-532), leer de la base las filas de {{filas.ts}} y pasarlas por {{calcular.ts}}, con el estado de cada fuente y su regla de ""desactualizado""; una consulta caída va como {{error}} del número o {{{ ok: false, motivo }}}. Sin cambiar {{contratos.ts}}.
+
+*Dónde:* {{apps/web/lib/webinar/vistas/{leer,filas,calcular}.ts}}.
+
+Fuente: PENDIENTES.md [WEBINAR-VISTAS-LECTURA-REAL] · Doc del área: docs/areas/embudos.md",WEBINAR-VISTAS-LECTURA-REAL,Embudos y Lanzamientos,P2,,feature
 [EMBUDOS-SALUD] Habilitar el estado de salud (bandas de la §04) ⏸️,Task,Medium,embudos,p2,decision-de-negocio,feature,,,"*Tipo:* decisión de negocio / feature
 
 *Estado verificado:* {{applyHealthBand}}, {{resolveBenchmark}}, {{CROSS_FUNNEL_BANDS}} sólo se usan en tests; la tabla de pasos muestra {{benchmarkLabel}} como texto. {{funnel_benchmarks}} sin uso. {{diagnoseFunnel()}} no existe.

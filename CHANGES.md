@@ -28,6 +28,32 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-01 — Webinars: contratos de vista y escenario de ejemplo (SCRUM-542)
+
+**Rama:** `feat/SCRUM-542-webinars-contratos-de-vista` (base `main` `4a542e5e`)
+**Commit(s):** `62074b73` — feat(webinars): contratos de vista y escenario de ejemplo de las seis pantallas; este (docs)
+**Módulo(s) afectado(s):** Limitless Webinars: `apps/web/lib/webinar/vistas/` (nuevo: `dato.ts`, `contratos.ts`, `filas.ts`, `calcular.ts`, `escenario-de-ejemplo.ts`, `org-de-demo.ts`, `sin-lectura-real.ts`, `leer.ts`), `components/webinar/cartel-datos-de-ejemplo.tsx` (nuevo); docs `areas/webinars-contratos-de-vista.md` (nuevo), `areas/embudos.md`, `README.md`, `operacion/entorno-y-deploy.md`, `operacion/testing.md`, `PENDIENTES.md`
+
+**Qué se hizo:** A2 del plan "UI primero, datos después". Las seis pantallas de Webinars (Inicio del lanzamiento activo, Lista y Detalle de lanzamientos, Leads, Ficha del lead y Configuración del lanzamiento) tienen un tipo (`contratos.ts`) y una función de lectura cada una (`leer.ts`: `leerInicio`, `leerListaDeLanzamientos`, `leerDetalleDelLanzamiento`, `leerLeads`, `leerFichaDelLead`, `leerConfiguracionDelLanzamiento`), server-side con `requireOrganizationId()`. Las pantallas no se construyeron.
+- Cada número es un `Dato<T>` (`{ value, state, source, reason, measuredAt }`, unión discriminada por `state`) con los cinco estados: `medido`, `sin_fuente`, `falta_configurar`, `desactualizado` (con el último valor) y `error`. `derivar`/`sumar`/`tasa`/`cociente` combinan números: sin valor en una entrada, el resultado toma el peor estado (error > falta configurar > sin fuente > desactualizado) y su motivo; nunca se calcula con un cero inventado.
+- Las reglas de estado viven en `calcular.ts` (puro, recibe `ahora` y la zona de la org): cada conteo toma el estado de la fuente que lo mide; asistencia y "se quedó a la oferta" se miden por sesión (sin ID de Zoom o sin minuto de la oferta, `falta_configurar`; reporte con error, `error`; sin reporte todavía, `sin_fuente`; sesión futura, `null`) y el total es la suma; las ventas dependen del producto principal configurado y su proveedor; la inversión, de las campañas asociadas y de Meta Ads; un filtro de Leads hereda el estado de los números de los que sale (un filtro sin fuente trae también las filas sin fuente, no a todos los registrados).
+- Escenario de ejemplo (`escenario-de-ejemplo.ts`): determinístico (mulberry32 con semilla 542, fechas relativas a la hora actual redondeada), un lanzamiento activo Pago con 2 sesiones y uno cerrado Orgánico, 300 leads (210, 120, 30 en los dos) con recorridos coherentes, ventas por Whop, llamadas por Calendly, carga del equipo y notas. Los cinco estados: sin fuente en "confirmaron el email" (GoHighLevel), falta configurar en "se quedaron a la oferta" (sesión 2 sin minuto de la oferta), desactualizado en la inversión de Meta Ads y lo que sale de ella, error en ventas VIP (Commas). Emails `@example.com` y teléfonos +44 7700 900xxx (reservados para ficción).
+- Sólo lo ve la organización de `WEBINAR_DEMO_ORGANIZATION_ID` (variable de servidor, UUID exacto; sin ella, ninguna), con `esEjemplo: true` y el cartel fijo `CartelDatosDeEjemplo`. Cualquier otra recibe todo `sin_fuente` con un motivo fijo y "no existe" en las pantallas de un lanzamiento o un lead.
+- Tests: 6 archivos, 77 casos declarados (80 ejecutados): `lib/webinar/vistas/__tests__/{dato,escenario-de-ejemplo,vistas-del-escenario,leer,las-pantallas-leen-de-su-funcion}.test.ts` y `components/webinar/__tests__/cartel-datos-de-ejemplo.test.ts`.
+
+**Por qué / finalidad:** que Santi construya Inicio y Lanzamientos (SCRUM-543, SCRUM-544) y yo Leads y la Ficha (SCRUM-545) contra un contrato fijo y con datos creíbles antes de que exista el modelo en producción; en B4 las funciones leen la base sin que cambien las pantallas.
+
+**Decisiones de diseño relevantes:**
+- No había un patrón de "valor con estado" en el repo: lo más cercano era `null` como "sin instrumentación" de `lib/funnels/source-signal.ts` y ADR-010. Se reusó lo que sí había: `Lectura<T>` (`lib/client/correr-accion.ts`, SCRUM-504) para las tres pantallas que dependen de una fila (`{ ok: false, motivo }` no se pudo leer, `data: null` no existe), `lecturaDegradable` para la zona de la org y `fechaEnZona`/`diasEntre` de `lib/fechas/calendario.ts`.
+- `filas.ts` copia los nombres del modelo de SCRUM-526 (PR #141) más lo que le falta según las fichas de SCRUM-549 (estado de venta, notas, `report_status`, inversión por lanzamiento). Sin metas de ventas (Martín, 28-oct). No depende de la migración: no hay migración en este cambio.
+- La org de demo por variable de entorno y no por una columna: la decide SCRUM-522 y no hace falta migrar. Nunca por URL, cookie o nombre.
+- Un test recorre `apps/web` y falla si un archivo de fuera del módulo importa algo que no sea `leer`, `contratos` o `dato` (el escenario no puede llegar a una pantalla sin pasar por el chequeo de la org de demo); se probó con un archivo mutante.
+- "Compraron" incluye la compra directa en la oferta: puede superar a "Asistieron a la llamada", nunca a "Asistieron".
+
+**Verificación:** suite completa 272 archivos y 4.302 tests (`main` `4a542e5e`: 266); los de Webinars también con `TZ=Pacific/Auckland` y `TZ=America/Argentina/Buenos_Aires`; `tsc --noEmit` limpio; lint 71 avisos, los mismos que `main`, ninguno en archivos nuevos; `pendientes_a_jira.py --actualizar-indices` ok; `next build` exit 0 sin "Dynamic server usage". Mutantes: `esOrgDeDemo` que devuelve `true` con la variable cargada hace fallar 2 tests de la lectura; un import del escenario desde `app/` hace fallar el test de imports.
+
+**Riesgos / deuda técnica pendiente:** `[WEBINAR-ORG-DE-DEMO]` (cargar la variable cuando decida SCRUM-522) y `[WEBINAR-VISTAS-LECTURA-REAL]` (B4). El contrato sigue el borrador de fichas de SCRUM-549: si la sesión del día 6 cambia algo (lista por lanzamiento, etapas, notas, origen), cambia el contrato antes de que las pantallas lo usen. Los valores de `report_status` los define la integración de Zoom.
+
 ### 2026-10-13 — Marketing, contenido: errores esperables como valor (SCRUM-502)
 
 **Rama:** `fix/SCRUM-502-marketing-contenido-errores` (base `main` `0353ec05`)

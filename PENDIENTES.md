@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 17 | 7 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
@@ -1327,6 +1327,18 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Dónde:** `apps/web/vercel.json`, nuevo `app/api/cron/*`, `lib/webinarjam/sync.ts`.
 
 ### Embudos y Lanzamientos · P2
+
+#### [WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars
+- **Tipo:** decisión de negocio / operativa
+- **Estado verificado:** el escenario de ejemplo de Webinars (SCRUM-542) sólo lo ve la organización cuyo UUID está en `WEBINAR_DEMO_ORGANIZATION_ID` (`apps/web/lib/webinar/vistas/org-de-demo.ts`). La variable no está en Vercel ni en `.env.example`: hoy ninguna organización ve el ejemplo.
+- **Qué hay que hacer:** cuando SCRUM-522 decida cuál es la org de demo y quién la crea, cargar su UUID en Vercel (Production y Preview, sólo servidor) y confirmar que ninguna org de un cliente tiene ese id.
+- **Dónde:** `apps/web/lib/webinar/vistas/org-de-demo.ts`, `docs/operacion/entorno-y-deploy.md`, `docs/areas/webinars-contratos-de-vista.md`.
+
+#### [WEBINAR-VISTAS-LECTURA-REAL] Las funciones de lectura de Webinars leen la base (B4)
+- **Tipo:** feature
+- **Estado verificado:** las seis funciones de `apps/web/lib/webinar/vistas/leer.ts` devuelven el escenario de ejemplo a la org de demo y, a cualquier otra, todo `sin_fuente` con `MOTIVO_SIN_LECTURA_REAL` (`sin-lectura-real.ts`) y "no existe" en las pantallas de un lanzamiento o un lead. Las tablas de SCRUM-526 no están migradas.
+- **Qué hay que hacer:** después de migrar el modelo (SCRUM-532), leer de la base las filas de `filas.ts` y pasarlas por `calcular.ts`, con el estado de cada fuente y su regla de "desactualizado"; una consulta caída va como `error` del número o `{ ok: false, motivo }`. Sin cambiar `contratos.ts`.
+- **Dónde:** `apps/web/lib/webinar/vistas/{leer,filas,calcular}.ts`.
 
 #### [EMBUDOS-SALUD] Habilitar el estado de salud (bandas de la §04) ⏸️
 - **Tipo:** decisión de negocio / feature
