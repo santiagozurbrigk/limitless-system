@@ -25,8 +25,12 @@ import type { SidebarParentKey } from "./sidebar-modules";
  *     Administración es de SCRUM-551.
  *
  * Una entrada con `lista: false` no se muestra (nada de "Próximamente") y su
- * ruta redirige a la pantalla de inicio de la experiencia, igual que cualquier
- * otra ruta de la plataforma que no esté en el menú. Cada tarea enciende la suya
+ * ruta no se abre. Lo que ve quien la tipea depende de si su pantalla existe:
+ * hoy `/inicio`, `/leads` y `/administracion` no tienen carpeta en
+ * `app/(platform)`, así que la URL da el 404 de la app (sin la barra); cuando
+ * la tarea cree la carpeta, su `layout.tsx` llama a `exigirRutaDeLaExperiencia`
+ * (lo exige un test) y esa ruta redirige a la pantalla de inicio mientras la
+ * entrada no esté lista, como hoy `/lanzamientos`. Cada tarea enciende la suya
  * cuando su pantalla existe.
  *
  * El bloqueo se decide por el segmento de primer nivel de `href` (`/sales` para
@@ -121,6 +125,37 @@ export const MENU_POR_EXPERIENCIA: Record<ExperienciaConMenuPropio, readonly Ent
       permissionId: "finance",
       lista: false, // SCRUM-551
     },
+  ],
+};
+
+/**
+ * Pantallas fuera del menú que una experiencia abre igual porque una pantalla
+ * de su menú enlaza a ellas (fix-pack 1 de A1, decisión de Fernando, 1-nov-2026).
+ * No se muestran en la barra, en el menú del celular ni en la paleta: se llega
+ * por el link o tipeando la URL. Cada valor es la pantalla a la que lleva el
+ * link, con la forma de las rutas de `app/` (`[id]` para un parámetro; un test
+ * exige que exista). Como con las entradas, se abre el segmento de primer
+ * nivel, con todo lo que cuelga de él, y el permiso del módulo de esa ruta
+ * (`module-for-path`) sigue valiendo en el layout de la plataforma.
+ *
+ *   - `limitless`:
+ *       - Integraciones: la Bandeja de Ventas lleva a «Conectar integración»,
+ *         «Conectar Zernio» y «Gestionar Zernio»; sin esto, la Bandeja no se
+ *         puede conectar ni reconectar.
+ *       - SOP (`/sops/<id>`) y documentos del contexto del negocio
+ *         (`/business-context/<id>`): el Tablero enlaza al SOP vinculado a una
+ *         tarea y a sus documentos. La biblioteca de SOP (`/operations/sops`)
+ *         no se abre: es otro segmento. `/sops` y `/sops/create` tampoco, en
+ *         la práctica: `next.config.ts` los manda a esa biblioteca
+ *         (`lib/navigation/redirects.ts`).
+ *   - `webinar`: ninguna.
+ */
+export const RUTAS_EXTRA_POR_EXPERIENCIA: Record<ExperienciaConMenuPropio, readonly string[]> = {
+  webinar: [],
+  limitless: [
+    paths.platform.integrations,
+    paths.platform.sops.detail("[id]"),
+    paths.platform.businessContext.viewer("[id]"),
   ],
 };
 

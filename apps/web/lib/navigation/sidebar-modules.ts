@@ -2,7 +2,7 @@ import { paths } from "@/routes/paths";
 import { ESCONDIDO } from "@/lib/release/escondido";
 import type { AddOnId } from "@/lib/auth/get-current-permissions";
 import type { OrganizationExperience } from "@/lib/organization/experience";
-import { entradasListas, menuPorDefecto, segmentoDe } from "./rutas-por-experiencia";
+import { coincide, entradasListas, menuPorDefecto, segmentoDe } from "./rutas-por-experiencia";
 import type { EntradaDelMenu } from "./menu-por-experiencia";
 import type {
   SidebarDirectModule,
@@ -369,9 +369,7 @@ export function buildSidebarNavDelMenu(menu: readonly EntradaDelMenu[]): Sidebar
     modulesWithChildren: grupos as Record<string, SidebarParentModule>,
     getParentFromPath: (pathname) =>
       listas.find(
-        (entrada) =>
-          entrada.grupo !== undefined &&
-          (pathname === segmentoDe(entrada.href) || pathname.startsWith(`${segmentoDe(entrada.href)}/`))
+        (entrada) => entrada.grupo !== undefined && coincide(pathname, segmentoDe(entrada.href))
       )?.grupo ?? null,
     rootItems,
   };

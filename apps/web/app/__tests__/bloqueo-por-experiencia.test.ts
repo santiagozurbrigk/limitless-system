@@ -251,18 +251,38 @@ describe("⭐ organización limitless", () => {
     sim.organizacionActiva = "org-limitless";
   });
 
-  it("todo segmento fuera de Clientes, Tablero, Ventas y los libres redirige a Clientes, sin SinAcceso", async () => {
+  it("todo segmento fuera de Clientes, Tablero, Ventas, los extra de limitless y los libres redirige a Clientes, sin SinAcceso", async () => {
     const resultado: Record<string, string> = {};
     for (const segmento of SEGMENTOS) resultado[segmento] = await entrar(segmento);
     const esperado = Object.fromEntries(
       SEGMENTOS.map((s) => [
         s,
-        ["clients", "workboard", "sales", "settings", "holding", "onboarding"].includes(s)
+        [
+          "clients",
+          "workboard",
+          "sales",
+          "integrations",
+          "sops",
+          "business-context",
+          "settings",
+          "holding",
+          "onboarding",
+        ].includes(s)
           ? "pasa"
           : "redirect /clients",
       ])
     );
     expect(resultado).toEqual(esperado);
+  });
+
+  it("⭐ abre /integrations, /sops y /business-context, adonde enlazan la Bandeja y el Tablero (fix-pack 1 de A1); webinar no", async () => {
+    for (const segmento of ["integrations", "sops", "business-context"]) {
+      expect(await entrar(segmento), segmento).toBe("pasa");
+    }
+    sim.organizacionActiva = "org-webinar";
+    for (const segmento of ["integrations", "sops", "business-context"]) {
+      expect(await entrar(segmento), segmento).toBe("redirect /team");
+    }
   });
 
   it("/dashboard, /team y /lanzamientos llevan a Clientes (no al Panel: no hay bucle)", async () => {

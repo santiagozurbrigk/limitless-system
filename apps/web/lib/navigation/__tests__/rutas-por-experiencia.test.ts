@@ -4,12 +4,15 @@ import { join } from "node:path";
 import {
   ACCESOS_DE_LA_ISLA,
   MENU_POR_EXPERIENCIA,
+  RUTAS_EXTRA_POR_EXPERIENCIA,
   RUTAS_LIBRES,
   type EntradaDelMenu,
   type ExperienciaConMenuPropio,
 } from "@/lib/navigation/menu-por-experiencia";
 import {
+  coincide,
   entradasListas,
+  hijosVisiblesDelGrupo,
   pantallaDeInicio,
   redireccionPorExperiencia,
   rutaPermitidaParaLaExperiencia,
@@ -22,6 +25,7 @@ import { permissionModuleForPath } from "@/lib/navigation/module-for-path";
 import { NAV_ICON_NAMES } from "@/components/navigation/nav-icons";
 import { ESCONDIDO } from "@/lib/release/escondido";
 import type { OrganizationExperience } from "@/lib/organization/experience";
+import { paths } from "@/routes/paths";
 import { pantallas } from "./pantallas-de-app";
 
 /**
@@ -170,6 +174,29 @@ describe("⭐ la config de los menús", () => {
     expect(ESCONDIDO.lanzamientos).toBe(true);
   });
 
+  it("⭐ rutas extra (fuera del menú): limitless abre Integraciones, SOP y contexto del negocio; webinar, ninguna", () => {
+    expect(Object.keys(RUTAS_EXTRA_POR_EXPERIENCIA).sort()).toEqual([...CON_MENU_PROPIO].sort());
+    expect(RUTAS_EXTRA_POR_EXPERIENCIA.webinar).toEqual([]);
+    expect(RUTAS_EXTRA_POR_EXPERIENCIA.limitless.map(segmentoDe)).toEqual([
+      "/integrations",
+      "/sops",
+      "/business-context",
+    ]);
+  });
+
+  for (const experiencia of CON_MENU_PROPIO) {
+    it(`${experiencia}: una ruta extra es una pantalla que existe, no es una entrada del menú ni una libre, y su segmento tiene layout`, () => {
+      const segmentosDelMenu = MENU_POR_EXPERIENCIA[experiencia].map((e) => segmentoDe(e.href));
+      for (const extra of RUTAS_EXTRA_POR_EXPERIENCIA[experiencia]) {
+        const segmento = segmentoDe(extra);
+        expect(segmentosDelMenu, extra).not.toContain(segmento);
+        expect(RUTAS_LIBRES, extra).not.toContain(segmento);
+        expect(RUTAS_DE_PANTALLAS.has(extra), extra).toBe(true);
+        expect(existsSync(join(process.cwd(), "app", "(platform)", segmento.slice(1), "layout.tsx")), extra).toBe(true);
+      }
+    });
+  }
+
   it("las rutas libres son onboarding, holding y ajustes de la cuenta", () => {
     expect([...RUTAS_LIBRES]).toEqual(["/onboarding", "/holding", "/settings"]);
   });
@@ -274,7 +301,7 @@ describe("⭐ rutas por experiencia", () => {
     expect(abiertas).toEqual(["/team", "/team/roles", "/settings", "/holding", "/onboarding/holding"]);
   });
 
-  it("⭐ limitless: Clientes, Tablero y todo Ventas (con sus subrutas) y las libres; ni Equipo ni Administración", () => {
+  it("⭐ limitless: Clientes, Tablero y todo Ventas (con sus subrutas), Integraciones y las libres; ni Equipo ni Administración", () => {
     const abiertas = plataforma.filter((ruta) => rutaPermitidaParaLaExperiencia("limitless", ruta));
     expect(abiertas).toEqual([
       "/sales/inbox",
@@ -282,23 +309,48 @@ describe("⭐ rutas por experiencia", () => {
       "/clients",
       "/clients/abc",
       "/workboard",
+      "/integrations",
       "/settings",
       "/holding",
       "/onboarding/holding",
     ]);
   });
 
-  it("webinar: el resto, incluidas las entradas no listas y las rutas anidadas, va a Equipo", () => {
+  it("webinar: el resto, incluidas las rutas anidadas, va a Equipo (las entradas no listas, en cuanto su carpeta exista)", () => {
     for (const ruta of ["/finance", "/marketing", "/lanzamientos", "/finance/expenses", "/inicio", "/leads", "/llamadas", "/dashboard", "/clients"]) {
       expect(redireccionPorExperiencia("webinar", ruta, FOUNDER)).toBe("/team");
     }
   });
 
-  it("⭐ limitless: el resto, incluida Administración mientras no esté lista, va a Clientes", () => {
+  // La decisión de la función. En la app la aplica el layout del segmento:
+  // `/administracion`, `/inicio` y `/leads` todavía no tienen carpeta y dan 404
+  // (ver "entradas no listas" más abajo).
+  it("⭐ limitless: el resto va a Clientes (para Administración, en cuanto su carpeta exista)", () => {
     for (const ruta of ["/dashboard", "/finance", "/marketing", "/team", "/administracion", "/inicio", "/lanzamientos"]) {
       expect(redireccionPorExperiencia("limitless", ruta, FOUNDER)).toBe("/clients");
     }
     expect(redireccionPorExperiencia("limitless", "/dashboard", SOLO_VENTAS)).toBe("/sales/inbox");
+  });
+
+  it("⭐ limitless abre las pantallas fuera del menú adonde enlazan la Bandeja y el Tablero; webinar las manda a Equipo", () => {
+    // sales-inbox-layout y zernio-inbox-panel: «Conectar integración», «Conectar
+    // Zernio», «Gestionar Zernio». workboard-task-resources: el SOP vinculado y
+    // los documentos del contexto del negocio de una tarea.
+    const enlazadas = [
+      paths.platform.integrations,
+      paths.platform.integrationsDiscord,
+      paths.platform.sops.detail("abc"),
+      paths.platform.businessContext.viewer("abc"),
+      paths.platform.businessContext.documents,
+    ];
+    for (const ruta of enlazadas) {
+      expect(rutaPermitidaParaLaExperiencia("limitless", ruta), ruta).toBe(true);
+      expect(redireccionPorExperiencia("limitless", ruta, FOUNDER), ruta).toBeNull();
+      expect(redireccionPorExperiencia("webinar", ruta, FOUNDER), ruta).toBe("/team");
+    }
+    // La biblioteca de SOP (/operations/sops) no: nadie de limitless enlaza ahí.
+    // `/sops/create` sí pasa el bloqueo, pero next.config la manda a la biblioteca.
+    expect(rutaPermitidaParaLaExperiencia("limitless", paths.platform.sops.library)).toBe(false);
   });
 
   it("un prefijo cuenta sólo si es un segmento entero", () => {
@@ -323,6 +375,45 @@ describe("⭐ rutas por experiencia", () => {
         expect(rutaPermitidaParaLaExperiencia(experiencia, pantallaDeInicio(experiencia, permisos))).toBe(true);
       }
     }
+  });
+});
+
+describe("⭐ entradas no listas: qué ve hoy quien tipea su URL (fix-pack 1 de A1, BLQ-2)", () => {
+  // Redirige sólo si hay una pantalla en esa URL y el layout de su segmento en
+  // `app/(platform)` llama a `exigirRutaDeLaExperiencia` (para una pantalla
+  // nueva lo exige `rutas-por-experiencia-en-disco.test.ts`). Si no hay
+  // pantalla, Next no ejecuta ningún layout de segmento y sirve
+  // `app/not-found.tsx`, el 404 sin la barra.
+  const PANTALLAS = pantallas(join(process.cwd(), "app"));
+
+  function queVe(href: string): "404" | "redirige" | "pantalla sin bloqueo" {
+    const hayPantalla = PANTALLAS.some((p) => p.ruta === href || p.ruta.startsWith(`${href}/`));
+    if (!hayPantalla) return "404";
+    const layout = join(process.cwd(), "app", "(platform)", segmentoDe(href).slice(1), "layout.tsx");
+    const bloquea =
+      existsSync(layout) && readFileSync(layout, "utf8").includes(`exigirRutaDeLaExperiencia("${segmentoDe(href)}")`);
+    return bloquea ? "redirige" : "pantalla sin bloqueo";
+  }
+
+  it("Inicio, Leads y Administración no tienen pantalla: 404; Lanzamientos tiene pantalla y layout con el bloqueo: redirige", () => {
+    const resultado = Object.fromEntries(
+      CON_MENU_PROPIO.flatMap((experiencia) =>
+        MENU_POR_EXPERIENCIA[experiencia]
+          .filter((e) => !e.lista)
+          .map((e) => [`${experiencia} ${e.href}`, queVe(e.href)])
+      )
+    );
+    expect(resultado).toEqual({
+      "webinar /inicio": "404",
+      "webinar /lanzamientos": "redirige",
+      "webinar /leads": "404",
+      "limitless /administracion": "404",
+    });
+  });
+
+  it("ninguna pantalla dinámica de primer nivel las atrapa (no hay [slug] ni [...todo] en la raíz)", () => {
+    const dinamicas = PANTALLAS.filter((p) => /^\/\[/.test(p.ruta)).map((p) => p.ruta);
+    expect(dinamicas).toEqual([]);
   });
 });
 
@@ -364,5 +455,49 @@ describe("⭐ invariante: una entrada lista no puede seguir escondida (SCRUM-529
     expect(problemas).toHaveLength(1);
     expect(problemas[0]).toContain("ESCONDIDO.lanzamientos");
     expect(problemas[0]).toContain("bucle de redirecciones");
+  });
+});
+
+describe("⭐ una sola regla para la barra, la paleta y el bloqueo (fix-pack 1 de A1, MNR-3 y MNR-4)", () => {
+  const GRUPO = {
+    children: [
+      { label: "Bandeja", href: "/sales/inbox", permissionId: "sales" as const },
+      { label: "Escondido", href: "/sales/x", permissionId: "sales" as const, hidden: true },
+      { label: "Sin módulo", href: "/sales/y" },
+      { label: "Finanzas", href: "/sales/z", permissionId: "finance" as const },
+    ],
+  };
+
+  it("hijosVisiblesDelGrupo: sin los escondidos; sin módulo, sólo el founder; el resto, por su módulo", () => {
+    expect(hijosVisiblesDelGrupo(FOUNDER, GRUPO).map((h) => h.label)).toEqual(["Bandeja", "Sin módulo", "Finanzas"]);
+    expect(hijosVisiblesDelGrupo(SOLO_VENTAS, GRUPO).map((h) => h.label)).toEqual(["Bandeja"]);
+    expect(hijosVisiblesDelGrupo(SIN_NADA, GRUPO)).toEqual([]);
+  });
+
+  it("coincide: el prefijo o algo que cuelga de él, por segmentos enteros", () => {
+    expect(coincide("/sales", "/sales")).toBe(true);
+    expect(coincide("/sales/inbox", "/sales")).toBe(true);
+    expect(coincide("/salesforce", "/sales")).toBe(false);
+  });
+
+  // La barra y la paleta no vuelven a escribir el filtro de hijos ni la regla
+  // de permiso de una entrada, y la barra de un menú propio no vuelve a
+  // escribir `coincide`: usan las funciones de `rutas-por-experiencia.ts`.
+  it("la barra y la paleta usan hijosVisiblesDelGrupo; sidebar-modules usa coincide", () => {
+    const leer = (archivo: string) => readFileSync(join(process.cwd(), archivo), "utf8");
+    const paleta = leer("components/navigation/command-palette.tsx");
+    const barra = leer("components/navigation/notch-nav/platform-notch-nav.tsx");
+    const sidebar = leer("lib/navigation/sidebar-modules.ts");
+    for (const [nombre, codigo] of [
+      ["command-palette.tsx", paleta],
+      ["platform-notch-nav.tsx", barra],
+    ] as const) {
+      expect(codigo, nombre).toContain("hijosVisiblesDelGrupo(");
+      // El filtro de hijos de antes: `.filter((c) => !c.hidden && canSeeNavItem(...))`.
+      expect(codigo, nombre).not.toMatch(/\.filter\(\s*\(\s*\w+\s*\)\s*=>\s*!\s*\w+\.hidden\s*&&\s*canSeeNavItem\(/);
+    }
+    expect(paleta).not.toMatch(/permisos\.modules\[\w+\]\s*\?\?\s*"none"/);
+    expect(sidebar).toContain("coincide(pathname, segmentoDe(entrada.href))");
+    expect(sidebar).not.toMatch(/pathname\.startsWith\(`\$\{segmentoDe\(entrada\.href\)\}\/`\)/);
   });
 });

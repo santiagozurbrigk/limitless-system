@@ -92,17 +92,30 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
     `workboard`), Ventas (el grupo `ventas` del menú completo, con sus hijos, `sales`; lleva a
     `/sales/inbox`) y Administración (`/administracion`, SCRUM-551; el módulo `finance` es provisorio
     hasta que esa tarea lo decida). Hoy están listas las tres primeras; Administración queda definida y
-    oculta. Clientes, Tablero y Ventas tienen el mismo nombre, ícono y módulo que en el menú completo
+    no se muestra. Clientes, Tablero y Ventas tienen el mismo nombre, ícono y módulo que en el menú completo
     (lo exige un test).
 
   Cada entrada tiene `lista`. Una entrada que no está lista no se muestra (sin "Próximamente") y su
-  ruta redirige como cualquier otra. Lo que abre una entrada es el segmento de primer nivel de su
-  `href` (`/sales` para Ventas), con todo lo que cuelga de él. `RUTAS_LIBRES` (para toda experiencia):
+  ruta no se abre. Lo que ve quien tipea la URL depende de si la pantalla existe: mientras no exista
+  (hoy `/inicio`, `/leads` y `/administracion`, sin carpeta en `app/(platform)`), la URL da el 404 de la
+  app, sin la barra, porque no hay layout de segmento que redirija; cuando su tarea cree la carpeta,
+  su `layout.tsx` aplica el bloqueo y la ruta redirige a la pantalla de inicio mientras la entrada no
+  esté lista (como hoy `/lanzamientos`). Lo fija el test "entradas no listas" de
+  `rutas-por-experiencia.test.ts`. Lo que abre una entrada es el segmento de primer nivel de su
+  `href` (`/sales` para Ventas), con todo lo que cuelga de él.
+  `RUTAS_EXTRA_POR_EXPERIENCIA` (fix-pack 1 de A1, decisión de Fernando del 1-nov-2026): pantallas
+  fuera del menú que una experiencia abre igual porque una pantalla de su menú enlaza a ellas. No se
+  muestran en la barra, en el menú del celular ni en la paleta; se llega por el link o tipeando la URL,
+  y el permiso del módulo de la ruta sigue valiendo. `limitless` abre `/integrations` (la Bandeja de
+  Ventas lleva a «Conectar integración», «Conectar Zernio» y «Gestionar Zernio»), `/sops` (el SOP
+  vinculado a una tarea del Tablero, `/sops/[id]`) y `/business-context` (los documentos de una tarea,
+  `/business-context/[id]`). La biblioteca de SOP (`/operations/sops`) no, y `/sops` y `/sops/create`
+  tampoco en la práctica: `next.config.ts` los manda a esa biblioteca. `webinar` no tiene ninguna. `RUTAS_LIBRES` (para toda experiencia):
   `/onboarding` (adonde el middleware manda al founder sin onboarding; bloquearla armaría un bucle),
   `/holding` y `/settings` (ajustes de la cuenta, desde el menú de perfil).
 - **Reglas:** `lib/navigation/rutas-por-experiencia.ts`, las mismas para toda experiencia con menú
   propio. `full` abre todo y su pantalla de inicio es `/dashboard`. `webinar` y `limitless` abren los
-  segmentos de sus entradas listas (con sus subrutas) y las libres. La pantalla de inicio depende de
+  segmentos de sus entradas listas (con sus subrutas), los de sus rutas extra y las libres. La pantalla de inicio depende de
   quien mira: de las entradas listas que ve por sus permisos (la misma regla que la barra,
   `entradasVisibles`), la de id `inicio` si está y si no, la primera (hoy `/team` en `webinar` y
   `/clients` en `limitless`; `/sales/inbox` para un miembro de `limitless` con sólo Ventas); si no ve
@@ -139,10 +152,12 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
   barra y un bucle de pedidos `?_rsc=` (QA final; `scripts/flujos-reales.mjs` de la evidencia lo mide). Queda un caso: desde una pantalla que ya muestra `SinAcceso`,
   una navegación del cliente cambia la URL pero sigue mostrando `SinAcceso` (no muestra la pantalla
   bloqueada ni redirige); es el límite de `[PERMISOS-LAYOUT-NAV-SUAVE]`, anotado ahí.
-- **Destino después del login:** `signInAction` y `/auth/callback` (sin `next` válido) van a la
-  pantalla de inicio de quien entra (`pantallaDeInicioDeLaOrganizacionActiva`, que para `webinar` y
-  `limitless` lee sus permisos); el `next` de una
-  invitación y `destinoSeguro` se respetan. Las pantallas del cliente que mandan a `/dashboard`
+- **Destino después del login:** `signInAction` y `/auth/callback` (sin `next` válido) usan la misma
+  resolución, `destinoPorDefectoDespuesDelLogin` (`lib/auth/destino-despues-del-login.ts`): una
+  cuenta holding va a `/holding`, sea cual sea la experiencia, y el resto a la pantalla de inicio de
+  quien entra (`pantallaDeInicioDeLaOrganizacionActiva`, que para `webinar` y `limitless` lee sus
+  permisos). Antes del fix-pack 1 de A1 el callback no tenía la rama del holding y un holding
+  `webinar` terminaba en Equipo. El `next` de una invitación y `destinoSeguro` se respetan. Las pantallas del cliente que mandan a `/dashboard`
   (recuperar contraseña, cambio obligatorio, aceptar invitación, onboarding) y el middleware que saca
   de `/login` a quien ya tiene sesión llegan a la pantalla de inicio por el layout de `/dashboard`,
   con un salto más. Lo mismo `enterBusinessAction` del holding: redirige a `/dashboard` y la request
@@ -160,9 +175,14 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
   `rutas-por-experiencia.test.ts` falla con ese mensaje. Administración (SCRUM-551) necesita además su
   carpeta en `app/(platform)` con el layout del bloqueo (lo exige `rutas-por-experiencia-en-disco`) y
   confirmar su módulo de permisos en la entrada y en `module-for-path`.
-- Para sumar una experiencia: el valor en la migración y en `EXPERIENCIAS`
-  (`lib/organization/experience.ts`), su menú en `MENU_POR_EXPERIENCIA` y su fila en
-  `ACCESOS_DE_LA_ISLA` (si falta alguno, no compila o falla un test). La barra, la paleta, el bloqueo
+- Para sumar una experiencia: el valor en el CHECK de la migración y en `EXPERIENCIAS`
+  (`lib/organization/experience.ts`), su menú en `MENU_POR_EXPERIENCIA`, su lista (aunque sea vacía)
+  en `RUTAS_EXTRA_POR_EXPERIENCIA` y su fila en `ACCESOS_DE_LA_ISLA`. Qué falla si falta cada uno: un
+  valor que está en el CHECK y no en `EXPERIENCIAS`, o al revés, hace fallar
+  `lib/organization/__tests__/experiencias-de-la-base.test.ts` (lee las migraciones; el test de RLS 97
+  compara además la definición del CHECK en la base); el menú, las rutas extra y la isla son `Record`
+  por experiencia, así que si faltan no compila. Ninguno de esos controles ve un CHECK cambiado a
+  mano en una base ni una base local con una versión vieja de la migración. La barra, la paleta, el bloqueo
   y el destino del login no se tocan.
 
 ### Título y "volver"
@@ -255,13 +275,13 @@ servidor, `client.ts` los `"use client"`; nunca importar un barrel con clientes 
 | `apps/web/lib/navigation/__tests__/module-for-path.test.ts` | Toda ruta de `(platform)` tiene módulo o es libre |
 | `apps/web/lib/navigation/__tests__/page-meta.test.ts` | Título y "volver" de cada pantalla |
 | `apps/web/lib/onboarding/__tests__/tours.test.ts` | Anclas `data-tour` existen en el JSX |
-| `apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts` | Menús de `webinar` y `limitless`: orden, entradas listas, módulo de cada entrada igual al de su ruta, segmentos sin repetir, pantalla existente para cada entrada lista, entradas de `limitless` iguales a las del menú completo, pantalla de inicio, reglas de rutas, destino sin bucle en las tres experiencias e invariante de que una entrada lista no siga escondida por `ESCONDIDO` |
+| `apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts` | Menús de `webinar` y `limitless`: orden, entradas listas, módulo de cada entrada igual al de su ruta, segmentos sin repetir, pantalla existente para cada entrada lista, entradas de `limitless` iguales a las del menú completo, pantalla de inicio, reglas de rutas, rutas extra de `limitless` (Integraciones, SOP, contexto del negocio) abiertas y cerradas para `webinar`, qué ve hoy quien tipea una entrada no lista (404 sin pantalla, redirección con pantalla), destino sin bucle en las tres experiencias, invariante de que una entrada lista no siga escondida por `ESCONDIDO`, y que la barra y la paleta usen `hijosVisiblesDelGrupo` y la barra de un menú propio `coincide` |
 | `apps/web/components/layout/__tests__/menu-celular-por-experiencia.test.ts` | El `MobileNav` real abierto: `full` con los ítems de siempre, `webinar` y `limitless` sólo con las entradas que el rol ve |
 | `apps/web/components/navigation/__tests__/paleta-por-experiencia.test.ts` | La paleta real: link del pie y lista para `full`, `webinar` y `limitless` |
 | `apps/web/lib/navigation/__tests__/rutas-por-experiencia-en-disco.test.ts` | Toda pantalla de `(platform)` cuelga del layout de su segmento con `exigirRutaDeLaExperiencia` de su propia ruta; las de afuera no pasan por el bloqueo |
 | `apps/web/lib/navigation/__tests__/menu-por-experiencia.test.ts` | Barra y paleta para `full` (igual que antes), `webinar` y `limitless` (entradas listas, el grupo Ventas, filtradas por permiso) |
 | `apps/web/components/navigation/notch-nav/__tests__/barra-por-experiencia.test.ts` | La barra real: logo, ítems e isla derecha para `full` (igual que antes), `webinar` y `limitless` (sin reportes, sin configuración pendiente, logo a la pantalla de inicio) |
-| `apps/web/app/__tests__/bloqueo-por-experiencia.test.ts` | Ejecuta el layout real de cada segmento: webinar redirige a Equipo, limitless a Clientes (o a la primera entrada que ve), full no cambia, cambio de negocio en un holding, organización activa y falla de lectura |
+| `apps/web/app/__tests__/bloqueo-por-experiencia.test.ts` | Ejecuta el layout real de cada segmento: webinar redirige a Equipo, limitless a Clientes (o a la primera entrada que ve) salvo sus entradas, sus rutas extra y las libres, full no cambia, cambio de negocio en un holding, organización activa y falla de lectura |
 
 Sin tests: `packages/ui` entero, la notch nav como componente, `buildPlatformRootItems`. Sin Playwright de
 navegación (sólo `e2e/holding.spec.ts`).

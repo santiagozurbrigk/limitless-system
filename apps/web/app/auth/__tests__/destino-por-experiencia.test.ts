@@ -208,4 +208,18 @@ describe("⭐ /auth/callback", () => {
     sim.superAdmin = true;
     expect(await volverDelMail()).toBe("/super-admin/organizations");
   });
+
+  it("⭐ sin next, una cuenta holding va a su holding como en el login, sea cual sea la experiencia (fix-pack 1 de A1, MNR-1)", async () => {
+    sim.accountType = "holding";
+    for (const experiencia of ["webinar", "limitless", "full"] as const) {
+      sim.experiencia = experiencia;
+      expect(await volverDelMail(), experiencia).toBe("/holding");
+    }
+  });
+
+  it("una cuenta holding con un next interno: el next gana, como antes", async () => {
+    sim.accountType = "holding";
+    sim.experiencia = "webinar";
+    expect(await volverDelMail("/team/roles")).toBe("/team/roles");
+  });
 });

@@ -5,11 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import { destinoSeguro } from "@/lib/auth/redirect-seguro";
 import { LINK_RECUPERACION_VENCIDO_QUERY } from "@/lib/auth/recuperar-contrasena";
+import { destinoPorDefectoDespuesDelLogin } from "@/lib/auth/destino-despues-del-login";
 import { pantallaDeInicioDeLaOrganizacionActiva } from "@/lib/organization/ruta-de-la-experiencia";
 
 /**
- * Sin `next` válido, el destino es la pantalla de inicio de la organización,
- * que se conoce recién con la sesión (SCRUM-524). Mientras tanto se marca así.
+ * Sin `next` válido, el destino es el mismo que el del login con contraseña
+ * (`destinoPorDefectoDespuesDelLogin`: el holding a su holding, el resto a la
+ * pantalla de inicio de la organización), que se conoce recién con la sesión
+ * (SCRUM-524). Mientras tanto se marca así.
  */
 const SIN_DESTINO_PEDIDO = "";
 
@@ -52,7 +55,10 @@ export async function GET(request: Request) {
       const destination =
         user?.email && (await isSuperAdminEmail(user.email))
           ? paths.superAdmin.organizations
-          : pedido || (await pantallaDeInicioDeLaOrganizacionActiva());
+          : pedido ||
+            (user
+              ? await destinoPorDefectoDespuesDelLogin(user.id)
+              : await pantallaDeInicioDeLaOrganizacionActiva());
 
       return NextResponse.redirect(`${origin}${destination}`);
     }

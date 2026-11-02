@@ -29,6 +29,7 @@ import {
 } from "@/providers/permissions-provider";
 import { useExperiencia, usePantallaDeInicio } from "@/providers/experiencia-provider";
 import { ACCESOS_DE_LA_ISLA } from "@/lib/navigation/menu-por-experiencia";
+import { hijosVisiblesDelGrupo } from "@/lib/navigation/rutas-por-experiencia";
 import { NotchNav, type NotchNavItem } from "./notch-nav";
 
 /**
@@ -106,9 +107,7 @@ export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) 
 
       const parent = config.modulesWithChildren[item.key];
       if (!parent) continue;
-      const children = parent.children.filter(
-        (c) => !c.hidden && canSeeNavItem(c.permissionId, checkAccess, isFounder)
-      );
+      const children = hijosVisiblesDelGrupo({ isFounder, modules }, parent);
       if (children.length === 0) continue;
 
       result.push({

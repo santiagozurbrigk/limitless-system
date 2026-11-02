@@ -28,6 +28,47 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-01 — Fix-pack 1 de A1: rutas extra de `limitless`, textos de las entradas no listas, destino del callback para un holding y una sola regla de visibilidad (SCRUM-524)
+
+**Rama:** `feat/SCRUM-524-webinars-menu` (integra `e0171311` de SCRUM-523 con el merge `60dea9ee`)
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma (navegación y login): `lib/navigation/menu-por-experiencia.ts` (`RUTAS_EXTRA_POR_EXPERIENCIA`), `lib/navigation/rutas-por-experiencia.ts` (rutas extra, `coincide` exportada, `hijosVisiblesDelGrupo`), `lib/navigation/sidebar-modules.ts`, `components/navigation/command-palette.tsx`, `components/navigation/notch-nav/platform-notch-nav.tsx`, `lib/auth/destino-despues-del-login.ts` (nuevo), `app/auth/actions.ts`, `app/auth/callback/route.ts`; tests `rutas-por-experiencia.test.ts`, `rutas-por-experiencia-en-disco.test.ts`, `app/__tests__/bloqueo-por-experiencia.test.ts`, `app/__tests__/layout-plataforma-experiencia.test.ts`, `app/auth/__tests__/destino-por-experiencia.test.ts`; docs `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `FUNCIONAL.md` (F-PLA-08), `backlog/historias.md` (H-PLA-08), `operacion/testing.md`
+
+**Qué se hizo:**
+- BLQ-3 (AR de A1). En una org `limitless`, la Bandeja de Ventas («Conectar integración», «Conectar Zernio», «Gestionar Zernio») y el Tablero (SOP vinculado, documentos de una tarea) enlazaban a rutas fuera de su menú, y esas rutas rebotaban a Clientes. Decisión de Fernando: abrirlas desde la config. `RUTAS_EXTRA_POR_EXPERIENCIA` abre para `limitless` `/integrations`, `/sops/[id]` y `/business-context/[id]`, con todo su segmento, y para `webinar` nada. No tienen entrada en la barra, en el menú del celular ni en la paleta (los tests de barra y paleta siguen fijando la lista exacta). El permiso del módulo de cada ruta sigue valiendo: un miembro sin Integraciones ve «No tenés acceso». `/sops` y `/sops/create` los manda `next.config.ts` a la biblioteca (`/operations/sops`), que sigue cerrada.
+- BLQ-2 (AR de A1). Los textos decían que una entrada no lista «redirige», pero `/inicio`, `/leads` y `/administracion` no tienen carpeta en `app/(platform)` y dan el 404 de la app. Se corrigieron el docblock de `MENU_POR_EXPERIENCIA`, `ui-y-navegacion.md`, `auth-organizaciones-y-permisos.md` y la entrada de abajo. Nuevo test «entradas no listas»: Inicio, Leads y Administración dan 404 y Lanzamientos redirige (tiene pantalla y layout con el bloqueo); además, ninguna pantalla dinámica de primer nivel las atrapa. Los nombres de los tests de la función pura dicen ahora que la redirección vale cuando la carpeta exista. No se crearon carpetas: pisaría a SCRUM-534, SCRUM-537 y SCRUM-551.
+- MNR-1 (AR de A1). `/auth/callback` sin `next` mandaba a un holding `webinar` a Equipo, mientras que el login con contraseña lo manda a `/holding`. Ahora los dos usan `destinoPorDefectoDespuesDelLogin`.
+- MNR-3 y MNR-4 (CR de A1).
+  - `hijosVisiblesDelGrupo` (en `rutas-por-experiencia.ts`, con `puedeVerEntrada`) reemplaza el filtro de hijos que estaba copiado en la paleta y en la barra.
+  - `coincide` se exporta y la usa `buildSidebarNavDelMenu`.
+  - Un test exige que la paleta y la barra usen la función y no el filtro viejo.
+- Validez, con el código de antes:
+  - Los tests nuevos de BLQ-3 fallaban así: `/integrations: expected false to be true`, `integrations: expected 'redirect /clients' to be 'pasa'` y `/integrations: expected '<p>pantalla</p>' to contain 'No tenés acceso'`.
+  - El de MNR-1 fallaba con `webinar: expected '/team' to be '/holding'`.
+  - El de MNR-3 y MNR-4 falla con cada uno de los tres archivos vuelto a su versión anterior, uno por vez.
+  - El de BLQ-2 falla si se crea `app/(platform)/administracion/page.tsx` sin el layout del bloqueo («pantalla sin bloqueo»).
+  - Si se saca `/sops` de las rutas extra, fallan 5 tests.
+
+**Por qué / finalidad:** fix-pack 1 de A1 (`doc/sdd/002-scrum-523-524-a1/fix-pack-1.md` de limitless-nexus): la AR rechazó y la CR aprobó con MENORs.
+
+**Decisiones de diseño relevantes:**
+- Cada ruta extra es la pantalla adonde lleva el link, escrita con la forma de las rutas de `app/` (`/sops/[id]`), y un test exige que exista. Se abre el segmento de primer nivel, con la misma regla que las entradas, así que la lógica no tiene ningún caso especial para `limitless`.
+- `destinoPorDefectoDespuesDelLogin` vive en `lib/auth` y no en `app/auth/actions.ts`: ese archivo es `"use server"`, y todo lo que exporta queda publicado como Server Action.
+
+**Verificación:**
+- Suite completa: 281 archivos y 4.419 tests (4.406 en el merge `60dea9ee`).
+- `tsc --noEmit` limpio.
+- Lint (`next lint`): 71 avisos y 0 errores, ninguno en los archivos tocados.
+- `next build` en verde.
+- `check-migrations.sh` en un Postgres 17 con pgvector descartable: 194 migraciones y 13 archivos de RLS en verde, incluido el 97 con la comparación del CHECK.
+- Los dos `--check` del backlog.
+- Casos declarados: 3.357 (`contar-casos.py`).
+
+**Riesgos / deuda técnica pendiente:**
+- `sidebar-root-navigation.tsx` y `sidebar-sub-navigation.tsx` todavía filtran hijos con su propia copia, y `module-for-path.ts` tiene su propio `coincide`. Son anteriores a 524 y quedaron fuera del alcance del fix-pack.
+- Desde un SOP abierto en `limitless`, un link a la biblioteca (`/operations/sops`) lleva a Clientes. Hoy la pantalla del SOP no tiene ese link.
+- Nota para el PO, fuera del código: una org `limitless` no tiene `/team` hasta SCRUM-551.
+
 ### 2026-11-01 — Menú y bloqueo de rutas para las tres experiencias: `webinar`, `limitless` y `full` (SCRUM-524, retrabajo)
 
 **Rama:** `feat/SCRUM-524-webinars-menu` (encadenada sobre `feat/SCRUM-523-webinars-experiencia`; integra `53afd280` rehaciendo el merge de SCRUM-523 y reaplicando encima los commits posteriores)
@@ -35,7 +76,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Módulo(s) afectado(s):** Plataforma (navegación): `lib/navigation/menu-por-experiencia.ts` (era `menu-webinar.ts`), `lib/navigation/rutas-por-experiencia.ts`, `lib/navigation/sidebar-modules.ts`, `lib/navigation/module-for-path.ts`, `routes/paths.ts`, `components/navigation/command-palette.tsx`, `components/navigation/notch-nav/platform-notch-nav.tsx`, `lib/organization/ruta-de-la-experiencia.ts`, `app/auth/actions.ts` (comentario); tests de navegación, barra, paleta, menú del celular, bloqueo por segmento, layout de la plataforma y destino del login (`lib/navigation/__tests__/menu-webinar.test.ts` pasó a `rutas-por-experiencia.test.ts`); docs `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `FUNCIONAL.md` (F-PLA-08), `backlog/historias.md` (H-PLA-08), `operacion/testing.md`, `PENDIENTES.md` (`[NAV-PALETA-PERMISOS]`)
 
 **Qué se hizo:**
-- Una sola config para los menús recortados: `MENU_POR_EXPERIENCIA` con `webinar` (Inicio, Lanzamientos, Leads y Equipo; se sacó Llamadas, con su ruta `/llamadas` de `paths.ts` y de `module-for-path`) y `limitless` (Clientes, Tablero de trabajo, Ventas y Administración). Clientes y Tablero son las pantallas de siempre con el mismo nombre, ícono y módulo; Ventas es el grupo `ventas` del menú completo con sus hijos (`grupo` en la entrada) y lleva a `/sales/inbox`; Administración (`/administracion`, SCRUM-551) queda definida con `lista: false`, oculta y redirigida como toda entrada no lista. `RUTAS_LIBRES` (antes `RUTAS_LIBRES_WEBINAR`) y `ACCESOS_DE_LA_ISLA` valen para las tres experiencias.
+- Una sola config para los menús recortados: `MENU_POR_EXPERIENCIA` con `webinar` (Inicio, Lanzamientos, Leads y Equipo; se sacó Llamadas, con su ruta `/llamadas` de `paths.ts` y de `module-for-path`) y `limitless` (Clientes, Tablero de trabajo, Ventas y Administración). Clientes y Tablero son las pantallas de siempre con el mismo nombre, ícono y módulo; Ventas es el grupo `ventas` del menú completo con sus hijos (`grupo` en la entrada) y lleva a `/sales/inbox`; Administración (`/administracion`, SCRUM-551) queda definida con `lista: false` y no se muestra. Corrección del fix-pack 1 de A1 (entrada de arriba): este commit decía «oculta y redirigida», pero sin carpeta en `app/(platform)` la URL da el 404 de la app. `RUTAS_LIBRES` (antes `RUTAS_LIBRES_WEBINAR`) y `ACCESOS_DE_LA_ISLA` valen para las tres experiencias.
 - Reglas generales (`rutas-por-experiencia.ts`): toda experiencia salvo `full` abre los segmentos de primer nivel de sus entradas listas y las rutas libres; la pantalla de inicio es la entrada `inicio` si se ve o la primera que el rol ve (Clientes en `limitless`; la Bandeja para un miembro con sólo Ventas), y Ajustes si no ve ninguna. Ya no hay nada específico de `webinar` en la lógica: el menú se elige por experiencia.
 - Barra y menú del celular: `buildSidebarNavDelMenu(menu)` (antes `buildWebinarSidebarNav`) arma links y grupos desde la config. Paleta: `itemsDeLaPaleta` lista las entradas y, para un grupo, sus hijos que el permiso deja ver.
 - `full` no cambia: mismo menú, mismas rutas, mismo destino.

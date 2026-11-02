@@ -1,8 +1,10 @@
 import { paths } from "@/routes/paths";
 import type { OrganizationExperience } from "@/lib/organization/experience";
 import type { UserPermissions } from "@/lib/auth/get-current-permissions";
+import type { SidebarChildItem, SidebarParentModule } from "./sidebar-nav-config";
 import {
   MENU_POR_EXPERIENCIA,
+  RUTAS_EXTRA_POR_EXPERIENCIA,
   RUTAS_LIBRES,
   type EntradaDelMenu,
 } from "./menu-por-experiencia";
@@ -16,8 +18,11 @@ import {
  *   - `full`: todo igual que antes. Ninguna ruta se redirige por experiencia y
  *     la pantalla de inicio es el Panel General.
  *   - `webinar` y `limitless`: sólo los segmentos de las entradas listas de su
- *     menú (`MENU_POR_EXPERIENCIA`) y las rutas libres. Cualquier otra ruta de
- *     la plataforma redirige a la pantalla de inicio de la experiencia.
+ *     menú (`MENU_POR_EXPERIENCIA`), los de sus rutas extra
+ *     (`RUTAS_EXTRA_POR_EXPERIENCIA`: pantallas fuera del menú a las que enlaza
+ *     una del menú) y las rutas libres. Cualquier otra ruta de la plataforma
+ *     redirige a la pantalla de inicio de la experiencia, si su segmento tiene
+ *     carpeta en `app/(platform)` (si no, la URL da el 404 de la app).
  *
  * Esto no reemplaza a los permisos: una ruta permitida acá sigue pasando por
  * `moduloBloqueadoParaRuta` en el layout de la plataforma.
@@ -26,7 +31,8 @@ import {
  * prueben menús con otras entradas listas; por defecto, el de la experiencia.
  */
 
-function coincide(pathname: string, prefix: string): boolean {
+/** Si `pathname` es `prefix` o cuelga de él, por segmentos enteros (`/sales` no abre `/salesforce`). */
+export function coincide(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
@@ -53,6 +59,25 @@ export function puedeVerEntrada(
   entrada: Pick<EntradaDelMenu, "permissionId">
 ): boolean {
   return permisos.isFounder || (permisos.modules[entrada.permissionId] ?? "none") !== "none";
+}
+
+/**
+ * Los hijos de un grupo de la barra que esta persona ve: los que no están
+ * escondidos y cuyo módulo puede ver con `puedeVerEntrada`; un hijo sin módulo,
+ * sólo el founder (como `canSeeNavItem`). La usan la barra
+ * (`platform-notch-nav.tsx`) y la paleta (`itemsDeLaPaleta`).
+ */
+export function hijosVisiblesDelGrupo(
+  permisos: PermisosDeLaBarra,
+  grupo: Pick<SidebarParentModule, "children">
+): SidebarChildItem[] {
+  return grupo.children.filter(
+    (hijo) =>
+      !hijo.hidden &&
+      (hijo.permissionId === undefined
+        ? permisos.isFounder
+        : puedeVerEntrada(permisos, { permissionId: hijo.permissionId }))
+  );
 }
 
 /** Las entradas del menú que ya tienen pantalla, en su orden. */
@@ -96,6 +121,9 @@ export function rutaPermitidaParaLaExperiencia(
 ): boolean {
   if (experiencia === "full") return true;
   if (RUTAS_LIBRES.some((libre) => coincide(pathname, libre))) return true;
+  if (RUTAS_EXTRA_POR_EXPERIENCIA[experiencia].some((extra) => coincide(pathname, segmentoDe(extra)))) {
+    return true;
+  }
   return entradasListas(menu).some((entrada) => coincide(pathname, segmentoDe(entrada.href)));
 }
 

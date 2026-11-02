@@ -211,6 +211,25 @@ describe("⭐ fuera de la experiencia, el layout de la plataforma no decide: dej
     expect(await cargar()).toContain("No tenés acceso");
   });
 
+  it("⭐ limitless en /integrations, /sops y /business-context (fuera del menú, abiertas por la config): el permiso del módulo sigue valiendo", async () => {
+    sim.experiencia = "limitless";
+    sim.permisos = { ...PERMISOS, modules: { ...emptyPermissions(), sales: "view" } };
+    for (const ruta of ["/integrations", "/sops/abc", "/business-context/abc"]) {
+      sim.pathname = ruta;
+      expect(await cargar(), ruta).toContain("No tenés acceso");
+    }
+    sim.permisos = {
+      ...PERMISOS,
+      modules: { ...emptyPermissions(), integrations: "full", operations: "view", knowledge_base: "view" },
+    };
+    for (const ruta of ["/integrations", "/sops/abc", "/business-context/abc"]) {
+      sim.pathname = ruta;
+      const html = await cargar();
+      expect(html, ruta).toContain("pantalla");
+      expect(html, ruta).not.toContain("No tenés acceso");
+    }
+  });
+
   it("sin x-pathname no se bloquea (no hay ruta que mirar)", async () => {
     sim.experiencia = "webinar";
     sim.pathname = "";

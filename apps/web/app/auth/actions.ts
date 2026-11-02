@@ -16,7 +16,7 @@ import {
   LEGACY_ACTIVE_ORG_COOKIE,
 } from "@/lib/holding/constants";
 import { emailSchema, firstZodError } from "@/lib/validations";
-import { ensureCurrentUserBootstrap, loadProfileOrganizationContext } from "@/lib/auth/bootstrap";
+import { ensureCurrentUserBootstrap } from "@/lib/auth/bootstrap";
 import { isSuperAdminEmail } from "@/lib/auth/require-super-admin";
 import {
   isTempPasswordExpired,
@@ -28,7 +28,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { paths } from "@/routes";
 import { CUENTA_DESACTIVADA_MESSAGE } from "@/lib/auth/cuenta-desactivada";
 import { destinoDeInvitacion } from "@/lib/team/invitacion";
-import { pantallaDeInicioDeLaOrganizacionActiva } from "@/lib/organization/ruta-de-la-experiencia";
+import { destinoPorDefectoDespuesDelLogin } from "@/lib/auth/destino-despues-del-login";
 
 const limiteRecuperacionPorEmail = rateLimit(LIMITE_RECUPERACION_POR_EMAIL);
 const limiteRecuperacionPorIp = rateLimit(LIMITE_RECUPERACION_POR_IP);
@@ -117,16 +117,10 @@ async function postAuthRedirect(invitacion: string | null = null) {
     }
 
     if (user) {
-      const { accountType } = await loadProfileOrganizationContext(user.id);
-
-      if (accountType === "holding") {
-        redirect(paths.platform.holding);
-      }
-
-      // La pantalla de inicio de la experiencia de la organización (SCRUM-524):
-      // el Panel para `full`; para `webinar` y `limitless`, la primera entrada
-      // lista del menú que la persona ve.
-      redirect(await pantallaDeInicioDeLaOrganizacionActiva());
+      // El holding a su holding; el resto, a la pantalla de inicio de la
+      // experiencia de la organización (SCRUM-524). La misma resolución que
+      // `/auth/callback` sin `next`.
+      redirect(await destinoPorDefectoDespuesDelLogin(user.id));
     }
   }
   redirect(paths.platform.dashboard);
