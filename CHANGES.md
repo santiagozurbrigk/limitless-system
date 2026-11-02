@@ -28,6 +28,27 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-01 — Experiencia de la organización con tres valores: `webinar`, `limitless` y `full` (SCRUM-523, retrabajo)
+
+**Rama:** `feat/SCRUM-523-webinars-experiencia`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma (organizaciones): `supabase/migrations/20261019120000_organizations_experience.sql` (editada, nunca se aplicó en producción), `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`, `apps/web/lib/organization/experience.ts` y sus tests, `app/(platform)/holding/__tests__/negocio-hereda-la-experiencia.test.ts`; docs `arquitectura/auth-organizaciones-y-permisos.md`, `arquitectura/base-de-datos.md`, `operacion/testing.md`, `PENDIENTES.md` (`[ORG-EXPERIENCIA-CAMBIO]`)
+
+**Qué se hizo:**
+- El CHECK `organizations_experience_check` acepta `webinar`, `limitless` y `full`; el comentario de la columna explica el valor nuevo. El default sigue en `full` (las organizaciones existentes no cambian) y las altas siguen mandando `webinar`, o la experiencia del holding para un negocio dentro de un holding (también si el holding es `limitless`).
+- `EXPERIENCIAS` en `lib/organization/experience.ts` suma `limitless`; la lectura estricta y la degradable la aceptan como valor válido.
+- Tests: `getOrganizationExperience` devuelve `limitless` y la lista de valores es exactamente la de la base; Agregar negocio y el onboarding del holding heredan `limitless`; el test de RLS 97 inserta una organización `limitless` con el service role y comprueba que ni el founder ni un member pueden pasar su org a `limitless`.
+
+**Por qué / finalidad:** pedido del PO (Martín, 28-oct-2026): una tercera experiencia, Limitless de gestión (Clientes, Tablero de trabajo, Ventas y Administración). El menú y las rutas de cada experiencia son SCRUM-524.
+
+**Decisiones de diseño relevantes:**
+- Se editó la migración existente en vez de sumar otra: nunca se aplicó en producción (decisión del PO).
+- Ninguna alta manda `limitless` y la migración no se la asigna a nadie: qué organización la recibe se decide fuera del código y se asigna por SQL con el service role, con su precheck, en la guía de SCRUM-532. No hay ids de organizaciones en el código.
+
+**Riesgos / deuda técnica pendiente:**
+- Los SQL de producción de `limitless-auditoria/sql-produccion/scrum-523/` (`01_migracion.sql` copia la migración y `02_verificacion.sql` compara la definición exacta del CHECK con dos valores) tienen que actualizarse antes de la ventana de SCRUM-532; si no, la verificación da `todo_ok = f`. Falta el paso de la guía que asigna `limitless` (precheck, update, verificación).
+- `[ORG-EXPERIENCIA-CAMBIO]` sigue abierto: tampoco hay pantalla para pasar una organización a `limitless`.
+
 ### 2026-10-19 — Limitless Webinars, Fase 0: tipo de experiencia por organización (SCRUM-523)
 
 **Rama:** `feat/SCRUM-523-webinars-experiencia` (base `main` `4a542e5e`)

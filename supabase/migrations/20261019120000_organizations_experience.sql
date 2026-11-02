@@ -12,6 +12,10 @@
 --     un holding crea dentro de su cuenta, que hereda la experiencia del
 --     holding, para que un founder con Limitless completo no pierda el menú al
 --     sumar un negocio.
+--   - 'limitless': Limitless de gestión (Clientes, Tablero de trabajo, Ventas y
+--     Administración; decisión del PO, 28-oct-2026). Ninguna alta la manda y
+--     ninguna organización queda así al aplicar esta migración: se asigna a
+--     mano, por SQL con el service role, según la guía de SCRUM-532.
 -- Qué cambia en el menú y las rutas con cada valor es SCRUM-524; esta
 -- migración sólo guarda el dato. Aplicada sola, no cambia nada para nadie: las
 -- altas siguen naciendo en 'full' hasta que se despliegue el código de 523.
@@ -42,10 +46,10 @@ alter table public.organizations
   drop constraint if exists organizations_experience_check;
 alter table public.organizations
   add constraint organizations_experience_check
-  check (experience in ('webinar', 'full'));
+  check (experience in ('webinar', 'limitless', 'full'));
 
 comment on column public.organizations.experience is
-  'Producto que ve la organización (SCRUM-523). full: Limitless completo, todos los módulos; es el default, así que las organizaciones que existían antes de Limitless Webinars quedaron en full y un alta que no diga nada nace full. webinar: Limitless Webinars; toda organización nueva nace así (decisión del PO, no la elige el cliente) porque cada alta de la app lo manda explícito, salvo el negocio que un holding crea dentro de su cuenta, que hereda la experiencia del holding. Sólo la cambia el service role.';
+  'Producto que ve la organización (SCRUM-523). full: Limitless completo, todos los módulos; es el default, así que las organizaciones que existían antes de Limitless Webinars quedaron en full y un alta que no diga nada nace full. webinar: Limitless Webinars; toda organización nueva nace así (decisión del PO, no la elige el cliente) porque cada alta de la app lo manda explícito, salvo el negocio que un holding crea dentro de su cuenta, que hereda la experiencia del holding. limitless: Limitless de gestión (Clientes, Tablero de trabajo, Ventas y Administración); ninguna alta la manda, se asigna por SQL. Sólo la cambia el service role.';
 
 grant select (experience) on public.organizations to authenticated;
 revoke update (experience) on public.organizations from anon, authenticated;

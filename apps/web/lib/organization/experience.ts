@@ -1,6 +1,6 @@
 /**
- * Qué producto ve la organización: Limitless completo o Limitless Webinars
- * (`organizations.experience`, SCRUM-523).
+ * Qué producto ve la organización: Limitless completo, Limitless Webinars o
+ * Limitless de gestión (`organizations.experience`, SCRUM-523).
  *
  *   - `full`: todos los módulos de siempre. Es el default de la columna: las
  *     organizaciones que existían antes de Webinars quedaron acá, y un alta
@@ -8,6 +8,9 @@
  *   - `webinar`: Limitless Webinars. Las altas lo mandan explícito: toda
  *     organización nueva nace así (decisión del PO), salvo el negocio que un
  *     holding crea dentro de su cuenta, que hereda la del holding.
+ *   - `limitless`: Limitless de gestión (Clientes, Tablero de trabajo, Ventas y
+ *     Administración; decisión del PO, 28-oct-2026). Ninguna alta la manda: se
+ *     asigna por SQL (guía de SCRUM-532).
  *
  * El dato sólo lo escribe el service role (los usuarios no tienen UPDATE de la
  * columna). Qué cambia en el menú y las rutas con cada valor es SCRUM-524.
@@ -24,7 +27,7 @@ import { lecturaDegradable } from "@/lib/server/lectura-degradable";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
-export const EXPERIENCIAS = ["webinar", "full"] as const;
+export const EXPERIENCIAS = ["webinar", "limitless", "full"] as const;
 
 export type OrganizationExperience = (typeof EXPERIENCIAS)[number];
 
@@ -41,7 +44,7 @@ export function esExperiencia(valor: unknown): valor is OrganizationExperience {
 
 /**
  * La experiencia guardada de una organización. Lanza si no se puede leer, si
- * la fila no aparece o si el valor no es uno de los dos: no inventa un valor.
+ * la fila no aparece o si el valor no es uno de los tres: no inventa un valor.
  * La usa el alta de un negocio dentro de un holding para heredar la del
  * holding (con el service role) y `getOrganizationExperience` (con la sesión).
  * El texto del error no lleva el valor leído.
@@ -62,7 +65,7 @@ export async function leerExperienciaDeLaOrganizacion(
   }
   const experiencia = (data as { experience?: unknown }).experience;
   if (!esExperiencia(experiencia)) {
-    throw new FallaDeLaBase({ message: "La organización tiene una experiencia que no es webinar ni full" });
+    throw new FallaDeLaBase({ message: "La organización tiene una experiencia que no es webinar, limitless ni full" });
   }
   return experiencia;
 }

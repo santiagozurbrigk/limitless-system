@@ -3,7 +3,8 @@
 -- founder, que sí puede cambiar la configuración de su org. La lee con su
 -- sesión (el layout la necesita). Una organización creada sin decir la
 -- experiencia nace en 'full' (el default; las altas de la app mandan 'webinar'
--- explícito, AR pasada 1) y la columna sólo acepta 'webinar' o 'full'.
+-- explícito, AR pasada 1) y la columna sólo acepta 'webinar', 'limitless' o
+-- 'full' ('limitless' la asigna el service role por SQL; ninguna alta la manda).
 -- Ninguna función SQL (tampoco las de triggers) ni regla inserta en
 -- organizations: las altas son las seis de la app
 -- (apps/web/lib/organization/__tests__/altas-conocidas.test.ts).
@@ -21,6 +22,9 @@ insert into public.organizations (id, name) values
   ('97000000-0000-0000-0000-000000000a00', 'Org completa');
 insert into public.organizations (id, name, experience) values
   ('97000000-0000-0000-0000-000000000b00', 'Org nueva', 'webinar');
+-- Una de Limitless de gestión, como la deja el SQL de la guía de SCRUM-532.
+insert into public.organizations (id, name, experience) values
+  ('97000000-0000-0000-0000-000000000c00', 'Org de gestión', 'limitless');
 
 insert into public.profiles (id, email, organization_id, role, full_name, is_active) values
   ('97000000-0000-0000-0000-00000000000f', 'f@test', '97000000-0000-0000-0000-000000000a00', 'founder', 'F', true),
@@ -36,6 +40,10 @@ select ci.espera(
     where table_schema = 'public' and table_name = 'organizations'
       and column_name = 'experience' and column_default = '''full''::text'),
   1, 'el default de organizations.experience es full');
+select ci.espera(
+  (select count(*) from public.organizations
+    where id = '97000000-0000-0000-0000-000000000c00' and experience = 'limitless'),
+  1, 'la columna acepta limitless');
 
 -- ─── Ninguna alta por SQL ────────────────────────────────────────────────────
 -- Un INSERT o MERGE en organizations, o un COPY hacia ella, en el cuerpo de
@@ -82,7 +90,7 @@ begin
   exception when check_violation then
     return;
   end;
-  raise exception 'FALLA: la columna aceptó una experiencia que no es webinar ni full';
+  raise exception 'FALLA: la columna aceptó una experiencia que no es webinar, limitless ni full';
 end $$;
 
 -- ─── Founder de la org completa: cambia el nombre, no la experiencia ─────────
@@ -102,16 +110,22 @@ select ci.rechazado(
 select ci.rechazado(
   $$update public.organizations set name = 'x', experience = 'webinar' where id = '97000000-0000-0000-0000-000000000a00'$$,
   'que el founder cambie la experiencia junto con otra columna');
+select ci.rechazado(
+  $$update public.organizations set experience = 'limitless' where id = '97000000-0000-0000-0000-000000000a00'$$,
+  'que el founder pase su org a limitless');
 
 reset role;
 
--- ─── Member de la org nueva: no se pasa a full ───────────────────────────────
+-- ─── Member de la org nueva: no se pasa a full ni a limitless ────────────────
 select ci.jwt('97000000-0000-0000-0000-00000000000b');
 set local role authenticated;
 
 select ci.rechazado(
   $$update public.organizations set experience = 'full' where id = '97000000-0000-0000-0000-000000000b00'$$,
   'que un member pase su org a full');
+select ci.rechazado(
+  $$update public.organizations set experience = 'limitless' where id = '97000000-0000-0000-0000-000000000b00'$$,
+  'que un member pase su org a limitless');
 
 reset role;
 
@@ -125,7 +139,8 @@ reset role;
 select ci.espera(
   (select count(*) from public.organizations
     where (id = '97000000-0000-0000-0000-000000000a00' and experience = 'full')
-       or (id = '97000000-0000-0000-0000-000000000b00' and experience = 'webinar')),
-  2, 'las dos organizaciones siguen con su experiencia');
+       or (id = '97000000-0000-0000-0000-000000000b00' and experience = 'webinar')
+       or (id = '97000000-0000-0000-0000-000000000c00' and experience = 'limitless')),
+  3, 'las tres organizaciones siguen con su experiencia');
 
 rollback;

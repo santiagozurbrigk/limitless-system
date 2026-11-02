@@ -22,7 +22,7 @@ permisos por módulo sólo cortan el render de pantallas**.
 | Permisos por módulo | `apps/web/lib/auth/get-current-permissions.ts`, `apps/web/constants/permission-modules.ts`, `apps/web/lib/team/mapper.ts` | Rol → mapa de 13 módulos con nivel `none/view/full` |
 | Gate de pantallas | `apps/web/app/(platform)/layout.tsx` + `apps/web/lib/navigation/module-for-path.ts` | Si el módulo de la ruta está en `none`, renderiza `SinAcceso` |
 | Add-ons | `apps/web/lib/auth/add-on-ids.ts`, `apps/web/lib/auth/add-ons.ts` | `organizations.enabled_add_ons`; `requireAddOn()` en server actions |
-| Experiencia | `apps/web/lib/organization/experience.ts` | `organizations.experience` (`webinar` o `full`, SCRUM-523); `getOrganizationExperience()` la lee para la org activa, una vez por request. Ver "Experiencia de la organización" |
+| Experiencia | `apps/web/lib/organization/experience.ts` | `organizations.experience` (`webinar`, `limitless` o `full`, SCRUM-523); `getOrganizationExperience()` la lee para la org activa, una vez por request. Ver "Experiencia de la organización" |
 | Super admin | `apps/web/lib/auth/require-super-admin.ts` | Allowlist por email en `super_admin_users`. Alta y baja: [`operacion/alta-super-admin.md`](../operacion/alta-super-admin.md) (primero la cuenta, después la lista) |
 | Rate limit | `apps/web/lib/rate-limit.ts` | RPC `consume_rate_limit` (Postgres), fallback en memoria |
 | Clientes Supabase | `apps/web/lib/supabase/{server,client,admin,env}.ts` | `createClient()` respeta RLS; `createAdminClient()` = service role |
@@ -31,7 +31,7 @@ permisos por módulo sólo cortan el render de pantallas**.
 
 | Tabla | Columnas clave | Notas |
 |---|---|---|
-| `organizations` | `id`, `name`, `status`, `account_type` (`founder`/`holding`), `enabled_add_ons text[]`, `experience` (`webinar`/`full`), `skip_onboarding`, `holding_billing_model`, `currency`, `timezone` | Raíz multi-tenant. Ni `enabled_add_ons` (20260922110000) ni `experience` (20261019120000) las puede editar un usuario |
+| `organizations` | `id`, `name`, `status`, `account_type` (`founder`/`holding`), `enabled_add_ons text[]`, `experience` (`webinar`/`limitless`/`full`), `skip_onboarding`, `holding_billing_model`, `currency`, `timezone` | Raíz multi-tenant. Ni `enabled_add_ons` (20260922110000) ni `experience` (20261019120000) las puede editar un usuario |
 | `profiles` | `id` (= `auth.users.id`, FK con `on delete cascade`), `organization_id`, `role`, `custom_role_id`, `is_holding_admin`, `must_change_password`, `temp_password_expires_at`, `is_active`, `last_login_at` | Un usuario → una org. El super admin tiene `organization_id = null` |
 | `team_roles` | `organization_id`, `name`, `permissions jsonb` (`{ "<moduleId>": "none"|"view"|"full" }`), `is_default` | Roles custom por org. Claves consolidadas a 13 módulos en `20260906102000_permisos_por_modulo.sql` |
 | `team_invitations` | `token`, `email`, `custom_role_id`, `status`, `expires_at`, `invited_by` | Aceptar NO crea cuentas: vincula una cuenta existente con ese email (perfil `role = 'member'`) vía `aceptar_invitacion_de_equipo` (SCRUM-495). Ningún código inserta filas: invitar crea la cuenta directo (ver Alta de cuentas) |
@@ -128,6 +128,10 @@ crea nace en `webinar` (lo manda explícito).
   Webinars quedaron acá, y un alta que no diga nada también nace así, el lado seguro (AR pasada 1).
 - `webinar`: Limitless Webinars. Toda organización nueva nace así porque cada alta de la app lo
   manda explícito. Lo decidió el PO (19-oct-2026); no lo elige el cliente.
+- `limitless`: Limitless de gestión (Clientes, Tablero de trabajo, Ventas y Administración; decisión
+  del PO, 28-oct-2026). Ninguna alta la manda y la migración no le asigna este valor a nadie: qué
+  organización la recibe se decide fuera del código y se asigna por SQL con el service role, con su
+  precheck, en la guía de SCRUM-532. El código no tiene ids de organizaciones.
 
 Las seis altas de la tabla de arriba mandan `experience` en el insert. Las cuatro que no crean un
 negocio dentro de un holding mandan `webinar`. Las dos que sí (Agregar negocio y el onboarding del
@@ -187,7 +191,7 @@ Qué lo controla:
 Nadie la cambia desde la app: `authenticated` la puede leer (grant por columna) pero no tiene UPDATE
 (la migración se aborta si algún grant se lo diera). `anon` tiene SELECT de toda la tabla desde
 antes, pero la RLS no le devuelve ninguna fila. Sólo el service role la escribe; hoy no hay
-pantalla para pasar una organización de `webinar` a `full` (`[ORG-EXPERIENCIA-CAMBIO]` en
+pantalla para pasar una organización de una experiencia a otra (`[ORG-EXPERIENCIA-CAMBIO]` en
 `PENDIENTES.md`).
 
 `getOrganizationExperience()` (`lib/organization/experience.ts`) devuelve la experiencia de la org

@@ -77,6 +77,7 @@ import { CUENTA_DESACTIVADA_MESSAGE } from "@/lib/auth/cuenta-desactivada";
 import { ErrorEsperable } from "@/lib/server/error-esperable";
 import {
   EXPERIENCIA_SI_FALLA,
+  EXPERIENCIAS,
   getOrganizationExperience,
   leerExperienciaDeLaOrganizacion,
 } from "../experience";
@@ -119,12 +120,22 @@ beforeEach(() => {
   return () => aviso.mockRestore();
 });
 
-describe("getOrganizationExperience: los dos valores", () => {
+describe("getOrganizationExperience: los tres valores", () => {
   it("una organización webinar devuelve webinar", async () => {
     await expect(getOrganizationExperience()).resolves.toBe("webinar");
     expect(sim.columnas).toEqual(["experience"]);
     expect(sim.filtros).toEqual([["id", "org-1"]]);
     expect(sim.reportes).toEqual([]);
+  });
+
+  it("una organización limitless devuelve limitless", async () => {
+    sim.respuesta = { data: { experience: "limitless" }, error: null };
+    await expect(getOrganizationExperience()).resolves.toBe("limitless");
+    expect(sim.reportes).toEqual([]);
+  });
+
+  it("los valores válidos son exactamente webinar, limitless y full", () => {
+    expect([...EXPERIENCIAS]).toEqual(["webinar", "limitless", "full"]);
   });
 
   it("una organización full devuelve full", async () => {
@@ -162,7 +173,7 @@ describe("getOrganizationExperience: falla de lectura", () => {
     expect(sim.reportes).toHaveLength(1);
   });
 
-  it("un valor que no es webinar ni full devuelve full y se reporta sin el valor", async () => {
+  it("un valor que no es webinar, limitless ni full devuelve full y se reporta sin el valor", async () => {
     sim.respuesta = { data: { experience: "otra" }, error: null };
     await expect(getOrganizationExperience()).resolves.toBe("full");
     expect(sim.reportes).toHaveLength(1);
