@@ -54,6 +54,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 - No se repitió la prueba en navegador contra el Supabase local con una organización `limitless` (la de SCRUM-524 fue con `webinar`): lo cubren los tests de layouts y componentes reales, no un navegador.
 - Un rol de `limitless` sin Clientes, Tablero ni Ventas cae en Ajustes, igual que un rol de `webinar` sin Equipo.
 
+### 2026-11-01 — `EXPERIENCIAS` comparada con el CHECK de la base y aviso para bases locales (SCRUM-523, fix-pack 1 de A1)
+
+**Rama:** `feat/SCRUM-523-webinars-experiencia`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma (organizaciones): `apps/web/lib/organization/__tests__/experiencias-de-la-base.test.ts` (nuevo), `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`; docs `operacion/testing.md`; esta misma entrada corrige una frase de la de abajo
+
+**Qué se hizo:**
+- AR de A1, BLQ-ALTO-1: la entrada de abajo decía que "la lista de valores es exactamente la de la base", pero ningún test leía la migración. Sumar `'gestion'` al CHECK, o a `EXPERIENCIAS` y al array del test, dejaba todo verde.
+- Test nuevo de Vitest: lee las migraciones en orden de versión, sin comentarios, sigue cada `drop constraint` y `add constraint` de `organizations_experience_check` y compara los valores del CHECK que queda con `EXPERIENCIAS`, sin importar el orden. Falla también si ninguna migración lo define, si la última lo borra sin volver a agregarlo o si el CHECK no tiene la forma `check (experience in ('a', ...))`.
+- El test de RLS 97 compara la definición entera del CHECK en la base armada desde cero (`pg_get_constraintdef`).
+- Validez. Con `'gestion'` sumado al CHECK, el test nuevo falla ("CHECK de 20261019120000_organizations_experience.sql distinto de EXPERIENCIAS") y el 97 también ("FALLA: el CHECK de organizations.experience acepta exactamente webinar, limitless y full (esperado 1, real 0)"). Con `'gestion'` sumado a `EXPERIENCIAS` y al array del test viejo, falla sólo el test nuevo.
+- La frase de la entrada de abajo se corrigió para decir lo que comprobaba ese commit.
+
+**Por qué / finalidad:** la frase de cobertura era falsa. Quien sume una experiencia, o escriba el SQL de SCRUM-532, confiaba en una guarda que no existía.
+
+**Decisiones de diseño relevantes:**
+- El test lee el archivo y no una base, porque Vitest no toca Supabase. El 97 cubre la base y el test nuevo ata la base a la app: entre los dos, un valor que esté en un lado y no en el otro hace fallar algo.
+- Es un lector de texto, no un parser de SQL. No ve un CHECK armado con `execute format(...)` ni uno cambiado a mano en una base. Si alguien cambia la forma del CHECK, el test falla y no adivina valores.
+
+**Riesgos / deuda técnica pendiente:**
+- AR de A1, MNR-2: la migración `20261019120000` se editó sin cambiar de versión. Una base local que ya había aplicado la versión vieja, con el CHECK de dos valores, no la vuelve a correr: hace falta `supabase db reset` o aplicar a mano el `drop constraint` y el `add constraint` del archivo. Si no, asignar `limitless` falla con `check_violation`. Producción no la tiene aplicada. Está anotado en `docs/operacion/testing.md` (Tests de RLS).
+
 ### 2026-11-01 — Experiencia de la organización con tres valores: `webinar`, `limitless` y `full` (SCRUM-523, retrabajo)
 
 **Rama:** `feat/SCRUM-523-webinars-experiencia`
@@ -63,7 +85,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Qué se hizo:**
 - El CHECK `organizations_experience_check` acepta `webinar`, `limitless` y `full`; el comentario de la columna explica el valor nuevo. El default sigue en `full` (las organizaciones existentes no cambian) y las altas siguen mandando `webinar`, o la experiencia del holding para un negocio dentro de un holding (también si el holding es `limitless`).
 - `EXPERIENCIAS` en `lib/organization/experience.ts` suma `limitless`; la lectura estricta y la degradable la aceptan como valor válido.
-- Tests: `getOrganizationExperience` devuelve `limitless` y la lista de valores es exactamente la de la base; Agregar negocio y el onboarding del holding heredan `limitless`; el test de RLS 97 inserta una organización `limitless` con el service role y comprueba que ni el founder ni un member pueden pasar su org a `limitless`.
+- Tests: `getOrganizationExperience` devuelve `limitless` y `EXPERIENCIAS` es `webinar`, `limitless` y `full` (comparado contra un array del mismo test: en este commit ningún test leía el CHECK de la migración; lo compara desde el fix-pack 1 de A1, entrada de arriba); Agregar negocio y el onboarding del holding heredan `limitless`; el test de RLS 97 inserta una organización `limitless` con el service role y comprueba que ni el founder ni un member pueden pasar su org a `limitless`.
 
 **Por qué / finalidad:** pedido del PO (Martín, 28-oct-2026): una tercera experiencia, Limitless de gestión (Clientes, Tablero de trabajo, Ventas y Administración). El menú y las rutas de cada experiencia son SCRUM-524.
 
