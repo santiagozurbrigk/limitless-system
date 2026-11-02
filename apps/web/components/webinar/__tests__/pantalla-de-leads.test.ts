@@ -14,6 +14,7 @@ import {
   type FilaDeLead,
   type VistaLeads,
 } from "@/lib/webinar/vistas/contratos";
+import { COLUMNAS_DE_LEADS } from "@/lib/webinar/leads/config";
 import { conError, medido, sinFuente } from "@/lib/webinar/vistas/dato";
 import { PantallaDeLeads } from "../pantalla-de-leads";
 
@@ -87,6 +88,25 @@ describe("tabla (AC-1, AC-11)", () => {
     expect(html).toContain("Directo o sin dato");
     expect(html).toContain("Sofía");
     expect(html).toContain("Sin responsable");
+  });
+
+  it("cada celda va bajo su encabezado, en el orden de COLUMNAS_DE_LEADS", () => {
+    const sinEtiquetas = (s: string) => s.replace(/<[^>]*>/g, "");
+    const encabezados = [...(html.match(/<thead[^>]*>.*?<\/thead>/)?.[0] ?? "").matchAll(/<th[^>]*>(.*?)<\/th>/g)].map((m) =>
+      sinEtiquetas(m[1])
+    );
+    expect(encabezados).toEqual(COLUMNAS_DE_LEADS.map((c) => c.etiqueta));
+    const filaZeta = html.match(/<tr [^>]*data-lead="zeta">(.*?)<\/tr>/)?.[1] ?? "";
+    const celdas = [...filaZeta.matchAll(/<td[^>]*>(.*?)<\/td>/g)].map((m) => sinEtiquetas(m[1]));
+    // Lo que tiene que haber bajo cada encabezado para la fila "zeta".
+    const esperado: Record<(typeof COLUMNAS_DE_LEADS)[number]["id"], string> = {
+      lead: "Persona zeta",
+      etapa: "Levantó la mano",
+      origen: "instagram",
+      responsable: "Sofía",
+      ultimoContacto: "Sin contactar",
+    };
+    expect(celdas).toEqual(COLUMNAS_DE_LEADS.map((c) => esperado[c.id]));
   });
 
   it("nombre null: muestra el email", () => {
@@ -223,6 +243,17 @@ describe("paginación y buscador", () => {
 
   it("con cursor: «Volver al principio» sin cursor; en la última página no hay «Siguiente»", () => {
     const html = render(vista({ siguienteCursor: null }), { cursor: "50" });
+    expect(html).toContain(">Volver al principio</a>");
+    expect(hrefs(html)).toContain(`/leads?filtro=levanto_la_mano_sin_contactar&busqueda=ana&lanzamiento=${LANZAMIENTO.id}`);
+    expect(html).not.toContain(">Siguiente</a>");
+  });
+
+  it("con cursor y medido con [] filas (cursor más allá del final): «Volver al principio» igual", () => {
+    const html = render(vista({ total: medido(0, "calculado", AHORA), filas: medido([], "landing", AHORA), siguienteCursor: null }), {
+      cursor: "500",
+    });
+    expect(html).toContain("Ningún lead coincide con este filtro.");
+    expect(html).toContain('<nav aria-label="Páginas"');
     expect(html).toContain(">Volver al principio</a>");
     expect(hrefs(html)).toContain(`/leads?filtro=levanto_la_mano_sin_contactar&busqueda=ana&lanzamiento=${LANZAMIENTO.id}`);
     expect(html).not.toContain(">Siguiente</a>");

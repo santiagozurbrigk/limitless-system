@@ -130,33 +130,34 @@ export function PantallaDeLeads({
         <AvisoDeEstado estado={vista.filas.state} reason={vista.filas.reason} que="Leads" />
       ) : null}
       {tieneValor(vista.filas) ? (
-        vista.filas.value.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Ningún lead coincide con este filtro.</p>
-        ) : (
-          <>
+        <>
+          {vista.filas.value.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Ningún lead coincide con este filtro.</p>
+          ) : (
             <TablaDeLeads filas={vista.filas.value} launchId={launchId} />
-            {vista.siguienteCursor || cursor ? (
-              <nav aria-label="Páginas" className="flex items-center gap-3 text-sm">
-                {cursor ? (
-                  <Link
-                    href={urlDeLeads(actual, { cursor: null })}
-                    className="text-muted-foreground hover:text-foreground hover:underline"
-                  >
-                    Volver al principio
-                  </Link>
-                ) : null}
-                {vista.siguienteCursor ? (
-                  <Link
-                    href={urlDeLeads(actual, { cursor: vista.siguienteCursor })}
-                    className="text-primary hover:underline"
-                  >
-                    Siguiente
-                  </Link>
-                ) : null}
-              </nav>
-            ) : null}
-          </>
-        )
+          )}
+          {/* También con la lista vacía: un cursor más allá del final vuelve al principio. */}
+          {vista.siguienteCursor || cursor ? (
+            <nav aria-label="Páginas" className="flex items-center gap-3 text-sm">
+              {cursor ? (
+                <Link
+                  href={urlDeLeads(actual, { cursor: null })}
+                  className="text-muted-foreground hover:text-foreground hover:underline"
+                >
+                  Volver al principio
+                </Link>
+              ) : null}
+              {vista.siguienteCursor ? (
+                <Link
+                  href={urlDeLeads(actual, { cursor: vista.siguienteCursor })}
+                  className="text-primary hover:underline"
+                >
+                  Siguiente
+                </Link>
+              ) : null}
+            </nav>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
