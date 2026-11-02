@@ -20,7 +20,7 @@ Uso real en producción (filas al 2026-09-23): `agent_messages` 12, `agent_conve
 
 | Ruta | Archivo | Qué muestra |
 |---|---|---|
-| `/agent`, `/agent/[conversationId]`, `/agent/stage/[stageId]` | `app/(platform)/agent/*/page.tsx` → `components/agent/agent-shell.tsx` | Chat SSE, historial, etapas de negocio, Canvas, propuestas. El layout (`agent/layout.tsx`) saca `conversationId`/`stageId` del path para `AgentDataProvider` |
+| `/agent`, `/agent/[conversationId]`, `/agent/stage/[stageId]` | `app/(platform)/agent/*/page.tsx` → `components/agent/agent-shell.tsx` | Chat SSE, historial, etapas de negocio, Canvas, propuestas. El layout (`agent/layout.tsx`, de servidor) aplica el bloqueo por experiencia (SCRUM-524) y `agent/agent-layout-cliente.tsx` saca `conversationId`/`stageId` del path para `AgentDataProvider` |
 | `/agent/project/[projectId]` | `app/(platform)/agent/project/[projectId]/page.tsx` | Redirect a `/agent` (proyectos ya no tienen UI) |
 | `/business-context/documents` | `app/(platform)/business-context/documents/page.tsx` → `components/business-context/knowledge-base-page.tsx` | Documentos, calls de Fathom, categorías custom, import de Google |
 | `/business-context/[id]` | `app/(platform)/business-context/[id]/page.tsx` | Visor de un documento |

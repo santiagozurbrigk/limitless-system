@@ -80,11 +80,11 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 31 | 18 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 33 | 19 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 15 | 7 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 10 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
@@ -136,7 +136,7 @@ Prioridad sugerida P1: la severidad es Crítica, pero la toma del super admin ex
 #### [PERMISOS-LAYOUT-NAV-SUAVE] El bloqueo por módulo vive en un layout que no se re-renderiza al navegar (nuevo)
 - **Tipo:** seguridad / verificación manual
 - **Severidad:** Alta
-- **Estado verificado:** el chequeo `sinAcceso` está en `app/(platform)/layout.tsx` leyendo `x-pathname`. En App Router los layouts compartidos no se re-renderizan en navegaciones cliente; la paleta ⌘K (`routes/navigation.ts` → `buildPlatformNavigation()`) lista todos los módulos sin filtrar permisos ni add-ons. Muy probable que `Cmd+K → Finanzas` muestre la pantalla a un rol sin acceso.
+- **Estado verificado:** el chequeo `sinAcceso` está en `app/(platform)/layout.tsx` leyendo `x-pathname`. En App Router los layouts compartidos no se re-renderizan en navegaciones cliente; lo medido en SCRUM-524 (prueba contra el Supabase local, `evidencia-sprint2/scrum-524/prueba-local/`): mientras ese layout muestra `SinAcceso`, no dibuja `children`, así que una navegación del cliente desde esa pantalla cambia la URL y sigue mostrando `SinAcceso`, sin la pantalla nueva y sin aplicar la redirección por experiencia de su segmento (la carga de la página sí redirige); la paleta ⌘K (`routes/navigation.ts` → `buildPlatformNavigation()`) lista todos los módulos sin filtrar permisos ni add-ons. Muy probable que `Cmd+K → Finanzas` muestre la pantalla a un rol sin acceso.
 - **Riesgo:** Si un member sin acceso a un módulo usa ⌘K o un link interno, entonces muy probablemente ve la pantalla completa (por ejemplo Finanzas) sin ningún conocimiento técnico. Es el camino más fácil de todos los de permisos.
 - **Impacto:** Todas las orgs que usan roles con módulos en «sin acceso»: la restricción se saltea desde la propia interfaz; no cruza organizaciones.
 - **Qué hay que hacer:** verificar en navegador; si se confirma, mover el chequeo a cada `page.tsx` (o a un layout por módulo) y filtrar la paleta con `canSeeNavItem`.
@@ -343,9 +343,16 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 
 #### [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo)
 - **Tipo:** bug
-- **Estado verificado:** `components/navigation/command-palette.tsx` usa `platformNavigation` estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos `hidden` del menú (`lib/navigation/build-platform-navigation.ts`); permisos y add-ons siguen sin filtrarse.
-- **Qué hay que hacer:** construirla con `buildPlatformSidebarNav(enabledAddOns)` + `canSeeNavItem`.
+- **Estado verificado:** en una organización `full`, `components/navigation/command-palette.tsx` usa `platformNavigation` estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos `hidden` del menú (`lib/navigation/build-platform-navigation.ts`); permisos y add-ons siguen sin filtrarse. En una organización `webinar` o `limitless` ya filtra por permiso (`itemsDeLaPaleta`, SCRUM-524), y desde SCRUM-524 el layout de la plataforma deja a la paleta dentro de `PermissionsProvider`.
+- **Qué hay que hacer:** para `full`, construirla con `buildPlatformSidebarNav(enabledAddOns)` + `canSeeNavItem`, como ya hace `itemsDeLaPaleta` para `webinar` y `limitless`.
 - **Dónde:** `apps/web/components/navigation/command-palette.tsx`, `apps/web/routes/navigation.ts`.
+
+#### [REPORTES-PANEL-CAMBIO-NEGOCIO] El panel de reportes ejecutivos no se actualiza al entrar a un negocio del holding (nuevo)
+- **Tipo:** bug
+- **Severidad:** Baja
+- **Estado verificado:** medido en SCRUM-524 contra un Supabase local, igual con el build de `f97b4cdb` y con el de SCRUM-524 (`evidencia-sprint2/scrum-524/isla-holding-explicacion.txt`, `isla-holding-f97b4cdb.txt`, `isla-holding-de45b3f1.txt`). Un holding entra con «Entrar al negocio» a un negocio con un reporte ejecutivo: el ícono del panel no aparece hasta recargar la página. Dos causas: (1) `ReportsPanel` (`components/executive-reports/reports-panel.tsx`) pide los reportes una sola vez, en el `useEffect` de montaje, y la barra ya estaba montada en `/holding`, donde leyó los del holding; la navegación que sigue a `enterBusinessAction` no la vuelve a montar ni le avisa del cambio. (2) La RLS de `executive_reports` toma el negocio del claim `active_business_org_id` del token (`get_my_organization_id`), que sólo existe después de que `enterBusinessAction` escribe `holding_active_sessions` y renueva la sesión: una lectura con un token anterior al cambio no ve los reportes del negocio. Al recargar, el panel se monta con el token nuevo y aparece. Al volver al holding pasa lo mismo al revés (el panel sigue mostrando lo leído antes).
+- **Qué hay que hacer:** que el panel vuelva a pedir los reportes cuando cambia la organización activa (por ejemplo, con el id de la organización activa del `HoldingPlatformProvider` como dependencia del efecto o como `key` del componente), y probarlo con el cambio real de negocio (la cookie sola no alcanza: hace falta el claim del token).
+- **Dónde:** `apps/web/components/executive-reports/reports-panel.tsx`, `apps/web/app/(platform)/holding/actions.ts` (`enterBusinessAction`).
 
 #### [DIALOG-DOBLE-PADDING] Padding duplicado en los modales
 - **Tipo:** deuda técnica
@@ -431,7 +438,24 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Qué hay que hacer:** abrir retrospectiva de sprint, versiones de SOP, leads de UTM y llamadas del cliente.
 - **Dónde:** workboard, SOPs, UTMs, ficha de cliente.
 
+#### [ORG-EXPERIENCIA-CAMBIO] Cómo pasa a `full` o a `limitless` una organización que lo necesite
+- **Tipo:** decisión de negocio
+- **Severidad:** Media
+- **Estado verificado:** desde SCRUM-523 (`20261019120000_organizations_experience.sql`) toda organización nueva nace con `organizations.experience = 'webinar'` porque las altas lo mandan explícito (el default de la columna es `full`), salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin (`createFounderAccountAction`, `createOrganizationFromHoldingAction`, `createHoldingOrgAction` en `app/super-admin/actions.ts`) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para `authenticated`) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL). `limitless` (Limitless de gestión, decisión del PO del 28-oct-2026) no la manda ninguna alta: se asigna sólo así, con el SQL y el precheck de la guía de SCRUM-532.
+- **Riesgo:** desde SCRUM-524, que esconde el menú y redirige las rutas según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan `webinar`) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
+- **Impacto:** clientes nuevos de Limitless completo dados de alta por el super admin después del deploy de SCRUM-523.
+- **Qué hay que hacer:** que el PO decida quién y desde dónde pasa una organización a `full` o a `limitless` (por ejemplo, un selector en el detalle de la organización del super admin, con `createAdminClient` y `requireSuperAdmin`, como `updateOrgAddOnsAction`), y si el cambio de un holding se propaga a sus negocios.
+- **Criterio de aceptación:** el super admin pasa una organización entre `webinar`, `limitless` y `full` sin SQL; un usuario de la organización sigue sin poder cambiarla (`supabase/ci/tests/97_experiencia_de_la_organizacion.sql`).
+- **Dónde:** `app/super-admin/actions.ts`, `organizations.experience`, `lib/organization/experience.ts`.
+
 ### Plataforma · P3
+
+#### [WEBINAR-ONBOARDING-GATE] Una cuenta webinar nueva pasa por el gate de onboarding del producto completo (nuevo)
+- **Tipo:** decisión de negocio
+- **Severidad:** Baja
+- **Estado verificado:** medido en el QA final de SCRUM-524 con una organización webinar creada por el alta real del super admin (`evidencia-sprint2/scrum-524/qa-final.md` § MENOR-2, `qa/prueba/alta-webinar.txt`): el founder cae en `/auth/force-password-change`, después en `/onboarding`, y en el siguiente login ve en `/team` el asistente «Tu negocio» (paso 1 de 3: negocio, oferta y avatar, `components/onboarding/onboarding-gate.tsx`). Es el gate de siempre (`shouldRedirectToGate` en el middleware, salvo `skip_onboarding`), no lo agrega SCRUM-524, y `/onboarding` es una ruta libre a propósito para no armar un bucle con el bloqueo por experiencia. SCRUM-524 no lo cambia.
+- **Qué hay que hacer:** que el PO decida si una organización webinar pasa por ese gate (son preguntas del producto completo: oferta y avatar), por uno propio de Webinars o por ninguno (`skip_onboarding` en el alta), y cuándo se revisa (probablemente con Inicio, SCRUM-534).
+- **Dónde:** `apps/web/lib/onboarding/gate-routing.ts`, `apps/web/lib/supabase/middleware.ts`, `apps/web/components/onboarding/onboarding-gate.tsx`, `app/super-admin/actions.ts` (altas).
 
 #### [MIDDLEWARE-COOKIE-REFRESCADA] El middleware le pasa a la página la cookie de sesión vieja después de refrescarla (nuevo)
 - **Tipo:** bug
@@ -1328,6 +1352,30 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 
 ### Embudos y Lanzamientos · P2
 
+#### [WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars
+- **Tipo:** decisión de negocio / operativa
+- **Estado verificado:** el escenario de ejemplo de Webinars (SCRUM-542) sólo lo ve la organización cuyo UUID está en `WEBINAR_DEMO_ORGANIZATION_ID` (`apps/web/lib/webinar/vistas/org-de-demo.ts`). La variable no está en Vercel ni en `.env.example`: hoy ninguna organización ve el ejemplo.
+- **Qué hay que hacer:** cuando SCRUM-522 decida cuál es la org de demo y quién la crea, cargar su UUID en Vercel (Production y Preview, sólo servidor) y confirmar que ninguna org de un cliente tiene ese id.
+- **Dónde:** `apps/web/lib/webinar/vistas/org-de-demo.ts`, `docs/operacion/entorno-y-deploy.md`, `docs/areas/webinars-contratos-de-vista.md`.
+
+#### [WEBINAR-VISTAS-LECTURA-REAL] Las funciones de lectura de Webinars leen la base (B4)
+- **Tipo:** feature
+- **Estado verificado:** las seis funciones de `apps/web/lib/webinar/vistas/leer.ts` devuelven el escenario de ejemplo a la org de demo y, a cualquier otra, todo `sin_fuente` con `MOTIVO_SIN_LECTURA_REAL` (`sin-lectura-real.ts`) y "no existe" en las pantallas de un lanzamiento o un lead. Las tablas de SCRUM-526 no están migradas.
+- **Qué hay que hacer:** después de migrar el modelo (SCRUM-532), leer de la base las filas de `filas.ts` y pasarlas por `calcular.ts`, con el estado de cada fuente y su regla de "desactualizado"; una consulta caída va como `error` del número o `{ ok: false, motivo }`. Sin cambiar `contratos.ts`.
+- **Dónde:** `apps/web/lib/webinar/vistas/{leer,filas,calcular}.ts`.
+
+#### [WEBINAR-REEMBOLSOS-POR-ORDEN] Asociar cada reembolso a su compra por el id de orden (B4, SCRUM-550)
+- **Tipo:** deuda técnica
+- **Estado verificado:** `asociarReembolsos` (`apps/web/lib/webinar/vistas/calcular.ts`, SCRUM-542) asocia cada reembolso con la compra cobrada más vieja del mismo lead, lanzamiento y nombre de producto (`data.product`), sin mirar el orden temporal. Un reembolso sin compra afecta los ingresos de la oferta principal sólo si su producto aparece en una compra `purchased` del lanzamiento o en ninguna. La regla es provisional y deja cuatro casos sin resolver: dos reembolsos parciales de la misma compra (el segundo queda suelto y los ingresos quedan en `error`), una compra sin `data.product` con un reembolso que sí lo trae (no se asocian), un reembolso con un `launch_id` distinto del de su compra (queda suelto en su lanzamiento y la compra sigue cobrada en el otro), y un VIP con el mismo nombre de producto que la oferta principal: la clave no mira la oferta, así que el reembolso del VIP puede ir a la compra principal (ingresos 4.985 → 4.938 en el escenario, medido en el re-AR de SCRUM-542).
+- **Qué hay que hacer:** cuando B4 lea los pagos reales, asociar por el id de orden del proveedor (`orderExternalId` de Whop/Commas) en vez de lead + lanzamiento + producto, sumar los reembolsos parciales de una misma orden y definir qué pasa con un reembolso cuya orden no se encuentra. Actualizar la regla en `docs/areas/webinars-contratos-de-vista.md`.
+- **Dónde:** `apps/web/lib/webinar/vistas/{filas,calcular}.ts`, `docs/areas/webinars-contratos-de-vista.md`.
+
+#### [WEBINAR-LEADS-PERSISTIR] Las acciones de la ficha del lead guardan de verdad y `/leads` lee la base (B4)
+- **Tipo:** feature
+- **Estado verificado:** las tres Server Actions de la ficha (`marcarAvanceDelLeadAction`, `asignarResponsableDelLeadAction`, `agregarNotaDelLeadAction`, `apps/web/app/leads/actions.ts`, SCRUM-545) exigen organización con `requireOrganizationId()`, validan la entrada y devuelven éxito sin escribir en ninguna base; la ficha muestra el cambio sólo en su estado local y avisa que es de ejemplo. No miran el módulo de permisos: `/leads` lo protege el layout de la plataforma con `sales`. `/leads` y `/leads/[id]` leen de `leerLeads` y `leerFichaDelLead`, que devuelven el escenario a la organización de demo y `sin_fuente` o "no existe" a las demás (`[WEBINAR-VISTAS-LECTURA-REAL]`).
+- **Qué hay que hacer:** cuando B4 migre el modelo, que las tres acciones escriban la etapa, el responsable y la nota, con el chequeo de módulo `sales` en la acción (`[PERMISOS-SERVER-ACTIONS]`: hoy se apoyan sólo en el layout); que la ficha deje el estado local y el aviso de ejemplo y muestre lo guardado; y, cuando `/leads` lea la base, un chequeo de permisos propio en la página para lo que no tiene que llegarle a alguien sin `sales` (R-8 de SCRUM-545).
+- **Dónde:** `apps/web/app/leads/actions.ts`, `apps/web/components/webinar/panel-de-venta-cliente.tsx`, `apps/web/lib/webinar/leads/estado-local.ts`, `apps/web/app/(platform)/leads/`.
+
 #### [EMBUDOS-SALUD] Habilitar el estado de salud (bandas de la §04) ⏸️
 - **Tipo:** decisión de negocio / feature
 - **Estado verificado:** `applyHealthBand`, `resolveBenchmark`, `CROSS_FUNNEL_BANDS` sólo se usan en tests; la tabla de pasos muestra `benchmarkLabel` como texto. `funnel_benchmarks` sin uso. `diagnoseFunnel()` no existe.
@@ -1419,6 +1467,24 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Dónde:** `apps/web/e2e/`.
 
 ### Embudos y Lanzamientos · P3
+
+#### [WEBINAR-LEADS-SIN-ORGANIZACION] Una cuenta sin organización que abre `/leads` deja dos eventos en Sentry
+- **Tipo:** bug
+- **Estado verificado:** para SCRUM-542 (dueño de `lib/webinar/vistas/`). Una cuenta sin organización (un super admin) que abre `/leads` o `/leads/<id>` pasa el bloqueo por experiencia (queda en `full`) y la página llama a `leerLeads` o `leerFichaDelLead`, que lanzan en `requireOrganizationId` (`apps/web/lib/webinar/vistas/leer.ts:60`) en vez de devolver `sin_fuente`. Next dibuja `app/(platform)/error.tsx` y quedan dos eventos en Sentry: el del servidor por `onRequestError` y el del navegador por `components/platform/pantalla-de-error.tsx`. Leído en el código, no ejecutado en la app (DT-28 y R-10 de SCRUM-545; `app/(platform)/leads/__tests__/pantallas-de-leads.test.ts` prueba que las dos páginas rechazan con `SIN_ORGANIZACION_VINCULADA`). SCRUM-545 no cambia `lib/webinar/vistas/`.
+- **Qué hay que hacer:** que las funciones de lectura de Webinars traten la cuenta sin organización como "sin fuente" (o "no existe" en la ficha) sin lanzar, igual que hace `getOrganizationExperience` con `SIN_ORGANIZACION_VINCULADA`.
+- **Dónde:** `apps/web/lib/webinar/vistas/leer.ts`, `apps/web/app/(platform)/leads/`.
+
+#### [WEBINAR-LEADS-CREAR-LANZAMIENTO] El estado vacío de Leads no tiene enlace para crear un lanzamiento
+- **Tipo:** feature
+- **Estado verificado:** sin lanzamientos, `/leads` muestra «Todavía no hay lanzamientos.» sin enlace: `RUTA_PARA_CREAR_LANZAMIENTO` es `null` en `apps/web/lib/webinar/leads/config.ts` porque no existe la pantalla de creación (SCRUM-544). `PantallaDeLeads` dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22).
+- **Qué hay que hacer:** que SCRUM-544 ponga en `RUTA_PARA_CREAR_LANZAMIENTO` la ruta de su pantalla de creación (desde `routes/paths.ts`).
+- **Dónde:** `apps/web/lib/webinar/leads/config.ts`.
+
+#### [WEBINAR-NUMEROS-DE-TICKET] Los comentarios y docs de Webinars citan SCRUM-534 y SCRUM-529 donde corresponde 543 y 544
+- **Tipo:** deuda técnica
+- **Estado verificado:** Inicio figura como SCRUM-534 y Lanzamientos como SCRUM-529, y el plan de Webinars los tiene como SCRUM-543 y SCRUM-544 (drift detectado en el SDD de SCRUM-545, que no los corrigió): `apps/web/lib/navigation/menu-por-experiencia.ts:15,16,66,74`, `apps/web/routes/paths.ts:29,31`, `apps/web/lib/navigation/module-for-path.ts:26`, `apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts:103`, `docs/diseno/ui-y-navegacion.md:88-89` y `PENDIENTES.md:457`.
+- **Qué hay que hacer:** confirmar con Martín qué ticket es cada pantalla y corregir los números donde corresponda.
+- **Dónde:** archivos citados.
 
 #### [FEAT-GHL-OAUTH] App del Marketplace de GHL
 - **Tipo:** feature

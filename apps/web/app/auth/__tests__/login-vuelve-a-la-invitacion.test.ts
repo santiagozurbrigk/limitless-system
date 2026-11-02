@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// SCRUM-524: el destino después del login sale de la experiencia; acá, `full`.
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/organization/experience", () => ({
+  getOrganizationExperience: async () => "full",
+}));
+
 /**
  * SCRUM-495 · [AUTH-ALTA-EMAIL-AJENO] parte A: `/invite` manda a iniciar
  * sesión con `?next=/invite?token=…` y el login vuelve ahí.

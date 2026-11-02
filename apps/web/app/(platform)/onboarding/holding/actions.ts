@@ -10,6 +10,7 @@ import {
   type HoldingBillingModel,
   type HoldingOnboardingData,
 } from "@/lib/holding/billing";
+import { leerExperienciaDeLaOrganizacion } from "@/lib/organization/experience";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { actionErrorMessage } from "@/lib/server/action-result";
@@ -170,6 +171,10 @@ export async function completeHoldingOnboardingAction(data: unknown) {
   // Validación cruzada según modelo ya guardado (no cabe en el schema estático).
   validateBusinessesForBillingModel(businesses, billingModel);
 
+  // Los negocios heredan la experiencia del holding (SCRUM-523). Se lee antes
+  // de crear ninguno: si falla, no queda nada a medias.
+  const experience = await leerExperienciaDeLaOrganizacion(admin, holdingOrgId);
+
   const createdOrgIds: string[] = [];
 
   try {
@@ -181,6 +186,7 @@ export async function completeHoldingOnboardingAction(data: unknown) {
           status: "active",
           account_type: "founder",
           skip_onboarding: true,
+          experience,
         })
         .select("id")
         .single();
