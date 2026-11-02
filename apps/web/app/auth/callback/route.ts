@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import { destinoSeguro } from "@/lib/auth/redirect-seguro";
 import { LINK_RECUPERACION_VENCIDO_QUERY } from "@/lib/auth/recuperar-contrasena";
+import { destinoDeInvitacion } from "@/lib/team/invitacion";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -42,10 +43,14 @@ export async function GET(request: Request) {
         await ensureUserBootstrap(user);
       }
 
+      // Mismo orden que `signInAction` (`postAuthRedirect`): la invitación de
+      // equipo gana sobre el destino del staff (SCRUM-552).
+      const invitacion = destinoDeInvitacion(searchParams.get("next"));
       const destination =
-        user?.email && (await isStaffEmail(user.email))
+        invitacion ??
+        (user?.email && (await isStaffEmail(user.email))
           ? DESTINO_DEL_STAFF
-          : next;
+          : next);
 
       return NextResponse.redirect(`${origin}${destination}`);
     }

@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *   la lista, aunque sea de la org de Limitless, al dashboard de siempre);
  * - `/superadmin/login` redirige a `/login`;
  * - el layout del panel rechaza a quien no es staff con un redirect a `/login`;
- * - el callback de Auth manda al staff al mismo destino;
+ * - el callback de Auth manda al staff al mismo destino, salvo que vuelva de
+ *   una invitación (gana la invitación, como en `signInAction`);
  * - `signInSuperAdminAction` ya no existe.
  *
  * Acá se simula `isStaffEmail`/`isStaffUser` (el guard en sí está probado en
@@ -26,6 +27,7 @@ const sim = vi.hoisted(() => ({
   lista: ["staff@limitless.test"],
   bootstraps: 0,
   bootstrapsDeUsuario: 0,
+  rol: "founder" as "founder" | "member",
   organizacion: { organizationId: "org-limitless", accountType: "founder" as "founder" | "holding" | null },
 }));
 
@@ -47,11 +49,11 @@ vi.mock("@/lib/auth/require-staff", async (importOriginal) => ({
 vi.mock("@/lib/auth/bootstrap", () => ({
   ensureCurrentUserBootstrap: async () => {
     sim.bootstraps += 1;
-    return { id: "u1", organization_id: "org-limitless", role: "founder" };
+    return { id: sim.usuario?.id, organization_id: "org-limitless", role: sim.rol };
   },
   ensureUserBootstrap: async () => {
     sim.bootstrapsDeUsuario += 1;
-    return { id: "u1", organization_id: "org-limitless", role: "founder" };
+    return { id: sim.usuario?.id, organization_id: "org-limitless", role: sim.rol };
   },
   loadProfileOrganizationContext: async () => ({
     organizationId: sim.organizacion.organizationId,
@@ -110,6 +112,7 @@ beforeEach(() => {
   sim.lista = ["staff@limitless.test"];
   sim.bootstraps = 0;
   sim.bootstrapsDeUsuario = 0;
+  sim.rol = "founder";
   sim.organizacion = { organizationId: "org-limitless", accountType: "founder" };
 });
 
@@ -125,12 +128,16 @@ describe("login del staff por /login", () => {
 
   it("⭐ un miembro de la org de Limitless fuera de la lista va al dashboard de siempre", async () => {
     sim.usuario = { id: "u2", email: "miembro@limitless.test" };
+    sim.rol = "member";
     expect(await entrar("miembro@limitless.test")).toBe(paths.platform.dashboard);
+    expect(sim.bootstraps).toBe(1);
   });
 
   it("un founder de la org de Limitless fuera de la lista tampoco va al panel", async () => {
     sim.usuario = { id: "u3", email: "founder@limitless.test" };
+    sim.rol = "founder";
     expect(await entrar("founder@limitless.test")).toBe(paths.platform.dashboard);
+    expect(sim.bootstraps).toBe(1);
   });
 
   it("el staff que viene de una invitación vuelve a la invitación", async () => {
@@ -169,5 +176,26 @@ describe("callback de Auth", () => {
     sim.usuario = { id: "u2", email: "miembro@limitless.test" };
     const res = await callbackDeAuth(new Request("https://app.test/auth/callback?code=c-1"));
     expect(res.headers.get("location")).toBe(`https://app.test${paths.platform.dashboard}`);
+  });
+
+  it("⭐ el staff que vuelve de una invitación va a la invitación, como en signInAction", async () => {
+    const next = encodeURIComponent("/invite?token=tok-1");
+    const res = await callbackDeAuth(new Request(`https://app.test/auth/callback?code=c-1&next=${next}`));
+    expect(res.headers.get("location")).toBe("https://app.test/invite?token=tok-1");
+    expect(sim.bootstrapsDeUsuario).toBe(0);
+    // El mismo destino que da el login con contraseña.
+    expect(await entrar("staff@limitless.test", "/invite?token=tok-1")).toBe("/invite?token=tok-1");
+  });
+
+  it("de la invitación sólo pasa el token, como en signInAction", async () => {
+    const next = encodeURIComponent("/invite?token=tok-1&next=https://evil.test");
+    const res = await callbackDeAuth(new Request(`https://app.test/auth/callback?code=c-1&next=${next}`));
+    expect(res.headers.get("location")).toBe("https://app.test/invite?token=tok-1");
+  });
+
+  it("un next que no es una invitación no le gana al destino del staff", async () => {
+    const next = encodeURIComponent("/invitaciones-viejas");
+    const res = await callbackDeAuth(new Request(`https://app.test/auth/callback?code=c-1&next=${next}`));
+    expect(res.headers.get("location")).toBe(`https://app.test${DESTINO_DEL_STAFF}`);
   });
 });
