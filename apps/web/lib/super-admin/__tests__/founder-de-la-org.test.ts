@@ -44,7 +44,7 @@ const sim = vi.hoisted(() => {
         resultado = resultado.filter((f) => f[columna] === valor);
         return builder;
       },
-      not(columna: string, _op: string, _valor: unknown) {
+      not(columna: string) {
         resultado = resultado.filter((f) => f[columna] !== null && f[columna] !== undefined);
         return builder;
       },
