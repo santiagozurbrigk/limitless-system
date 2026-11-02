@@ -14,12 +14,17 @@ importa el escenario ni calcula números. Lo controla `las-pantallas-leen-de-su-
 - Recorre los archivos `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` y `.cjs` de `apps/web` de fuera
   del módulo (sin `node_modules`, `.next`, `dist`, `.turbo`, `e2e` ni `coverage`). En cada uno resuelve los
   especificadores de `import ... from`, `import "x"`, `export ... from`, `import()` y `require()`, con
-  comillas simples o dobles o un template sin `${}`. El alias `@/` y lo que no empieza con `.` (por el
-  `baseUrl` de tsconfig) se resuelven desde la raíz de la app; lo relativo, desde la carpeta del archivo. Con
-  o sin extensión. Falla si alguno cae en `lib/webinar/vistas/` y no es `leer`, `contratos` o `dato`.
+  comillas simples o dobles o un template sin `${}`, y con espacios o comentarios (`/* */`, como el
+  `webpackChunkName`, o `//`) entre la palabra, el paréntesis y el especificador. El alias `@/` y lo que no
+  empieza con `.` (por el `baseUrl` de tsconfig) se resuelven desde la raíz de la app; lo relativo, desde la
+  carpeta del archivo. Con o sin extensión. Falla si alguno cae en `lib/webinar/vistas/` y no es `leer`,
+  `contratos` o `dato`.
+- No ve un especificador armado en ejecución (`import(variable)`, un template con `${}`), un alias distinto
+  de `@/`, otras funciones que reciben una ruta (`require.resolve`, `vi.importActual`, `vi.mock`) ni la ruta
+  escrita con otras mayúsculas.
 - Adentro del módulo, con la misma resolución, sólo `leer.ts` importa el escenario.
-- Un auto-test del detector prueba cada una de esas formas, y que deja pasar `leer`, `contratos`, `dato` y
-  una carpeta que se llama parecido.
+- Un auto-test del detector prueba cada una de las formas que ve, y que deja pasar `leer`, `contratos`,
+  `dato` y una carpeta que se llama parecido.
 - `leer`, `calcular`, `escenario-de-ejemplo`, `org-de-demo` y `sin-lectura-real` empiezan con
   `import "server-only"`, y el mismo test lo verifica: si un Client Component los importa, el build falla.
   `dato` y `contratos` (y `filas`, que tiene sólo tipos) se pueden importar desde el cliente.
@@ -146,9 +151,17 @@ Dos reglas que valen también para los datos reales (viven en `calcular.ts`):
   ya ocurrieron, con el peor estado entre esas sesiones. Si alguien vuelve a otra sesión, suma en el detalle
   de esa sesión pero no en el total.
 - Cada reembolso se asocia a una compra concreta: la más vieja todavía cobrada del mismo lead, lanzamiento y
-  producto. Con dos compras y un reembolso, una queda cobrada. Un reembolso del VIP no toca las ventas, los
-  ingresos ni los reembolsos de la oferta principal. Si un reembolso no corresponde a ninguna compra, los
-  ingresos quedan en `error`, porque no se sabe qué producto devolvió.
+  producto, sea anterior o posterior al reembolso (la misma hora o un reloj desfasado no lo dejan suelto).
+  Los reembolsos se reparten por fecha y, a igual fecha, por id, así que el resultado no depende del orden en
+  que llegan las filas. Con dos compras y un reembolso, una queda cobrada. Un reembolso del VIP no toca las
+  ventas, los ingresos ni los reembolsos de la oferta principal. Un reembolso sin compra que le corresponda
+  sólo afecta los números de su producto, que se reconoce por el nombre en las compras del lanzamiento: si es
+  de la oferta principal, los ingresos quedan en `error` ("Hay 1 reembolso de la oferta principal que no
+  corresponde a ninguna compra"); si es del VIP, la oferta principal no cambia; si el producto no aparece en
+  ninguna compra (o aparece en las dos ofertas), los ingresos quedan en `error` porque no se sabe si es de la
+  oferta principal. **La regla es provisional hasta B4** (`[WEBINAR-REEMBOLSOS-POR-ORDEN]`, SCRUM-550): no
+  asocia por el id de orden del proveedor, y dos reembolsos parciales de una compra, una compra sin producto
+  o un reembolso con otro `launch_id` que su compra quedan sin asociar.
 
 ## Qué cambia en B4
 

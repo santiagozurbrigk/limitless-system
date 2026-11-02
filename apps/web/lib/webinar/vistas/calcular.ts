@@ -320,34 +320,58 @@ function datoDeProveedor<T>(ctx: Contexto, proveedor: string, valor: T): Dato<T>
 
 type CompraConReembolso = { compra: FilaEvento; reembolso: FilaEvento | null };
 
+const porFechaEId = (a: FilaEvento, b: FilaEvento) =>
+  a.occurred_at.localeCompare(b.occurred_at) || a.id.localeCompare(b.id);
+
 /**
  * Cada reembolso se asocia a una compra concreta: la más vieja todavía
- * cobrada del mismo lead, lanzamiento y producto (`data.product`), hecha antes
- * del reembolso. Así dos compras con un reembolso dejan una cobrada, y un
- * reembolso del VIP (`vip_purchased`) no toca la oferta principal
- * (`purchased`). Un reembolso sin compra que le corresponda queda en
- * `huerfanos`: no se sabe de qué producto es.
+ * cobrada del mismo lead, lanzamiento y producto (`data.product`), sin mirar
+ * si es anterior o posterior al reembolso (un desfase de reloj o la misma
+ * hora no lo dejan suelto). Los reembolsos se reparten por fecha y, a igual
+ * fecha, por id, así que el resultado no depende del orden de entrada. Dos
+ * compras con un reembolso dejan una cobrada, y un reembolso del VIP
+ * (`vip_purchased`) no toca la oferta principal (`purchased`). Un reembolso
+ * sin compra que le corresponda queda en `huerfanos`.
+ *
+ * Provisional hasta B4 (`[WEBINAR-REEMBOLSOS-POR-ORDEN]`): no asocia por id de
+ * orden ni reparte reembolsos parciales.
  */
 function asociarReembolsos(eventos: readonly FilaEvento[]): {
   compras: CompraConReembolso[];
   huerfanos: FilaEvento[];
 } {
-  const porFecha = [...eventos].sort(
-    (a, b) => a.occurred_at.localeCompare(b.occurred_at) || a.id.localeCompare(b.id)
-  );
+  const porFecha = [...eventos].sort(porFechaEId);
   const clave = (e: FilaEvento) => `${e.launch_id}|${e.lead_id}|${e.data.product ?? ""}`;
-  const compras: CompraConReembolso[] = [];
+  const compras: CompraConReembolso[] = porFecha
+    .filter((e) => e.kind === "purchased" || e.kind === "vip_purchased")
+    .map((compra) => ({ compra, reembolso: null }));
   const huerfanos: FilaEvento[] = [];
   for (const e of porFecha) {
-    if (e.kind === "purchased" || e.kind === "vip_purchased") {
-      compras.push({ compra: e, reembolso: null });
-    } else if (e.kind === "refunded") {
-      const cobrada = compras.find((c) => c.reembolso === null && clave(c.compra) === clave(e));
-      if (cobrada) cobrada.reembolso = e;
-      else huerfanos.push(e);
-    }
+    if (e.kind !== "refunded") continue;
+    const cobrada = compras.find((c) => c.reembolso === null && clave(c.compra) === clave(e));
+    if (cobrada) cobrada.reembolso = e;
+    else huerfanos.push(e);
   }
   return { compras, huerfanos };
+}
+
+/**
+ * De qué oferta es un reembolso sin compra, por el nombre de su producto en
+ * las compras del lanzamiento: `principal` si sólo aparece en `purchased`,
+ * `vip` si sólo aparece en `vip_purchased`, `desconocido` si no aparece o
+ * aparece en las dos.
+ */
+function ofertaDelHuerfano(
+  reembolso: FilaEvento,
+  compras: readonly CompraConReembolso[]
+): "principal" | "vip" | "desconocido" {
+  const tipos = new Set(
+    compras
+      .filter((c) => (c.compra.data.product ?? "") === (reembolso.data.product ?? ""))
+      .map((c) => c.compra.kind)
+  );
+  if (tipos.size !== 1) return "desconocido";
+  return tipos.has("purchased") ? "principal" : "vip";
 }
 
 const sinMontoLeido = (e: FilaEvento | null) =>
@@ -380,6 +404,11 @@ function ventasDelLanzamiento(ctx: Contexto, launchId: string): VentasDelLanzami
     0
   );
   const fuenteDeLaFalla = comoFuente(principal.provider) ?? "configuracion";
+  // Un reembolso sin compra sólo afecta a la oferta principal si es de ella o
+  // si no se sabe de qué oferta es; uno del VIP no la toca.
+  const ofertas = huerfanos.map((h) => ofertaDelHuerfano(h, compras));
+  const huerfanosPrincipales = ofertas.filter((o) => o === "principal").length;
+  const huerfanosDesconocidos = ofertas.filter((o) => o === "desconocido").length;
   const ingresos: Dato<number> =
     sinMonto > 0
       ? conError(
@@ -388,14 +417,21 @@ function ventasDelLanzamiento(ctx: Contexto, launchId: string): VentasDelLanzami
             ? "Hay 1 compra cuyo monto no se pudo leer: los ingresos no se pueden sumar."
             : `Hay ${sinMonto} compras cuyo monto no se pudo leer: los ingresos no se pueden sumar.`
         )
-      : huerfanos.length > 0
+      : huerfanosPrincipales > 0
         ? conError(
             fuenteDeLaFalla,
-            huerfanos.length === 1
-              ? "Hay 1 reembolso que no corresponde a ninguna compra: los ingresos no se pueden calcular."
-              : `Hay ${huerfanos.length} reembolsos que no corresponden a ninguna compra: los ingresos no se pueden calcular.`
+            huerfanosPrincipales === 1
+              ? "Hay 1 reembolso de la oferta principal que no corresponde a ninguna compra: los ingresos no se pueden calcular."
+              : `Hay ${huerfanosPrincipales} reembolsos de la oferta principal que no corresponden a ninguna compra: los ingresos no se pueden calcular.`
           )
-        : datoDeProveedor(ctx, principal.provider, neto);
+        : huerfanosDesconocidos > 0
+          ? conError(
+              fuenteDeLaFalla,
+              huerfanosDesconocidos === 1
+                ? "Hay 1 reembolso sin compra que le corresponda y por su producto no se sabe si es de la oferta principal: los ingresos no se pueden calcular."
+                : `Hay ${huerfanosDesconocidos} reembolsos sin compra que les corresponda y por su producto no se sabe si son de la oferta principal: los ingresos no se pueden calcular.`
+            )
+          : datoDeProveedor(ctx, principal.provider, neto);
   const reembolsados = new Set(principales.filter((c) => c.reembolso).map((c) => c.compra.lead_id));
   return {
     ventas: datoDeProveedor(ctx, principal.provider, leadsCon(ctx, launchId, "purchased").size),

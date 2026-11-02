@@ -523,7 +523,7 @@ describe("reglas de estado sin el escenario", () => {
       ]);
     });
 
-    it("un reembolso que no se puede asociar a ninguna compra deja los ingresos en error", () => {
+    it("un reembolso de un producto que no aparece en ninguna compra del lanzamiento deja los ingresos en error", () => {
       const huerfano = {
         ...filas,
         eventos: [
@@ -533,7 +533,93 @@ describe("reglas de estado sin el escenario", () => {
       };
       const v = calcularDetalleDelLanzamiento(huerfano, ACTIVO.id, AHORA, false)!;
       expect(v.ventas.ingresos.state).toBe("error");
-      expect(v.ventas.ingresos.reason).toMatch(/reembolso/);
+      expect(v.ventas.ingresos.reason).toBe(
+        "Hay 1 reembolso sin compra que le corresponda y por su producto no se sabe si es de la oferta principal: los ingresos no se pueden calcular."
+      );
+    });
+
+    it("un reembolso de la oferta principal sin compra de ese lead deja los ingresos en error, con ese motivo", () => {
+      const compradores = new Set(filas.eventos.filter((e) => e.kind === "purchased").map((e) => e.lead_id));
+      const sinCompra = filas.registros.find((r) => r.launch_id === ACTIVO.id && !compradores.has(r.lead_id))!;
+      const huerfano = {
+        ...filas,
+        eventos: [
+          ...filas.eventos,
+          { ...compra, id: "reembolso-sin-compra", lead_id: sinCompra.lead_id, kind: "refunded" as const, occurred_at: despues(1) },
+        ],
+      };
+      const v = calcularDetalleDelLanzamiento(huerfano, ACTIVO.id, AHORA, false)!;
+      expect(v.ventas.ingresos.state).toBe("error");
+      expect(v.ventas.ingresos.reason).toBe(
+        "Hay 1 reembolso de la oferta principal que no corresponde a ninguna compra: los ingresos no se pueden calcular."
+      );
+    });
+
+    it("un reembolso del VIP sin compra que le corresponda no toca los números de la oferta principal", () => {
+      const vip = { product: "VIP de ejemplo", amount: 47, currency: "USD" };
+      const otroLead = filas.eventos.find((e) => e.kind === "purchased" && e.launch_id === ACTIVO.id && e.lead_id !== compra.lead_id)!;
+      const conVipHuerfano = {
+        ...filas,
+        eventos: [
+          ...filas.eventos,
+          { ...otroLead, id: "compra-vip-de-otro", kind: "vip_purchased" as const, source: "commas" as const, occurred_at: despues(1), data: vip },
+          { ...compra, id: "reembolso-vip-huerfano", kind: "refunded" as const, source: "commas" as const, occurred_at: despues(2), data: vip },
+        ],
+      };
+      const v = calcularDetalleDelLanzamiento(conVipHuerfano, ACTIVO.id, AHORA, false)!;
+      expect(v.ventas.ingresos).toEqual(detalle.ventas.ingresos);
+      expect(v.ventas.reembolsos).toEqual(detalle.ventas.reembolsos);
+      expect(v.ventas.ventas).toEqual(detalle.ventas.ventas);
+      expect(comprasDeLaFicha(conVipHuerfano)).toEqual([[compra.data.product, "cobrada"]]);
+    });
+
+    it.each([
+      ["a la misma hora que la compra y con un id menor", 0, "0000-reembolso"],
+      ["un segundo antes que la compra (relojes desfasados)", -1_000, "reembolso-adelantado"],
+    ])("un reembolso %s se asocia a esa compra", (_caso, ms, id) => {
+      const conReembolso = {
+        ...filas,
+        eventos: [
+          ...filas.eventos,
+          { ...compra, id, kind: "refunded" as const, occurred_at: new Date(Date.parse(compra.occurred_at) + ms).toISOString() },
+        ],
+      };
+      expect(comprasDeLaFicha(conReembolso)).toEqual([[compra.data.product, "reembolsada"]]);
+      const v = calcularDetalleDelLanzamiento(conReembolso, ACTIVO.id, AHORA, false)!;
+      expect(v.ventas.ingresos.state).toBe(detalle.ventas.ingresos.state);
+      expect(v.ventas.ingresos.value).toBe((detalle.ventas.ingresos.value as number) - compra.data.amount!);
+      expect(v.ventas.reembolsos.value).toBe((detalle.ventas.reembolsos.value as number) + 1);
+    });
+
+    it("la asociación no depende del orden de los eventos: el reembolso va a la compra más vieja", () => {
+      const reembolso = { ...compra, id: "reembolso-primero", kind: "refunded" as const, occurred_at: despues(2) };
+      const segunda = { ...compra, id: "segunda-compra", occurred_at: despues(1) };
+      const enOrden = { ...filas, eventos: [reembolso, ...filas.eventos, segunda] };
+      const invertido = { ...filas, eventos: [...enOrden.eventos].reverse() };
+      const estados = (f: typeof filas) =>
+        calcularFichaDelLead(f, compra.lead_id, ACTIVO.id, AHORA, false)!.compras.value!.map((c) => [c.eventoId, c.estado]);
+      expect(estados(enOrden)).toEqual([
+        [compra.id, "reembolsada"],
+        ["segunda-compra", "cobrada"],
+      ]);
+      expect(estados(invertido)).toEqual(estados(enOrden));
+      expect(calcularDetalleDelLanzamiento(invertido, ACTIVO.id, AHORA, false)!.ventas).toEqual(
+        calcularDetalleDelLanzamiento(enOrden, ACTIVO.id, AHORA, false)!.ventas
+      );
+    });
+
+    it("con dos reembolsos para una compra, la compra se queda con el más viejo en cualquier orden de entrada", () => {
+      // El más viejo no tiene monto: si se asocia, los ingresos dicen eso; si
+      // quedara suelto, dirían que hay un reembolso sin compra.
+      const viejo = { ...compra, id: "reembolso-viejo", kind: "refunded" as const, occurred_at: despues(1), data: { ...compra.data, amount: null } };
+      const nuevo = { ...compra, id: "reembolso-nuevo", kind: "refunded" as const, occurred_at: despues(2) };
+      const enOrden = { ...filas, eventos: [nuevo, ...filas.eventos, viejo] };
+      const invertido = { ...filas, eventos: [...enOrden.eventos].reverse() };
+      for (const f of [enOrden, invertido]) {
+        expect(calcularDetalleDelLanzamiento(f, ACTIVO.id, AHORA, false)!.ventas.ingresos.reason).toBe(
+          "Hay 1 compra cuyo monto no se pudo leer: los ingresos no se pueden sumar."
+        );
+      }
     });
   });
 

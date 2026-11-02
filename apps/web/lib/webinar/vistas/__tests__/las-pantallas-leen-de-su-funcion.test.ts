@@ -7,11 +7,15 @@
  *
  * Qué ve: cada `import ... from`, `import "x"`, `export ... from`, `import()`
  * y `require()` de los `.ts/.tsx/.mts/.cts/.js/.jsx/.mjs/.cjs` de la app, con
- * comillas simples, dobles o un template sin `${}`, resuelto a una ruta (alias
- * `@/`, `baseUrl` o relativo a la carpeta del archivo, con o sin extensión).
+ * comillas simples, dobles o un template sin `${}`, con espacios o comentarios
+ * (`/* *\/`, como el `webpackChunkName`, o `//`) entre la palabra, el
+ * paréntesis y el especificador, resuelto a una ruta (alias `@/`, `baseUrl` o
+ * relativo a la carpeta del archivo, con o sin extensión).
  * Qué no ve: un especificador armado en ejecución (`import(variable)`, un
- * template con `${}`) ni un alias distinto de `@/`; adentro del módulo sólo
- * controla quién importa el escenario. El auto-test de abajo prueba cada forma.
+ * template con `${}`), un alias distinto de `@/`, otras funciones que reciben
+ * una ruta (`require.resolve`, `vi.importActual`, `vi.mock`) ni la ruta escrita
+ * con otras mayúsculas; adentro del módulo sólo controla quién importa el
+ * escenario. El auto-test de abajo prueba cada forma que ve.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -35,14 +39,16 @@ function archivos(dir: string, encontrados: string[] = []): string[] {
 /**
  * Los especificadores que un archivo importa: `import ... from`, `import "x"`,
  * `export ... from`, `import()` y `require()`, con comillas simples, dobles o
- * un template sin `${}`. Un import comentado también cuenta (falla de más,
- * nunca de menos).
+ * un template sin `${}`, y con espacios o comentarios (`/* *\/` o `//`) entre
+ * la palabra, el paréntesis y el especificador. Un import comentado también
+ * cuenta (falla de más, nunca de menos).
  */
+const ENTRE = String.raw`(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*`;
 const FORMAS_DE_IMPORT = [
-  /\bfrom\s*(["'])([^"'\n]+)\1/g,
-  /\bimport\s*(["'])([^"'\n]+)\1/g,
-  /\bimport\s*\(\s*(["'`])([^"'`$\n]+)\1/g,
-  /\brequire\s*\(\s*(["'`])([^"'`$\n]+)\1/g,
+  new RegExp(String.raw`\bfrom${ENTRE}(["'])([^"'\n]+)\1`, "g"),
+  new RegExp(String.raw`\bimport${ENTRE}(["'])([^"'\n]+)\1`, "g"),
+  new RegExp(String.raw`\bimport${ENTRE}\(${ENTRE}(["'\`])([^"'\`$\n]+)\1`, "g"),
+  new RegExp(String.raw`\brequire${ENTRE}\(${ENTRE}(["'\`])([^"'\`$\n]+)\1`, "g"),
 ];
 
 function especificadores(texto: string): string[] {
@@ -110,6 +116,12 @@ describe("el detector de imports (auto-test)", () => {
     ["import() con template", PAGINA, "const m = await import(`@/lib/webinar/vistas/calcular`);"],
     ["require", PAGINA, `const m = require('@/lib/webinar/vistas/escenario-de-ejemplo.ts');`],
     ["un archivo de una subcarpeta", PAGINA, `import { x } from "@/lib/webinar/vistas/__tests__/ayuda";`],
+    ["import() con un comentario de webpack", PAGINA, `const m = await import(/* webpackChunkName: "x" */ "@/lib/webinar/vistas/escenario-de-ejemplo");`],
+    ["from con un comentario", PAGINA, `import { x } from /* c */ "@/lib/webinar/vistas/calcular";`],
+    ["relativo con un comentario", HERMANO, `import { calcularInicio } from /* c */ '../vistas/calcular';`],
+    ["import() relativo con un comentario de línea", PAGINA, `const m = await import(\n  // el escenario\n  "../../../../lib/webinar/vistas/escenario-de-ejemplo"\n);`],
+    ["require con un comentario", PAGINA, `const m = require(/* c */ "@/lib/webinar/vistas/calcular");`],
+    ["import sin nombres con un comentario", PAGINA, `import /* c */ "@/lib/webinar/vistas/calcular";`],
   ])("detecta: %s", (_forma, archivo, texto) => {
     expect(prohibidosFueraDelModulo(texto, archivo)).not.toEqual([]);
   });
@@ -133,6 +145,7 @@ describe("el detector de imports (auto-test)", () => {
     ["reexportado", `export { escenarioDeEjemplo } from './escenario-de-ejemplo';`],
     ["import()", `const m = import("./escenario-de-ejemplo");`],
     ["con alias", `import { escenarioDeEjemplo } from "@/lib/webinar/vistas/escenario-de-ejemplo";`],
+    ["import() con un comentario", `const m = import(/* webpackChunkName: "e" */ "./escenario-de-ejemplo");`],
   ])("dentro del módulo, detecta el escenario: %s", (_forma, texto) => {
     expect(importaElEscenario(texto, CONTRATOS)).toBe(true);
   });

@@ -2080,6 +2080,15 @@ Fuente: PENDIENTES.md [WEBINAR-ORG-DE-DEMO] · Doc del área: docs/areas/embudos
 *Dónde:* {{apps/web/lib/webinar/vistas/{leer,filas,calcular}.ts}}.
 
 Fuente: PENDIENTES.md [WEBINAR-VISTAS-LECTURA-REAL] · Doc del área: docs/areas/embudos.md",WEBINAR-VISTAS-LECTURA-REAL,Embudos y Lanzamientos,P2,,feature
+"[WEBINAR-REEMBOLSOS-POR-ORDEN] Asociar cada reembolso a su compra por el id de orden (B4, SCRUM-550)",Task,Medium,embudos,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
+
+*Estado verificado:* {{asociarReembolsos}} ({{apps/web/lib/webinar/vistas/calcular.ts}}, SCRUM-542) asocia cada reembolso con la compra cobrada más vieja del mismo lead, lanzamiento y nombre de producto ({{data.product}}), sin mirar el orden temporal. Un reembolso sin compra afecta los ingresos de la oferta principal sólo si su producto aparece en una compra {{purchased}} del lanzamiento o en ninguna. La regla es provisional y deja tres casos sin resolver: dos reembolsos parciales de la misma compra (el segundo queda suelto y los ingresos quedan en {{error}}), una compra sin {{data.product}} con un reembolso que sí lo trae (no se asocian), y un reembolso con un {{launch_id}} distinto del de su compra (queda suelto en su lanzamiento y la compra sigue cobrada en el otro).
+
+*Qué hay que hacer:* cuando B4 lea los pagos reales, asociar por el id de orden del proveedor ({{orderExternalId}} de Whop/Commas) en vez de lead + lanzamiento + producto, sumar los reembolsos parciales de una misma orden y definir qué pasa con un reembolso cuya orden no se encuentra. Actualizar la regla en {{docs/areas/webinars-contratos-de-vista.md}}.
+
+*Dónde:* {{apps/web/lib/webinar/vistas/{filas,calcular}.ts}}, {{docs/areas/webinars-contratos-de-vista.md}}.
+
+Fuente: PENDIENTES.md [WEBINAR-REEMBOLSOS-POR-ORDEN] · Doc del área: docs/areas/embudos.md",WEBINAR-REEMBOLSOS-POR-ORDEN,Embudos y Lanzamientos,P2,,deuda técnica
 [EMBUDOS-SALUD] Habilitar el estado de salud (bandas de la §04) ⏸️,Task,Medium,embudos,p2,decision-de-negocio,feature,,,"*Tipo:* decisión de negocio / feature
 
 *Estado verificado:* {{applyHealthBand}}, {{resolveBenchmark}}, {{CROSS_FUNNEL_BANDS}} sólo se usan en tests; la tabla de pasos muestra {{benchmarkLabel}} como texto. {{funnel_benchmarks}} sin uso. {{diagnoseFunnel()}} no existe.
