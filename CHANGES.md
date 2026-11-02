@@ -28,6 +28,30 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-02 — SCRUM-552, fix-pack 1 de AR y CR: lo que la guía promete del 98, founder determinístico, callback con invitación y test por acción que puede fallar
+
+**Rama:** `feat/SCRUM-552-consola-acceso-staff`
+**Commit(s):** `3ccafc03` — test(auth): el 98 verifica must_change_password y custom_role_id; `a2522c5d` — fix(auth): founder determinístico en la ficha y el listado; `ac1edf1b` — fix(auth): el callback de Auth respeta la invitación; `1bd3dd4c` — test(auth): el test por acción recorre todo el panel y "siguió después del guard" puede fallar; `86cd1037` — docs(auth): guard del staff en plataforma y seguridad, CSV de Jira; `bd9f5a50` — test(auth): email del fixture; este (docs)
+**Módulo(s) afectado(s):** Plataforma (auth y super admin): `supabase/ci/tests/98_staff_en_org_de_limitless.sql`, `apps/web/lib/super-admin/queries.ts`, `apps/web/app/auth/callback/route.ts`, tests `lib/super-admin/__tests__/founder-de-la-org.test.ts` (nuevo), `app/auth/__tests__/login-del-staff.test.ts`, `app/super-admin/__tests__/guard-de-staff-por-accion.test.ts`; docs `operacion/staff-en-org-de-limitless.md`, `operacion/testing.md`, `areas/plataforma.md`, `arquitectura/seguridad.md`, `backlog/jira-import.csv`, `PENDIENTES.md`
+
+**Qué se hizo:**
+- **BLQ-1 (AR):** la guía decía que la migración no toca `role`, `is_active`, `custom_role_id` ni `must_change_password`, y el 98 sólo miraba rol y estado (el mutante del AR, `must_change_password = true, custom_role_id = null` en el `update`, pasaba `check-migrations`). Ahora s6 (staff pendiente) se siembra con `must_change_password = true` y s1/s4 con `false`; el caso 6 verifica que ninguno cambie y que `custom_role_id` siga null, y la foto del caso 7 suma las dos columnas. Mutantes: el del AR muere por `no le pone must_change_password a quien no lo tenía`; `must_change_password = false`, por `no le saca must_change_password al staff a mitad del alta`; `custom_role_id = <rol de la org>`, por `no le asigna un rol de la org`. `custom_role_id` no se siembra en un perfil sin org (lo impide `validar_rol_de_la_org`): la guía dice que no pisar uno existente queda por código.
+- **MNR-1 (AR):** la ficha de una org con varios founders (la de Limitless) mostraba "—" (`maybeSingle` con varias filas da error) y el listado tomaba uno arbitrario. Los dos ordenan por `created_at` e `id` y muestran el más antiguo (la ficha con `limit(1)`). Test con tres founders, dos con la misma fecha, y un mock que se comporta como PostgREST; sacar cualquiera de los `order` lo pone rojo.
+- **MNR-2 (AR):** `/auth/callback` mandaba al staff al panel aunque volviera de una invitación de equipo. Usa `destinoDeInvitacion` y el mismo orden que `signInAction`: la invitación primero (sólo el token), después el destino del staff. La ruta de la invitación es `/invite?token=…` (el fix-pack decía `/invite/<token>`).
+- **MNR-3 (AR):** el inventario del test por acción sólo leía los `.ts` directos de `app/super-admin/`. Ahora recorre `app/super-admin/` y todo route group `(super-admin)` con subcarpetas (sin `__tests__`): todo `.ts` y todo `.tsx` que arranca con `"use server"`. Un archivo de acciones nuevo en `app/super-admin/<sub>/`, en `app/(super-admin)/…` (`.ts` o `.tsx` con `"use server"`) hace fallar el Test 1 con su nombre; con el test anterior, el de la subcarpeta pasaba en verde. Una página `.tsx` sin `"use server"` no cuenta.
+- **MNR-4 (CR):** "la acción no hizo nada después del guard" no podía fallar, porque el guard ya lee `profiles`. Esa lectura queda etiquetada `guard:profiles` y no cuenta (también en las operaciones permitidas del escenario "staff desactivado"). La ruta OAuth de inicio, que pasado el guard no toca la base ni la red, prueba que siguió con la redirección a Google y la cookie (`despuesDelGuard`). Mutante `runMutation(async () => { await requireStaff(); return undefined; })` en `removePlatformClaudeKeyAction`: verde con el test anterior, rojo ahora por ese assert.
+- **MNR-5 (CR):** en `login-del-staff.test.ts` el caso "miembro" simula `role: member` (antes, founder como el caso siguiente).
+- **MNR-6 (CR):** `jira-import.csv` regenerado (`pendientes_a_jira.py --actualizar-indices`): 334 filas, con los 6 `[STAFF-*]`.
+- **MNR-7 (CR):** `docs/areas/plataforma.md` ("Guard doble") y `docs/arquitectura/seguridad.md` describen `require-staff.ts`, la lectura de `profiles.is_active` y el motivo `desactivado`.
+- Observación del CR: `lib/auth/__tests__/super-admin-una-consulta.test.ts` se suma a `[STAFF-ALIAS-REQUIRE-SUPER-ADMIN]`.
+- Números (una corrida, `pnpm exec vitest run` en `apps/web` y `contar-casos.py apps/web`): 278 archivos, 4.636 tests del runner, ~3.270 casos declarados (antes del fix-pack: 277, 4.629 y ~3.263). El test por acción sigue en 318.
+
+**Por qué / finalidad:** cerrar el AR (rechazado por BLQ-1) y los menores de AR y CR de SCRUM-552.
+
+**Decisiones de diseño relevantes:** el founder se elige en la consulta (`order` + `limit`), sin función nueva; el callback reusa `destinoDeInvitacion` en vez de repetir la regla. En el 98 se siembran los dos valores de `must_change_password`: sembrar sólo `true` no mata al mutante del AR, que escribe `true`.
+
+**Riesgos / deuda técnica pendiente:** una server action declarada inline (`"use server"` dentro de una función) en una página del route group no la ve el inventario; hoy no hay ninguna. Una acción que lea `profiles` con `select("is_active")` se contaría como lectura del guard.
+
 ### 2026-11-01 — El staff es founder de la org de Limitless, entra por `/login` y el panel queda detrás de `requireStaff` (SCRUM-552)
 
 **Rama:** `feat/SCRUM-552-consola-acceso-staff` (rebasada sobre `feat/SCRUM-523-webinars-experiencia` @ `e0171311`)
