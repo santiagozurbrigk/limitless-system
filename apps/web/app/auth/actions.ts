@@ -17,7 +17,7 @@ import {
 } from "@/lib/holding/constants";
 import { emailSchema, firstZodError } from "@/lib/validations";
 import { ensureCurrentUserBootstrap, loadProfileOrganizationContext } from "@/lib/auth/bootstrap";
-import { isSuperAdminEmail } from "@/lib/auth/require-super-admin";
+import { DESTINO_DEL_STAFF, isStaffEmail } from "@/lib/auth/require-staff";
 import {
   isTempPasswordExpired,
   TEMP_PASSWORD_EXPIRED_MESSAGE,
@@ -111,8 +111,8 @@ async function postAuthRedirect(invitacion: string | null = null) {
       redirect(invitacion);
     }
 
-    if (user?.email && (await isSuperAdminEmail(user.email))) {
-      redirect(paths.superAdmin.organizations);
+    if (user?.email && (await isStaffEmail(user.email))) {
+      redirect(DESTINO_DEL_STAFF);
     }
 
     if (user) {
@@ -184,76 +184,6 @@ export async function signInAction(
 
   await postAuthRedirect(invitacion);
   return {};
-}
-
-export async function signInSuperAdminAction(
-  _prev: AuthActionState,
-  formData: FormData
-): Promise<AuthActionState> {
-  if (!isSupabaseConfigured()) {
-    return { error: "Supabase no configurado." };
-  }
-
-  const emailRaw = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-
-  const emailParsed = emailSchema.safeParse(emailRaw);
-  if (!emailParsed.success) {
-    return { error: firstZodError(emailParsed.error) };
-  }
-  if (!password) {
-    return { error: "Completa email y contraseña." };
-  }
-
-  // SCRUM-24: por IP + email y por IP (compartido con el login normal).
-  const { allowed, resetAt } = await limiteDeLogin("signin-superadmin", emailParsed.data);
-  if (!allowed) {
-    return { error: rateLimitErrorMessage(resetAt) };
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    email: emailParsed.data,
-    password,
-  });
-
-  if (error) {
-    return { error: mapAuthError(error.message) };
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user?.email || !(await isSuperAdminEmail(user.email))) {
-    await supabase.auth.signOut();
-    return { error: "No tenés permisos de super admin." };
-  }
-
-  const expired = await rejectExpiredTempPasswordSession(supabase, user.id);
-  if (expired) return expired;
-
-  try {
-    await ensureCurrentUserBootstrap();
-  } catch (e) {
-    await supabase.auth.signOut();
-    return {
-      error:
-        e instanceof Error ? e.message : "No se pudo inicializar tu perfil.",
-    };
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("must_change_password")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (profile?.must_change_password) {
-    redirect(paths.auth.forcePasswordChange);
-  }
-
-  redirect(paths.superAdmin.organizations);
 }
 
 /**

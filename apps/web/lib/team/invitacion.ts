@@ -71,7 +71,7 @@ export const MENSAJE_INVITACION: Record<MotivoRechazoInvitacion, string> = {
   otro_email:
     "Esta invitación es para otro email. Cerrá sesión y entrá con la cuenta del email invitado.",
   cuenta_de_staff:
-    "Esta cuenta es del equipo de Limitless y no se puede sumar a una organización por invitación. Pedile a quien te invitó que use otro email.",
+    "Esta cuenta es del equipo de Limitless y sólo se puede sumar a la organización de Limitless. Pedile a quien te invitó que use otro email.",
   otra_org:
     "Tu cuenta ya pertenece a otra organización y cada cuenta puede estar en una sola. Pedile a quien te invitó que te dé de alta con otro email.",
   rol_de_otra_org:

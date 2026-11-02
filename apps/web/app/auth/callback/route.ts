@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ensureUserBootstrap } from "@/lib/auth/bootstrap";
-import { isSuperAdminEmail } from "@/lib/auth/require-super-admin";
+import { DESTINO_DEL_STAFF, isStaffEmail } from "@/lib/auth/require-staff";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import { destinoSeguro } from "@/lib/auth/redirect-seguro";
@@ -43,8 +43,8 @@ export async function GET(request: Request) {
       }
 
       const destination =
-        user?.email && (await isSuperAdminEmail(user.email))
-          ? paths.superAdmin.organizations
+        user?.email && (await isStaffEmail(user.email))
+          ? DESTINO_DEL_STAFF
           : next;
 
       return NextResponse.redirect(`${origin}${destination}`);
