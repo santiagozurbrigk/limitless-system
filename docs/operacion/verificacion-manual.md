@@ -16,7 +16,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 | [Clientes](#clientes) | 14 |
 | [Ventas](#ventas) | 11 |
 | [Marketing](#marketing) | 14 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 11 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 12 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | 12 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | 8 |
 | [Infraestructura](#infraestructura) | 14 |
@@ -806,6 +806,15 @@ con una sesión real.
 4. Cash collected = dashboard del proveedor.
 5. Cambiar de período mueve todo junto.
 6. ⚠️ Dos embudos de precio distinto en la misma org: spend, revenue y KPIs idénticos (limitación conocida, [EMBUDOS-MEDIDAS-POR-EMBUDO]).
+
+### V12. Leads y ficha del lead de Webinars (SCRUM-545) ⭐ — `[WEBINAR-ORG-DE-DEMO]`
+**Prerrequisitos:** después de la ventana de SCRUM-532 (migración `20261019120000_organizations_experience.sql`), con `WEBINAR_DEMO_ORGANIZATION_ID` cargada (SCRUM-522): una organización `webinar` que sea la de demo y una organización `full` con dos cuentas de rol configurado (una con Ventas y otra sin Ventas), el founder y una cuenta sin rol configurado. Los tests de Vitest no cubren el conteo de clics ni la interacción en el navegador.
+1. ⭐ Abrir `/leads?filtro=levanto_la_mano_sin_contactar`. Resultado: el filtro «Levantó la mano sin contactar» aparece aplicado.
+2. ⭐ Contar clics desde esa lista: clic en una fila (se abre la ficha), clic en «Marcar como Contactado». Resultado: 2 clics.
+3. ⭐ Resultado del paso 2: aparece «Cambio de ejemplo: no se guardó y se pierde al recargar.»; al recargar, la etapa vuelve a la de antes.
+4. Repetir con asignar responsable y con agregar una nota. Resultado: lo mismo; la nota aparece primero, marcada «Nota de ejemplo». En una ficha con una etapa sin paso siguiente (por ejemplo, Calificado) no hay botón de avance.
+5. Clic en cualquier parte de una fila de la tabla, no sólo en el nombre. Resultado: abre la ficha.
+6. 🔒 Con la organización `full`: tipear `/leads` con la cuenta con Ventas. Resultado: la pantalla, sin entrada «Leads» en el menú. Con la cuenta con rol configurado sin Ventas: «No tenés acceso a Ventas». Como founder y con la cuenta sin rol configurado: la pantalla.
 
 ---
 

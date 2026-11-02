@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 18 | 7 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 10 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
@@ -1370,6 +1370,12 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Qué hay que hacer:** cuando B4 lea los pagos reales, asociar por el id de orden del proveedor (`orderExternalId` de Whop/Commas) en vez de lead + lanzamiento + producto, sumar los reembolsos parciales de una misma orden y definir qué pasa con un reembolso cuya orden no se encuentra. Actualizar la regla en `docs/areas/webinars-contratos-de-vista.md`.
 - **Dónde:** `apps/web/lib/webinar/vistas/{filas,calcular}.ts`, `docs/areas/webinars-contratos-de-vista.md`.
 
+#### [WEBINAR-LEADS-PERSISTIR] Las acciones de la ficha del lead guardan de verdad y `/leads` lee la base (B4)
+- **Tipo:** feature
+- **Estado verificado:** las tres Server Actions de la ficha (`marcarAvanceDelLeadAction`, `asignarResponsableDelLeadAction`, `agregarNotaDelLeadAction`, `apps/web/app/leads/actions.ts`, SCRUM-545) exigen organización con `requireOrganizationId()`, validan la entrada y devuelven éxito sin escribir en ninguna base; la ficha muestra el cambio sólo en su estado local y avisa que es de ejemplo. No miran el módulo de permisos: `/leads` lo protege el layout de la plataforma con `sales`. `/leads` y `/leads/[id]` leen de `leerLeads` y `leerFichaDelLead`, que devuelven el escenario a la organización de demo y `sin_fuente` o "no existe" a las demás (`[WEBINAR-VISTAS-LECTURA-REAL]`).
+- **Qué hay que hacer:** cuando B4 migre el modelo, que las tres acciones escriban la etapa, el responsable y la nota, con el chequeo de módulo `sales` en la acción (`[PERMISOS-SERVER-ACTIONS]`: hoy se apoyan sólo en el layout); que la ficha deje el estado local y el aviso de ejemplo y muestre lo guardado; y, cuando `/leads` lea la base, un chequeo de permisos propio en la página para lo que no tiene que llegarle a alguien sin `sales` (R-8 de SCRUM-545).
+- **Dónde:** `apps/web/app/leads/actions.ts`, `apps/web/components/webinar/panel-de-venta-cliente.tsx`, `apps/web/lib/webinar/leads/estado-local.ts`, `apps/web/app/(platform)/leads/`.
+
 #### [EMBUDOS-SALUD] Habilitar el estado de salud (bandas de la §04) ⏸️
 - **Tipo:** decisión de negocio / feature
 - **Estado verificado:** `applyHealthBand`, `resolveBenchmark`, `CROSS_FUNNEL_BANDS` sólo se usan en tests; la tabla de pasos muestra `benchmarkLabel` como texto. `funnel_benchmarks` sin uso. `diagnoseFunnel()` no existe.
@@ -1461,6 +1467,24 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Dónde:** `apps/web/e2e/`.
 
 ### Embudos y Lanzamientos · P3
+
+#### [WEBINAR-LEADS-SIN-ORGANIZACION] Una cuenta sin organización que abre `/leads` deja dos eventos en Sentry
+- **Tipo:** bug
+- **Estado verificado:** para SCRUM-542 (dueño de `lib/webinar/vistas/`). Una cuenta sin organización (un super admin) que abre `/leads` o `/leads/<id>` pasa el bloqueo por experiencia (queda en `full`) y la página llama a `leerLeads` o `leerFichaDelLead`, que lanzan en `requireOrganizationId` (`apps/web/lib/webinar/vistas/leer.ts:60`) en vez de devolver `sin_fuente`. Next dibuja `app/(platform)/error.tsx` y quedan dos eventos en Sentry: el del servidor por `onRequestError` y el del navegador por `components/platform/pantalla-de-error.tsx`. Leído en el código, no ejecutado en la app (DT-28 y R-10 de SCRUM-545; `app/(platform)/leads/__tests__/pantallas-de-leads.test.ts` prueba que las dos páginas rechazan con `SIN_ORGANIZACION_VINCULADA`). SCRUM-545 no cambia `lib/webinar/vistas/`.
+- **Qué hay que hacer:** que las funciones de lectura de Webinars traten la cuenta sin organización como "sin fuente" (o "no existe" en la ficha) sin lanzar, igual que hace `getOrganizationExperience` con `SIN_ORGANIZACION_VINCULADA`.
+- **Dónde:** `apps/web/lib/webinar/vistas/leer.ts`, `apps/web/app/(platform)/leads/`.
+
+#### [WEBINAR-LEADS-CREAR-LANZAMIENTO] El estado vacío de Leads no tiene enlace para crear un lanzamiento
+- **Tipo:** feature
+- **Estado verificado:** sin lanzamientos, `/leads` muestra «Todavía no hay lanzamientos.» sin enlace: `RUTA_PARA_CREAR_LANZAMIENTO` es `null` en `apps/web/lib/webinar/leads/config.ts` porque no existe la pantalla de creación (SCRUM-544). `PantallaDeLeads` dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22).
+- **Qué hay que hacer:** que SCRUM-544 ponga en `RUTA_PARA_CREAR_LANZAMIENTO` la ruta de su pantalla de creación (desde `routes/paths.ts`).
+- **Dónde:** `apps/web/lib/webinar/leads/config.ts`.
+
+#### [WEBINAR-NUMEROS-DE-TICKET] Los comentarios y docs de Webinars citan SCRUM-534 y SCRUM-529 donde corresponde 543 y 544
+- **Tipo:** deuda técnica
+- **Estado verificado:** Inicio figura como SCRUM-534 y Lanzamientos como SCRUM-529, y el plan de Webinars los tiene como SCRUM-543 y SCRUM-544 (drift detectado en el SDD de SCRUM-545, que no los corrigió): `apps/web/lib/navigation/menu-por-experiencia.ts:15,16,66,74`, `apps/web/routes/paths.ts:29,31`, `apps/web/lib/navigation/module-for-path.ts:26`, `apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts:103`, `docs/diseno/ui-y-navegacion.md:88-89` y `PENDIENTES.md:457`.
+- **Qué hay que hacer:** confirmar con Martín qué ticket es cada pantalla y corregir los números donde corresponda.
+- **Dónde:** archivos citados.
 
 #### [FEAT-GHL-OAUTH] App del Marketplace de GHL
 - **Tipo:** feature

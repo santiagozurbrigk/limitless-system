@@ -217,7 +217,7 @@ y las rutas extra de la experiencia (para `limitless`, los segmentos de `/integr
 y `/business-context/[id]`, adonde enlazan la Bandeja y el Tablero, con todo su contenido:
 `/integrations/*`, `/sops/*` y `/business-context/*`; fix-pack 1 de A1), redirige a la
 pantalla de inicio de esa experiencia. Una entrada no lista cuya pantalla todavía no existe
-(`/inicio`, `/leads`, `/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
+(`/inicio`, `/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
 el layout de cada segmento de primer nivel, porque el de `(platform)` no se vuelve a ejecutar en
 una navegación del cliente. Detalle en
 [`diseno/ui-y-navegacion.md` § Menú por experiencia](../diseno/ui-y-navegacion.md#menú-por-experiencia-limitless-webinars-y-limitless-de-gestión).

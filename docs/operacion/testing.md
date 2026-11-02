@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot`, `apps/reel-worker` | sí (`pnpm typecheck`, job `checks`) |
 | Lint | ESLint 9 (`next lint` en web; `eslint src/` con la base de `packages/config` en ui, reel-worker y bot) | `apps/web`, `packages/ui`, `apps/reel-worker`, `apps/discord-bot` | sí (`pnpm lint`, job `checks`) |
-| Unitarios | Vitest 3, entorno `node` | `apps/web` (288 archivos) | sí (`pnpm test`) |
+| Unitarios | Vitest 3, entorno `node` | `apps/web` (297 archivos) | sí (`pnpm test`) |
 | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** (se activa con staging, ver E2E) |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
@@ -82,7 +82,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-**Integración local de #148 y #150 para SCRUM-545:** 288 archivos de test contados en el árbol combinado. Cada párrafo de abajo es la medición de su rama y no el total de esta combinación; se reconcilia al entrar los PRs base. La frase "las 75 filas de la tabla suman lo mismo" corresponde a #150 y no vale para esta combinación.
+**Integración local de #148 y #150 para SCRUM-545:** 297 archivos de test contados en el árbol combinado con SCRUM-545 (`cd apps/web && pnpm test`, 2026-11-02: 297 archivos y 4.720 tests ejecutados; sobre la base `09131c63`, que tenía 288 y 4.592, SCRUM-545 sumó 9 archivos). Cada párrafo de abajo es la medición de su rama y no el total de esta combinación; se reconcilia al entrar los PRs base. La frase "las 75 filas de la tabla suman lo mismo" corresponde a #150 y no vale para esta combinación.
 
 **Medición de #148 (`feat/SCRUM-524-webinars-menu`):**
 

@@ -28,6 +28,36 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-02 — Leads y ficha del lead de Limitless Webinars (SCRUM-545, A7)
+
+**Rama:** `feat/SCRUM-545-webinars-leads-y-ficha` (base: integración local `09131c63` de #148 y #150, sin mergear)
+**Commit(s):** `27b6b035` — ruta de la ficha y config de Leads (W0); `e84ba501` — lógica, acciones simuladas y avisos (W1); `de2323cf` — pantalla de Leads y ficha del lead (W2); `ff4982e9` — enciende Leads en el menú webinar y sus rutas (W3); este (W4, docs)
+**Módulo(s) afectado(s):** Embudos y Lanzamientos (Webinars) y Plataforma (menú por experiencia): `app/(platform)/leads/{layout,page}.tsx`, `app/(platform)/leads/[id]/page.tsx`, `app/leads/actions.ts`, `lib/webinar/leads/{config,url,estado-local,esquemas}.ts`, `components/webinar/{pantalla-de-leads,filtros-de-leads,tabla-de-leads,ficha-del-lead,panel-de-venta-del-lead,panel-de-venta-cliente,aviso-de-estado,fecha-de-la-org}.tsx`, `routes/paths.ts`, `lib/navigation/{menu-por-experiencia,page-meta,module-for-path}.ts`; 9 tests nuevos y 8 actualizados; docs `FUNCIONAL.md` (F-EMB-25), `backlog/historias.md` (H-EMB-25), `areas/webinars-contratos-de-vista.md`, `operacion/verificacion-manual.md`, `operacion/testing.md`, `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`
+
+**Qué se hizo:**
+- `/leads`: tabla con nombre (o email), etapa, origen, responsable y último contacto ("Sin contactar"), en el orden y con las 50 filas que da el contrato; los 5 filtros de `FILTROS_DE_LEADS` con su conteo, como enlaces; selector de lanzamiento; buscador `<form method="get">` con filtro y lanzamiento ocultos y sin cursor; paginación "Siguiente" y "Volver al principio". Filtro, búsqueda, lanzamiento y cursor viven en la URL (`/leads?filtro=<id>` abre con el filtro aplicado). Un dato que no llega `medido` muestra su estado y su motivo (`AvisoDeEstado`), sin cero ni filas. Sin lanzamientos: estado vacío sin enlace (`RUTA_PARA_CREAR_LANZAMIENTO = null`).
+- `/leads/[id]`: contacto, WhatsApp (`whatsappUrl` tal cual; "No dejó teléfono"), registros por lanzamiento con origen y calificación, línea de tiempo con la fuente y quién cargó cada evento, avisos de fuentes, compras (monto sin leer: "—"), y el panel de venta. `{ ok: false }` dibuja `ErrorDeCarga` con el motivo; `{ ok: true, data: null }`, el 404 de la app. La fila de la tabla enlaza a la ficha con `?lanzamiento=` y el enlace cubre toda la fila.
+- Panel de venta: un solo botón "Marcar como …" con el mapa explícito `SIGUIENTE_ETAPA` (`raised_hand` → `contacted` → `qualified`), selector de responsable y notas. Presentación sin hooks (`panel-de-venta-del-lead.tsx`) y envoltorio `"use client"` (`panel-de-venta-cliente.tsx`) con el estado local.
+- Tres Server Actions simuladas en `app/leads/actions.ts`: `runMutation(async () => { await requireOrganizationId(); validar; devolver })`, sin escribir, sin Supabase y sin revalidar. Con éxito, la ficha refleja el cambio sólo en su estado local y avisa "Cambio de ejemplo: no se guardó y se pierde al recargar."
+- Menú: la entrada Leads de `webinar` pasa a `lista: true`; `page-meta` suma "Leads" y "Ficha del lead" (vuelve a Leads); `paths.platform.webinars.lead(id)`. Comentarios que decían que Leads era de SCRUM-537 o que `/leads` no tenía pantalla, corregidos.
+
+**Por qué / finalidad:** que el setter encuentre a quien levantó la mano y marque avance en 2 clics desde la lista filtrada (SCRUM-545), con las pantallas leyendo sólo de `leerLeads` y `leerFichaDelLead` (SCRUM-542) antes de que exista la base (B4).
+
+**Decisiones de diseño relevantes:**
+- Las acciones no persisten (no hay migración ni tabla): devuelven éxito sin escribir y la interfaz lo dice. Persistir es `[WEBINAR-LEADS-PERSISTIR]`.
+- Con una cuenta sin organización, las acciones devuelven el texto de `SIN_ORGANIZACION_VINCULADA`, `runMutation` deja su aviso en los logs y no va a Sentry; la acción no lo atrapa ni lo traduce.
+- La pantalla de inicio de `webinar` pasa de `/team` a `/leads` para quien tiene `sales` y para el founder (es la primera entrada lista que ve); sin `sales`, sigue `/team`. No se tocó `pantallaDeInicio` ni el orden del menú.
+- En `full`, `/leads` abre tipeando la URL (antes daba 404), sin entrada en el menú. Sin `sales`, «No tenés acceso a Ventas» para quien tiene rol configurado; el founder y las cuentas sin rol entran por la regla general de módulos. No se agregó un chequeo propio.
+- Navegación sin Client Components: filtros, selector y paginación son `Link`; las fechas las formatea la hoja cliente `FechaDeLaOrg` en la zona de la organización.
+
+**Verificación:**
+- `cd apps/web && pnpm test`: 297 archivos y 4.720 tests, sin rojos (base `09131c63`: 288 y 4.592).
+- `tsc --noEmit` limpio.
+- Mutantes, cada uno con su rojo leído y revertido: `"Supabase"` en `TEXTO_DE_INFRAESTRUCTURA` (caso sin organización de las tres acciones), una llamada a `createClient` en `actions.ts` (control "ninguna llama a Supabase"), un hook en `panel-de-venta-del-lead.tsx` (lectura del fuente), el módulo de `/leads` cambiado a `finance` (caso sin Ventas del layout en `full`) y las líneas del founder y del sin rol de `acceso-a-modulo.ts` (sus casos).
+- No verificable en esta ventana (pasos en `verificacion-manual.md`, Embudos V12): el conteo real de clics, la interacción en el navegador, el toast con el motivo, una organización `webinar` o `full` real con la base.
+
+**Riesgos / deuda técnica pendiente:** `[WEBINAR-LEADS-PERSISTIR]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]` (AC-6 parcial hasta SCRUM-544), `[WEBINAR-LEADS-SIN-ORGANIZACION]` (una cuenta sin organización que abre `/leads` cae en la pantalla de error de la plataforma y deja dos eventos en Sentry), `[WEBINAR-NUMEROS-DE-TICKET]`. Volver de la ficha a la lista pierde el filtro (no se arregla en esta HU). Cruce con SCRUM-537, 543 y 544 en `menu-por-experiencia.ts`, `paths.ts` y `module-for-path.ts` al mergear.
+
 ### 2026-11-01 — Fix-pack 2 de A1: «Generar SOP» escondido en `limitless` y textos corregidos (SCRUM-524)
 
 **Rama:** `feat/SCRUM-524-webinars-menu`

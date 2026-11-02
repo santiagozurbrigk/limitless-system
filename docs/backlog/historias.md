@@ -774,6 +774,17 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Tareas técnicas:** `[LANZAMIENTOS-DORMIDO]`
 - **Para confirmar:** Decisión: construir lo que falta o sacarlo de la pantalla.
 
+### [H-EMB-25] Seguir a los leads de un lanzamiento y marcar su avance (Limitless Webinars)
+- **Funcionalidad:** F-EMB-25 · A medias
+- **Historia:** Como setter de Limitless Webinars, quiero ver a los leads de un lanzamiento filtrados por lo que falta hacer y marcar el avance de cada uno desde su ficha, para encontrar rápido a quien levantó la mano y no dejar a nadie sin contactar.
+- **Criterios de aceptación:**
+  - Dado un lanzamiento con leads, cuando abro `/leads?filtro=levanto_la_mano_sin_contactar`, entonces veo ese filtro aplicado, con su conteo, y llego a marcar avance en 2 clics: la fila y el botón de la ficha.
+  - Dado que marco avance, asigno responsable o agrego una nota, entonces el cambio queda guardado y lo ve el resto del equipo al recargar (hoy es de ejemplo y la ficha lo avisa).
+  - Dada una organización que no es la de demo, cuando abro `/leads`, entonces veo sus leads reales y nunca un cero ni una lista inventada cuando una fuente no está conectada.
+  - Dada una organización sin lanzamientos, cuando abro `/leads`, entonces veo cómo crear uno.
+- **Tareas técnicas:** `[WEBINAR-LEADS-PERSISTIR]`, `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`, `[WEBINAR-LEADS-SIN-ORGANIZACION]`
+- **Para confirmar:** Martín: "menos de 3 clics" se interpretó como 2 desde la lista ya filtrada (abrir la ficha y pulsar el botón de avance).
+
 ---
 
 ## Agente de negocio e IA

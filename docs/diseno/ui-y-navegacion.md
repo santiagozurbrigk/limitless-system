@@ -86,8 +86,8 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
 - **Config:** `lib/navigation/menu-por-experiencia.ts`. `MENU_POR_EXPERIENCIA` tiene un menú por
   experiencia salvo `full` (que ve el menú de siempre), con las entradas del PO en orden:
   - `webinar` (19-oct y 28-oct-2026): Inicio (`/inicio`, módulo `dashboard`, SCRUM-534), Lanzamientos
-    (`/lanzamientos`, `funnels`, SCRUM-529), Leads (`/leads`, `sales`, SCRUM-537) y Equipo (`/team`,
-    `team`). Llamadas salió del menú el 28-oct. Hoy sólo Equipo está lista.
+    (`/lanzamientos`, `funnels`, SCRUM-529), Leads (`/leads`, `sales`, SCRUM-545) y Equipo (`/team`,
+    `team`). Llamadas salió del menú el 28-oct. Hoy están listas Leads y Equipo.
   - `limitless` (28-oct-2026): Clientes (`/clients`, `clients`), Tablero de trabajo (`/workboard`,
     `workboard`), Ventas (el grupo `ventas` del menú completo, con sus hijos, `sales`; lleva a
     `/sales/inbox`) y Administración (`/administracion`, SCRUM-551; el módulo `finance` es provisorio
@@ -97,7 +97,7 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
 
   Cada entrada tiene `lista`. Una entrada que no está lista no se muestra (sin "Próximamente") y su
   ruta no se abre. Lo que ve quien tipea la URL depende de si la pantalla existe: mientras no exista
-  (hoy `/inicio`, `/leads` y `/administracion`, sin carpeta en `app/(platform)`), la URL da el 404 de la
+  (hoy `/inicio` y `/administracion`, sin carpeta en `app/(platform)`), la URL da el 404 de la
   app, sin la barra, porque no hay layout de segmento que redirija; cuando su tarea cree la carpeta,
   su `layout.tsx` aplica el bloqueo y la ruta redirige a la pantalla de inicio mientras la entrada no
   esté lista (como hoy `/lanzamientos`). Lo fija el test "entradas no listas" de
