@@ -11,6 +11,8 @@ import {
   getDocumentOriginalFileUrlAction,
 } from "@/app/business-context/actions";
 import { paths } from "@/routes";
+import { rutaPermitidaParaLaExperiencia } from "@/lib/navigation/rutas-por-experiencia";
+import { useExperiencia } from "@/providers/experiencia-provider";
 import { useToast } from "@/providers/toast-provider";
 import type { ContextDocument } from "@/types/business-context";
 import { SuggestedCallTasksPanel } from "./suggested-call-tasks-panel";
@@ -24,6 +26,12 @@ export function DocumentViewerSidebar({
   const { push } = useToast();
   const [pending, startTransition] = useTransition();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // «Generar SOP» lleva a la biblioteca de SOP: sólo si la experiencia la abre
+  // (en `limitless` está cerrada y el link rebotaría a Clientes; SCRUM-524).
+  const puedeGenerarSop = rutaPermitidaParaLaExperiencia(
+    useExperiencia(),
+    paths.platform.operations.sops
+  );
 
   useEffect(() => {
     setConfirmDelete(false);
@@ -99,16 +107,18 @@ export function DocumentViewerSidebar({
                 ? "Confirmar eliminación"
                 : "Eliminar documento"}
           </Button>
-          <Button
-            asChild
-            size="sm"
-            className="justify-start gap-2 bg-brand-600 hover:bg-brand-700"
-          >
-            <Link href={`${paths.platform.operations.sops}#crear`}>
-              <FilePlus className="h-4 w-4" />
-              Generar SOP
-            </Link>
-          </Button>
+          {puedeGenerarSop ? (
+            <Button
+              asChild
+              size="sm"
+              className="justify-start gap-2 bg-brand-600 hover:bg-brand-700"
+            >
+              <Link href={`${paths.platform.operations.sops}#crear`}>
+                <FilePlus className="h-4 w-4" />
+                Generar SOP
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </Panel>
     </div>

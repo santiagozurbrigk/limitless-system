@@ -16,6 +16,10 @@ import {
 } from "@/lib/onboarding/current";
 import { TOUR_IDS } from "@/lib/onboarding/tours";
 import { headers } from "next/headers";
+import {
+  pantallaDeInicio,
+  rutaPermitidaParaLaExperiencia,
+} from "@/lib/navigation/rutas-por-experiencia";
 import { moduloBloqueadoParaRuta } from "@/lib/auth/acceso-a-modulo";
 import { getPermissionModuleLabel } from "@/constants/permission-modules";
 import { SinAcceso } from "@/components/platform/sin-acceso";
@@ -23,6 +27,8 @@ import { AvisoClaveIa } from "@/components/platform/aviso-clave-ia";
 import { zonaDeLaOrganizacionActiva } from "@/lib/fechas/organizacion-activa";
 import { ZonaDeLaOrganizacionProvider } from "@/providers/zona-de-la-organizacion-provider";
 import { lecturaDegradable } from "@/lib/server/lectura-degradable";
+import { getOrganizationExperience } from "@/lib/organization/experience";
+import { ExperienciaProvider } from "@/providers/experiencia-provider";
 
 /**
  * Lo que se usa si una lectura secundaria del layout falla (SCRUM-108).
@@ -74,7 +80,7 @@ export default async function PlatformRouteLayout({
    * Sentry (`lectura_degradada`) y la plataforma sigue con el valor de arriba.
    * Una sesión no válida o una cuenta desactivada no se degradan: se relanzan.
    */
-  const [holdingSession, permissions, onboarding, headerList, zona] =
+  const [holdingSession, permissions, onboarding, headerList, zona, experiencia] =
     await Promise.all([
       lecturaDegradable(
         "layout-plataforma:holding",
@@ -96,6 +102,8 @@ export default async function PlatformRouteLayout({
         zonaDeLaOrganizacionActiva,
         null
       ),
+      // Degradable por su cuenta: si no se puede leer, `full` (SCRUM-523).
+      getOrganizationExperience(),
     ]);
 
   /**
@@ -115,41 +123,74 @@ export default async function PlatformRouteLayout({
    * `module-for-path` tiene que colgar de este layout: el test de
    * `module-for-path` recorre `app/` y falla si una queda afuera (SCRUM-18).
    */
-  const moduloBloqueado = moduloBloqueadoParaRuta(
-    headerList.get("x-pathname") ?? "",
-    permissions
-  );
+  const pathname = headerList.get("x-pathname") ?? "";
 
+  /**
+   * ⭐ Una ruta fuera de la experiencia no se decide acá (SCRUM-524).
+   *
+   * Si este layout dibujara `SinAcceso`, no dibujaría `children`, y el layout
+   * del segmento, que es el que redirige a la pantalla de inicio
+   * (`exigirRutaDeLaExperiencia`), no llegaría a aplicar su redirección: una
+   * organización webinar sin el módulo Marketing que tipeaba `/marketing` veía
+   * «No tenés acceso». Por eso, fuera de la experiencia este layout no bloquea
+   * por permiso: deja pasar `children` y redirige el segmento.
+   *
+   * Este layout tampoco redirige por su cuenta. Lo hacía (un `redirect` con
+   * `x-pathname`) y en una organización webinar, un `router.push` a una ruta
+   * bloqueada seguido de `router.refresh()` (aceptar una invitación, entrar a
+   * un negocio del holding) dejaba la pantalla sin barra y el navegador en un
+   * bucle de pedidos `?_rsc=` (QA final de SCRUM-524). La redirección del
+   * segmento cubre la carga de la página y la navegación del cliente.
+   */
+  const fueraDeLaExperiencia =
+    pathname !== "" && !rutaPermitidaParaLaExperiencia(experiencia, pathname);
+  const moduloBloqueado = fueraDeLaExperiencia
+    ? null
+    : moduloBloqueadoParaRuta(pathname, permissions);
+
+  /**
+   * La experiencia (SCRUM-524) arma el menú de la barra y de la paleta de
+   * comandos. Los permisos envuelven a `AppProviders` para que la paleta, que
+   * se dibuja ahí adentro, también los vea. El bloqueo de las rutas que no son
+   * de la experiencia lo hace el layout de cada segmento
+   * (`exigirRutaDeLaExperiencia`), que corre en la carga de la página y en cada
+   * navegación del cliente.
+   */
   return (
     <ZonaDeLaOrganizacionProvider zona={zona}>
-      <AppProviders>
+      <ExperienciaProvider
+        experiencia={experiencia}
+        inicio={pantallaDeInicio(experiencia, permissions)}
+      >
         <PermissionsProvider value={permissions}>
-          <HoldingPlatformProvider value={holdingSession}>
-            <OnboardingProvider value={onboarding}>
-              <WelcomeGate>
-                <PlatformLayout>
-                  {/*
-                  El aviso de la clave de IA vencida va arriba de todo y en
-                  todas las pantallas: mientras esté rota, cualquier función de
-                  IA que se toque va a fallar, así que no sirve esconderlo en
-                  una sola página.
-                */}
-                  <AvisoClaveIa esFounder={permissions.isFounder} />
+          <AppProviders>
+            <HoldingPlatformProvider value={holdingSession}>
+              <OnboardingProvider value={onboarding}>
+                <WelcomeGate>
+                  <PlatformLayout>
+                    {/*
+                    El aviso de la clave de IA vencida va arriba de todo y en
+                    todas las pantallas: mientras esté rota, cualquier función de
+                    IA que se toque va a fallar, así que no sirve esconderlo en
+                    una sola página.
+                  */}
+                    <AvisoClaveIa esFounder={permissions.isFounder} />
 
-                  {moduloBloqueado ? (
-                    <SinAcceso
-                      moduleLabel={getPermissionModuleLabel(moduloBloqueado)}
-                    />
-                  ) : (
-                    children
-                  )}
-                </PlatformLayout>
-              </WelcomeGate>
-              <TourRunner />
-            </OnboardingProvider>
-          </HoldingPlatformProvider>
+                    {moduloBloqueado ? (
+                      <SinAcceso
+                        moduleLabel={getPermissionModuleLabel(moduloBloqueado)}
+                      />
+                    ) : (
+                      children
+                    )}
+                  </PlatformLayout>
+                </WelcomeGate>
+                <TourRunner />
+              </OnboardingProvider>
+            </HoldingPlatformProvider>
+          </AppProviders>
         </PermissionsProvider>
-      </AppProviders>
+      </ExperienciaProvider>
     </ZonaDeLaOrganizacionProvider>
   );
 }

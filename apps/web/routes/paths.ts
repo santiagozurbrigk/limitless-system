@@ -24,6 +24,19 @@ export const paths = {
   platform: {
     dashboard: `${PLATFORM}/dashboard`,
 
+    /**
+     * Rutas de los menús por experiencia (SCRUM-524) cuyas pantallas todavía
+     * no existen. Limitless Webinars: `/inicio` es de SCRUM-534 y Leads, de
+     * SCRUM-537 (Lanzamientos usa `lanzamientos`, SCRUM-529). Limitless de
+     * gestión: Administración es de SCRUM-551. Qué entradas ve cada
+     * experiencia y cuál está lista vive en `lib/navigation/menu-por-experiencia.ts`.
+     */
+    inicio: `${PLATFORM}/inicio`,
+    webinars: {
+      leads: `${PLATFORM}/leads`,
+    },
+    administracion: `${PLATFORM}/administracion`,
+
     finance: {
       root: `${PLATFORM}/finance`,
       expenses: `${PLATFORM}/finance/expenses`,

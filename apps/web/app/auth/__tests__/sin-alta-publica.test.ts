@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+// SCRUM-524: el destino después del login sale de la experiencia; acá, `full`.
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/organization/experience", () => ({
+  getOrganizationExperience: async () => "full",
+}));
+
 /**
  * SCRUM-23 · [SIGNUP-PUBLICO]: el alta pública de cuentas founder está cerrada.
  * Las cuentas se crean por invitación; no queda ninguna action que llame a

@@ -262,7 +262,7 @@ Fuente: PENDIENTES.md [AUTH-ALTA-EMAIL-AJENO] · Doc del área: docs/areas/plata
 
 *Severidad:* Alta
 
-*Estado verificado:* el chequeo {{sinAcceso}} está en {{app/(platform)/layout.tsx}} leyendo {{x-pathname}}. En App Router los layouts compartidos no se re-renderizan en navegaciones cliente; la paleta ⌘K ({{routes/navigation.ts}} → {{buildPlatformNavigation()}}) lista todos los módulos sin filtrar permisos ni add-ons. Muy probable que {{Cmd+K → Finanzas}} muestre la pantalla a un rol sin acceso.
+*Estado verificado:* el chequeo {{sinAcceso}} está en {{app/(platform)/layout.tsx}} leyendo {{x-pathname}}. En App Router los layouts compartidos no se re-renderizan en navegaciones cliente; lo medido en SCRUM-524 (prueba contra el Supabase local, {{evidencia-sprint2/scrum-524/prueba-local/}}): mientras ese layout muestra {{SinAcceso}}, no dibuja {{children}}, así que una navegación del cliente desde esa pantalla cambia la URL y sigue mostrando {{SinAcceso}}, sin la pantalla nueva y sin aplicar la redirección por experiencia de su segmento (la carga de la página sí redirige); la paleta ⌘K ({{routes/navigation.ts}} → {{buildPlatformNavigation()}}) lista todos los módulos sin filtrar permisos ni add-ons. Muy probable que {{Cmd+K → Finanzas}} muestre la pantalla a un rol sin acceso.
 
 *Riesgo:* Si un member sin acceso a un módulo usa ⌘K o un link interno, entonces muy probablemente ve la pantalla completa (por ejemplo Finanzas) sin ningún conocimiento técnico. Es el camino más fácil de todos los de permisos.
 
@@ -1448,13 +1448,24 @@ Fuente: PENDIENTES.md [GLASS-TOKENS-PISADOS] · Doc del área: docs/areas/plataf
 Fuente: PENDIENTES.md [UI-EMOJIS] · Doc del área: docs/areas/plataforma.md",UI-EMOJIS,Plataforma,P2,,deuda técnica
 [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo),Bug,Medium,plataforma,p2,bug,,,,"*Tipo:* bug
 
-*Estado verificado:* {{components/navigation/command-palette.tsx}} usa {{platformNavigation}} estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos {{hidden}} del menú ({{lib/navigation/build-platform-navigation.ts}}); permisos y add-ons siguen sin filtrarse.
+*Estado verificado:* en una organización {{full}}, {{components/navigation/command-palette.tsx}} usa {{platformNavigation}} estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos {{hidden}} del menú ({{lib/navigation/build-platform-navigation.ts}}); permisos y add-ons siguen sin filtrarse. En una organización {{webinar}} o {{limitless}} ya filtra por permiso ({{itemsDeLaPaleta}}, SCRUM-524), y desde SCRUM-524 el layout de la plataforma deja a la paleta dentro de {{PermissionsProvider}}.
 
-*Qué hay que hacer:* construirla con {{buildPlatformSidebarNav(enabledAddOns)}} + {{canSeeNavItem}}.
+*Qué hay que hacer:* para {{full}}, construirla con {{buildPlatformSidebarNav(enabledAddOns)}} + {{canSeeNavItem}}, como ya hace {{itemsDeLaPaleta}} para {{webinar}} y {{limitless}}.
 
 *Dónde:* {{apps/web/components/navigation/command-palette.tsx}}, {{apps/web/routes/navigation.ts}}.
 
 Fuente: PENDIENTES.md [NAV-PALETA-PERMISOS] · Doc del área: docs/areas/plataforma.md",NAV-PALETA-PERMISOS,Plataforma,P2,,bug
+[REPORTES-PANEL-CAMBIO-NEGOCIO] El panel de reportes ejecutivos no se actualiza al entrar a un negocio del holding (nuevo),Bug,Medium,plataforma,p2,sev-baja,bug,,,"*Tipo:* bug
+
+*Severidad:* Baja
+
+*Estado verificado:* medido en SCRUM-524 contra un Supabase local, igual con el build de {{f97b4cdb}} y con el de SCRUM-524 ({{evidencia-sprint2/scrum-524/isla-holding-explicacion.txt}}, {{isla-holding-f97b4cdb.txt}}, {{isla-holding-de45b3f1.txt}}). Un holding entra con «Entrar al negocio» a un negocio con un reporte ejecutivo: el ícono del panel no aparece hasta recargar la página. Dos causas: (1) {{ReportsPanel}} ({{components/executive-reports/reports-panel.tsx}}) pide los reportes una sola vez, en el {{useEffect}} de montaje, y la barra ya estaba montada en {{/holding}}, donde leyó los del holding; la navegación que sigue a {{enterBusinessAction}} no la vuelve a montar ni le avisa del cambio. (2) La RLS de {{executive_reports}} toma el negocio del claim {{active_business_org_id}} del token ({{get_my_organization_id}}), que sólo existe después de que {{enterBusinessAction}} escribe {{holding_active_sessions}} y renueva la sesión: una lectura con un token anterior al cambio no ve los reportes del negocio. Al recargar, el panel se monta con el token nuevo y aparece. Al volver al holding pasa lo mismo al revés (el panel sigue mostrando lo leído antes).
+
+*Qué hay que hacer:* que el panel vuelva a pedir los reportes cuando cambia la organización activa (por ejemplo, con el id de la organización activa del {{HoldingPlatformProvider}} como dependencia del efecto o como {{key}} del componente), y probarlo con el cambio real de negocio (la cookie sola no alcanza: hace falta el claim del token).
+
+*Dónde:* {{apps/web/components/executive-reports/reports-panel.tsx}}, {{apps/web/app/(platform)/holding/actions.ts}} ({{enterBusinessAction}}).
+
+Fuente: PENDIENTES.md [REPORTES-PANEL-CAMBIO-NEGOCIO] · Doc del área: docs/areas/plataforma.md",REPORTES-PANEL-CAMBIO-NEGOCIO,Plataforma,P2,Baja,bug
 [DIALOG-DOBLE-PADDING] Padding duplicado en los modales,Task,Medium,plataforma,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
 
 *Estado verificado:* {{packages/ui/src/primitives/dialog.tsx}} con {{p-6}} en content y {{px-6}} en header/footer.
@@ -1587,7 +1598,7 @@ Fuente: PENDIENTES.md [LAYOUT-CAJONES] · Doc del área: docs/areas/plataforma.m
 
 *Estado verificado:* desde SCRUM-523 ({{20261019120000_organizations_experience.sql}}) toda organización nueva nace con {{organizations.experience = 'webinar'}} porque las altas lo mandan explícito (el default de la columna es {{full}}), salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin ({{createFounderAccountAction}}, {{createOrganizationFromHoldingAction}}, {{createHoldingOrgAction}} en {{app/super-admin/actions.ts}}) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para {{authenticated}}) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL). {{limitless}} (Limitless de gestión, decisión del PO del 28-oct-2026) no la manda ninguna alta: se asigna sólo así, con el SQL y el precheck de la guía de SCRUM-532.
 
-*Riesgo:* cuando SCRUM-524 esconda el menú según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan {{webinar}}) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
+*Riesgo:* desde SCRUM-524, que esconde el menú y redirige las rutas según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan {{webinar}}) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
 
 *Impacto:* clientes nuevos de Limitless completo dados de alta por el super admin después del deploy de SCRUM-523.
 
@@ -2945,6 +2956,17 @@ Fuente: PENDIENTES.md [CAMPO-FECHA-MIGRAR] · Doc del área: docs/arquitectura/v
 *Dónde:* los archivos citados.
 
 Fuente: PENDIENTES.md [FECHAS-UTC-RESTO] · Doc del área: docs/arquitectura/vision-general.md",FECHAS-UTC-RESTO,"Infraestructura, seguridad y tests (transversal)",P2,,bug
+[WEBINAR-ONBOARDING-GATE] Una cuenta webinar nueva pasa por el gate de onboarding del producto completo (nuevo),Task,Low,plataforma,p3,sev-baja,decision-de-negocio,,,"*Tipo:* decisión de negocio
+
+*Severidad:* Baja
+
+*Estado verificado:* medido en el QA final de SCRUM-524 con una organización webinar creada por el alta real del super admin ({{evidencia-sprint2/scrum-524/qa-final.md}} § MENOR-2, {{qa/prueba/alta-webinar.txt}}): el founder cae en {{/auth/force-password-change}}, después en {{/onboarding}}, y en el siguiente login ve en {{/team}} el asistente «Tu negocio» (paso 1 de 3: negocio, oferta y avatar, {{components/onboarding/onboarding-gate.tsx}}). Es el gate de siempre ({{shouldRedirectToGate}} en el middleware, salvo {{skip_onboarding}}), no lo agrega SCRUM-524, y {{/onboarding}} es una ruta libre a propósito para no armar un bucle con el bloqueo por experiencia. SCRUM-524 no lo cambia.
+
+*Qué hay que hacer:* que el PO decida si una organización webinar pasa por ese gate (son preguntas del producto completo: oferta y avatar), por uno propio de Webinars o por ninguno ({{skip_onboarding}} en el alta), y cuándo se revisa (probablemente con Inicio, SCRUM-534).
+
+*Dónde:* {{apps/web/lib/onboarding/gate-routing.ts}}, {{apps/web/lib/supabase/middleware.ts}}, {{apps/web/components/onboarding/onboarding-gate.tsx}}, {{app/super-admin/actions.ts}} (altas).
+
+Fuente: PENDIENTES.md [WEBINAR-ONBOARDING-GATE] · Doc del área: docs/areas/plataforma.md",WEBINAR-ONBOARDING-GATE,Plataforma,P3,Baja,decisión de negocio
 [MIDDLEWARE-COOKIE-REFRESCADA] El middleware le pasa a la página la cookie de sesión vieja después de refrescarla (nuevo),Bug,Low,plataforma,p3,bug,,,,"*Tipo:* bug
 
 *Estado verificado:* en {{apps/web/lib/supabase/middleware.ts}}, {{updateSession}} copia los headers del request ({{:63}}, {{new Headers(request.headers)}}, que incluye el header {{cookie}}) antes de llamar a {{supabase.auth.getUser()}}. Cuando ese {{getUser()}} refresca la sesión, {{setAll}} actualiza {{request.cookies}}, pero arma la respuesta con la copia vieja ({{NextResponse.next({ request: forwardedRequest })}}, {{:72}} y {{:83}}). El layout y las páginas reciben el token anterior y vuelven a refrescar con un refresh token que ya se rotó. Hoy anda: GoTrue lo acepta dentro del intervalo de reuso y, si no, devuelve {{refresh_token_already_used}}, que {{getCurrentUserPermissions}} trata como ""sin usuario"" (SCRUM-108). Viene de {{main}}; lo encontró el AR de SCRUM-108 (pasada 3, {{evidencia-sprint2/scrum-108/ar-pasada-3.md}} § Middleware y layout) leyendo el código; no se reprodujo en el navegador.

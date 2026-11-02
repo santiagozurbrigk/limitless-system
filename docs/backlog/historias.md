@@ -89,6 +89,8 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un miembro sin acceso a un módulo, cuando abre la paleta ⌘K, entonces ese módulo no aparece.
   - Dado un módulo adicional que la organización no contrató, entonces no aparece ni en la barra ni en la paleta.
   - Dado un holding con módulos adicionales distintos a los de uno de sus negocios, cuando entra a ese negocio, entonces el menú muestra los módulos del negocio y no los del holding.
+  - Dada una organización de Limitless Webinars, cuando entra, entonces la barra y la paleta muestran sólo las entradas listas de su menú (Inicio, Lanzamientos, Leads y Equipo) que su rol le deja ver, y cualquier otra pantalla la lleva a su pantalla de inicio.
+  - Dada una organización de Limitless de gestión, cuando entra, entonces la barra y la paleta muestran sólo Clientes, Tablero de trabajo, Ventas y Administración (cuando esté lista) según su rol, y cualquier otra pantalla la lleva a su pantalla de inicio, salvo Integraciones, los SOP y los documentos del contexto del negocio, a los que llega desde la Bandeja y el Tablero (sin entrada en el menú y con los permisos de siempre).
   - Se recorrió la barra con una sesión real (menús desplegables, cambio de negocio del holding, contador de Clientes, perfil y versión celular) y el resultado quedó anotado.
 - **Tareas técnicas:** `[NAV-PALETA-PERMISOS]`, `[ADDONS-HOLDING]`, `[NAV-1]`
 - **Para confirmar:** —
