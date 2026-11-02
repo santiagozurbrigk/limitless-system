@@ -28,7 +28,7 @@ import {
   usePermissions,
 } from "@/providers/permissions-provider";
 import { useExperiencia, usePantallaDeInicio } from "@/providers/experiencia-provider";
-import { ACCESOS_DE_LA_ISLA } from "@/lib/navigation/menu-webinar";
+import { ACCESOS_DE_LA_ISLA } from "@/lib/navigation/menu-por-experiencia";
 import { NotchNav, type NotchNavItem } from "./notch-nav";
 
 /**

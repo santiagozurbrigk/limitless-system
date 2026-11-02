@@ -9,7 +9,7 @@
  *
  *   - `full`: igual que antes. Logo al Panel, menú completo, reportes y
  *     configuración pendiente en la isla, Integraciones.
- *   - `webinar`: logo a la pantalla de inicio, sólo las entradas del menú que
+ *   - `webinar` y `limitless`: logo a la pantalla de inicio, sólo las entradas del menú que
  *     el rol ve, sin reportes, sin configuración pendiente, sin Integraciones.
  */
 
@@ -85,6 +85,13 @@ const SIN_EQUIPO: UserPermissions = {
   role: "member",
   isFounder: false,
   modules: { ...emptyPermissions(), finance: "full", settings: "view" },
+  enabledAddOns: [],
+  hasRoleConfigured: true,
+};
+const SOLO_VENTAS: UserPermissions = {
+  role: "member",
+  isFounder: false,
+  modules: { ...emptyPermissions(), sales: "view" },
   enabledAddOns: [],
   hasRoleConfigured: true,
 };
@@ -170,5 +177,30 @@ describe("⭐ barra de una organización webinar", () => {
     expect(miembro.logo).toEqual(["/settings"]);
     expect(miembro.logoCelular).toEqual(["/settings"]);
     expect(miembro.isla).not.toContain('data-marca="reportes"');
+  });
+});
+
+describe("⭐ barra de una organización limitless", () => {
+  const barra = dibujar("limitless", "/clients", FOUNDER);
+
+  it("el logo lleva a la pantalla de inicio, en la barra y en el celular", () => {
+    expect(barra.logo).toEqual(["/clients"]);
+    expect(barra.logoCelular).toEqual(["/clients"]);
+  });
+
+  it("Clientes, Tablero de trabajo y Ventas; Administración no (SCRUM-551)", () => {
+    expect(barra.items).toEqual(["Clientes", "Tablero de trabajo", "Ventas"]);
+  });
+
+  it("⭐ la isla sin reportes ejecutivos, sin configuración pendiente y sin Integraciones: sólo Ajustes", () => {
+    expect(barra.isla).not.toContain('data-marca="reportes"');
+    expect(barra.isla).not.toContain('data-marca="configuracion-pendiente"');
+    expect(barra.islaHrefs).toEqual(["/settings"]);
+  });
+
+  it("un miembro con sólo Ventas: sólo Ventas y el logo a la Bandeja", () => {
+    const miembro = dibujar("limitless", "/sales/inbox", SOLO_VENTAS);
+    expect(miembro.items).toEqual(["Ventas"]);
+    expect(miembro.logo).toEqual(["/sales/inbox"]);
   });
 });

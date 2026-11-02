@@ -28,6 +28,32 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-01 — Menú y bloqueo de rutas para las tres experiencias: `webinar`, `limitless` y `full` (SCRUM-524, retrabajo)
+
+**Rama:** `feat/SCRUM-524-webinars-menu` (encadenada sobre `feat/SCRUM-523-webinars-experiencia`; integra `53afd280` rehaciendo el merge de SCRUM-523 y reaplicando encima los commits posteriores)
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma (navegación): `lib/navigation/menu-por-experiencia.ts` (era `menu-webinar.ts`), `lib/navigation/rutas-por-experiencia.ts`, `lib/navigation/sidebar-modules.ts`, `lib/navigation/module-for-path.ts`, `routes/paths.ts`, `components/navigation/command-palette.tsx`, `components/navigation/notch-nav/platform-notch-nav.tsx`, `lib/organization/ruta-de-la-experiencia.ts`, `app/auth/actions.ts` (comentario); tests de navegación, barra, paleta, menú del celular, bloqueo por segmento, layout de la plataforma y destino del login (`lib/navigation/__tests__/menu-webinar.test.ts` pasó a `rutas-por-experiencia.test.ts`); docs `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `FUNCIONAL.md` (F-PLA-08), `backlog/historias.md` (H-PLA-08), `operacion/testing.md`, `PENDIENTES.md` (`[NAV-PALETA-PERMISOS]`)
+
+**Qué se hizo:**
+- Una sola config para los menús recortados: `MENU_POR_EXPERIENCIA` con `webinar` (Inicio, Lanzamientos, Leads y Equipo; se sacó Llamadas, con su ruta `/llamadas` de `paths.ts` y de `module-for-path`) y `limitless` (Clientes, Tablero de trabajo, Ventas y Administración). Clientes y Tablero son las pantallas de siempre con el mismo nombre, ícono y módulo; Ventas es el grupo `ventas` del menú completo con sus hijos (`grupo` en la entrada) y lleva a `/sales/inbox`; Administración (`/administracion`, SCRUM-551) queda definida con `lista: false`, oculta y redirigida como toda entrada no lista. `RUTAS_LIBRES` (antes `RUTAS_LIBRES_WEBINAR`) y `ACCESOS_DE_LA_ISLA` valen para las tres experiencias.
+- Reglas generales (`rutas-por-experiencia.ts`): toda experiencia salvo `full` abre los segmentos de primer nivel de sus entradas listas y las rutas libres; la pantalla de inicio es la entrada `inicio` si se ve o la primera que el rol ve (Clientes en `limitless`; la Bandeja para un miembro con sólo Ventas), y Ajustes si no ve ninguna. Ya no hay nada específico de `webinar` en la lógica: el menú se elige por experiencia.
+- Barra y menú del celular: `buildSidebarNavDelMenu(menu)` (antes `buildWebinarSidebarNav`) arma links y grupos desde la config. Paleta: `itemsDeLaPaleta` lista las entradas y, para un grupo, sus hijos que el permiso deja ver.
+- `full` no cambia: mismo menú, mismas rutas, mismo destino.
+
+**Por qué / finalidad:** pedido del PO (Martín, 28-oct-2026): tercera experiencia, Limitless de gestión, y Webinars sin Llamadas.
+
+**Decisiones de diseño relevantes:**
+- Lo que abre una entrada es el segmento de primer nivel de su `href` (el bloqueo vive en el layout del segmento); un test exige que dos entradas no compartan segmento y que toda entrada lista lleve a una pantalla que existe (si no, la pantalla de inicio sería un 404).
+- Ventas reusa el grupo del menú completo en vez de copiar sus cinco hijos: si cambia en el menú completo, cambia igual en `limitless`. Un test exige que todos sus hijos vivan en `/sales` y tengan el módulo `sales`.
+- El módulo de permisos de Administración (`finance`) es provisorio: lo decide SCRUM-551, que además tiene que crear la carpeta con el layout del bloqueo.
+- El código no sabe qué organización es `limitless`: no hay ids ni nombres. Se asigna por SQL (guía de SCRUM-532).
+
+**Verificación:** suite completa 280 archivos y 4.403 tests (antes 4.364 con el 523 nuevo); `tsc --noEmit` limpio; lint 71 avisos y 0 errores, los mismos archivos que en 523; `next build`; los dos `--check` del backlog.
+
+**Riesgos / deuda técnica pendiente:**
+- No se repitió la prueba en navegador contra el Supabase local con una organización `limitless` (la de SCRUM-524 fue con `webinar`): lo cubren los tests de layouts y componentes reales, no un navegador.
+- Un rol de `limitless` sin Clientes, Tablero ni Ventas cae en Ajustes, igual que un rol de `webinar` sin Equipo.
+
 ### 2026-11-01 — Experiencia de la organización con tres valores: `webinar`, `limitless` y `full` (SCRUM-523, retrabajo)
 
 **Rama:** `feat/SCRUM-523-webinars-experiencia`

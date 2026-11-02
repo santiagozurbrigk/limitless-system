@@ -51,6 +51,13 @@ const SIN_EQUIPO: UserPermissions = {
   enabledAddOns: [],
   hasRoleConfigured: true,
 };
+const SOLO_VENTAS: UserPermissions = {
+  role: "member",
+  isFounder: false,
+  modules: { ...emptyPermissions(), sales: "view" },
+  enabledAddOns: [],
+  hasRoleConfigured: true,
+};
 
 function paleta(experiencia: OrganizationExperience, inicio: string, permisos: UserPermissions) {
   const html = renderToStaticMarkup(
@@ -89,5 +96,19 @@ describe("⭐ paleta de una organización webinar", () => {
     const p = paleta("webinar", "/settings", SIN_EQUIPO);
     expect(p.pie).toEqual(["Ir al inicio /settings"]);
     expect(p.items).toEqual([]);
+  });
+});
+
+describe("⭐ paleta de una organización limitless", () => {
+  it("el pie lleva a la pantalla de inicio; lista Clientes, Tablero y los hijos de Ventas", () => {
+    const p = paleta("limitless", "/clients", FOUNDER);
+    expect(p.pie).toEqual(["Ir al inicio /clients"]);
+    expect(p.items).toEqual(["Clientes", "Tablero de trabajo", "Bandeja", "Métricas", "Closing", "Cobros", "Llamadas"]);
+  });
+
+  it("un miembro con sólo Ventas: sólo los hijos de Ventas", () => {
+    const p = paleta("limitless", "/sales/inbox", SOLO_VENTAS);
+    expect(p.pie).toEqual(["Ir al inicio /sales/inbox"]);
+    expect(p.items).toEqual(["Bandeja", "Métricas", "Closing", "Cobros", "Llamadas"]);
   });
 });

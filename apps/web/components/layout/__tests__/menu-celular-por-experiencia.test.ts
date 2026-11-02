@@ -9,7 +9,7 @@
  * de la app.
  *
  *   - `full`: los ítems de siempre.
- *   - `webinar`: sólo las entradas listas del menú que el rol ve.
+ *   - `webinar` y `limitless`: sólo las entradas listas del menú que el rol ve.
  */
 
 import { createElement, Fragment, type ComponentType, type ReactNode } from "react";
@@ -51,6 +51,13 @@ const SIN_EQUIPO: UserPermissions = {
   role: "member",
   isFounder: false,
   modules: { ...emptyPermissions(), finance: "full", settings: "view" },
+  enabledAddOns: [],
+  hasRoleConfigured: true,
+};
+const SOLO_VENTAS: UserPermissions = {
+  role: "member",
+  isFounder: false,
+  modules: { ...emptyPermissions(), sales: "view" },
   enabledAddOns: [],
   hasRoleConfigured: true,
 };
@@ -106,5 +113,20 @@ describe("⭐ menú del celular de una organización webinar", () => {
     const menu = menuAbierto("webinar", "/settings", SIN_EQUIPO);
     expect(menu.links).toEqual([]);
     expect(menu.grupos).toEqual([]);
+  });
+});
+
+describe("⭐ menú del celular de una organización limitless", () => {
+  it("Clientes y Tablero como links y el grupo Ventas", () => {
+    const menu = menuAbierto("limitless", "/clients", FOUNDER);
+    expect(menu.html).toContain('data-dialogo="abierto"');
+    expect(menu.links).toEqual(["Clientes /clients", "Tablero de trabajo /workboard"]);
+    expect(menu.grupos).toEqual(["Ventas"]);
+  });
+
+  it("un miembro con sólo Ventas ve sólo el grupo Ventas", () => {
+    const menu = menuAbierto("limitless", "/sales/inbox", SOLO_VENTAS);
+    expect(menu.links).toEqual([]);
+    expect(menu.grupos).toEqual(["Ventas"]);
   });
 });

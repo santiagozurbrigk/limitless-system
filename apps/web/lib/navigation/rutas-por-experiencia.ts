@@ -2,10 +2,10 @@ import { paths } from "@/routes/paths";
 import type { OrganizationExperience } from "@/lib/organization/experience";
 import type { UserPermissions } from "@/lib/auth/get-current-permissions";
 import {
-  MENU_WEBINAR,
-  RUTAS_LIBRES_WEBINAR,
-  type EntradaDelMenuWebinar,
-} from "./menu-webinar";
+  MENU_POR_EXPERIENCIA,
+  RUTAS_LIBRES,
+  type EntradaDelMenu,
+} from "./menu-por-experiencia";
 
 /**
  * ⭐ Qué rutas de la plataforma abre cada experiencia y adónde va el que entra
@@ -15,15 +15,29 @@ import {
  *
  *   - `full`: todo igual que antes. Ninguna ruta se redirige por experiencia y
  *     la pantalla de inicio es el Panel General.
- *   - `webinar`: sólo las entradas listas de `MENU_WEBINAR` y las rutas libres.
- *     Cualquier otra ruta de la plataforma redirige a la pantalla de inicio.
+ *   - `webinar` y `limitless`: sólo los segmentos de las entradas listas de su
+ *     menú (`MENU_POR_EXPERIENCIA`) y las rutas libres. Cualquier otra ruta de
+ *     la plataforma redirige a la pantalla de inicio de la experiencia.
  *
  * Esto no reemplaza a los permisos: una ruta permitida acá sigue pasando por
  * `moduloBloqueadoParaRuta` en el layout de la plataforma.
+ *
+ * Las funciones reciben el menú como último argumento para que los tests
+ * prueben menús con otras entradas listas; por defecto, el de la experiencia.
  */
 
 function coincide(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+/** El segmento de primer nivel de una ruta: `/sales` para `/sales/inbox`. */
+export function segmentoDe(href: string): string {
+  return `/${href.split("/")[1] ?? ""}`;
+}
+
+/** El menú de la experiencia; `full` no tiene (vacío). */
+export function menuPorDefecto(experiencia: OrganizationExperience): readonly EntradaDelMenu[] {
+  return experiencia === "full" ? [] : MENU_POR_EXPERIENCIA[experiencia];
 }
 
 /** Lo que hace falta de los permisos para saber qué entradas ve alguien. */
@@ -36,23 +50,21 @@ export type PermisosDeLaBarra = Pick<UserPermissions, "isFounder" | "modules">;
  */
 export function puedeVerEntrada(
   permisos: PermisosDeLaBarra,
-  entrada: Pick<EntradaDelMenuWebinar, "permissionId">
+  entrada: Pick<EntradaDelMenu, "permissionId">
 ): boolean {
   return permisos.isFounder || (permisos.modules[entrada.permissionId] ?? "none") !== "none";
 }
 
-/** Las entradas del menú webinar que ya tienen pantalla, en su orden. */
-export function entradasListas(
-  menu: readonly EntradaDelMenuWebinar[] = MENU_WEBINAR
-): EntradaDelMenuWebinar[] {
+/** Las entradas del menú que ya tienen pantalla, en su orden. */
+export function entradasListas(menu: readonly EntradaDelMenu[]): EntradaDelMenu[] {
   return menu.filter((entrada) => entrada.lista);
 }
 
 /** Las entradas listas que esta persona ve por sus permisos, en su orden. */
 export function entradasVisibles(
   permisos: PermisosDeLaBarra,
-  menu: readonly EntradaDelMenuWebinar[] = MENU_WEBINAR
-): EntradaDelMenuWebinar[] {
+  menu: readonly EntradaDelMenu[]
+): EntradaDelMenu[] {
   return entradasListas(menu).filter((entrada) => puedeVerEntrada(permisos, entrada));
 }
 
@@ -60,15 +72,15 @@ export function entradasVisibles(
  * La pantalla a la que va la persona después del login y cuando abre una ruta
  * que no es de su experiencia.
  *
- * Para `webinar`: de las entradas listas que puede ver por sus permisos,
- * Inicio si está; si no, la primera en el orden del menú. Si no ve ninguna,
- * Ajustes, que es libre: no hay bucle (Ajustes tiene su propio módulo de
- * permisos, `settings`).
+ * Para `webinar` y `limitless`: de las entradas listas que puede ver por sus
+ * permisos, la de id `inicio` si está; si no, la primera en el orden del menú
+ * (en `limitless`, Clientes). Si no ve ninguna, Ajustes, que es libre: no hay
+ * bucle (Ajustes tiene su propio módulo de permisos, `settings`).
  */
 export function pantallaDeInicio(
   experiencia: OrganizationExperience,
   permisos: PermisosDeLaBarra,
-  menu: readonly EntradaDelMenuWebinar[] = MENU_WEBINAR
+  menu: readonly EntradaDelMenu[] = menuPorDefecto(experiencia)
 ): string {
   if (experiencia === "full") return paths.platform.dashboard;
   const visibles = entradasVisibles(permisos, menu);
@@ -80,11 +92,11 @@ export function pantallaDeInicio(
 export function rutaPermitidaParaLaExperiencia(
   experiencia: OrganizationExperience,
   pathname: string,
-  menu: readonly EntradaDelMenuWebinar[] = MENU_WEBINAR
+  menu: readonly EntradaDelMenu[] = menuPorDefecto(experiencia)
 ): boolean {
   if (experiencia === "full") return true;
-  if (RUTAS_LIBRES_WEBINAR.some((libre) => coincide(pathname, libre))) return true;
-  return entradasListas(menu).some((entrada) => coincide(pathname, entrada.href));
+  if (RUTAS_LIBRES.some((libre) => coincide(pathname, libre))) return true;
+  return entradasListas(menu).some((entrada) => coincide(pathname, segmentoDe(entrada.href)));
 }
 
 /**
@@ -97,7 +109,7 @@ export function redireccionPorExperiencia(
   experiencia: OrganizationExperience,
   pathname: string,
   permisos: PermisosDeLaBarra,
-  menu: readonly EntradaDelMenuWebinar[] = MENU_WEBINAR
+  menu: readonly EntradaDelMenu[] = menuPorDefecto(experiencia)
 ): string | null {
   if (rutaPermitidaParaLaExperiencia(experiencia, pathname, menu)) return null;
   return pantallaDeInicio(experiencia, permisos, menu);

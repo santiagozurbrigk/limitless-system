@@ -1448,9 +1448,9 @@ Fuente: PENDIENTES.md [GLASS-TOKENS-PISADOS] · Doc del área: docs/areas/plataf
 Fuente: PENDIENTES.md [UI-EMOJIS] · Doc del área: docs/areas/plataforma.md",UI-EMOJIS,Plataforma,P2,,deuda técnica
 [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo),Bug,Medium,plataforma,p2,bug,,,,"*Tipo:* bug
 
-*Estado verificado:* en una organización {{full}}, {{components/navigation/command-palette.tsx}} usa {{platformNavigation}} estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos {{hidden}} del menú ({{lib/navigation/build-platform-navigation.ts}}); permisos y add-ons siguen sin filtrarse. En una organización {{webinar}} ya filtra por permiso ({{itemsDeLaPaleta}}, SCRUM-524), y desde SCRUM-524 el layout de la plataforma deja a la paleta dentro de {{PermissionsProvider}}.
+*Estado verificado:* en una organización {{full}}, {{components/navigation/command-palette.tsx}} usa {{platformNavigation}} estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos {{hidden}} del menú ({{lib/navigation/build-platform-navigation.ts}}); permisos y add-ons siguen sin filtrarse. En una organización {{webinar}} o {{limitless}} ya filtra por permiso ({{itemsDeLaPaleta}}, SCRUM-524), y desde SCRUM-524 el layout de la plataforma deja a la paleta dentro de {{PermissionsProvider}}.
 
-*Qué hay que hacer:* para {{full}}, construirla con {{buildPlatformSidebarNav(enabledAddOns)}} + {{canSeeNavItem}}, como ya hace {{itemsDeLaPaleta}} para {{webinar}}.
+*Qué hay que hacer:* para {{full}}, construirla con {{buildPlatformSidebarNav(enabledAddOns)}} + {{canSeeNavItem}}, como ya hace {{itemsDeLaPaleta}} para {{webinar}} y {{limitless}}.
 
 *Dónde:* {{apps/web/components/navigation/command-palette.tsx}}, {{apps/web/routes/navigation.ts}}.
 

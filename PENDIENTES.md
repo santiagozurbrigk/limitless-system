@@ -343,8 +343,8 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 
 #### [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo)
 - **Tipo:** bug
-- **Estado verificado:** en una organización `full`, `components/navigation/command-palette.tsx` usa `platformNavigation` estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos `hidden` del menú (`lib/navigation/build-platform-navigation.ts`); permisos y add-ons siguen sin filtrarse. En una organización `webinar` ya filtra por permiso (`itemsDeLaPaleta`, SCRUM-524), y desde SCRUM-524 el layout de la plataforma deja a la paleta dentro de `PermissionsProvider`.
-- **Qué hay que hacer:** para `full`, construirla con `buildPlatformSidebarNav(enabledAddOns)` + `canSeeNavItem`, como ya hace `itemsDeLaPaleta` para `webinar`.
+- **Estado verificado:** en una organización `full`, `components/navigation/command-palette.tsx` usa `platformNavigation` estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos `hidden` del menú (`lib/navigation/build-platform-navigation.ts`); permisos y add-ons siguen sin filtrarse. En una organización `webinar` o `limitless` ya filtra por permiso (`itemsDeLaPaleta`, SCRUM-524), y desde SCRUM-524 el layout de la plataforma deja a la paleta dentro de `PermissionsProvider`.
+- **Qué hay que hacer:** para `full`, construirla con `buildPlatformSidebarNav(enabledAddOns)` + `canSeeNavItem`, como ya hace `itemsDeLaPaleta` para `webinar` y `limitless`.
 - **Dónde:** `apps/web/components/navigation/command-palette.tsx`, `apps/web/routes/navigation.ts`.
 
 #### [REPORTES-PANEL-CAMBIO-NEGOCIO] El panel de reportes ejecutivos no se actualiza al entrar a un negocio del holding (nuevo)

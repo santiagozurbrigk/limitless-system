@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * SCRUM-524 · ⭐ Después del login, cada organización va a su pantalla de
- * inicio: el Panel para `full`, la primera entrada lista del menú webinar para
- * `webinar` (hoy, Equipo). Vale para el login con contraseña
+ * inicio: el Panel para `full`, la primera entrada lista del menú de su
+ * experiencia para `webinar` (hoy, Equipo) y `limitless` (Clientes). Vale para el login con contraseña
  * (`signInAction`) y para `/auth/callback`. Se respetan `destinoSeguro` y el
  * `next` de las invitaciones. Las pantallas del cliente que mandan a
  * `/dashboard` (recuperar contraseña, cambio obligatorio, aceptar invitación)
@@ -18,7 +18,7 @@ class Redireccion extends Error {
 }
 
 const sim = vi.hoisted(() => ({
-  experiencia: "full" as "full" | "webinar",
+  experiencia: "full" as "full" | "webinar" | "limitless",
   accountType: "founder" as "founder" | "holding",
   superAdmin: false,
   bootstraps: 0,
@@ -149,6 +149,13 @@ describe("⭐ login con contraseña", () => {
     expect(await login("https://evil.com")).toBe("/team");
   });
 
+  it("⭐ limitless: a Clientes; un miembro con sólo Ventas, a la Bandeja", async () => {
+    sim.experiencia = "limitless";
+    expect(await login()).toBe("/clients");
+    sim.permisos = { isFounder: false, modules: { sales: "view" } };
+    expect(await login()).toBe("/sales/inbox");
+  });
+
   it("una cuenta holding sigue yendo a su holding, sea cual sea la experiencia", async () => {
     sim.accountType = "holding";
     sim.experiencia = "webinar";
@@ -167,6 +174,11 @@ describe("⭐ /auth/callback", () => {
     expect(await volverDelMail()).toBe("/dashboard");
     sim.experiencia = "webinar";
     expect(await volverDelMail()).toBe("/team");
+  });
+
+  it("sin next: limitless a Clientes", async () => {
+    sim.experiencia = "limitless";
+    expect(await volverDelMail()).toBe("/clients");
   });
 
   it("⭐ sin next, un miembro webinar sin Equipo: a Ajustes", async () => {

@@ -23,8 +23,10 @@ import { paths } from "@/routes";
 import { platformNavigation } from "@/routes/navigation";
 import type { OrganizationExperience } from "@/lib/organization/experience";
 import type { UserPermissions } from "@/lib/auth/get-current-permissions";
-import { entradasVisibles } from "@/lib/navigation/rutas-por-experiencia";
-import { usePermissions } from "@/providers/permissions-provider";
+import { entradasVisibles, menuPorDefecto } from "@/lib/navigation/rutas-por-experiencia";
+import { modulesWithChildren } from "@/lib/navigation/sidebar-modules";
+import { canSeeNavItem, usePermissions } from "@/providers/permissions-provider";
+import type { PermissionModuleId } from "@/constants/permission-modules";
 import { useExperiencia, usePantallaDeInicio } from "@/providers/experiencia-provider";
 
 export type PaletteItem = {
@@ -92,21 +94,32 @@ const ALL_ITEMS = [...QUICK_ACTIONS, ...flattenNav()];
  * Lo que lista la paleta según la experiencia de la organización (SCRUM-524).
  *
  *   - `full`: lo de siempre, las acciones rápidas y todo el menú.
- *   - `webinar`: sólo las entradas listas de su menú, filtradas por permiso con
- *     la misma regla que la barra (`entradasVisibles`). Sin acciones rápidas:
- *     todas llevan a módulos que no son de Limitless Webinars.
+ *   - `webinar` y `limitless`: sólo las entradas listas de su menú, filtradas
+ *     por permiso con la misma regla que la barra (`entradasVisibles`). Una
+ *     entrada que es un grupo (Ventas) lista sus hijos que el permiso deja ver,
+ *     como la barra. Sin acciones rápidas: todas llevan a módulos del menú
+ *     completo.
  */
 export function itemsDeLaPaleta(
   experiencia: OrganizationExperience,
   permisos: Pick<UserPermissions, "isFounder" | "modules">
 ): PaletteItem[] {
   if (experiencia === "full") return ALL_ITEMS;
-  return entradasVisibles(permisos).map((entrada) => ({
-    label: entrada.label,
-    href: entrada.href,
-    group: "Plataforma",
-    keywords: entrada.label,
-  }));
+  const acceso = (m: PermissionModuleId) =>
+    permisos.isFounder || (permisos.modules[m] ?? "none") !== "none";
+  return entradasVisibles(permisos, menuPorDefecto(experiencia)).flatMap((entrada) => {
+    if (!entrada.grupo) {
+      return [{ label: entrada.label, href: entrada.href, group: "Plataforma", keywords: entrada.label }];
+    }
+    return modulesWithChildren[entrada.grupo].children
+      .filter((hijo) => !hijo.hidden && canSeeNavItem(hijo.permissionId, acceso, permisos.isFounder))
+      .map((hijo) => ({
+        label: hijo.label,
+        href: hijo.href,
+        group: entrada.label,
+        keywords: `${entrada.label} ${hijo.label}`,
+      }));
+  });
 }
 
 export function CommandPalette() {

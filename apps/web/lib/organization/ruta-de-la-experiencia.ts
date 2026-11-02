@@ -55,7 +55,7 @@ export async function exigirRutaDeLaExperiencia(segmento: string): Promise<void>
 /**
  * La pantalla de inicio de quien entra, en la organización activa: el destino
  * por defecto después del login. `/dashboard` para `full` (sin leer permisos);
- * para `webinar`, lo que diga `pantallaDeInicio` con sus permisos.
+ * para `webinar` y `limitless`, lo que diga `pantallaDeInicio` con sus permisos.
  */
 export async function pantallaDeInicioDeLaOrganizacionActiva(): Promise<string> {
   const experiencia = await getOrganizationExperience();

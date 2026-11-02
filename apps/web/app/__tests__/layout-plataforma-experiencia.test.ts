@@ -21,7 +21,7 @@ class Redireccion extends Error {
 }
 
 const sim = vi.hoisted(() => ({
-  experiencia: "full" as "full" | "webinar",
+  experiencia: "full" as "full" | "webinar" | "limitless",
   pathname: "/team",
   recibidas: [] as unknown[],
   inicios: [] as unknown[],
@@ -123,6 +123,12 @@ describe("⭐ la experiencia llega al menú", () => {
     expect(sim.recibidas).toEqual(["full", "webinar"]);
   });
 
+  it("limitless también llega tal cual", async () => {
+    sim.experiencia = "limitless";
+    await render();
+    expect(sim.recibidas).toEqual(["limitless"]);
+  });
+
   it("⭐ se lee en cada pedido: cambiar de organización activa recalcula el menú", async () => {
     sim.experiencia = "webinar";
     await render();
@@ -190,6 +196,21 @@ describe("⭐ fuera de la experiencia, el layout de la plataforma no decide: dej
     expect(await cargar()).toContain("pantalla");
   });
 
+  it("⭐ limitless sin el módulo Marketing que tipea /marketing: pasa al segmento, que lo manda a su inicio", async () => {
+    sim.experiencia = "limitless";
+    sim.pathname = "/marketing/content";
+    const html = await cargar();
+    expect(html).not.toMatch(/^redirect /);
+    expect(html).not.toContain("No tenés acceso");
+  });
+
+  it("limitless sin Clientes en /clients (ruta de su menú) sigue viendo «No tenés acceso»", async () => {
+    sim.experiencia = "limitless";
+    sim.permisos = { ...PERMISOS, modules: { ...emptyPermissions(), sales: "view" } };
+    sim.pathname = "/clients";
+    expect(await cargar()).toContain("No tenés acceso");
+  });
+
   it("sin x-pathname no se bloquea (no hay ruta que mirar)", async () => {
     sim.experiencia = "webinar";
     sim.pathname = "";
@@ -209,6 +230,19 @@ describe("⭐ el layout calcula la pantalla de inicio con los permisos de quien 
     sim.pathname = "/settings";
     await render();
     expect(sim.inicios).toEqual(["/dashboard", "/team", "/settings"]);
+  });
+
+  it("limitless: /clients con Clientes; /sales/inbox con sólo Ventas; /settings con sólo Equipo", async () => {
+    sim.experiencia = "limitless";
+    sim.pathname = "/settings";
+    await render();
+    sim.permisos = { ...PERMISOS, modules: { ...emptyPermissions(), clients: "view", sales: "view" } };
+    sim.pathname = "/clients";
+    await render();
+    sim.permisos = { ...PERMISOS, modules: { ...emptyPermissions(), sales: "view" } };
+    sim.pathname = "/sales/inbox";
+    await render();
+    expect(sim.inicios).toEqual(["/settings", "/clients", "/sales/inbox"]);
   });
 
   it("webinar sin Equipo que tipea /finance: el layout deja pasar (el segmento lo manda a Ajustes)", async () => {

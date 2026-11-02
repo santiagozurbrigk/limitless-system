@@ -209,12 +209,14 @@ No se mezcla con las banderas de `lib/release/escondido.ts`, que esconden algo a
 organizaciones.
 
 Qué cambia con cada valor (SCRUM-524): con `full`, nada (mismo menú, mismas rutas, mismo destino
-después del login). Con `webinar`, la barra y la paleta muestran sólo las entradas listas del menú
-de Limitless Webinars (`lib/navigation/menu-webinar.ts`) y toda otra ruta de `app/(platform)`,
-salvo `/onboarding`, `/holding` y `/settings`, redirige a la pantalla de inicio. El bloqueo vive en
+después del login). Con `webinar` o `limitless`, la barra y la paleta muestran sólo las entradas
+listas del menú de esa experiencia (`lib/navigation/menu-por-experiencia.ts`: Inicio, Lanzamientos,
+Leads y Equipo para `webinar`; Clientes, Tablero de trabajo, Ventas y Administración para
+`limitless`) y toda otra ruta de `app/(platform)`, salvo `/onboarding`, `/holding` y `/settings`,
+redirige a la pantalla de inicio de esa experiencia. El bloqueo vive en
 el layout de cada segmento de primer nivel, porque el de `(platform)` no se vuelve a ejecutar en
 una navegación del cliente. Detalle en
-[`diseno/ui-y-navegacion.md` § Menú por experiencia](../diseno/ui-y-navegacion.md#menú-por-experiencia-limitless-webinars).
+[`diseno/ui-y-navegacion.md` § Menú por experiencia](../diseno/ui-y-navegacion.md#menú-por-experiencia-limitless-webinars-y-limitless-de-gestión).
 La experiencia no es un límite de seguridad de los datos: eso lo siguen haciendo los permisos por
 módulo y la RLS.
 

@@ -124,7 +124,8 @@ async function postAuthRedirect(invitacion: string | null = null) {
       }
 
       // La pantalla de inicio de la experiencia de la organización (SCRUM-524):
-      // el Panel para `full`, la primera entrada lista del menú para `webinar`.
+      // el Panel para `full`; para `webinar` y `limitless`, la primera entrada
+      // lista del menú que la persona ve.
       redirect(await pantallaDeInicioDeLaOrganizacionActiva());
     }
   }

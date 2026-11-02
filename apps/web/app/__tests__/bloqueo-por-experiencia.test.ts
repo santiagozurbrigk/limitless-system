@@ -129,7 +129,12 @@ beforeAll(async () => {
 }, 120_000);
 
 beforeEach(() => {
-  sim.experiencias = { "org-full": "full", "org-webinar": "webinar", "holding-1": "full" };
+  sim.experiencias = {
+    "org-full": "full",
+    "org-webinar": "webinar",
+    "org-limitless": "limitless",
+    "holding-1": "full",
+  };
   sim.organizacionActiva = "org-full";
   sim.falla = false;
   sim.resolverLanza = null;
@@ -241,6 +246,40 @@ describe("⭐ organización webinar", () => {
   });
 });
 
+describe("⭐ organización limitless", () => {
+  beforeEach(() => {
+    sim.organizacionActiva = "org-limitless";
+  });
+
+  it("todo segmento fuera de Clientes, Tablero, Ventas y los libres redirige a Clientes, sin SinAcceso", async () => {
+    const resultado: Record<string, string> = {};
+    for (const segmento of SEGMENTOS) resultado[segmento] = await entrar(segmento);
+    const esperado = Object.fromEntries(
+      SEGMENTOS.map((s) => [
+        s,
+        ["clients", "workboard", "sales", "settings", "holding", "onboarding"].includes(s)
+          ? "pasa"
+          : "redirect /clients",
+      ])
+    );
+    expect(resultado).toEqual(esperado);
+  });
+
+  it("/dashboard, /team y /lanzamientos llevan a Clientes (no al Panel: no hay bucle)", async () => {
+    expect(await entrar("dashboard")).toBe("redirect /clients");
+    expect(await entrar("team")).toBe("redirect /clients");
+    expect(await entrar("lanzamientos")).toBe("redirect /clients");
+  });
+
+  it("⭐ un miembro con sólo Ventas va a la Bandeja; sin ninguna de las tres, a Ajustes", async () => {
+    sim.permisos = { isFounder: false, modules: { sales: "view" } };
+    expect(await entrar("dashboard")).toBe("redirect /sales/inbox");
+    sim.permisos = { isFounder: false, modules: { finance: "full", settings: "view" } };
+    expect(await entrar("dashboard")).toBe("redirect /settings");
+    expect(await entrar("settings")).toBe("pasa");
+  });
+});
+
 describe("⭐ organización full: todo igual que antes", () => {
   it("ningún segmento redirige por experiencia; /lanzamientos sigue yendo al Panel y las internas, a 404", async () => {
     const resultado: Record<string, string> = {};
@@ -264,6 +303,18 @@ describe("⭐ la experiencia es la de la organización activa", () => {
     expect(await entrar("finance")).toBe("redirect /team");
     sim.organizacionActiva = "holding-1";
     expect(await entrar("finance")).toBe("pasa");
+  });
+
+  it("⭐ un holding (full) que cambia entre un negocio limitless y uno webinar ve el bloqueo de cada uno", async () => {
+    sim.organizacionActiva = "org-limitless";
+    expect(await entrar("clients")).toBe("pasa");
+    expect(await entrar("team")).toBe("redirect /clients");
+    sim.organizacionActiva = "org-webinar";
+    expect(await entrar("clients")).toBe("redirect /team");
+    expect(await entrar("team")).toBe("pasa");
+    sim.organizacionActiva = "holding-1";
+    expect(await entrar("clients")).toBe("pasa");
+    expect(await entrar("team")).toBe("pasa");
   });
 
   it("sin organización activa (super admin sin org, demo): full, no se bloquea", async () => {
