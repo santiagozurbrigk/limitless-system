@@ -441,7 +441,11 @@ export async function loadOrganizationsList(): Promise<
         .from("profiles")
         .select("id, organization_id, email, full_name, role")
         .eq("role", "founder")
-        .not("organization_id", "is", null),
+        .not("organization_id", "is", null)
+        // Una org puede tener varios founders (la de Limitless: todo el staff,
+        // SCRUM-552). Se muestra el más antiguo, el mismo que en la ficha.
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true }),
       admin
         .from("profiles")
         .select("organization_id")
@@ -631,6 +635,10 @@ export async function loadOrganizationDetail(
       .select("id, email, full_name")
       .eq("organization_id", orgId)
       .eq("role", "founder")
+      // Varios founders (la org de Limitless): el más antiguo, como en el listado.
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(1)
       .maybeSingle(),
     admin
       .from("profiles")
