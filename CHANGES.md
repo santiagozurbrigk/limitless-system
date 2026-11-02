@@ -28,6 +28,33 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-01 — Fix-pack 2 de A1: «Generar SOP» escondido en `limitless` y textos corregidos (SCRUM-524)
+
+**Rama:** `feat/SCRUM-524-webinars-menu`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma (contexto del negocio): `components/business-context/document-viewer-sidebar.tsx`; test nuevo `components/business-context/__tests__/generar-sop-por-experiencia.test.ts`; docs `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `FUNCIONAL.md` (F-PLA-08), `operacion/testing.md` y la entrada del fix-pack 1, abajo
+
+**Qué se hizo:**
+- BLQ-2 (re-AR de A1). El panel de un documento del contexto (`/business-context/[id]`, abierto para `limitless` por el fix-pack 1) tenía «Generar SOP», que lleva a `/operations/sops#crear`; `limitless` no abre `/operations` y el link rebotaba a Clientes. Decisión de Fernando: esconderlo. El panel lo muestra sólo si `rutaPermitidaParaLaExperiencia(useExperiencia(), paths.platform.operations.sops)`: la misma regla del bloqueo, sin ningún caso especial para `limitless`. `full` lo sigue viendo; `webinar` no llega a esa pantalla. Se corrigió el riesgo de la entrada del fix-pack 1, que decía que no había ese link (se había revisado la pantalla del SOP, no la del documento).
+- Revisión de los demás links: sobre los componentes que importan las páginas de `/integrations`, `/sops` y `/business-context` (con sus barrels), ningún otro link, `router.push` ni `redirect` lleva a un segmento cerrado para `limitless`. Quedan `app/(platform)/sops/page.tsx` y `sops/create/page.tsx`, que no se dibujan: `next.config.ts` manda `/sops` y `/sops/create` a la biblioteca antes. La paleta, que también aparece, ya filtra por experiencia.
+- BLQ-1 (re-AR de A1). La entrada del fix-pack 1 decía que, sin `/sops` en las rutas extra, fallan 5 tests: fallan 6, en 4 archivos. Ahora dice el número, la edición y la salida del runner.
+- MNR-1 (re-AR de A1). `auth-organizaciones-y-permisos.md` dice ahora que se abren los segmentos enteros (`/integrations/*`, `/sops/*` y `/business-context/*`), como `ui-y-navegacion.md`.
+- Validez: con el panel de antes, el test nuevo fallaba con `expected '<div class="space-y-4">…' not to contain 'Generar SOP'` en el caso de `limitless`; el de `full` pasa con los dos.
+
+**Por qué / finalidad:** fix-pack 2 de A1 (`doc/sdd/002-scrum-523-524-a1/fix-pack-2.md` de limitless-nexus): la re-AR rechazó con un BLQ medio, uno bajo y un menor.
+
+**Decisiones de diseño relevantes:**
+- Esconder y no abrir `/operations` para `limitless`: lo decidió Fernando. La condición pregunta por el destino del link y no por la experiencia, así que si un día `limitless` abre la biblioteca, el link vuelve solo.
+
+**Verificación:**
+- Suite completa: 282 archivos y 4.421 tests.
+- `tsc --noEmit` limpio.
+- Lint (`next lint`): 71 avisos y 0 errores, ninguno en los archivos tocados.
+- `next build` en verde.
+- Casos declarados: 3.359 (`contar-casos.py`).
+
+**Riesgos / deuda técnica pendiente:** ninguno nuevo.
+
 ### 2026-11-01 — Fix-pack 1 de A1: rutas extra de `limitless`, textos de las entradas no listas, destino del callback para un holding y una sola regla de visibilidad (SCRUM-524)
 
 **Rama:** `feat/SCRUM-524-webinars-menu` (integra `e0171311` de SCRUM-523 con el merge `60dea9ee`)
@@ -47,7 +74,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
   - El de MNR-1 fallaba con `webinar: expected '/team' to be '/holding'`.
   - El de MNR-3 y MNR-4 falla con cada uno de los tres archivos vuelto a su versión anterior, uno por vez.
   - El de BLQ-2 falla si se crea `app/(platform)/administracion/page.tsx` sin el layout del bloqueo («pantalla sin bloqueo»).
-  - Si se saca `/sops` de las rutas extra, fallan 5 tests.
+  - Si se saca `/sops` de las rutas extra (la línea `paths.platform.sops.detail("[id]"),` de `RUTAS_EXTRA_POR_EXPERIENCIA`), fallan 6 tests en 4 archivos (`npx vitest run` en `apps/web`: «Test Files 4 failed | 277 passed (281)», «Tests 6 failed | 4413 passed (4419)»): 2 en `bloqueo-por-experiencia.test.ts`, 1 en `layout-plataforma-experiencia.test.ts`, 1 en `rutas-por-experiencia-en-disco.test.ts` y 2 en `rutas-por-experiencia.test.ts`. Corregido en el fix-pack 2: decía 5.
 
 **Por qué / finalidad:** fix-pack 1 de A1 (`doc/sdd/002-scrum-523-524-a1/fix-pack-1.md` de limitless-nexus): la AR rechazó y la CR aprobó con MENORs.
 
@@ -66,7 +93,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Riesgos / deuda técnica pendiente:**
 - `sidebar-root-navigation.tsx` y `sidebar-sub-navigation.tsx` todavía filtran hijos con su propia copia, y `module-for-path.ts` tiene su propio `coincide`. Son anteriores a 524 y quedaron fuera del alcance del fix-pack.
-- Desde un SOP abierto en `limitless`, un link a la biblioteca (`/operations/sops`) lleva a Clientes. Hoy la pantalla del SOP no tiene ese link.
+- Desde un SOP abierto en `limitless`, un link a la biblioteca (`/operations/sops`) llevaría a Clientes. Corregido en el fix-pack 2: la pantalla del SOP no tiene ese link, pero el panel de un documento del contexto (`/business-context/[id]`) sí lo tenía («Generar SOP»); ahora no se muestra en `limitless`.
 - Nota para el PO, fuera del código: una org `limitless` no tiene `/team` hasta SCRUM-551.
 
 ### 2026-11-01 — Menú y bloqueo de rutas para las tres experiencias: `webinar`, `limitless` y `full` (SCRUM-524, retrabajo)

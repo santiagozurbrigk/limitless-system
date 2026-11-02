@@ -110,7 +110,11 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
   Ventas lleva a «Conectar integración», «Conectar Zernio» y «Gestionar Zernio»), `/sops` (el SOP
   vinculado a una tarea del Tablero, `/sops/[id]`) y `/business-context` (los documentos de una tarea,
   `/business-context/[id]`). La biblioteca de SOP (`/operations/sops`) no, y `/sops` y `/sops/create`
-  tampoco en la práctica: `next.config.ts` los manda a esa biblioteca. `webinar` no tiene ninguna. `RUTAS_LIBRES` (para toda experiencia):
+  tampoco en la práctica: `next.config.ts` los manda a esa biblioteca. Por eso el panel de un
+  documento del contexto (`document-viewer-sidebar.tsx`) muestra «Generar SOP», que lleva a esa
+  biblioteca, sólo si `rutaPermitidaParaLaExperiencia` abre su destino: en `limitless` no está
+  (fix-pack 2 de A1, decisión de Fernando). Es el único link a un segmento cerrado en las pantallas de
+  las rutas extra (revisado sobre los componentes que importan sus páginas). `webinar` no tiene ninguna. `RUTAS_LIBRES` (para toda experiencia):
   `/onboarding` (adonde el middleware manda al founder sin onboarding; bloquearla armaría un bucle),
   `/holding` y `/settings` (ajustes de la cuenta, desde el menú de perfil).
 - **Reglas:** `lib/navigation/rutas-por-experiencia.ts`, las mismas para toda experiencia con menú
@@ -278,6 +282,7 @@ servidor, `client.ts` los `"use client"`; nunca importar un barrel con clientes 
 | `apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts` | Menús de `webinar` y `limitless`: orden, entradas listas, módulo de cada entrada igual al de su ruta, segmentos sin repetir, pantalla existente para cada entrada lista, entradas de `limitless` iguales a las del menú completo, pantalla de inicio, reglas de rutas, rutas extra de `limitless` (Integraciones, SOP, contexto del negocio) abiertas y cerradas para `webinar`, qué ve hoy quien tipea una entrada no lista (404 sin pantalla, redirección con pantalla), destino sin bucle en las tres experiencias, invariante de que una entrada lista no siga escondida por `ESCONDIDO`, y que la barra y la paleta usen `hijosVisiblesDelGrupo` y la barra de un menú propio `coincide` |
 | `apps/web/components/layout/__tests__/menu-celular-por-experiencia.test.ts` | El `MobileNav` real abierto: `full` con los ítems de siempre, `webinar` y `limitless` sólo con las entradas que el rol ve |
 | `apps/web/components/navigation/__tests__/paleta-por-experiencia.test.ts` | La paleta real: link del pie y lista para `full`, `webinar` y `limitless` |
+| `apps/web/components/business-context/__tests__/generar-sop-por-experiencia.test.ts` | El panel real de un documento del contexto: «Generar SOP» está para `full` y no para `limitless` (fix-pack 2 de A1) |
 | `apps/web/lib/navigation/__tests__/rutas-por-experiencia-en-disco.test.ts` | Toda pantalla de `(platform)` cuelga del layout de su segmento con `exigirRutaDeLaExperiencia` de su propia ruta; las de afuera no pasan por el bloqueo |
 | `apps/web/lib/navigation/__tests__/menu-por-experiencia.test.ts` | Barra y paleta para `full` (igual que antes), `webinar` y `limitless` (entradas listas, el grupo Ventas, filtradas por permiso) |
 | `apps/web/components/navigation/notch-nav/__tests__/barra-por-experiencia.test.ts` | La barra real: logo, ítems e isla derecha para `full` (igual que antes), `webinar` y `limitless` (sin reportes, sin configuración pendiente, logo a la pantalla de inicio) |
