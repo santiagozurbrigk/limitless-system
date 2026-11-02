@@ -8,9 +8,13 @@ dentro de la ventana de SCRUM-532 (día 5). Depende de `20261019120000_organizat
 - El staff de Limitless (emails en `super_admin_users`) pasa a ser **founder de la organización de Limitless**,
   la única con `organizations.experience = 'limitless'`. Un índice único parcial
   (`organizations_una_sola_limitless`) impide marcar una segunda.
-- La migración asocia a esa organización los perfiles del staff que **no tienen organización**. No toca `role`,
-  `is_active`, `custom_role_id` ni `must_change_password`, y no mueve a nadie que ya esté en otra organización
-  (`supabase/ci/tests/98_staff_en_org_de_limitless.sql`, casos 6 y 7).
+- La migración asocia a esa organización los perfiles del staff que **no tienen organización**, y no mueve a
+  nadie que ya esté en otra organización (`supabase/ci/tests/98_staff_en_org_de_limitless.sql`, casos 6 y 7).
+  No cambia `role`, `is_active` ni `must_change_password` (en los dos sentidos: un staff a mitad del alta lo
+  conserva en `true`, el resto en `false`) y no asigna `custom_role_id` (98, caso 6; el caso 7 compara las
+  cuatro columnas antes y después de la segunda corrida). Un perfil sin organización no puede tener
+  `custom_role_id` (lo impide `validar_rol_de_la_org`), así que el 98 no siembra uno; que la asociación no
+  pise un `custom_role_id` existente queda **por código**: el `update` sólo escribe `organization_id`.
 - Una invitación de equipo a la organización de Limitless deja entrar al staff como founder; a cualquier otra
   organización sigue dando `cuenta_de_staff` (98, caso 8).
 - El panel interno lo sigue dando **sólo** la lista: un miembro (o founder) de la organización de Limitless que

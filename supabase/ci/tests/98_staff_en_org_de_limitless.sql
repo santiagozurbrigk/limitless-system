@@ -35,13 +35,16 @@ insert into public.super_admin_users (email) values
   ('s1@test'), ('s2@test'), ('s3@test'), ('s3b@test'), ('s4@test'),
   ('S5@test'), ('s6@test'), ('S7@test');
 
-insert into public.profiles (id, email, organization_id, role, full_name, is_active) values
-  ('98000000-0000-0000-0000-000000000001', 's1@test',   null, 'founder', 'S1', true),
-  ('98000000-0000-0000-0000-000000000002', 's2@test',   '98000000-0000-0000-0000-000000000a00', 'founder', 'S2', true),
-  ('98000000-0000-0000-0000-000000000004', ' S4@Test ', null, 'founder', 'S4', true),
-  ('98000000-0000-0000-0000-000000000005', 's5@test',   null, 'founder', 'S5', true),
-  ('98000000-0000-0000-0000-000000000006', 's6@test',   null, 'member',  'S6', false),
-  ('98000000-0000-0000-0000-0000000000f1', 'h@test',    null, 'founder', 'H',  true);
+-- s6 es un staff pendiente a mitad del alta (contraseña temporal sin cambiar):
+-- must_change_password = true. s1 y s4 lo tienen en false. custom_role_id no se
+-- siembra: un perfil sin org no puede tener rol (validar_rol_de_la_org).
+insert into public.profiles (id, email, organization_id, role, full_name, is_active, must_change_password) values
+  ('98000000-0000-0000-0000-000000000001', 's1@test',   null, 'founder', 'S1', true,  false),
+  ('98000000-0000-0000-0000-000000000002', 's2@test',   '98000000-0000-0000-0000-000000000a00', 'founder', 'S2', true, false),
+  ('98000000-0000-0000-0000-000000000004', ' S4@Test ', null, 'founder', 'S4', true,  false),
+  ('98000000-0000-0000-0000-000000000005', 's5@test',   null, 'founder', 'S5', true,  false),
+  ('98000000-0000-0000-0000-000000000006', 's6@test',   null, 'member',  'S6', false, true),
+  ('98000000-0000-0000-0000-0000000000f1', 'h@test',    null, 'founder', 'H',  true,  false);
 
 insert into public.team_roles (id, organization_id, name) values
   ('98000000-0000-0000-0000-0000000000e1', '98000000-0000-0000-0000-000000000100', 'Operaciones Limitless');
@@ -158,17 +161,32 @@ select ci.espera(
   (select count(*) from public.profiles
     where id = '98000000-0000-0000-0000-000000000006' and role = 'member' and not is_active),
   1, 'la asociación no cambia el rol ni el estado del perfil');
+select ci.espera(
+  (select count(*) from public.profiles
+    where id = '98000000-0000-0000-0000-000000000006' and must_change_password),
+  1, 'la asociación no le saca must_change_password al staff a mitad del alta');
+select ci.espera(
+  (select count(*) from public.profiles
+    where id in ('98000000-0000-0000-0000-000000000001', '98000000-0000-0000-0000-000000000004')
+      and must_change_password is false),
+  2, 'la asociación no le pone must_change_password a quien no lo tenía');
+select ci.espera(
+  (select count(*) from public.profiles
+    where id in ('98000000-0000-0000-0000-000000000001', '98000000-0000-0000-0000-000000000004',
+                 '98000000-0000-0000-0000-000000000006')
+      and custom_role_id is null),
+  3, 'la asociación no le asigna un rol de la org (custom_role_id) al staff');
 
 -- ─── 7. Idempotencia ─────────────────────────────────────────────────────────
 create temp table antes on commit drop as
-  select id, organization_id, role, is_active from public.profiles;
+  select id, organization_id, role, is_active, must_change_password, custom_role_id from public.profiles;
 select ci.espera(public.asociar_staff_a_la_org_de_limitless(), 0,
   'la segunda corrida de la asociación no asocia a nadie');
 select ci.espera(
   (select count(*) from (
-     (select * from antes except select id, organization_id, role, is_active from public.profiles)
+     (select * from antes except select id, organization_id, role, is_active, must_change_password, custom_role_id from public.profiles)
      union all
-     (select id, organization_id, role, is_active from public.profiles except select * from antes)) d),
+     (select id, organization_id, role, is_active, must_change_password, custom_role_id from public.profiles except select * from antes)) d),
   0, 'la segunda corrida deja los perfiles exactamente igual');
 select ci.espera((select count(*) from public.profiles), (select count(*) from antes),
   'la segunda corrida no crea ni borra perfiles');
