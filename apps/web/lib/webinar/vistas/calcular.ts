@@ -330,11 +330,14 @@ const porFechaEId = (a: FilaEvento, b: FilaEvento) =>
  * hora no lo dejan suelto). Los reembolsos se reparten por fecha y, a igual
  * fecha, por id, así que el resultado no depende del orden de entrada. Dos
  * compras con un reembolso dejan una cobrada, y un reembolso del VIP
- * (`vip_purchased`) no toca la oferta principal (`purchased`). Un reembolso
- * sin compra que le corresponda queda en `huerfanos`.
+ * (`vip_purchased`) cuyo producto se llama distinto que el de la principal
+ * no la toca (`purchased`). Un reembolso sin compra que le corresponda queda
+ * en `huerfanos`.
  *
  * Provisional hasta B4 (`[WEBINAR-REEMBOLSOS-POR-ORDEN]`): no asocia por id de
- * orden ni reparte reembolsos parciales.
+ * orden ni reparte reembolsos parciales, y la clave no mira la oferta: si el
+ * VIP y la principal tienen el mismo nombre de producto, un reembolso del VIP
+ * puede ir a la compra principal.
  */
 function asociarReembolsos(eventos: readonly FilaEvento[]): {
   compras: CompraConReembolso[];

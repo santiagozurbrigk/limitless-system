@@ -398,6 +398,25 @@ describe("Configuración del lanzamiento", () => {
   });
 });
 
+describe("las funciones no leen la hora del sistema", () => {
+  it("con otro reloj, las seis vistas son las mismas", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2031-06-15T03:00:00Z"));
+      expect({
+        inicio: calcularInicio(filas, AHORA, true, null),
+        lista: calcularListaDeLanzamientos(filas, AHORA, true),
+        detalle: calcularDetalleDelLanzamiento(filas, ACTIVO.id, AHORA, true),
+        leads: calcularLeads(filas, {}, AHORA, true),
+        ficha: calcularFichaDelLead(filas, conLlamada.lead_id, null, AHORA, true),
+        configuracion: calcularConfiguracionDelLanzamiento(filas, ACTIVO.id, true),
+      }).toEqual(VISTAS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("reglas de estado sin el escenario", () => {
   const vacio = { ...filas, eventos: [], registros: [], leads: [], visitas: [], estadosDeVenta: [], notas: [] };
 
@@ -440,6 +459,17 @@ describe("reglas de estado sin el escenario", () => {
     const v = calcularDetalleDelLanzamiento(conFalla, ACTIVO.id, AHORA, false)!;
     expect(v.sesiones[0].asistieron?.state).toBe("error");
     expect(paso(v.embudo, "asistieron").state).toBe("error");
+  });
+
+  it("una sesión ocurrida sin reporte de Zoom deja esa sesión y el total sin valor, con el motivo de la sesión", () => {
+    const sinReporte = {
+      ...filas,
+      sesiones: filas.sesiones.map((s, i) => (i === 0 ? { ...s, report_status: null } : s)),
+    };
+    const v = calcularDetalleDelLanzamiento(sinReporte, ACTIVO.id, AHORA, false)!;
+    const motivo = "Zoom todavía no entregó el reporte de la sesión 1 (puede tardar hasta 24 h).";
+    expect(v.sesiones[0].asistieron).toMatchObject({ state: "sin_fuente", value: null, reason: motivo });
+    expect(paso(v.embudo, "asistieron")).toMatchObject({ state: "sin_fuente", value: null, reason: motivo });
   });
 
   it("sin sesiones ocurridas, la asistencia es cero con Zoom conectado y sin fuente sin Zoom", () => {
@@ -571,6 +601,26 @@ describe("reglas de estado sin el escenario", () => {
       expect(v.ventas.reembolsos).toEqual(detalle.ventas.reembolsos);
       expect(v.ventas.ventas).toEqual(detalle.ventas.ventas);
       expect(comprasDeLaFicha(conVipHuerfano)).toEqual([[compra.data.product, "cobrada"]]);
+    });
+
+    it("un reembolso sin compra de un producto que aparece en las dos ofertas deja los ingresos en error: no se sabe de cuál es", () => {
+      const compradores = new Set(filas.eventos.filter((e) => e.kind === "purchased").map((e) => e.lead_id));
+      const sinCompra = filas.registros.find((r) => r.launch_id === ACTIVO.id && !compradores.has(r.lead_id))!;
+      const otroLead = filas.eventos.find((e) => e.kind === "purchased" && e.launch_id === ACTIVO.id && e.lead_id !== compra.lead_id)!;
+      const enLasDos = {
+        ...filas,
+        eventos: [
+          ...filas.eventos,
+          // Un VIP con el mismo nombre de producto que la oferta principal.
+          { ...otroLead, id: "vip-con-el-nombre-principal", kind: "vip_purchased" as const, source: "commas" as const, occurred_at: despues(1) },
+          { ...compra, id: "reembolso-ambiguo", lead_id: sinCompra.lead_id, kind: "refunded" as const, occurred_at: despues(2) },
+        ],
+      };
+      const v = calcularDetalleDelLanzamiento(enLasDos, ACTIVO.id, AHORA, false)!;
+      expect(v.ventas.ingresos.state).toBe("error");
+      expect(v.ventas.ingresos.reason).toBe(
+        "Hay 1 reembolso sin compra que le corresponda y por su producto no se sabe si es de la oferta principal: los ingresos no se pueden calcular."
+      );
     });
 
     it.each([

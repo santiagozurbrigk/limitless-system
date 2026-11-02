@@ -20,18 +20,22 @@ importa el escenario ni calcula números. Lo controla `las-pantallas-leen-de-su-
   carpeta del archivo. Con o sin extensión. Falla si alguno cae en `lib/webinar/vistas/` y no es `leer`,
   `contratos` o `dato`.
 - No ve un especificador armado en ejecución (`import(variable)`, un template con `${}`), un alias distinto
-  de `@/`, otras funciones que reciben una ruta (`require.resolve`, `vi.importActual`, `vi.mock`) ni la ruta
-  escrita con otras mayúsculas.
+  de `@/`, otras funciones que reciben una ruta (`require.resolve`, `vi.importActual`, `vi.mock`), la ruta
+  escrita con otras mayúsculas, un import en la misma línea después de un texto que termina en `from`
+  (`const s = "from"; import { x } from "…"`) ni uno que nombra algo entre comillas
+  (`import { "from" as y } from "…"`): en esos dos, la comilla del texto se toma como la del especificador.
 - Adentro del módulo, con la misma resolución, sólo `leer.ts` importa el escenario.
-- Un auto-test del detector prueba cada una de las formas que ve, y que deja pasar `leer`, `contratos`,
-  `dato` y una carpeta que se llama parecido.
+- Un auto-test del detector tiene un caso para cada forma que ve (cada palabra con cada comilla que acepta,
+  comentarios en cada posición, cada resolución, cada extensión que quita y cada extensión de archivo que
+  recorre), uno que verifica que recorre `app/`, `components/` y `lib/`, y casos que dejan pasar `leer`,
+  `contratos`, `dato` y una carpeta que se llama parecido. También verifica que 40 comentarios seguidos o un
+  `/*` sin cerrar en cada línea de 100 KB no lo traban (menos de 200 ms).
 - `leer`, `calcular`, `escenario-de-ejemplo`, `org-de-demo` y `sin-lectura-real` empiezan con
   `import "server-only"`, y el mismo test lo verifica: si un Client Component los importa, el build falla.
   `dato` y `contratos` (y `filas`, que tiene sólo tipos) se pueden importar desde el cliente.
 
-Lo que el test **no** ve: un especificador armado en ejecución (`import(variable)` o un template con `${}`),
-un alias distinto de `@/`, y que `contratos` o `dato` reexporten `calcular` o `filas` (adentro del módulo
-sólo se controla el escenario).
+Lo que el test **no** ve: lo de la lista de arriba, y que `contratos` o `dato` reexporten `calcular` o
+`filas` (adentro del módulo sólo se controla el escenario).
 
 ## Un número: `Dato<T>` (`dato.ts`)
 
@@ -153,15 +157,17 @@ Dos reglas que valen también para los datos reales (viven en `calcular.ts`):
 - Cada reembolso se asocia a una compra concreta: la más vieja todavía cobrada del mismo lead, lanzamiento y
   producto, sea anterior o posterior al reembolso (la misma hora o un reloj desfasado no lo dejan suelto).
   Los reembolsos se reparten por fecha y, a igual fecha, por id, así que el resultado no depende del orden en
-  que llegan las filas. Con dos compras y un reembolso, una queda cobrada. Un reembolso del VIP no toca las
-  ventas, los ingresos ni los reembolsos de la oferta principal. Un reembolso sin compra que le corresponda
-  sólo afecta los números de su producto, que se reconoce por el nombre en las compras del lanzamiento: si es
-  de la oferta principal, los ingresos quedan en `error` ("Hay 1 reembolso de la oferta principal que no
-  corresponde a ninguna compra"); si es del VIP, la oferta principal no cambia; si el producto no aparece en
-  ninguna compra (o aparece en las dos ofertas), los ingresos quedan en `error` porque no se sabe si es de la
-  oferta principal. **La regla es provisional hasta B4** (`[WEBINAR-REEMBOLSOS-POR-ORDEN]`, SCRUM-550): no
+  que llegan las filas. Con dos compras y un reembolso, una queda cobrada. Un reembolso del VIP cuyo producto
+  tiene otro nombre que el de la oferta principal no toca las ventas, los ingresos ni los reembolsos de la
+  principal; si los dos productos se llaman igual, el reembolso puede ir a la compra principal (la clave es el
+  nombre, no la oferta). Un reembolso sin compra que le corresponda sólo afecta los números de su producto,
+  que se reconoce por el nombre en las compras del lanzamiento: si es de la oferta principal, los ingresos
+  quedan en `error` ("Hay 1 reembolso de la oferta principal que no corresponde a ninguna compra"); si es del
+  VIP, la oferta principal no cambia; si el producto no aparece en ninguna compra (o aparece en las dos
+  ofertas), los ingresos quedan en `error` porque no se sabe si es de la oferta principal. **La regla es provisional hasta B4** (`[WEBINAR-REEMBOLSOS-POR-ORDEN]`, SCRUM-550): no
   asocia por el id de orden del proveedor, y dos reembolsos parciales de una compra, una compra sin producto
-  o un reembolso con otro `launch_id` que su compra quedan sin asociar.
+  o un reembolso con otro `launch_id` que su compra quedan sin asociar, y un VIP con el mismo nombre de
+  producto que la principal se confunde con ella.
 
 ## Qué cambia en B4
 
@@ -195,7 +201,8 @@ funciones de `leer.ts`. Las pantallas no se tocan.
 el escenario (determinismo, tamaño, contactos falsos, coherencia de cada recorrido y del embudo); las seis
 vistas (claves estables, los cinco estados en el número que corresponde, coherencia entre pantallas, Leads
 con filtros, búsqueda y paginación, reglas de estado sin el escenario, asistentes distintos entre sesiones,
-reembolsos asociados a su compra, motivos iguales en el número y en Configuración); las funciones de
+reembolsos asociados a su compra, motivos iguales en el número y en Configuración, que no leen la hora del
+sistema); las funciones de
 lectura (sólo la org de demo recibe el ejemplo, con las fechas en la zona de la org); quién importa el módulo
 (con el auto-test del detector) y qué archivos son sólo de servidor; el cartel.
 
