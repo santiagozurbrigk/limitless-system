@@ -12,7 +12,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 
 | Área | Bloques |
 |---|---|
-| [Plataforma](#plataforma) | 12 |
+| [Plataforma](#plataforma) | 13 |
 | [Clientes](#clientes) | 14 |
 | [Ventas](#ventas) | 11 |
 | [Marketing](#marketing) | 14 |
@@ -194,6 +194,27 @@ provocar a mano sin tocar la base es un `notFound()`.
 5. En Sentry, buscar el código de referencia que mostró la pantalla (tag `error_digest`). Resultado: un evento del navegador con el tag `boundary` y, si vino del servidor, el evento del servidor con el mismo código y el mensaje real (el stack del error); ninguno con cookies, query ni cuerpo del pedido.
 6. Si alguna vez aparece un evento con el tag `lectura_degradada`, la plataforma siguió andando con un valor por defecto (barra de holding sin negocio activo, sin checklist, con la zona por defecto): revisar qué lectura falló.
 7. 🔒⭐ Si hay un incidente de la base (timeouts de PostgREST), un miembro con rol limitado que abre un módulo que no tiene ve "No pudimos cargar la plataforma", nunca la pantalla del módulo. En Sentry, el evento `FallaDeLaBase` del servidor.
+
+---
+
+### 13. Staff por `/login` y org de Limitless 🔒⭐ (SCRUM-552)
+
+Lo que cubren los tests (Supabase simulado y la base del CI): `app/auth/__tests__/login-del-staff.test.ts`,
+`lib/supabase/__tests__/middleware-login-del-staff.test.ts`, `app/super-admin/__tests__/guard-de-staff-por-accion.test.ts`
+y `supabase/ci/tests/98_staff_en_org_de_limitless.sql`. Queda verlo en producción, después de la ventana de
+SCRUM-532 ([`staff-en-org-de-limitless.md`](staff-en-org-de-limitless.md), paso 8).
+
+**Prerrequisitos:** 523 y 552 aplicadas; la org de Limitless marcada (`experience = 'limitless'`); una cuenta
+del staff (en `super_admin_users`) y una cuenta de la org de Limitless que **no** está en la lista.
+
+1. ⭐ Entrar con la cuenta del staff por `https://otc-plaform.vercel.app/login`. Resultado: llega a
+   `/super-admin/organizations`; en la base, su perfil está en la org de Limitless como `founder`.
+2. Abrir `https://otc-plaform.vercel.app/superadmin/login`. Resultado: redirige a `/login`.
+3. 🔒⭐ Entrar con la cuenta de la org de Limitless que no está en la lista. Resultado: va al Panel de clientes
+   (`/dashboard`), no al panel interno; abrir `/super-admin/organizations` a mano la manda a `/login`.
+4. 🔒 Con la cuenta del staff, si la org de Limitless no completó el onboarding y no tiene `skip_onboarding`,
+   abrir `/super-admin/organizations`. Resultado esperado: el gate de onboarding redirige a `/onboarding`
+   (esperado, ver el paso 3b de la guía); anotarlo si pasa sin haberse decidido el paso 3b.
 
 ---
 
@@ -991,8 +1012,13 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
    - Volver a abrir el link. → "Esta invitación ya se usó…".
    - Con otra fila pendiente, abrir el link con la sesión de **otra** cuenta. → "Iniciaste sesión como…" y botón
      para cerrar sesión; la fila sigue `pending`.
-   - Con una invitación para el email de alguien del staff (`super_admin_users`), entrar con esa cuenta y tocar
-     "Unirme al equipo". → "Esta cuenta es del equipo de Limitless…"; la fila sigue `pending` y no se crea perfil.
+   - Con una invitación **a una org que no es la de Limitless** para el email de alguien del staff
+     (`super_admin_users`), entrar con esa cuenta y tocar "Unirme al equipo". → "Esta cuenta es del equipo de
+     Limitless y sólo se puede sumar a la organización de Limitless…"; la fila sigue `pending` y no se crea
+     perfil.
+   - Con una invitación **a la org de Limitless** para el email de alguien del staff que todavía no tiene perfil,
+     tocar "Unirme al equipo". → Entra a la org de Limitless como **founder** (SCRUM-552); la fila queda
+     `accepted`.
    - Al terminar, borrar las filas y la cuenta de prueba.
 
 ---

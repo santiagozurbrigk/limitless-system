@@ -41,7 +41,7 @@ de negocio (clientes, ventas, marketing, etc.).
 | `/privacidad` | `app/(landing)/privacidad/page.tsx` | Política de privacidad, pública (la piden las apps OAuth) |
 | `/demo` | `app/demo/page.tsx` | Tour estático (`components/demo`, `lib/demo/tour-steps.ts`), público |
 | `/design-system`, `/design-system/charts`, `/design-system/categorias` | `app/design-system/*` | Showcase de componentes y gráficos, público |
-| `/superadmin/login` | `app/superadmin/login/page.tsx` | Login del staff (`signInSuperAdminAction`) |
+| `/superadmin/login` | `app/superadmin/login/page.tsx` | Redirige a `/login` (SCRUM-552): el staff entra por el login de todos |
 | `/super-admin/*` | `app/(super-admin)/super-admin/*` | Panel interno (tabla abajo) |
 
 `app/superadmin/` (sin guion) no es un duplicado del panel: sólo tiene `login/` y `dashboard/`, que
@@ -178,7 +178,9 @@ configuración (`[DEMO-LAYOUT-500]`). `/demo` y `/design-system` sí funcionan.
   `moduloBloqueadoParaRuta`). El test de `module-for-path` recorre `app/` entero y falla si una queda afuera:
   es lo que le pasaba a `/founder` en su propio grupo `(founder)` hasta SCRUM-18. Super admin no tiene
   módulo: lo cuida su propio guard (`app/(super-admin)/super-admin/layout.tsx`).
-- **Super admin no tiene organización.** Todo lo que haga contra una org lo hace con service role.
+- **El staff es founder de la organización de Limitless** (SCRUM-552; la única con `experience = 'limitless'`).
+  Eso no le da el panel interno (lo da sólo `super_admin_users`), y las acciones del panel contra cualquier org
+  siguen yendo con service role.
 - **Integraciones: para agregar un proveedor** se tocan cuatro lugares y nada más (id, registro, color,
   health). La UI se arma sola.
 - `/`, `/prueba`, `/privacidad`, `/demo`, `/design-system`, `/invite`, `/onboarding-cliente/*` son públicas
