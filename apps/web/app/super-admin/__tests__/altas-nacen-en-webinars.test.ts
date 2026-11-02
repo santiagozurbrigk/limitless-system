@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * SCRUM-523 · las tres altas del super admin crean organizaciones que nacen en
- * Limitless Webinars: no mandan `experience` y queda el default de la base
- * (`webinar`). Ninguna crea un negocio dentro de una cuenta holding:
+ * Limitless Webinars: mandan `experience: "webinar"` explícito, porque el
+ * default de la base es `full` (AR pasada 1, MAYOR-2). Ninguna crea un negocio
+ * dentro de una cuenta holding:
  * `createOrganizationFromHoldingAction` lo vincula a `holdings` (el portfolio
  * del super admin), que no tiene experiencia propia, y `createHoldingOrgAction`
  * crea la cuenta holding misma.
@@ -46,7 +47,7 @@ beforeEach(() => {
 });
 
 describe("altas del super admin", () => {
-  it("⭐ cuenta de founder nueva: queda en webinar, sin mandar experience", async () => {
+  it("⭐ cuenta de founder nueva: queda en webinar, mandado explícito", async () => {
     const r = await createFounderAccountAction({
       organizationName: "Org Founder",
       founderName: "Ana",
@@ -54,7 +55,7 @@ describe("altas del super admin", () => {
     });
     expect(r.success).toBe(true);
     expect(sim.estado.insertsDeOrganizaciones).toHaveLength(1);
-    expect(sim.estado.insertsDeOrganizaciones[0]).not.toHaveProperty("experience");
+    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ experience: "webinar" });
     expect(experienciaGuardada(sim.estado, "Org Founder")).toBe("webinar");
   });
 
@@ -66,15 +67,15 @@ describe("altas del super admin", () => {
     });
     expect(r.success).toBe(true);
     expect(sim.estado.tablas.holding_organizations).toHaveLength(1);
-    expect(sim.estado.insertsDeOrganizaciones[0]).not.toHaveProperty("experience");
+    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ experience: "webinar" });
     expect(experienciaGuardada(sim.estado, "Org Portfolio")).toBe("webinar");
   });
 
   it("⭐ cuenta holding nueva: queda en webinar", async () => {
     const r = await createHoldingOrgAction({ name: "Holding Nuevo", founderEmail: "caro@test.com" });
     expect(r.success).toBe(true);
-    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ account_type: "holding" });
-    expect(sim.estado.insertsDeOrganizaciones[0]).not.toHaveProperty("experience");
+    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ account_type: "holding", experience: "webinar" });
+    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ experience: "webinar" });
     expect(experienciaGuardada(sim.estado, "Holding Nuevo")).toBe("webinar");
   });
 });

@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 32 | 18 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 33 | 18 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
@@ -347,6 +347,13 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Qué hay que hacer:** para `full`, construirla con `buildPlatformSidebarNav(enabledAddOns)` + `canSeeNavItem`, como ya hace `itemsDeLaPaleta` para `webinar`.
 - **Dónde:** `apps/web/components/navigation/command-palette.tsx`, `apps/web/routes/navigation.ts`.
 
+#### [REPORTES-PANEL-CAMBIO-NEGOCIO] El panel de reportes ejecutivos no se actualiza al entrar a un negocio del holding (nuevo)
+- **Tipo:** bug
+- **Severidad:** Baja
+- **Estado verificado:** medido en SCRUM-524 contra un Supabase local, igual con el build de `f97b4cdb` y con el de SCRUM-524 (`evidencia-sprint2/scrum-524/isla-holding-explicacion.txt`, `isla-holding-f97b4cdb.txt`, `isla-holding-de45b3f1.txt`). Un holding entra con «Entrar al negocio» a un negocio con un reporte ejecutivo: el ícono del panel no aparece hasta recargar la página. Dos causas: (1) `ReportsPanel` (`components/executive-reports/reports-panel.tsx`) pide los reportes una sola vez, en el `useEffect` de montaje, y la barra ya estaba montada en `/holding`, donde leyó los del holding; la navegación que sigue a `enterBusinessAction` no la vuelve a montar ni le avisa del cambio. (2) La RLS de `executive_reports` toma el negocio del claim `active_business_org_id` del token (`get_my_organization_id`), que sólo existe después de que `enterBusinessAction` escribe `holding_active_sessions` y renueva la sesión: una lectura con un token anterior al cambio no ve los reportes del negocio. Al recargar, el panel se monta con el token nuevo y aparece. Al volver al holding pasa lo mismo al revés (el panel sigue mostrando lo leído antes).
+- **Qué hay que hacer:** que el panel vuelva a pedir los reportes cuando cambia la organización activa (por ejemplo, con el id de la organización activa del `HoldingPlatformProvider` como dependencia del efecto o como `key` del componente), y probarlo con el cambio real de negocio (la cookie sola no alcanza: hace falta el claim del token).
+- **Dónde:** `apps/web/components/executive-reports/reports-panel.tsx`, `apps/web/app/(platform)/holding/actions.ts` (`enterBusinessAction`).
+
 #### [DIALOG-DOBLE-PADDING] Padding duplicado en los modales
 - **Tipo:** deuda técnica
 - **Estado verificado:** `packages/ui/src/primitives/dialog.tsx` con `p-6` en content y `px-6` en header/footer.
@@ -431,14 +438,14 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Qué hay que hacer:** abrir retrospectiva de sprint, versiones de SOP, leads de UTM y llamadas del cliente.
 - **Dónde:** workboard, SOPs, UTMs, ficha de cliente.
 
-#### [ORG-EXPERIENCIA-CAMBIO] Cómo pasa a `full` una organización nueva que lo necesite
+#### [ORG-EXPERIENCIA-CAMBIO] Cómo pasa a `full` o a `limitless` una organización que lo necesite
 - **Tipo:** decisión de negocio
 - **Severidad:** Media
-- **Estado verificado:** desde SCRUM-523 (`20261019120000_organizations_experience.sql`) toda organización nueva nace con `organizations.experience = 'webinar'`, salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin (`createFounderAccountAction`, `createOrganizationFromHoldingAction`, `createHoldingOrgAction` en `app/super-admin/actions.ts`) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para `authenticated`) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL).
+- **Estado verificado:** desde SCRUM-523 (`20261019120000_organizations_experience.sql`) toda organización nueva nace con `organizations.experience = 'webinar'` porque las altas lo mandan explícito (el default de la columna es `full`), salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin (`createFounderAccountAction`, `createOrganizationFromHoldingAction`, `createHoldingOrgAction` en `app/super-admin/actions.ts`) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para `authenticated`) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL). `limitless` (Limitless de gestión, decisión del PO del 28-oct-2026) no la manda ninguna alta: se asigna sólo así, con el SQL y el precheck de la guía de SCRUM-532.
 - **Riesgo:** desde SCRUM-524, que esconde el menú y redirige las rutas según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan `webinar`) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
 - **Impacto:** clientes nuevos de Limitless completo dados de alta por el super admin después del deploy de SCRUM-523.
-- **Qué hay que hacer:** que el PO decida quién y desde dónde pasa una organización a `full` (por ejemplo, un selector en el detalle de la organización del super admin, con `createAdminClient` y `requireSuperAdmin`, como `updateOrgAddOnsAction`), y si el cambio de un holding se propaga a sus negocios.
-- **Criterio de aceptación:** el super admin pasa una organización de `webinar` a `full` (y de vuelta) sin SQL; un usuario de la organización sigue sin poder cambiarla (`supabase/ci/tests/97_experiencia_de_la_organizacion.sql`).
+- **Qué hay que hacer:** que el PO decida quién y desde dónde pasa una organización a `full` o a `limitless` (por ejemplo, un selector en el detalle de la organización del super admin, con `createAdminClient` y `requireSuperAdmin`, como `updateOrgAddOnsAction`), y si el cambio de un holding se propaga a sus negocios.
+- **Criterio de aceptación:** el super admin pasa una organización entre `webinar`, `limitless` y `full` sin SQL; un usuario de la organización sigue sin poder cambiarla (`supabase/ci/tests/97_experiencia_de_la_organizacion.sql`).
 - **Dónde:** `app/super-admin/actions.ts`, `organizations.experience`, `lib/organization/experience.ts`.
 
 ### Plataforma · P3

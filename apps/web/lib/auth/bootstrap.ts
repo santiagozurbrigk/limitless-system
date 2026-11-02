@@ -59,10 +59,10 @@ export async function ensureUserBootstrap(user: User) {
     return profile;
   }
 
-  // Sin `experience`: nace en Limitless Webinars por el default de la base (SCRUM-523).
+  // Nace en Limitless Webinars: se manda explícito, el default de la base es full (SCRUM-523).
   const { data: org, error: orgError } = await admin
     .from("organizations")
-    .insert({ name: defaultOrgName(email) })
+    .insert({ name: defaultOrgName(email), experience: "webinar" })
     .select("id")
     .single();
 
@@ -186,6 +186,15 @@ export async function getCurrentProfileAccountType(): Promise<
   return getProfileAccountType();
 }
 
+/**
+ * El mensaje con el que `requireOrganizationId` lanza cuando la cuenta no tiene
+ * organización (un super admin, que tiene `organization_id = null`). Es un texto
+ * de este código, no de la base: `getOrganizationExperience` lo compara para
+ * separar "no hay organización activa" de "falló resolverla".
+ */
+export const SIN_ORGANIZACION_VINCULADA =
+  "No se pudo vincular tu cuenta a una organización. Revisa Supabase (tablas organizations y profiles).";
+
 async function resolveOrganizationId(): Promise<string> {
   const supabase = await createClient();
   const {
@@ -210,9 +219,7 @@ async function resolveOrganizationId(): Promise<string> {
   if (!organizationId) {
     const boot = await ensureUserBootstrap(user);
     if (!boot.organization_id) {
-      throw new Error(
-        "No se pudo vincular tu cuenta a una organización. Revisa Supabase (tablas organizations y profiles)."
-      );
+      throw new Error(SIN_ORGANIZACION_VINCULADA);
     }
     return boot.organization_id;
   }

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { createElement, type ReactNode } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { pantallas } from "@/lib/navigation/__tests__/pantallas-de-app";
+import { ErrorEsperable } from "@/lib/server/error-esperable";
 
 /**
  * SCRUM-524 · ⭐ El bloqueo por experiencia, ejecutando los layouts reales.
@@ -28,6 +29,7 @@ const sim = vi.hoisted(() => ({
   organizacionActiva: "org-full" as string | null,
   experiencias: {} as Record<string, unknown>,
   falla: false,
+  resolverLanza: null as unknown,
   reportes: 0,
   permisos: null as unknown as { isFounder: boolean; modules: Record<string, string> },
   lecturasDePermisos: 0,
@@ -50,9 +52,22 @@ vi.mock("@/lib/auth/get-current-permissions", () => ({
   },
 }));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
-vi.mock("@/lib/auth/bootstrap", () => ({
-  tryRequireOrganizationId: async () => sim.organizacionActiva,
-}));
+// Como `requireOrganizationId` desde SCRUM-523: una cuenta sin organización
+// (super admin) lanza con `SIN_ORGANIZACION_VINCULADA`, que la experiencia
+// toma como `full` sin reportar. La constante es la real.
+vi.mock("@/lib/auth/bootstrap", async () => {
+  const { SIN_ORGANIZACION_VINCULADA } = await vi.importActual<typeof import("@/lib/auth/bootstrap")>(
+    "@/lib/auth/bootstrap"
+  );
+  return {
+    SIN_ORGANIZACION_VINCULADA,
+    requireOrganizationId: async () => {
+      if (sim.resolverLanza) throw sim.resolverLanza;
+      if (sim.organizacionActiva === null) throw new Error(SIN_ORGANIZACION_VINCULADA);
+      return sim.organizacionActiva;
+    },
+  };
+});
 vi.mock("@/lib/observability/reportar-falla", () => ({
   reportarFalla: () => {
     sim.reportes += 1;
@@ -117,6 +132,7 @@ beforeEach(() => {
   sim.experiencias = { "org-full": "full", "org-webinar": "webinar", "holding-1": "full" };
   sim.organizacionActiva = "org-full";
   sim.falla = false;
+  sim.resolverLanza = null;
   sim.reportes = 0;
   sim.permisos = { isFounder: true, modules: {} };
   sim.lecturasDePermisos = 0;
@@ -262,5 +278,20 @@ describe("⭐ una falla de lectura no bloquea a nadie", () => {
     sim.falla = true;
     expect(await entrar("finance")).toBe("pasa");
     expect(sim.reportes).toBe(1);
+  });
+
+  it("si falla resolver la organización (no la sesión), es full: nadie queda bloqueado y queda registrado", async () => {
+    sim.organizacionActiva = "org-webinar";
+    sim.resolverLanza = new Error("fetch failed");
+    expect(await entrar("finance")).toBe("pasa");
+    expect(sim.reportes).toBe(1);
+  });
+
+  it("⭐ una sesión no válida o una cuenta desactivada no se degradan a full: el layout relanza", async () => {
+    for (const mensaje of ["Sesión no válida", "Tu cuenta está desactivada."]) {
+      sim.resolverLanza = new ErrorEsperable(mensaje);
+      await expect(entrar("finance")).rejects.toBe(sim.resolverLanza);
+    }
+    expect(sim.reportes).toBe(0);
   });
 });

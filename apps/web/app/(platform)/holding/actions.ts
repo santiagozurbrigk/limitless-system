@@ -145,8 +145,8 @@ export async function addBusinessToMyHoldingAction(
 
     // El negocio hereda la experiencia del holding (SCRUM-523): un founder con
     // Limitless completo que suma un negocio no pierde el menú completo. Si no
-    // se puede leer, no se crea nada (el default de la base lo dejaría en
-    // webinar sin que nadie lo decida).
+    // se puede leer, no se crea nada: el default de la base (full) decidiría
+    // por el holding.
     const experience = await leerExperienciaDeLaOrganizacion(admin, holdingOrgId);
 
     const { data: newOrg, error: orgError } = await admin

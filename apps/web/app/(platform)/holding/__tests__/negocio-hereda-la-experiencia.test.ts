@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * completo que suma un negocio no pierde el menú completo.
  *
  * Si la experiencia del holding no se puede leer, no se crea ningún negocio:
- * el default de la base lo dejaría en webinar sin que nadie lo decida.
+ * el default de la base (`full`) decidiría por el holding.
  */
 
 const sim = vi.hoisted(() => ({
@@ -48,7 +48,7 @@ import { estadoInicial, experienciaGuardada } from "@/lib/organization/__tests__
 import { addBusinessToMyHoldingAction } from "../actions";
 import { completeHoldingOnboardingAction } from "../../onboarding/holding/actions";
 
-function holdingCon(experience: "full" | "webinar") {
+function holdingCon(experience: "full" | "webinar" | "limitless") {
   sim.estado = estadoInicial({
     organizations: [
       {
@@ -93,6 +93,14 @@ describe("Agregar negocio desde el holding", () => {
     expect(experienciaGuardada(sim.estado, "Negocio W")).toBe("webinar");
   });
 
+  it("⭐ holding en Limitless de gestión: el negocio nuevo queda en limitless", async () => {
+    holdingCon("limitless");
+    const r = await addBusinessToMyHoldingAction({ businessName: "Negocio L", revenueSharePct: 10 });
+    expect(r.success).toBe(true);
+    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ experience: "limitless" });
+    expect(experienciaGuardada(sim.estado, "Negocio L")).toBe("limitless");
+  });
+
   it("⭐ si no se puede leer la experiencia del holding, no se crea el negocio", async () => {
     sim.estado.fallaLecturaDeExperiencia = true;
     const r = await addBusinessToMyHoldingAction({ businessName: "Negocio X", revenueSharePct: 10 });
@@ -125,6 +133,14 @@ describe("Onboarding del holding", () => {
     expect(experienciaGuardada(sim.estado, "Uno")).toBe("webinar");
     expect(experienciaGuardada(sim.estado, "Dos")).toBe("webinar");
     for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila).toMatchObject({ experience: "webinar" });
+  });
+
+  it("⭐ holding en Limitless de gestión: los negocios quedan en limitless", async () => {
+    holdingCon("limitless");
+    await completeHoldingOnboardingAction(NEGOCIOS);
+    expect(experienciaGuardada(sim.estado, "Uno")).toBe("limitless");
+    expect(experienciaGuardada(sim.estado, "Dos")).toBe("limitless");
+    for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila).toMatchObject({ experience: "limitless" });
   });
 
   it("⭐ si no se puede leer la experiencia del holding, no se crea ningún negocio", async () => {

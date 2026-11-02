@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * SCRUM-523 · la organización que crea el bootstrap (un usuario que entra sin
- * perfil) nace en Limitless Webinars: no manda `experience` y queda el default
- * de la base (`webinar`).
+ * perfil) nace en Limitless Webinars: manda `experience: "webinar"` explícito,
+ * porque el default de la base es `full` (AR pasada 1, MAYOR-2).
  */
 
 const sim = vi.hoisted(() => ({
@@ -26,10 +26,10 @@ beforeEach(() => {
 });
 
 describe("ensureUserBootstrap", () => {
-  it("⭐ la organización nueva queda en webinar, sin mandar experience", async () => {
+  it("⭐ la organización nueva queda en webinar, mandado explícito", async () => {
     const perfil = await ensureUserBootstrap({ id: "u-1", email: "dani@test.com", user_metadata: {} } as User);
     expect(perfil).toMatchObject({ id: "u-1", role: "founder" });
-    expect(sim.estado.insertsDeOrganizaciones).toEqual([{ name: "Dani" }]);
+    expect(sim.estado.insertsDeOrganizaciones).toEqual([{ name: "Dani", experience: "webinar" }]);
     expect(experienciaGuardada(sim.estado, "Dani")).toBe("webinar");
   });
 

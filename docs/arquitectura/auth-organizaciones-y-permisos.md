@@ -22,7 +22,7 @@ permisos por módulo sólo cortan el render de pantallas**.
 | Permisos por módulo | `apps/web/lib/auth/get-current-permissions.ts`, `apps/web/constants/permission-modules.ts`, `apps/web/lib/team/mapper.ts` | Rol → mapa de 13 módulos con nivel `none/view/full` |
 | Gate de pantallas | `apps/web/app/(platform)/layout.tsx` + `apps/web/lib/navigation/module-for-path.ts` | Si el módulo de la ruta está en `none`, renderiza `SinAcceso` |
 | Add-ons | `apps/web/lib/auth/add-on-ids.ts`, `apps/web/lib/auth/add-ons.ts` | `organizations.enabled_add_ons`; `requireAddOn()` en server actions |
-| Experiencia | `apps/web/lib/organization/experience.ts` | `organizations.experience` (`webinar` o `full`, SCRUM-523); `getOrganizationExperience()` la lee para la org activa, una vez por request. Ver "Experiencia de la organización" |
+| Experiencia | `apps/web/lib/organization/experience.ts` | `organizations.experience` (`webinar`, `limitless` o `full`, SCRUM-523); `getOrganizationExperience()` la lee para la org activa, una vez por request. Ver "Experiencia de la organización" |
 | Super admin | `apps/web/lib/auth/require-super-admin.ts` | Allowlist por email en `super_admin_users`. Alta y baja: [`operacion/alta-super-admin.md`](../operacion/alta-super-admin.md) (primero la cuenta, después la lista) |
 | Rate limit | `apps/web/lib/rate-limit.ts` | RPC `consume_rate_limit` (Postgres), fallback en memoria |
 | Clientes Supabase | `apps/web/lib/supabase/{server,client,admin,env}.ts` | `createClient()` respeta RLS; `createAdminClient()` = service role |
@@ -31,7 +31,7 @@ permisos por módulo sólo cortan el render de pantallas**.
 
 | Tabla | Columnas clave | Notas |
 |---|---|---|
-| `organizations` | `id`, `name`, `status`, `account_type` (`founder`/`holding`), `enabled_add_ons text[]`, `experience` (`webinar`/`full`), `skip_onboarding`, `holding_billing_model`, `currency`, `timezone` | Raíz multi-tenant. Ni `enabled_add_ons` (20260922110000) ni `experience` (20261019120000) las puede editar un usuario |
+| `organizations` | `id`, `name`, `status`, `account_type` (`founder`/`holding`), `enabled_add_ons text[]`, `experience` (`webinar`/`limitless`/`full`), `skip_onboarding`, `holding_billing_model`, `currency`, `timezone` | Raíz multi-tenant. Ni `enabled_add_ons` (20260922110000) ni `experience` (20261019120000) las puede editar un usuario |
 | `profiles` | `id` (= `auth.users.id`, FK con `on delete cascade`), `organization_id`, `role`, `custom_role_id`, `is_holding_admin`, `must_change_password`, `temp_password_expires_at`, `is_active`, `last_login_at` | Un usuario → una org. El super admin tiene `organization_id = null` |
 | `team_roles` | `organization_id`, `name`, `permissions jsonb` (`{ "<moduleId>": "none"|"view"|"full" }`), `is_default` | Roles custom por org. Claves consolidadas a 13 módulos en `20260906102000_permisos_por_modulo.sql` |
 | `team_invitations` | `token`, `email`, `custom_role_id`, `status`, `expires_at`, `invited_by` | Aceptar NO crea cuentas: vincula una cuenta existente con ese email (perfil `role = 'member'`) vía `aceptar_invitacion_de_equipo` (SCRUM-495). Ningún código inserta filas: invitar crea la cuenta directo (ver Alta de cuentas) |
@@ -117,39 +117,96 @@ page.tsx / Server Actions → requireOrganizationId() → createClient() (RLS) o
 
 `ensureUserBootstrap` también **repara** usuarios sin perfil: `requireOrganizationId()` lo llama si el
 perfil no tiene org. Para un email de `super_admin_users` crea el perfil sin organización. La org que
-crea nace en `webinar`.
+crea nace en `webinar` (lo manda explícito).
 
 ### Experiencia de la organización
 
 `organizations.experience` dice qué producto ve la organización (SCRUM-523, Limitless Webinars Fase 0):
 
-- `full`: Limitless completo, todos los módulos. Las organizaciones que existían antes de Webinars
-  quedaron acá (la migración `20261019120000_organizations_experience.sql` agrega la columna con
-  default `full` y después lo cambia).
-- `webinar`: Limitless Webinars. Es el default de la columna: toda organización nueva nace así. Lo
-  decidió el PO (19-oct-2026); no lo elige el cliente.
+- `full`: Limitless completo, todos los módulos. Es el default de la columna
+  (`20261019120000_organizations_experience.sql`): las organizaciones que existían antes de
+  Webinars quedaron acá, y un alta que no diga nada también nace así, el lado seguro (AR pasada 1).
+- `webinar`: Limitless Webinars. Toda organización nueva nace así porque cada alta de la app lo
+  manda explícito. Lo decidió el PO (19-oct-2026); no lo elige el cliente.
+- `limitless`: Limitless de gestión (Clientes, Tablero de trabajo, Ventas y Administración; decisión
+  del PO, 28-oct-2026). Ninguna alta la manda y la migración no le asigna este valor a nadie: qué
+  organización la recibe se decide fuera del código y se asigna por SQL con el service role, con su
+  precheck, en la guía de SCRUM-532. El código no tiene ids de organizaciones.
 
-La excepción: un negocio que se crea dentro de un holding (Agregar negocio y el onboarding del
-holding, que lo vinculan en `holding_businesses` en el mismo flujo) hereda la experiencia de la
-organización del holding, para que un founder con Limitless completo no pierda el menú completo. Esas
-dos altas leen la del holding con `leerExperienciaDeLaOrganizacion` (service role) y la mandan
-explícita en el insert; si no la pueden leer, no crean nada. Las otras cuatro altas no la mandan y
-queda el default. `lib/organization/__tests__/altas-conocidas.test.ts` falla si aparece un insert en
-`organizations` que no está en esa lista, y `supabase/ci/tests/97_experiencia_de_la_organizacion.sql`
-falla si el default deja de ser `webinar`.
+Las seis altas de la tabla de arriba mandan `experience` en el insert. Las cuatro que no crean un
+negocio dentro de un holding mandan `webinar`. Las dos que sí (Agregar negocio y el onboarding del
+holding, que lo vinculan en `holding_businesses` en el mismo flujo) mandan la experiencia de la
+organización del holding, para que un founder con Limitless completo no pierda el menú completo: la
+leen con `leerExperienciaDeLaOrganizacion` (service role) y, si no la pueden leer, no crean nada.
+
+Qué lo controla:
+
+- `lib/organization/__tests__/altas-conocidas.test.ts` lee con el AST de TypeScript (no con
+  expresiones regulares: los comentarios y el contenido de los strings no cuentan) los `.ts`,
+  `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` y `.cjs` de `apps/` y `packages/` (salvo
+  `node_modules`, `.next`, `dist`, `.turbo`, `__tests__` y los `*.test.*`). Una llamada a from es
+  `x.from(t)`, `x?.from(t)`, `x["from"](t)`, con o sin genéricos, y `x.from.call(y, t)` o
+  `x.from.apply(y, [t])`, salvo en `Array`, `Buffer` y los arreglos tipados. La tabla se resuelve si
+  es un literal, un template sin `${}`, una suma de esos, un arreglo literal de esos (vale cada
+  elemento), o una constante `const X = "..."` del mismo archivo o importada por nombre
+  (`import { X }`, ruta relativa o `@/`) de un archivo recorrido. Falla si:
+  1. un from con `organizations` no sigue directo con `select`, `update`, `delete`, `insert` o
+     `upsert` (por ejemplo, guardado en una variable);
+  2. los insert o upsert sobre `organizations` no son exactamente las seis altas, o alguno no manda
+     `experience` con un valor que no sea `undefined`, `null` ni `void` (en un objeto literal o un
+     arreglo de objetos literales);
+  3. un from con tabla dinámica sigue con `insert`/`upsert`, o no sigue con ningún método en un
+     archivo que hace algún `insert`/`upsert`, o está en un archivo que escribe y tiene un string con
+     `organizations`, y no está en la lista de destinos revisados (hoy dos: el checklist de
+     onboarding y la baja del super admin);
+  4. `from` se usa como referencia: `x.from.bind(...)`, o guardado en una variable
+     (`const f = x.from`, `const { from: f } = x`) que se llama en el mismo archivo;
+  5. un string contiene `rest/v1/organizations`;
+  6. en un archivo que hace algún `insert`/`upsert`, una llamada que no es a from recibe un
+     argumento que se resuelve a `organizations` (un helper `insertar(admin, "organizations",
+     fila)`, `admin[clave]("organizations")` o `Reflect.apply(admin.from, admin,
+     ["organizations"])`). En un archivo que sólo lee no cuenta: un conteo o un log con el nombre de
+     la tabla es legítimo (AR pasada 3).
+
+  Lo que no ve: un acceso con clave calculada (`admin[clave](t)`, `Reflect.apply`) cuando la tabla
+  tampoco se resuelve o el archivo no escribe; la tabla `organizations` pasada desde un archivo que
+  no escribe a un helper de otro archivo que hace el insert con la tabla que recibe (si el helper
+  encadena el insert al from, lo agarra la regla 3 en el helper); una variable local llamada
+  `Array`, `Buffer` o como un arreglo tipado (se toma como el global); una constante que llega por
+  `import * as`, un re-export o un paquete (queda como tabla dinámica); una tabla armada
+  en tiempo de ejecución (`["organiz", "ations"].join("")`) o guardada en una propiedad de un objeto
+  y usada en un archivo que no escribe; un from con tabla dinámica en un archivo de sólo lectura
+  que devuelve el builder para que otro archivo haga el insert; `from` guardado en una variable que
+  se pasa a otra función sin llamarlo; una URL de PostgREST armada por partes; el código fuera de
+  `apps/` y `packages/` o con otra extensión. Un alta que se le escape nace `full`.
+- `supabase/ci/tests/97_experiencia_de_la_organizacion.sql` falla si el default deja de ser `full`,
+  y si el cuerpo de alguna función de cualquier schema (también las de triggers), sin sus
+  comentarios (`/* ... */` y `--` hasta el fin de la línea), tiene un `insert into`, `merge into` o
+  `copy` sobre `organizations`, o si una regla inserta en ella. Quita los comentarios con texto, no
+  con un parser de SQL, así que no ve: SQL armado en tiempo de ejecución (`format()` y `execute`, o
+  la tabla en una variable); un `--` dentro de un string en la misma línea que el insert (se corta
+  como comentario); un `/*` dentro de un string antes del insert y un `*/` en otro string después
+  (borra el insert); un comentario anidado (`/* a /* b */ c */`, corta en el primer `*/`).
 
 Nadie la cambia desde la app: `authenticated` la puede leer (grant por columna) pero no tiene UPDATE
-(la migración se aborta si algún grant se lo diera). Sólo el service role la escribe; hoy no hay
-pantalla para pasar una organización de `webinar` a `full` (`[ORG-EXPERIENCIA-CAMBIO]` en
+(la migración se aborta si algún grant se lo diera). `anon` tiene SELECT de toda la tabla desde
+antes, pero la RLS no le devuelve ninguna fila. Sólo el service role la escribe; hoy no hay
+pantalla para pasar una organización de una experiencia a otra (`[ORG-EXPERIENCIA-CAMBIO]` en
 `PENDIENTES.md`).
 
 `getOrganizationExperience()` (`lib/organization/experience.ts`) devuelve la experiencia de la org
 activa (la del negocio elegido en una cuenta holding) con la sesión de quien mira, memoizada con
-`cache()` por request. Es una lectura degradable (`lecturaDegradable`): si falla, devuelve `full`
-(nadie pierde módulos por una falla de lectura) y la falla va a Sentry con el tag
-`lectura_degradada = organizacion:experiencia`. Sin organización activa o sin Supabase configurado
-devuelve `full` sin consultar. No se mezcla con las banderas de `lib/release/escondido.ts`, que
-esconden algo a todas las organizaciones.
+`cache()` por request. Resuelve la org con `requireOrganizationId()`:
+
+- sin Supabase configurado, o una cuenta sin organización (un super admin: `requireOrganizationId`
+  lanza con `SIN_ORGANIZACION_VINCULADA`), devuelve `full` sin consultar ni reportar;
+- una sesión no válida o una cuenta desactivada (`ErrorEsperable`) se relanzan, como en el layout;
+- cualquier otra falla, al resolver la org o al leer la columna, pasa por `lecturaDegradable`:
+  devuelve `full` (nadie pierde módulos por una falla de lectura) y va a Sentry con el tag
+  `lectura_degradada = organizacion:experiencia`, sin el valor leído.
+
+No se mezcla con las banderas de `lib/release/escondido.ts`, que esconden algo a todas las
+organizaciones.
 
 Qué cambia con cada valor (SCRUM-524): con `full`, nada (mismo menú, mismas rutas, mismo destino
 después del login). Con `webinar`, la barra y la paleta muestran sólo las entradas listas del menú

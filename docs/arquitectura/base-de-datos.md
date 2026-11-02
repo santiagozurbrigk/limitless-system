@@ -120,7 +120,7 @@ Una línea por tabla de producción. Filas = conteo aproximado de prod el 2026-0
 ### Plataforma, cuentas y permisos
 | Tabla | Propósito |
 |---|---|
-| `organizations` | Raíz multi-tenant: nombre, `account_type` (founder/holding), `status`, `enabled_add_ons`, `experience` (`webinar`/`full`, default `webinar`; las previas a Webinars en `full`; ver `docs/arquitectura/auth-organizaciones-y-permisos.md` § Experiencia de la organización), BYOK de Claude cifrado, preferencias |
+| `organizations` | Raíz multi-tenant: nombre, `account_type` (founder/holding), `status`, `enabled_add_ons`, `experience` (`webinar`/`limitless`/`full`, default `full`; `limitless` se asigna por SQL; las altas de la app mandan `webinar` o la del holding; ver `docs/arquitectura/auth-organizaciones-y-permisos.md` § Experiencia de la organización), BYOK de Claude cifrado, preferencias |
 | `profiles` | Usuario (= `auth.users.id`) → `organization_id`, `role`, contraseña temporal, `is_holding_admin` |
 | `team_roles` | Roles custom con `permissions` por módulo |
 | `team_invitations` | Invitaciones por token (`/invite`); aceptarlas no crea cuentas (`aceptar_invitacion_de_equipo`) |
