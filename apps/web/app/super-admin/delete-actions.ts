@@ -19,7 +19,7 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import { requireStaff } from "@/lib/auth/require-staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { paths } from "@/routes";
@@ -94,7 +94,7 @@ export async function previewOrganizationDeletionAction(
   organizationId: string
 ): Promise<MutationResult<VistaPreviaDeBaja>> {
   return runMutation(async () => {
-    const ejecutor = await requireSuperAdmin();
+    const ejecutor = await requireStaff();
     const admin = createAdminClient();
 
     const { data: org } = await admin
@@ -149,7 +149,7 @@ export async function deleteOrganizationAction(input: {
   confirmacion: string;
 }): Promise<MutationResult<ResultadoDeBaja>> {
   return runMutation(async () => {
-    const ejecutor = await requireSuperAdmin();
+    const ejecutor = await requireStaff();
     const admin = createAdminClient();
 
     const { data: org } = await admin
@@ -212,7 +212,7 @@ export async function previewUserDeletionAction(
   profileId: string
 ): Promise<MutationResult<VistaPreviaDeBaja>> {
   return runMutation(async () => {
-    const ejecutor = await requireSuperAdmin();
+    const ejecutor = await requireStaff();
     const admin = createAdminClient();
 
     const { data: perfil } = await admin
@@ -270,7 +270,7 @@ export async function deleteUserAction(input: {
   confirmacion: string;
 }): Promise<MutationResult<ResultadoDeBaja>> {
   return runMutation(async () => {
-    const ejecutor = await requireSuperAdmin();
+    const ejecutor = await requireStaff();
     const admin = createAdminClient();
 
     const { data: perfil } = await admin

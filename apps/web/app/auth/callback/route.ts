@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { ensureUserBootstrap } from "@/lib/auth/bootstrap";
-import { isSuperAdminEmail } from "@/lib/auth/require-super-admin";
+import { DESTINO_DEL_STAFF, isStaffEmail } from "@/lib/auth/require-staff";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import { destinoSeguro } from "@/lib/auth/redirect-seguro";
 import { LINK_RECUPERACION_VENCIDO_QUERY } from "@/lib/auth/recuperar-contrasena";
+import { destinoDeInvitacion } from "@/lib/team/invitacion";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -42,10 +43,14 @@ export async function GET(request: Request) {
         await ensureUserBootstrap(user);
       }
 
+      // Mismo orden que `signInAction` (`postAuthRedirect`): la invitación de
+      // equipo gana sobre el destino del staff (SCRUM-552).
+      const invitacion = destinoDeInvitacion(searchParams.get("next"));
       const destination =
-        user?.email && (await isSuperAdminEmail(user.email))
-          ? paths.superAdmin.organizations
-          : next;
+        invitacion ??
+        (user?.email && (await isStaffEmail(user.email))
+          ? DESTINO_DEL_STAFF
+          : next);
 
       return NextResponse.redirect(`${origin}${destination}`);
     }
