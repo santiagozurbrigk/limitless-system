@@ -155,6 +155,8 @@ const PAGE_META: Record<string, PageMeta> = {
     title: "Equipo",
     subtitle: "Miembros y roles de la organización",
   },
+  // Limitless Webinars (SCRUM-545). La ficha (`/leads/[id]`) va por prefijo, abajo.
+  "/leads": { title: "Leads" },
   "/business-context/documents": {
     title: "Base de conocimiento",
     subtitle: "Documentos, calls y frameworks para la IA",
@@ -366,6 +368,9 @@ function resolveMeta(pathname: string): PageMeta {
   }
   if (pathname.startsWith("/lanzamientos/") && pathname !== "/lanzamientos") {
     return { title: "Lanzamiento", subtitle: "Plan, ejecución e impacto" };
+  }
+  if (pathname.startsWith("/leads/") && pathname !== "/leads") {
+    return { title: "Ficha del lead" };
   }
   if (pathname.startsWith("/marketing/content/") && pathname !== "/marketing/content") {
     return { title: "Publicación", subtitle: "Detalle de contenido — Marketing" };

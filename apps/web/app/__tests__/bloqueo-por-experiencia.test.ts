@@ -160,6 +160,7 @@ describe("los segmentos de la plataforma", () => {
       "integrations",
       "intelligence",
       "lanzamientos",
+      "leads",
       "marketing",
       "onboarding",
       "operations",
@@ -179,22 +180,31 @@ describe("⭐ organización webinar", () => {
     sim.organizacionActiva = "org-webinar";
   });
 
-  it("todo segmento fuera de Equipo y de los libres redirige a Equipo, sin SinAcceso", async () => {
+  it("todo segmento fuera de Leads, Equipo y de los libres redirige a Leads (con Ventas), sin SinAcceso", async () => {
     const resultado: Record<string, string> = {};
     for (const segmento of SEGMENTOS) resultado[segmento] = await entrar(segmento);
     const esperado = Object.fromEntries(
       SEGMENTOS.map((s) => [
         s,
-        ["team", "settings", "holding", "onboarding"].includes(s) ? "pasa" : "redirect /team",
+        ["leads", "team", "settings", "holding", "onboarding"].includes(s) ? "pasa" : "redirect /leads",
       ])
     );
     expect(resultado).toEqual(esperado);
   });
 
-  it("tipear /finance, /marketing o /lanzamientos lleva a Equipo (no al Panel)", async () => {
+  it("tipear /finance, /marketing o /lanzamientos lleva a Leads (no al Panel)", async () => {
+    expect(await entrar("finance")).toBe("redirect /leads");
+    expect(await entrar("marketing")).toBe("redirect /leads");
+    expect(await entrar("lanzamientos")).toBe("redirect /leads");
+  });
+
+  it("⭐ SCRUM-545: /leads abre; un miembro con Equipo y sin Ventas sigue yendo a Equipo", async () => {
+    expect(await entrar("leads")).toBe("pasa");
+    sim.permisos = { isFounder: false, modules: { team: "view" } };
+    expect(await entrar("leads")).toBe("pasa");
     expect(await entrar("finance")).toBe("redirect /team");
-    expect(await entrar("marketing")).toBe("redirect /team");
-    expect(await entrar("lanzamientos")).toBe("redirect /team");
+    sim.permisos = { isFounder: false, modules: { sales: "view", team: "view" } };
+    expect(await entrar("finance")).toBe("redirect /leads");
   });
 
   it("una ruta anidada tipeada (/finance/expenses, /lanzamientos/[id]) redirige por un layout de su cadena", async () => {
@@ -218,12 +228,12 @@ describe("⭐ organización webinar", () => {
           break;
         }
       }
-      expect(destino, ruta).toBe("redirect /team");
+      expect(destino, ruta).toBe("redirect /leads");
     }
   });
 
-  it("/dashboard, el destino por defecto de las pantallas del cliente, lleva a Equipo", async () => {
-    expect(await entrar("dashboard")).toBe("redirect /team");
+  it("/dashboard, el destino por defecto de las pantallas del cliente, lleva a Leads", async () => {
+    expect(await entrar("dashboard")).toBe("redirect /leads");
   });
 
   it("⭐ un miembro sin Equipo va a Ajustes (no a una pantalla con «No tenés acceso»)", async () => {
@@ -236,7 +246,7 @@ describe("⭐ organización webinar", () => {
   it("los permisos se leen sólo para elegir el destino de una redirección", async () => {
     expect(await entrar("team")).toBe("pasa");
     expect(sim.lecturasDePermisos).toBe(0);
-    expect(await entrar("finance")).toBe("redirect /team");
+    expect(await entrar("finance")).toBe("redirect /leads");
     expect(sim.lecturasDePermisos).toBe(1);
   });
 
@@ -281,7 +291,7 @@ describe("⭐ organización limitless", () => {
     }
     sim.organizacionActiva = "org-webinar";
     for (const segmento of ["integrations", "sops", "business-context"]) {
-      expect(await entrar(segmento), segmento).toBe("redirect /team");
+      expect(await entrar(segmento), segmento).toBe("redirect /leads");
     }
   });
 
@@ -289,6 +299,10 @@ describe("⭐ organización limitless", () => {
     expect(await entrar("dashboard")).toBe("redirect /clients");
     expect(await entrar("team")).toBe("redirect /clients");
     expect(await entrar("lanzamientos")).toBe("redirect /clients");
+  });
+
+  it("⭐ SCRUM-545: /leads no abre en limitless: lleva a Clientes", async () => {
+    expect(await entrar("leads")).toBe("redirect /clients");
   });
 
   it("⭐ un miembro con sólo Ventas va a la Bandeja; sin ninguna de las tres, a Ajustes", async () => {
@@ -313,6 +327,11 @@ describe("⭐ organización full: todo igual que antes", () => {
     expect(resultado).toEqual(esperado);
     expect(sim.lecturasDePermisos).toBe(0);
   });
+
+  it("⭐ SCRUM-545: /leads abre en full tipeando la URL (antes daba 404)", async () => {
+    expect(await entrar("leads")).toBe("pasa");
+    expect(sim.lecturasDePermisos).toBe(0);
+  });
 });
 
 describe("⭐ la experiencia es la de la organización activa", () => {
@@ -320,7 +339,7 @@ describe("⭐ la experiencia es la de la organización activa", () => {
     sim.organizacionActiva = "holding-1";
     expect(await entrar("finance")).toBe("pasa");
     sim.organizacionActiva = "org-webinar";
-    expect(await entrar("finance")).toBe("redirect /team");
+    expect(await entrar("finance")).toBe("redirect /leads");
     sim.organizacionActiva = "holding-1";
     expect(await entrar("finance")).toBe("pasa");
   });
@@ -330,7 +349,7 @@ describe("⭐ la experiencia es la de la organización activa", () => {
     expect(await entrar("clients")).toBe("pasa");
     expect(await entrar("team")).toBe("redirect /clients");
     sim.organizacionActiva = "org-webinar";
-    expect(await entrar("clients")).toBe("redirect /team");
+    expect(await entrar("clients")).toBe("redirect /leads");
     expect(await entrar("team")).toBe("pasa");
     sim.organizacionActiva = "holding-1";
     expect(await entrar("clients")).toBe("pasa");
@@ -340,6 +359,12 @@ describe("⭐ la experiencia es la de la organización activa", () => {
   it("sin organización activa (super admin sin org, demo): full, no se bloquea", async () => {
     sim.organizacionActiva = null;
     expect(await entrar("finance")).toBe("pasa");
+  });
+
+  it("⭐ SCRUM-545 (QA-1): sin organización activa, /leads tampoco se bloquea", async () => {
+    sim.organizacionActiva = null;
+    expect(await entrar("leads")).toBe("pasa");
+    expect(sim.reportes).toBe(0);
   });
 });
 

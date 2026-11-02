@@ -101,12 +101,13 @@ describe("⭐ barra de una organización full: igual que antes", () => {
 describe("⭐ barra de una organización webinar", () => {
   const webinar = buildPlatformSidebarNav(["operaciones", "producto"], "webinar");
 
-  it("sólo las entradas listas del menú (hoy, Equipo), aunque tenga add-ons", () => {
-    expect(webinar.rootItems.map(describir)).toEqual(["/team"]);
+  it("sólo las entradas listas del menú (hoy, Leads y Equipo), aunque tenga add-ons", () => {
+    expect(webinar.rootItems.map(describir)).toEqual(["/leads", "/team"]);
   });
 
   it("cada entrada lleva su módulo de permisos", () => {
-    const [equipo] = webinar.rootItems;
+    const [leads, equipo] = webinar.rootItems;
+    expect(leads).toMatchObject({ type: "link", module: { label: "Leads", permissionId: "sales" } });
     expect(equipo).toMatchObject({ type: "link", module: { label: "Equipo", permissionId: "team" } });
   });
 
@@ -116,9 +117,9 @@ describe("⭐ barra de una organización webinar", () => {
   });
 
   it("además, filtrada por los permisos de siempre", () => {
-    expect(visibles(webinar, FOUNDER)).toEqual(["Equipo"]);
+    expect(visibles(webinar, FOUNDER)).toEqual(["Leads", "Equipo"]);
     expect(visibles(webinar, MIEMBRO_CON_EQUIPO)).toEqual(["Equipo"]);
-    expect(visibles(webinar, MIEMBRO_SIN_EQUIPO)).toEqual([]);
+    expect(visibles(webinar, MIEMBRO_SIN_EQUIPO)).toEqual(["Leads"]);
   });
 });
 
@@ -172,10 +173,11 @@ describe("⭐ paleta de comandos", () => {
 
   it("webinar: sólo las entradas listas, filtradas por permiso, sin acciones rápidas", () => {
     expect(itemsDeLaPaleta("webinar", FOUNDER)).toEqual([
+      { label: "Leads", href: "/leads", group: "Plataforma", keywords: "Leads" },
       { label: "Equipo", href: "/team", group: "Plataforma", keywords: "Equipo" },
     ]);
     expect(itemsDeLaPaleta("webinar", MIEMBRO_CON_EQUIPO).map((i) => i.href)).toEqual(["/team"]);
-    expect(itemsDeLaPaleta("webinar", MIEMBRO_SIN_EQUIPO)).toEqual([]);
+    expect(itemsDeLaPaleta("webinar", MIEMBRO_SIN_EQUIPO).map((i) => i.href)).toEqual(["/leads"]);
   });
 
   it("⭐ limitless: Clientes, Tablero y los hijos de Ventas, filtrados por permiso, sin acciones rápidas", () => {
