@@ -47,11 +47,12 @@ from public.organizations o
 left join public.onboarding_state st on st.organization_id = o.id
 where o.experience = 'limitless';
 
--- P1. La lista de staff, cuenta por cuenta.
+-- P1. La lista de staff, cuenta por cuenta. Corre antes y después de 523
+--     (la experiencia se lee con to_jsonb para no fallar si la columna todavía no existe).
 select s.email, s.name, s.role as rol_en_lista, s.created_at as en_lista_desde,
        u.id as user_id, u.email as email_auth, u.email_confirmed_at, u.last_sign_in_at, u.banned_until,
        (u.id is not null and s.email = lower(btrim(u.email))) as coincide_como_la_app,
-       p.organization_id, o.name as org, o.experience, p.role, p.is_active
+       p.organization_id, o.name as org, to_jsonb(o) ->> 'experience' as experience, p.role, p.is_active
 from public.super_admin_users s
 left join auth.users u      on lower(btrim(u.email)) = lower(btrim(s.email))
 left join public.profiles p on p.id = u.id
@@ -78,13 +79,13 @@ from staff;
 
 -- P3. Miembros actuales de la org de Limitless y si están en la lista
 --     (los que tienen en_lista_staff = false NO tienen panel ni Administración, AC-1).
-with lim as (select id from public.organizations where experience = 'limitless')
-select p.id, p.email, p.role, p.custom_role_id, p.is_active,
+--     La org va por id (el de P0a), así corre antes de 523 y antes del marcado.
+select p.id, p.email, p.full_name, p.role, p.custom_role_id, p.is_active,
        exists (select 1 from public.super_admin_users s
                join auth.users u on s.email = lower(btrim(u.email))
                where u.id = p.id) as en_lista_staff
 from public.profiles p
-where p.organization_id in (select id from lim)
+where p.organization_id = '<id de P0a>'
 order by en_lista_staff desc, p.email;
 
 -- P4. Filas de la lista con mayúsculas/espacios: nunca dieron acceso y la migración NO las asocia.
@@ -100,7 +101,7 @@ real acá.
 
 ## Pasos del día 5
 
-1. **Antes de la ventana (sólo lectura): P0a, P1 y P4.**
+1. **Antes de la ventana (sólo lectura): P0a, P1, P3 y P4.**
    - Confirmar con Martín el id de la organización de Limitless entre las filas de P0a.
      **Esperado:** una candidata clara. Si ninguna fila es la de Limitless, o hay dudas, no seguir.
    - Si esa organización tiene `account_type = 'holding'`, **parar y escalar** (R8): esta HU no contempla que la
