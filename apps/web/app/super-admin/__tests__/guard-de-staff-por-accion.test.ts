@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,7 +16,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *
  * La tabla `CASOS` es literal: el inventario del disco (archivos del panel y
  * exports de cada uno) se compara contra ella, y un archivo o un export nuevo
- * sin caso hace fallar el test.
+ * sin caso hace fallar el test. El inventario recorre `app/super-admin/` y todo
+ * route group `(super-admin)` con sus subcarpetas (sin `__tests__`).
+ *
+ * "Pasó el guard y siguió" no cuenta lo que consulta el propio guard (la lista y
+ * el `is_active` del perfil, etiquetado `guard:profiles`).
  *
  * Mocks: sólo infraestructura (`next/cache`, `next/headers`, `next/navigation`,
  * `server-only`, `@sentry/nextjs`, `reportarFalla`) y la capa de Supabase
@@ -26,6 +30,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type Usuario = { id: string; email: string };
 type Perfil = { is_active: boolean; organization_id: string | null; role: string };
+
+/**
+ * Lo que consulta el propio guard con service role: la lista y el `is_active`
+ * del perfil. Lo que no esté acá lo hizo la acción.
+ */
+const { OPERACION_DEL_GUARD_EN_PROFILES, OPERACIONES_DEL_GUARD } = vi.hoisted(() => ({
+  OPERACION_DEL_GUARD_EN_PROFILES: "guard:profiles",
+  OPERACIONES_DEL_GUARD: ["from:super_admin_users", "guard:profiles"],
+}));
 
 const sim = vi.hoisted(() => ({
   usuario: null as { id: string; email: string } | null,
@@ -133,6 +146,7 @@ vi.mock("@/lib/supabase/admin", () => ({
           if (prop === "from") {
             return (tabla: string) => {
               sim.operaciones.push(`from:${tabla}`);
+              const indice = sim.operaciones.length - 1;
               if (tabla === "super_admin_users") {
                 let email = "";
                 const lista = {
@@ -149,8 +163,10 @@ vi.mock("@/lib/supabase/admin", () => ({
                 return lista;
               }
               if (tabla === "profiles") {
-                // La lectura del guard es `select("is_active")`; cualquier otra
-                // lectura de profiles (de la acción) va por la cadena genérica.
+                // La lectura del guard es `select("is_active")`: se etiqueta
+                // `guard:profiles` para que no cuente como algo que hizo la
+                // acción. Cualquier otra lectura de profiles (de la acción) queda
+                // `from:profiles` y va por la cadena genérica.
                 return new Proxy(
                   {},
                   {
@@ -158,6 +174,7 @@ vi.mock("@/lib/supabase/admin", () => ({
                       if (metodo === "select") {
                         return (columnas: string) => {
                           if (columnas !== "is_active") return cadena();
+                          sim.operaciones[indice] = OPERACION_DEL_GUARD_EN_PROFILES;
                           const perfil = {
                             eq: () => perfil,
                             maybeSingle: async () => ({ data: sim.perfil, error: null }),
@@ -187,7 +204,7 @@ import { MENSAJES_DE_RECHAZO_DEL_STAFF } from "@/lib/auth/require-staff";
 // ─── Inventario ─────────────────────────────────────────────────────────────
 
 const WEB = process.cwd();
-const APP_PANEL = join(WEB, "app", "super-admin");
+const APP = join(WEB, "app");
 const LIB_PANEL = join(WEB, "lib", "super-admin");
 const RUTAS_DIR = join(WEB, "app", "api", "integrations", "super-admin-google");
 
@@ -222,8 +239,43 @@ function rutasDe(dir: string): string[] {
   return salida.sort();
 }
 
+/** Las carpetas del panel en `app/`: `app/super-admin/` y todo route group `(super-admin)`. */
+function raicesDelPanel(dir: string = APP): string[] {
+  const salida: string[] = [];
+  for (const entrada of readdirSync(dir)) {
+    const ruta = join(dir, entrada);
+    if (!statSync(ruta).isDirectory() || entrada === "node_modules") continue;
+    if ((dir === APP && entrada === "super-admin") || entrada === "(super-admin)") salida.push(ruta);
+    else salida.push(...raicesDelPanel(ruta));
+  }
+  return salida;
+}
+
+/**
+ * Los archivos de acciones bajo una carpeta del panel, recursivo y sin
+ * `__tests__`: todo `.ts` (un `actions.ts` en una subcarpeta también cuenta) y
+ * todo `.tsx` que arranca con `"use server"`. Las páginas y layouts `.tsx`
+ * (server components) no son acciones.
+ */
+function archivosDeAccionesEn(dir: string): string[] {
+  const salida: string[] = [];
+  for (const entrada of readdirSync(dir)) {
+    const ruta = join(dir, entrada);
+    if (statSync(ruta).isDirectory()) {
+      if (entrada !== "__tests__") salida.push(...archivosDeAccionesEn(ruta));
+    } else if (entrada.endsWith(".ts") && !entrada.endsWith(".d.ts")) {
+      salida.push(ruta);
+    } else if (entrada.endsWith(".tsx") && /^\s*(["'])use server\1/.test(readFileSync(ruta, "utf8"))) {
+      salida.push(ruta);
+    }
+  }
+  return salida;
+}
+
 function moduloDelPanelEnDisco(): string[] {
-  const app = archivosTs(APP_PANEL).map((f) => `app/super-admin/${f}`);
+  const app = raicesDelPanel()
+    .flatMap((raiz) => archivosDeAccionesEn(raiz))
+    .map((f) => relative(WEB, f).split(sep).join("/"));
   const lib = archivosTs(LIB_PANEL)
     .filter((f) => importaElGuard(readFileSync(join(LIB_PANEL, f), "utf8")))
     .map((f) => `lib/super-admin/${f}`);
@@ -234,7 +286,16 @@ function moduloDelPanelEnDisco(): string[] {
 
 type Forma = "valor-success" | "valor-ok" | "excepcion" | "redirect-error";
 type Modulo = Record<string, (...args: unknown[]) => Promise<unknown>>;
-type Caso = { invocar: (m: Modulo) => Promise<unknown>; forma: Forma };
+/**
+ * `despuesDelGuard`: sólo para lo que, pasado el guard, no toca la base ni la
+ * red (la ruta OAuth de inicio arma la URL de Google y una cookie). Dice qué
+ * prueba que siguió después del guard.
+ */
+type Caso = {
+  invocar: (m: Modulo) => Promise<unknown>;
+  forma: Forma;
+  despuesDelGuard?: (r: Resultado) => boolean;
+};
 
 const ORG_LIMITLESS = "11111111-1111-4111-8111-11111111c0de";
 const ORG_A = "22222222-2222-4222-8222-222222222222";
@@ -396,11 +457,18 @@ const EXENTAS: Record<string, Record<string, string>> = {
 const COOKIE_OAUTH = "super_admin_google_oauth";
 const ESTADO_OAUTH = "estado-de-prueba-1234";
 
-const RUTAS: Record<string, { cargar: () => Promise<unknown>; invocar: (m: Modulo) => Promise<unknown>; forma: Forma }> = {
+const RUTAS: Record<string, Caso & { cargar: () => Promise<unknown> }> = {
   "oauth/start/route.ts": {
     cargar: () => import("@/app/api/integrations/super-admin-google/oauth/start/route"),
     invocar: (m) => m.GET(new NextRequest("https://app.test/api/integrations/super-admin-google/oauth/start")),
     forma: "excepcion",
+    despuesDelGuard: (r) => {
+      if (r.tipo !== "valor" || !(r.valor instanceof Response)) return false;
+      return (
+        (r.valor.headers.get("location") ?? "").startsWith("https://accounts.google.com/") &&
+        (r.valor.headers.get("set-cookie") ?? "").includes("super_admin_google_oauth=")
+      );
+    },
   },
   "oauth/callback/route.ts": {
     cargar: () => import("@/app/api/integrations/super-admin-google/oauth/callback/route"),
@@ -446,7 +514,7 @@ const ESCENARIOS: Escenario[] = [
     usuario: STAFF,
     perfil: { is_active: false, organization_id: ORG_LIMITLESS, role: "founder" },
     mensaje: CUENTA_DESACTIVADA_MESSAGE,
-    permitidas: ["from:super_admin_users", "from:profiles"],
+    permitidas: ["from:super_admin_users", "guard:profiles"],
   },
   {
     nombre: "staff de la lista",
@@ -614,7 +682,7 @@ const TODOS: { id: string; cargar: () => Promise<unknown>; caso: Caso }[] = [
   ...Object.entries(RUTAS).map(([ruta, r]) => ({
     id: `app/api/integrations/super-admin-google/${ruta}#GET`,
     cargar: r.cargar,
-    caso: { invocar: r.invocar, forma: r.forma },
+    caso: { invocar: r.invocar, forma: r.forma, despuesDelGuard: r.despuesDelGuard },
   })),
 ];
 
@@ -630,9 +698,11 @@ for (const escenario of ESCENARIOS) describe(`escenario: ${escenario.nombre}`, (
     if (escenario.mensaje === null) {
       expect(esRechazoDelGuard(r), `el staff de la lista fue rechazado: ${textoDelRechazo(r)}`).toBe(false);
       expect(sim.getUser).toBeGreaterThan(0);
-      // Pasó el guard y siguió: tocó la base (o la red) más allá del guard.
-      const masAllaDelGuard = sim.operaciones.filter((o) => o !== "from:super_admin_users").length;
-      expect(masAllaDelGuard + sim.fetches, "la acción no hizo nada después del guard").toBeGreaterThan(0);
+      // Pasó el guard y siguió: tocó la base (o la red) más allá de lo que
+      // consulta el guard, o hizo lo que dice su `despuesDelGuard`.
+      const masAllaDelGuard = sim.operaciones.filter((o) => !OPERACIONES_DEL_GUARD.includes(o)).length;
+      const siguio = masAllaDelGuard + sim.fetches > 0 || caso.despuesDelGuard?.(r) === true;
+      expect(siguio, "la acción no hizo nada después del guard").toBe(true);
       return;
     }
 
