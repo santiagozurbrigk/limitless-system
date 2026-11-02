@@ -110,7 +110,7 @@ function perfil(
   full_name: string,
   created_at: string
 ): Fila {
-  return { id, organization_id, role, full_name, email: `${id}@test`, created_at };
+  return { id, organization_id, role, full_name, email: `${id}@test.local`, created_at };
 }
 
 function sembrar(perfiles: Fila[]) {
@@ -139,7 +139,7 @@ describe("founder que se muestra de una org con varios founders", () => {
     expect(ficha?.founder).toEqual({
       id: "f-viejo-a",
       name: "Founder Viejo A",
-      email: "f-viejo-a@test",
+      email: "f-viejo-a@test.local",
       lastLogin: "login-de-f-viejo-a",
     });
   });
