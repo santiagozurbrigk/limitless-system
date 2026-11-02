@@ -471,7 +471,7 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 
 #### [STAFF-ALIAS-REQUIRE-SUPER-ADMIN] Seis módulos del panel siguen en el alias `require-super-admin` (nuevo, SCRUM-552)
 - **Tipo:** deuda técnica
-- **Estado verificado:** `apps/web/lib/auth/require-super-admin.ts` es un re-export `@deprecated` de `require-staff.ts` (mismo guard, mismo `cache`; `lib/auth/__tests__/require-staff.test.ts`, "el alias de require-super-admin es el mismo guard"). Lo importan todavía `lib/super-admin/{org-health,waitlist-queries,client-health,onboarding-progress,holding-queries,holdings-admin}.ts` y `lib/super-admin/__tests__/load-onboarding-progress.test.ts`. El test por acción del panel ya los cubre a través del alias.
+- **Estado verificado:** `apps/web/lib/auth/require-super-admin.ts` es un re-export `@deprecated` de `require-staff.ts` (mismo guard, mismo `cache`; `lib/auth/__tests__/require-staff.test.ts`, "el alias de require-super-admin es el mismo guard"). Lo importan todavía `lib/super-admin/{org-health,waitlist-queries,client-health,onboarding-progress,holding-queries,holdings-admin}.ts` y los tests `lib/super-admin/__tests__/load-onboarding-progress.test.ts` y `lib/auth/__tests__/super-admin-una-consulta.test.ts`. El test por acción del panel ya los cubre a través del alias.
 - **Qué hay que hacer:** pasarlos a `requireStaff` y borrar el alias en C3 (SCRUM-553).
 - **Dónde:** `apps/web/lib/super-admin/`, `apps/web/lib/auth/require-super-admin.ts`.
 
