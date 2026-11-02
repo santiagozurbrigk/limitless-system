@@ -61,21 +61,34 @@ async function organizacionQueLee(): Promise<{ ahora: Date; demo: boolean }> {
   return { ahora: new Date(), demo: esOrgDeDemo(organizationId) };
 }
 
+/**
+ * La zona de la organización: define el hoy de las fechas de calendario del
+ * escenario y de los días al cierre. Si no se puede leer, la de por defecto
+ * (y la falla queda en Sentry).
+ */
+function zonaDeLaOrg(): Promise<string | null> {
+  return lecturaDegradable("webinar:zona-de-la-org", zonaDeLaOrganizacionActiva, null);
+}
+
+/** El escenario de ejemplo con las fechas de calendario en la zona de la org. */
+async function escenario(ahora: Date) {
+  const zona = await zonaDeLaOrg();
+  return { filas: escenarioDeEjemplo(ahora, zona), zona };
+}
+
 /** Inicio del lanzamiento activo (`/inicio`, SCRUM-543). */
 export async function leerInicio(): Promise<VistaInicio> {
   const { ahora, demo } = await organizacionQueLee();
   if (!demo) return inicioSinLecturaReal();
-  // La zona sólo cambia el conteo de días al cierre: si no se puede leer, la
-  // de por defecto (y la falla queda en Sentry).
-  const zona = await lecturaDegradable("webinar:zona-de-la-org", zonaDeLaOrganizacionActiva, null);
-  return calcularInicio(escenarioDeEjemplo(ahora), ahora, true, zona);
+  const { filas, zona } = await escenario(ahora);
+  return calcularInicio(filas, ahora, true, zona);
 }
 
 /** Lista de lanzamientos (`/lanzamientos`, SCRUM-544). */
 export async function leerListaDeLanzamientos(): Promise<VistaListaDeLanzamientos> {
   const { ahora, demo } = await organizacionQueLee();
   if (!demo) return listaSinLecturaReal();
-  return calcularListaDeLanzamientos(escenarioDeEjemplo(ahora), ahora, true);
+  return calcularListaDeLanzamientos((await escenario(ahora)).filas, ahora, true);
 }
 
 /** Detalle de un lanzamiento (SCRUM-544). */
@@ -86,7 +99,7 @@ export async function leerDetalleDelLanzamiento(
   if (!demo) return { ok: true, data: null };
   return {
     ok: true,
-    data: calcularDetalleDelLanzamiento(escenarioDeEjemplo(ahora), launchId, ahora, true),
+    data: calcularDetalleDelLanzamiento((await escenario(ahora)).filas, launchId, ahora, true),
   };
 }
 
@@ -94,7 +107,7 @@ export async function leerDetalleDelLanzamiento(
 export async function leerLeads(parametros: ParametrosDeLeads = {}): Promise<VistaLeads> {
   const { ahora, demo } = await organizacionQueLee();
   if (!demo) return leadsSinLecturaReal(parametros);
-  return calcularLeads(escenarioDeEjemplo(ahora), parametros, ahora, true);
+  return calcularLeads((await escenario(ahora)).filas, parametros, ahora, true);
 }
 
 /**
@@ -109,7 +122,7 @@ export async function leerFichaDelLead(
   if (!demo) return { ok: true, data: null };
   return {
     ok: true,
-    data: calcularFichaDelLead(escenarioDeEjemplo(ahora), leadId, launchId, ahora, true),
+    data: calcularFichaDelLead((await escenario(ahora)).filas, leadId, launchId, ahora, true),
   };
 }
 
@@ -121,6 +134,6 @@ export async function leerConfiguracionDelLanzamiento(
   if (!demo) return { ok: true, data: null };
   return {
     ok: true,
-    data: calcularConfiguracionDelLanzamiento(escenarioDeEjemplo(ahora), launchId, true),
+    data: calcularConfiguracionDelLanzamiento((await escenario(ahora)).filas, launchId, true),
   };
 }

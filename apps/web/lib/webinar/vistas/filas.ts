@@ -13,10 +13,12 @@ import type {
  * de la base, más lo que las fichas de SCRUM-549 piden y el modelo todavía no
  * tiene (estado de venta, notas, equipo e inversión en anuncios).
  *
- * Hoy sólo las llena el escenario de ejemplo. En B4 las lee la base (o una
- * consulta agrupada que dé lo mismo) y pasan por las mismas funciones de
- * `calcular.ts`: el contrato de las pantallas no cambia. Si el modelo final
- * cambia un nombre, cambia acá y en la lectura, no en las pantallas.
+ * Hoy sólo las llena el escenario de ejemplo. En B4 las lee la base y pasan
+ * por las mismas funciones de `calcular.ts`, que trabajan con filas en memoria
+ * (no con conteos: ver "Qué cambia en B4" en
+ * `docs/areas/webinars-contratos-de-vista.md`). El contrato de las pantallas
+ * no cambia. Si el modelo final cambia un nombre, cambia acá, en la lectura y
+ * en `calcular.ts`, no en las pantallas.
  */
 
 export type FilaLanzamiento = {

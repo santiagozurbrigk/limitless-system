@@ -186,9 +186,7 @@ export function derivar<V extends readonly Dato<unknown>[], R>(
   const fuentes = new Set(entradas.map((d) => d.source));
   const source: FuenteDelDato = fuentes.size === 1 ? entradas[0].source : "calculado";
 
-  if (!tieneValor(peor)) {
-    return { ...peor, source: peor.source };
-  }
+  if (!tieneValor(peor)) return peor;
 
   const valores = entradas.map((d) => d.value) as {
     [K in keyof V]: V[K] extends Dato<infer T> ? T : never;

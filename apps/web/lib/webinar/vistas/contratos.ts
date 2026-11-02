@@ -271,7 +271,11 @@ export const ETIQUETA_DEL_FILTRO: Record<FiltroDeLeads, string> = {
 export type ParametrosDeLeads = {
   /** Sin lanzamiento: el activo; si no hay activo, el más nuevo. */
   launchId?: string | null;
-  filtro?: FiltroDeLeads | null;
+  /**
+   * Llega como texto de la URL (`?filtro=`): la lectura lo valida y uno que no
+   * es de `FILTROS_DE_LEADS` se toma como `todos`.
+   */
+  filtro?: string | null;
   /** Busca por nombre o email, sin distinguir mayúsculas. */
   busqueda?: string | null;
   /** Opaco: el `siguienteCursor` de la página anterior. */

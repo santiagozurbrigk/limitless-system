@@ -3,7 +3,10 @@
  * es estable (las claves de cada vista), el escenario cubre los cinco estados y
  * los números son coherentes entre sí.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
 import {
   calcularConfiguracionDelLanzamiento,
   calcularDetalleDelLanzamiento,
@@ -181,10 +184,30 @@ describe("coherencia de los números", () => {
     }
   });
 
-  it("la asistencia total es la suma de las sesiones", () => {
+  it("sin nadie que repita sesión, la asistencia total coincide con la suma de las sesiones", () => {
     const activo = inicio.activo.value!;
     const suma = activo.sesiones.reduce((t, s) => t + (s.asistieron?.value ?? 0), 0);
     expect(paso(activo.embudo, "asistieron").value).toBe(suma);
+  });
+
+  it("quien asiste a dos sesiones cuenta una vez en Asistieron (personas distintas)", () => {
+    const [s1, s2] = filas.sesiones;
+    const repite = filas.eventos.find((e) => e.kind === "attended" && e.data.session_id === s1.id)!;
+    const conRepetido = {
+      ...filas,
+      eventos: [
+        ...filas.eventos,
+        { ...repite, id: "repite-sesion-2", occurred_at: s2.starts_at, data: { session_id: s2.id } },
+      ],
+    };
+    const v = calcularDetalleDelLanzamiento(conRepetido, ACTIVO.id, AHORA, false)!;
+    // La sesión 2 suma a quien vino otra vez; el total de personas no cambia.
+    expect(v.sesiones[1].asistieron!.value).toBe((detalle.sesiones[1].asistieron!.value as number) + 1);
+    expect(paso(v.embudo, "asistieron")).toEqual(paso(detalle.embudo, "asistieron"));
+    const l = calcularLeads(conRepetido, {}, AHORA, false);
+    const n = (f: string) => l.filtros.find((x) => x.filtro === f)!.personas.value as number;
+    expect(n("registrado_sin_asistir") + (paso(v.embudo, "asistieron").value as number)).toBe(n("todos"));
+    expect(v.tasas.asistencia.value as number).toBeLessThanOrEqual(1);
   });
 
   it("los ingresos son las ventas por el precio, menos los reembolsos", () => {
@@ -226,6 +249,14 @@ describe("coherencia de los números", () => {
     // 15:30 UTC del 1-nov: en Buenos Aires es 1-nov; en Auckland, ya 2-nov.
     expect(calcularInicio(filas, AHORA, true, "America/Argentina/Buenos_Aires").activo.value!.diasParaElCierre).toBe(3);
     expect(calcularInicio(filas, AHORA, true, "Pacific/Auckland").activo.value!.diasParaElCierre).toBe(2);
+  });
+
+  it("el escenario arma sus fechas en la zona de la org: cierra en 3 días a cualquier hora", () => {
+    // 01:30 UTC del 2-nov = 22:30 del 1-nov en Buenos Aires.
+    const t = new Date("2026-11-02T01:30:00Z");
+    for (const zona of ["America/Argentina/Buenos_Aires", "Pacific/Kiritimati", "Pacific/Honolulu", "Pacific/Auckland"]) {
+      expect(calcularInicio(escenarioDeEjemplo(t, zona), t, true, zona).activo.value!.diasParaElCierre).toBe(3);
+    }
   });
 
   it("la lista pone el activo primero", () => {
@@ -283,7 +314,7 @@ describe("Leads", () => {
   it("un filtro o cursor que no existe no rompe: todos, desde el principio", () => {
     const raro = calcularLeads(
       filas,
-      { filtro: "cualquiera" as never, cursor: "basura", launchId: "otro" },
+      { filtro: "cualquiera", cursor: "basura", launchId: "otro" },
       AHORA,
       true
     );
@@ -343,6 +374,22 @@ describe("Configuración del lanzamiento", () => {
     ]);
     expect(configuracion.productos.map((p) => p.rol)).toEqual(["main", "vip"]);
     expect(configuracion.campanas).toHaveLength(1);
+  });
+
+  it("cada faltante dice lo mismo que el número que no se puede medir por él", () => {
+    const faltante = (f: typeof filas, campo: string) =>
+      calcularConfiguracionDelLanzamiento(f, ACTIVO.id, false)!.faltantes.find((x) => x.campo === campo)!.reason;
+    const v = (f: typeof filas) => calcularDetalleDelLanzamiento(f, ACTIVO.id, AHORA, false)!;
+
+    expect(detalle.sesiones[1].seQuedaronALaOferta!.reason).toBe(faltante(filas, "segundo_de_la_oferta"));
+    const sinZoom = { ...filas, sesiones: filas.sesiones.map((s) => ({ ...s, zoom_webinar_id: null })) };
+    expect(v(sinZoom).sesiones[0].asistieron!.reason).toBe(faltante(sinZoom, "zoom_webinar_id"));
+    const sinProducto = { ...filas, productos: [] };
+    expect(v(sinProducto).ventas.ventas.reason).toBe(faltante(sinProducto, "producto_principal"));
+    const sinCampanas = { ...filas, campanas: [] };
+    expect(v(sinCampanas).anuncios!.inversion.reason).toBe(faltante(sinCampanas, "campanas"));
+    const sinSesiones = { ...filas, sesiones: [] };
+    expect(paso(v(sinSesiones).embudo, "asistieron").reason).toBe(faltante(sinSesiones, "sesiones"));
   });
 
   it("un lanzamiento que no existe es null en detalle y configuración", () => {
@@ -427,6 +474,67 @@ describe("reglas de estado sin el escenario", () => {
     expect(v.sesiones.at(-1)!.asistieron).toBeNull();
     expect(v.proximaSesion?.id).toBe("futura");
     expect(paso(v.embudo, "asistieron")).toEqual(paso(inicio.activo.value!.embudo, "asistieron"));
+  });
+
+  describe("reembolsos: cada uno se asocia a una compra concreta", () => {
+    const yaReembolsados = new Set(filas.eventos.filter((e) => e.kind === "refunded").map((e) => e.lead_id));
+    const compra = filas.eventos.find(
+      (e) => e.kind === "purchased" && e.launch_id === ACTIVO.id && !yaReembolsados.has(e.lead_id)
+    )!;
+    const despues = (horas: number) => new Date(Date.parse(compra.occurred_at) + horas * 3_600_000).toISOString();
+    const comprasDeLaFicha = (f: typeof filas) =>
+      calcularFichaDelLead(f, compra.lead_id, ACTIVO.id, AHORA, false)!.compras.value!.map((c) => [c.producto, c.estado]);
+
+    it("dos compras y un reembolso: una queda cobrada y los ingresos restan una sola vez", () => {
+      const conDos = {
+        ...filas,
+        eventos: [
+          ...filas.eventos,
+          { ...compra, id: "segunda-compra", occurred_at: despues(1) },
+          { ...compra, id: "reembolso-de-una", kind: "refunded" as const, occurred_at: despues(2) },
+        ],
+      };
+      expect(comprasDeLaFicha(conDos)).toEqual([
+        [compra.data.product, "reembolsada"],
+        [compra.data.product, "cobrada"],
+      ]);
+      const v = calcularDetalleDelLanzamiento(conDos, ACTIVO.id, AHORA, false)!;
+      expect(v.ventas.ingresos.value).toBe(detalle.ventas.ingresos.value);
+      expect(v.ventas.reembolsos.value).toBe((detalle.ventas.reembolsos.value as number) + 1);
+    });
+
+    it("un reembolso del VIP no toca las ventas, los ingresos ni los reembolsos de la oferta principal", () => {
+      const vip = { product: "VIP de ejemplo", amount: 47, currency: "USD" };
+      const conVip = {
+        ...filas,
+        eventos: [
+          ...filas.eventos,
+          { ...compra, id: "compra-vip", kind: "vip_purchased" as const, source: "commas" as const, occurred_at: despues(1), data: vip },
+          { ...compra, id: "reembolso-vip", kind: "refunded" as const, source: "commas" as const, occurred_at: despues(2), data: vip },
+        ],
+      };
+      const v = calcularDetalleDelLanzamiento(conVip, ACTIVO.id, AHORA, false)!;
+      expect(v.ventas.ingresos).toEqual(detalle.ventas.ingresos);
+      expect(v.ventas.reembolsos).toEqual(detalle.ventas.reembolsos);
+      expect(v.ventas.ventas).toEqual(detalle.ventas.ventas);
+      expect(comprasDeLaFicha(conVip)).toEqual([
+        [compra.data.product, "cobrada"],
+        ["VIP de ejemplo", "reembolsada"],
+      ]);
+    });
+
+    it("un reembolso que no se puede asociar a ninguna compra deja los ingresos en error", () => {
+      const huerfano = {
+        ...filas,
+        eventos: [
+          ...filas.eventos,
+          { ...compra, id: "reembolso-huerfano", kind: "refunded" as const, occurred_at: despues(1), data: { ...compra.data, product: "Otro producto" } },
+        ],
+      };
+      const v = calcularDetalleDelLanzamiento(huerfano, ACTIVO.id, AHORA, false)!;
+      expect(v.ventas.ingresos.state).toBe("error");
+      expect(v.ventas.ingresos.reason).toMatch(/reembolso/);
+    });
   });
 
   it("una compra sin monto deja los ingresos en error, nunca suma un cero", () => {

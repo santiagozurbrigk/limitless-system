@@ -1,3 +1,5 @@
+import "server-only";
+
 import { diasEntre, esFechaCalendario, fechaEnZona } from "@/lib/fechas/calendario";
 import {
   conError,
@@ -8,7 +10,6 @@ import {
   faltaConfigurar,
   medido,
   sinFuente,
-  sumar,
   tasa,
   cociente,
   type Dato,
@@ -61,9 +62,10 @@ import type {
  * ejemplo y en B4 la lectura real, así que las reglas de estado de cada número
  * viven acá y no en las pantallas:
  *   - un conteo toma el estado de la fuente que lo mide (`FUENTE_DEL_TIPO`);
- *   - la asistencia y "se quedó a la oferta" se miden por sesión y el total es
- *     su suma (`sumar`): una sesión sin reporte o sin el minuto de la oferta
- *     deja el total sin valor, con el motivo de esa sesión;
+ *   - la asistencia y "se quedó a la oferta" se miden por sesión y el total
+ *     son las personas distintas de las sesiones ocurridas: una sesión sin
+ *     reporte o sin el minuto de la oferta deja el total sin valor, con el
+ *     motivo de esa sesión;
  *   - las ventas dependen del producto principal configurado y de su
  *     proveedor; la inversión, de las campañas asociadas y de Meta Ads;
  *   - un filtro de Leads o un número calculado hereda el peor estado de los
@@ -170,6 +172,21 @@ const FUENTE_DEL_TIPO: Partial<Record<TipoDeEvento, FuenteDelDato>> = {
   call_no_show: "calendly",
 };
 
+// ─── Lo que falta configurar ───────────────────────────────────────────────
+
+/**
+ * Los motivos de lo que falta cargar en el lanzamiento: los mismos en el
+ * número que no se puede medir y en la lista de Configuración.
+ */
+const MOTIVO_FALTA = {
+  sesiones: "Cargá las sesiones del lanzamiento.",
+  zoomWebinarId: (sesion: number) => `Cargá el ID del webinar de Zoom de la sesión ${sesion}.`,
+  segundoDeLaOferta: (sesion: number) =>
+    `Cargá el minuto de la oferta de la sesión ${sesion} para saber quién se quedó hasta la oferta.`,
+  productoPrincipal: "Cargá el producto de la oferta principal para contar las ventas.",
+  campanas: "Asociá las campañas de anuncios del lanzamiento para medir la inversión.",
+} as const;
+
 // ─── Lanzamiento ───────────────────────────────────────────────────────────
 
 function resumen(l: FilaLanzamiento): LanzamientoResumen {
@@ -202,10 +219,16 @@ function conteoDeTipo(ctx: Contexto, launchId: string, tipo: TipoDeEvento): Dato
   return datoDeFuente(ctx, fuente, leadsCon(ctx, launchId, tipo).size);
 }
 
-function leadsDeSesion(ctx: Contexto, s: FilaSesion, tipo: "attended" | "stayed_to_offer"): number {
+/** Leads distintos con un evento de `tipo` en alguna de las sesiones. */
+function leadsDeSesiones(
+  ctx: Contexto,
+  launchId: string,
+  sesionIds: ReadonlySet<string>,
+  tipo: "attended" | "stayed_to_offer"
+): number {
   const leads = new Set<string>();
   for (const e of ctx.filas.eventos) {
-    if (e.launch_id === s.launch_id && e.kind === tipo && e.data.session_id === s.id) {
+    if (e.launch_id === launchId && e.kind === tipo && sesionIds.has(e.data.session_id ?? "")) {
       leads.add(e.lead_id);
     }
   }
@@ -221,17 +244,14 @@ function datoDeSesion(
   if (s.starts_at > ctx.ahoraIso) return null;
   const cual = `la sesión ${numero}`;
   if (!s.zoom_webinar_id) {
-    return faltaConfigurar("configuracion", `Cargá el ID del webinar de Zoom de ${cual}.`);
+    return faltaConfigurar("configuracion", MOTIVO_FALTA.zoomWebinarId(numero));
   }
   const zoom = estadoDeFuente(ctx.filas, "zoom");
   if (zoom.state !== "medido" && zoom.state !== "desactualizado") {
     return datoDeFuente(ctx, "zoom", 0);
   }
   if (tipo === "stayed_to_offer" && s.offer_offset_seconds === null) {
-    return faltaConfigurar(
-      "configuracion",
-      `Cargá el minuto de la oferta de ${cual} para saber quién se quedó hasta la oferta.`
-    );
+    return faltaConfigurar("configuracion", MOTIVO_FALTA.segundoDeLaOferta(numero));
   }
   if (s.report_status === "error") {
     return conError(
@@ -243,7 +263,7 @@ function datoDeSesion(
   if (s.report_status === null) {
     return sinFuente("zoom", `Zoom todavía no entregó el reporte de ${cual} (puede tardar hasta 24 h).`);
   }
-  return datoDeFuente(ctx, "zoom", leadsDeSesion(ctx, s, tipo));
+  return datoDeFuente(ctx, "zoom", leadsDeSesiones(ctx, s.launch_id, new Set([s.id]), tipo));
 }
 
 function sesionesDelLanzamiento(ctx: Contexto, launchId: string): SesionDelLanzamiento[] {
@@ -255,19 +275,31 @@ function sesionesDelLanzamiento(ctx: Contexto, launchId: string): SesionDelLanza
   }));
 }
 
+/**
+ * El total de un lanzamiento son las **personas distintas** de las sesiones
+ * que ya ocurrieron (quien vuelve a otra sesión cuenta una vez), con el peor
+ * estado entre esas sesiones (`derivar`). El detalle por sesión sí cuenta a
+ * cada uno en cada sesión.
+ */
 function totalDeSesiones(
   ctx: Contexto,
+  launchId: string,
   sesiones: SesionDelLanzamiento[],
-  campo: "asistieron" | "seQuedaronALaOferta"
+  campo: "asistieron" | "seQuedaronALaOferta",
+  tipo: "attended" | "stayed_to_offer"
 ): Dato<number> {
   if (sesiones.length === 0) {
-    return faltaConfigurar("configuracion", "Cargá las sesiones del lanzamiento.");
+    return faltaConfigurar("configuracion", MOTIVO_FALTA.sesiones);
   }
-  const ocurridas = sesiones.map((s) => s[campo]).filter((d): d is Dato<number> => d !== null);
+  const ocurridas = sesiones.filter((s) => s[campo] !== null);
   // Ninguna sesión ocurrió todavía: nadie asistió, y eso sí es un dato (si
   // Zoom está conectado; si no, el estado de Zoom).
   if (ocurridas.length === 0) return datoDeFuente(ctx, "zoom", 0, ctx.ahoraIso);
-  return sumar(ocurridas);
+  const ids = new Set(ocurridas.map((s) => s.id));
+  return derivar(
+    ocurridas.map((s) => s[campo] as Dato<number>),
+    () => leadsDeSesiones(ctx, launchId, ids, tipo)
+  );
 }
 
 function productoDe(ctx: Contexto, launchId: string, rol: "main" | "vip") {
@@ -275,10 +307,7 @@ function productoDe(ctx: Contexto, launchId: string, rol: "main" | "vip") {
 }
 
 function sinProductoPrincipal() {
-  return faltaConfigurar(
-    "configuracion",
-    "Cargá el producto de la oferta principal para contar las ventas."
-  );
+  return faltaConfigurar("configuracion", MOTIVO_FALTA.productoPrincipal);
 }
 
 function datoDeProveedor<T>(ctx: Contexto, proveedor: string, valor: T): Dato<T> {
@@ -288,6 +317,41 @@ function datoDeProveedor<T>(ctx: Contexto, proveedor: string, valor: T): Dato<T>
   }
   return datoDeFuente(ctx, fuente, valor);
 }
+
+type CompraConReembolso = { compra: FilaEvento; reembolso: FilaEvento | null };
+
+/**
+ * Cada reembolso se asocia a una compra concreta: la más vieja todavía
+ * cobrada del mismo lead, lanzamiento y producto (`data.product`), hecha antes
+ * del reembolso. Así dos compras con un reembolso dejan una cobrada, y un
+ * reembolso del VIP (`vip_purchased`) no toca la oferta principal
+ * (`purchased`). Un reembolso sin compra que le corresponda queda en
+ * `huerfanos`: no se sabe de qué producto es.
+ */
+function asociarReembolsos(eventos: readonly FilaEvento[]): {
+  compras: CompraConReembolso[];
+  huerfanos: FilaEvento[];
+} {
+  const porFecha = [...eventos].sort(
+    (a, b) => a.occurred_at.localeCompare(b.occurred_at) || a.id.localeCompare(b.id)
+  );
+  const clave = (e: FilaEvento) => `${e.launch_id}|${e.lead_id}|${e.data.product ?? ""}`;
+  const compras: CompraConReembolso[] = [];
+  const huerfanos: FilaEvento[] = [];
+  for (const e of porFecha) {
+    if (e.kind === "purchased" || e.kind === "vip_purchased") {
+      compras.push({ compra: e, reembolso: null });
+    } else if (e.kind === "refunded") {
+      const cobrada = compras.find((c) => c.reembolso === null && clave(c.compra) === clave(e));
+      if (cobrada) cobrada.reembolso = e;
+      else huerfanos.push(e);
+    }
+  }
+  return { compras, huerfanos };
+}
+
+const sinMontoLeido = (e: FilaEvento | null) =>
+  e !== null && (e.data.amount === null || e.data.amount === undefined);
 
 function ventasDelLanzamiento(ctx: Contexto, launchId: string): VentasDelLanzamiento {
   const principal = productoDe(ctx, launchId, "main");
@@ -303,27 +367,40 @@ function ventasDelLanzamiento(ctx: Contexto, launchId: string): VentasDelLanzami
       ventasVip,
     };
   }
-  const compras = ctx.filas.eventos.filter(
-    (e) => e.launch_id === launchId && (e.kind === "purchased" || e.kind === "refunded")
+  const { compras, huerfanos } = asociarReembolsos(
+    ctx.filas.eventos.filter((e) => e.launch_id === launchId)
   );
-  const sinMonto = compras.filter((e) => e.data.amount === null || e.data.amount === undefined);
-  const neto = compras.reduce(
-    (total, e) => total + (e.kind === "purchased" ? 1 : -1) * (e.data.amount ?? 0),
+  // La oferta principal: las compras `purchased` y sus reembolsos.
+  const principales = compras.filter((c) => c.compra.kind === "purchased");
+  const sinMonto =
+    principales.filter((c) => sinMontoLeido(c.compra)).length +
+    principales.filter((c) => sinMontoLeido(c.reembolso)).length;
+  const neto = principales.reduce(
+    (total, c) => total + (c.compra.data.amount ?? 0) - (c.reembolso?.data.amount ?? 0),
     0
   );
+  const fuenteDeLaFalla = comoFuente(principal.provider) ?? "configuracion";
   const ingresos: Dato<number> =
-    sinMonto.length > 0
+    sinMonto > 0
       ? conError(
-          comoFuente(principal.provider) ?? "configuracion",
-          sinMonto.length === 1
+          fuenteDeLaFalla,
+          sinMonto === 1
             ? "Hay 1 compra cuyo monto no se pudo leer: los ingresos no se pueden sumar."
-            : `Hay ${sinMonto.length} compras cuyo monto no se pudo leer: los ingresos no se pueden sumar.`
+            : `Hay ${sinMonto} compras cuyo monto no se pudo leer: los ingresos no se pueden sumar.`
         )
-      : datoDeProveedor(ctx, principal.provider, neto);
+      : huerfanos.length > 0
+        ? conError(
+            fuenteDeLaFalla,
+            huerfanos.length === 1
+              ? "Hay 1 reembolso que no corresponde a ninguna compra: los ingresos no se pueden calcular."
+              : `Hay ${huerfanos.length} reembolsos que no corresponden a ninguna compra: los ingresos no se pueden calcular.`
+          )
+        : datoDeProveedor(ctx, principal.provider, neto);
+  const reembolsados = new Set(principales.filter((c) => c.reembolso).map((c) => c.compra.lead_id));
   return {
     ventas: datoDeProveedor(ctx, principal.provider, leadsCon(ctx, launchId, "purchased").size),
     ingresos,
-    reembolsos: datoDeProveedor(ctx, principal.provider, leadsCon(ctx, launchId, "refunded").size),
+    reembolsos: datoDeProveedor(ctx, principal.provider, reembolsados.size),
     ventasVip,
   };
 }
@@ -338,10 +415,7 @@ function anunciosDelLanzamiento(
   const campanas = ctx.filas.campanas.filter((c) => c.launch_id === l.id);
   let inversion: Dato<number>;
   if (campanas.length === 0) {
-    inversion = faltaConfigurar(
-      "configuracion",
-      "Asociá las campañas de anuncios del lanzamiento para medir la inversión."
-    );
+    inversion = faltaConfigurar("configuracion", MOTIVO_FALTA.campanas);
   } else if (campanas.some((c) => c.platform !== "meta")) {
     inversion = sinFuente("meta_ads", "Por ahora sólo se lee la inversión de campañas de Meta.");
   } else {
@@ -382,8 +456,8 @@ function numerosDelLanzamiento(ctx: Contexto, l: FilaLanzamiento): Numeros {
   const visitas = datoDeFuente(ctx, "landing", visitantes);
   const registrados = conteoDeTipo(ctx, l.id, "registered");
   const sesiones = sesionesDelLanzamiento(ctx, l.id);
-  const asistieron = totalDeSesiones(ctx, sesiones, "asistieron");
-  const seQuedaron = totalDeSesiones(ctx, sesiones, "seQuedaronALaOferta");
+  const asistieron = totalDeSesiones(ctx, l.id, sesiones, "asistieron", "attended");
+  const seQuedaron = totalDeSesiones(ctx, l.id, sesiones, "seQuedaronALaOferta", "stayed_to_offer");
   const levantaron = conteoDeTipo(ctx, l.id, "raised_hand");
   const contactados = conteoDeTipo(ctx, l.id, "contacted");
   const agendados = conteoDeTipo(ctx, l.id, "call_booked");
@@ -633,7 +707,7 @@ export function calcularLeads(
     null;
   const filtro: FiltroDeLeads =
     parametros.filtro && (FILTROS_DE_LEADS as readonly string[]).includes(parametros.filtro)
-      ? parametros.filtro
+      ? (parametros.filtro as FiltroDeLeads)
       : "todos";
   const busqueda = (parametros.busqueda ?? "").trim();
 
@@ -755,21 +829,16 @@ export function calcularFichaDelLead(
     sesionId: e.data.session_id ?? null,
   }));
 
-  const reembolsadas = new Set(
-    eventos.filter((e) => e.kind === "refunded").map((e) => `${e.launch_id}:${e.data.product}`)
-  );
-  const compras: CompraDelLead[] = eventos
-    .filter((e) => e.kind === "purchased" || e.kind === "vip_purchased")
-    .map((e) => ({
-      eventoId: e.id,
-      launchId: e.launch_id,
-      producto: e.data.product ?? "Producto sin nombre",
-      monto: e.data.amount ?? null,
-      moneda: e.data.currency ?? lanzamientos.get(e.launch_id)?.currency ?? "",
-      estado: reembolsadas.has(`${e.launch_id}:${e.data.product}`) ? "reembolsada" : "cobrada",
-      fuente: e.source,
-      occurredAt: e.occurred_at,
-    }));
+  const compras: CompraDelLead[] = asociarReembolsos(eventos).compras.map(({ compra: e, reembolso }) => ({
+    eventoId: e.id,
+    launchId: e.launch_id,
+    producto: e.data.product ?? "Producto sin nombre",
+    monto: e.data.amount ?? null,
+    moneda: e.data.currency ?? lanzamientos.get(e.launch_id)?.currency ?? "",
+    estado: reembolso ? "reembolsada" : "cobrada",
+    fuente: e.source,
+    occurredAt: e.occurred_at,
+  }));
   const principal = productoDe(ctx, elegido.id, "main");
 
   const notas = filas.notas
@@ -830,21 +899,21 @@ export function calcularConfiguracionDelLanzamiento(
 
   const faltantes: FaltanteDeConfiguracion[] = [];
   if (sesiones.length === 0) {
-    faltantes.push({ campo: "sesiones", sesionId: null, reason: "Cargá las sesiones del lanzamiento." });
+    faltantes.push({ campo: "sesiones", sesionId: null, reason: MOTIVO_FALTA.sesiones });
   }
   sesiones.forEach((s, i) => {
     if (!s.zoom_webinar_id) {
       faltantes.push({
         campo: "zoom_webinar_id",
         sesionId: s.id,
-        reason: `Cargá el ID del webinar de Zoom de la sesión ${i + 1}.`,
+        reason: MOTIVO_FALTA.zoomWebinarId(i + 1),
       });
     }
     if (s.offer_offset_seconds === null) {
       faltantes.push({
         campo: "segundo_de_la_oferta",
         sesionId: s.id,
-        reason: `Cargá el minuto de la oferta de la sesión ${i + 1} para saber quién se quedó hasta la oferta.`,
+        reason: MOTIVO_FALTA.segundoDeLaOferta(i + 1),
       });
     }
   });
@@ -852,14 +921,14 @@ export function calcularConfiguracionDelLanzamiento(
     faltantes.push({
       campo: "producto_principal",
       sesionId: null,
-      reason: "Cargá el producto de la oferta principal para contar las ventas.",
+      reason: MOTIVO_FALTA.productoPrincipal,
     });
   }
   if (l.variant !== "organic" && campanas.length === 0) {
     faltantes.push({
       campo: "campanas",
       sesionId: null,
-      reason: "Asociá las campañas de anuncios del lanzamiento para medir la inversión.",
+      reason: MOTIVO_FALTA.campanas,
     });
   }
 

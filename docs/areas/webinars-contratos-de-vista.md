@@ -9,8 +9,24 @@ Código: `apps/web/lib/webinar/vistas/`. Las pantallas todavía no existen.
 ## La regla
 
 **Cada pantalla llama sólo a su función de lectura y renderiza lo que devuelve.** No consulta la base, no
-importa el escenario ni calcula números. Un test (`las-pantallas-leen-de-su-funcion.test.ts`) falla si un
-archivo de fuera del módulo importa algo que no sea `leer`, `contratos` o `dato`.
+importa el escenario ni calcula números. Lo controla `las-pantallas-leen-de-su-funcion.test.ts`:
+
+- Recorre los archivos `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` y `.cjs` de `apps/web` de fuera
+  del módulo (sin `node_modules`, `.next`, `dist`, `.turbo`, `e2e` ni `coverage`). En cada uno resuelve los
+  especificadores de `import ... from`, `import "x"`, `export ... from`, `import()` y `require()`, con
+  comillas simples o dobles o un template sin `${}`. El alias `@/` y lo que no empieza con `.` (por el
+  `baseUrl` de tsconfig) se resuelven desde la raíz de la app; lo relativo, desde la carpeta del archivo. Con
+  o sin extensión. Falla si alguno cae en `lib/webinar/vistas/` y no es `leer`, `contratos` o `dato`.
+- Adentro del módulo, con la misma resolución, sólo `leer.ts` importa el escenario.
+- Un auto-test del detector prueba cada una de esas formas, y que deja pasar `leer`, `contratos`, `dato` y
+  una carpeta que se llama parecido.
+- `leer`, `calcular`, `escenario-de-ejemplo`, `org-de-demo` y `sin-lectura-real` empiezan con
+  `import "server-only"`, y el mismo test lo verifica: si un Client Component los importa, el build falla.
+  `dato` y `contratos` (y `filas`, que tiene sólo tipos) se pueden importar desde el cliente.
+
+Lo que el test **no** ve: un especificador armado en ejecución (`import(variable)` o un template con `${}`),
+un alias distinto de `@/`, y que `contratos` o `dato` reexporten `calcular` o `filas` (adentro del módulo
+sólo se controla el escenario).
 
 ## Un número: `Dato<T>` (`dato.ts`)
 
@@ -65,7 +81,8 @@ Los tipos están en `contratos.ts`. Lo principal:
 - **Detalle**: lo mismo que Inicio para cualquier lanzamiento, más registros por origen (`utm_source`).
 - **Leads**: selector de lanzamientos, los cinco filtros listos con su conteo (`FILTROS_DE_LEADS`), el total
   del filtro y la búsqueda, la página (50 filas, `LEADS_POR_PAGINA`, del registro más nuevo al más viejo) y
-  `siguienteCursor` (opaco; `null` si no hay más). Filtro, búsqueda, lanzamiento y cursor van en la URL. Un
+  `siguienteCursor` (opaco; `null` si no hay más). Filtro, búsqueda, lanzamiento y cursor van en la URL; el
+  filtro llega como texto y uno que no está en `FILTROS_DE_LEADS` se toma como `todos`. Un
   filtro que depende de una fuente sin conectar trae el conteo, el total y las filas en `sin_fuente`: nunca
   lista a todos los registrados como "sin asistir".
 - **Ficha**: datos de contacto, `whatsappUrl` (`null` sin teléfono), registros por lanzamiento con origen y
@@ -101,9 +118,10 @@ Las vistas son JSON: se pueden pasar enteras a un Client Component.
 
 ## El escenario de ejemplo (`escenario-de-ejemplo.ts`)
 
-Determinístico (generador con semilla 542, sin `Math.random`); las fechas se arman hacia atrás desde la hora
+Determinístico (generador con semilla 542, sin `Math.random`). Las fechas se arman hacia atrás desde la hora
 actual, así que el lanzamiento activo se ve en curso cualquier día y la paginación es estable dentro de la
-hora.
+hora. Las de calendario (captación y cierre) salen del hoy de la zona de la organización, como las cargaría
+el dueño: el activo cierra en 3 días a cualquier hora.
 
 - Un lanzamiento **activo, variante Pago** (USD 997, cierra en 3 días, 2 sesiones de Zoom ya ocurridas) y uno
   **cerrado, Orgánico** (USD 497, 1 sesión).
@@ -122,28 +140,51 @@ hora.
 "Compraron" incluye a quien compró en la oferta sin llamada: puede superar a "Asistieron a la llamada", nunca
 a "Asistieron".
 
+Dos reglas que valen también para los datos reales (viven en `calcular.ts`):
+
+- "Asistieron" y "Se quedaron a la oferta" del lanzamiento cuentan **personas distintas** de las sesiones que
+  ya ocurrieron, con el peor estado entre esas sesiones. Si alguien vuelve a otra sesión, suma en el detalle
+  de esa sesión pero no en el total.
+- Cada reembolso se asocia a una compra concreta: la más vieja todavía cobrada del mismo lead, lanzamiento y
+  producto. Con dos compras y un reembolso, una queda cobrada. Un reembolso del VIP no toca las ventas, los
+  ingresos ni los reembolsos de la oferta principal. Si un reembolso no corresponde a ninguna compra, los
+  ingresos quedan en `error`, porque no se sabe qué producto devolvió.
+
 ## Qué cambia en B4
 
-Sólo la rama de "cualquier otra organización" de `leer.ts`: lee de la base las filas de `filas.ts` (o una
-consulta agrupada que dé lo mismo) y las pasa por las mismas funciones de `calcular.ts`, donde viven las
-reglas de estado de cada número. **Los tipos de `contratos.ts` y las pantallas no cambian.** Lo que la lectura
-real tiene que resolver:
+**Queda estable:** los tipos de `contratos.ts` (lo que recibe cada pantalla) y las firmas de las seis
+funciones de `leer.ts`. Las pantallas no se tocan.
 
-- el estado de cada fuente para la organización (`EstadoDeFuente`), con su regla de "desactualizado";
-- `filas.ts` copia el modelo propuesto en SCRUM-526 (PR #141) más lo que todavía no tiene: estado de venta
-  (`lead_sales_state`), notas, `report_status` de las sesiones e inversión por lanzamiento (SCRUM-535). Si el
-  modelo final cambia un nombre, cambia ahí y en la lectura;
-- el cursor de Leads hoy es un desplazamiento; en B4 puede ser por clave (sigue siendo opaco);
-- una consulta caída: `error` en el número o la lista que no se pudo leer, o `{ ok: false, motivo }` en las
-  tres pantallas de un lanzamiento o un lead.
+**Cambia:**
+
+- `leer.ts`: la rama de "cualquier otra organización" deja de devolver `sin-lectura-real.ts` y lee de la base.
+- `calcular.ts`: hoy trabaja con **filas de eventos en memoria**, no con conteos. Arma los conjuntos de
+  `lead_id` de cada tipo de evento (`leadsPorTipo`), y los filtros de Leads son diferencias entre esos
+  conjuntos. La asistencia por sesión, el total de personas distintas y la asociación de cada reembolso con
+  su compra recorren los eventos uno por uno. La página y el cursor de Leads también se resuelven en memoria:
+  se cortan todos los registros del lanzamiento y el cursor es un desplazamiento (`o<n>`). Pasarle las filas
+  de la base tal cual alcanza para una org chica (el escenario tiene unos 300 leads y 1.000 eventos), pero
+  con una org grande carga todos los eventos en cada pedido. Una consulta agrupada devuelve conteos, no
+  filas, así que no se puede pasar por estas funciones sin cambiarlas. Para leer agregados o paginar en la
+  base hay que reescribir esas partes: los conteos por tipo y por sesión, los conjuntos de los filtros, la
+  página y el cursor (que puede pasar a ser por clave y sigue opaco para la pantalla). Las reglas de estado
+  de cada número (`datoDeFuente`, `derivar` y los motivos) no dependen de eso.
+- `filas.ts` copia el modelo propuesto en SCRUM-526 (PR #141) y suma lo que ese modelo todavía no tiene:
+  estado de venta (`lead_sales_state`), notas, `report_status` de las sesiones e inversión por lanzamiento
+  (SCRUM-535). Si el modelo final cambia un nombre, hay que cambiarlo ahí, en la lectura y en `calcular.ts`.
+- La lectura real tiene que resolver el estado de cada fuente de la organización (`EstadoDeFuente`), con su
+  regla de "desactualizado". Una consulta caída va como `error` en el número o la lista que no se pudo leer,
+  o como `{ ok: false, motivo }` en las tres pantallas de un lanzamiento o de un lead.
 
 ## Tests
 
 `apps/web/lib/webinar/vistas/__tests__/` y `components/webinar/__tests__/`: el `Dato` y sus combinaciones;
 el escenario (determinismo, tamaño, contactos falsos, coherencia de cada recorrido y del embudo); las seis
 vistas (claves estables, los cinco estados en el número que corresponde, coherencia entre pantallas, Leads
-con filtros, búsqueda y paginación, reglas de estado sin el escenario); las funciones de lectura (sólo la org
-de demo recibe el ejemplo); quién importa el módulo; el cartel.
+con filtros, búsqueda y paginación, reglas de estado sin el escenario, asistentes distintos entre sesiones,
+reembolsos asociados a su compra, motivos iguales en el número y en Configuración); las funciones de
+lectura (sólo la org de demo recibe el ejemplo, con las fechas en la zona de la org); quién importa el módulo
+(con el auto-test del detector) y qué archivos son sólo de servidor; el cartel.
 
 ## A definir
 

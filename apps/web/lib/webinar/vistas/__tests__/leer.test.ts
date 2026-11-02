@@ -86,6 +86,27 @@ describe("la organización de demo", () => {
   });
 });
 
+describe("el escenario de la demo se arma en la zona de la org", () => {
+  // Entre las dos, a cualquier hora del día una tiene otra fecha que UTC.
+  it.each(["Pacific/Kiritimati", "Pacific/Honolulu"])("%s: cierra en 3 días y todas las pantallas dicen la misma fecha", async (z) => {
+    requireOrganizationId.mockResolvedValue(DEMO);
+    zona.mockResolvedValue(z);
+    try {
+      const inicio = (await leerInicio()).activo.value!;
+      expect(inicio.diasParaElCierre).toBe(3);
+      const lista = (await leerListaDeLanzamientos()).lanzamientos.value!;
+      expect(lista[0].lanzamiento.cierraEl).toBe(inicio.lanzamiento.cierraEl);
+      const detalle = await leerDetalleDelLanzamiento(LANZAMIENTO);
+      expect(detalle.ok && detalle.data!.lanzamiento.cierraEl).toBe(inicio.lanzamiento.cierraEl);
+      const configuracion = await leerConfiguracionDelLanzamiento(LANZAMIENTO);
+      expect(configuracion.ok && configuracion.data!.lanzamiento.cierraEl).toBe(inicio.lanzamiento.cierraEl);
+    } finally {
+      zona.mockReset();
+      zona.mockImplementation(async () => null);
+    }
+  });
+});
+
 describe("cualquier otra organización nunca recibe el ejemplo", () => {
   const casos: [string, Record<string, string | undefined>][] = [
     ["con la variable apuntando a la demo", { [VARIABLE_DE_LA_ORG_DE_DEMO]: DEMO }],

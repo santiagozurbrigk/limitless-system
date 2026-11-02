@@ -1,3 +1,5 @@
+import "server-only";
+
 import { sinFuente } from "./dato";
 import {
   ETIQUETA_DEL_FILTRO,
@@ -35,7 +37,7 @@ export function listaSinLecturaReal(): VistaListaDeLanzamientos {
 export function leadsSinLecturaReal(parametros: ParametrosDeLeads): VistaLeads {
   const filtro: FiltroDeLeads =
     parametros.filtro && (FILTROS_DE_LEADS as readonly string[]).includes(parametros.filtro)
-      ? parametros.filtro
+      ? (parametros.filtro as FiltroDeLeads)
       : "todos";
   return {
     esEjemplo: false,

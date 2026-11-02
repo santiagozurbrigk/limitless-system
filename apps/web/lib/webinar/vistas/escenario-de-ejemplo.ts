@@ -1,3 +1,6 @@
+import "server-only";
+
+import { fechaEnZona, sumarDias } from "@/lib/fechas/calendario";
 import type { EtapaDelLead, EstadoDeFuente } from "./contratos";
 import { ETAPAS_DEL_LEAD } from "./contratos";
 import type {
@@ -16,9 +19,12 @@ import type {
  *
  * Datos inventados, sólo para la organización de demo (`org-de-demo.ts`) y
  * siempre con el cartel "Datos de ejemplo". Determinístico: la misma `ahora`
- * da exactamente las mismas filas (generador con semilla fija, sin
- * `Math.random`). Las fechas se arman hacia atrás desde `ahora` para que el
- * lanzamiento activo se vea en curso cualquier día.
+ * y la misma zona dan exactamente las mismas filas (generador con semilla
+ * fija, sin `Math.random`). Las fechas se arman hacia atrás desde `ahora` para
+ * que el lanzamiento activo se vea en curso cualquier día; las de calendario
+ * (`capture_starts_on`, `closes_on`) salen del hoy de la zona de la
+ * organización, como las cargaría el dueño: el activo cierra en 3 días a
+ * cualquier hora.
  *
  * Qué tiene:
  *   - un lanzamiento activo de variante Pago (2 sesiones de Zoom ya
@@ -117,12 +123,13 @@ function iso(ms: number): string {
 }
 
 /**
- * Las filas del escenario. `ahora` se redondea a la hora: el escenario no
- * cambia entre dos pedidos de la misma hora (la paginación de Leads es
- * estable).
+ * Las filas del escenario. `ahora` se redondea a la hora: los instantes no
+ * cambian entre dos pedidos de la misma hora (la paginación de Leads es
+ * estable). `zona` es la de la organización (`null` = la de por defecto).
  */
-export function escenarioDeEjemplo(ahora: Date): FilasDelWebinar {
+export function escenarioDeEjemplo(ahora: Date, zona: string | null = null): FilasDelWebinar {
   const t0 = Math.floor(ahora.getTime() / HORA) * HORA;
+  const hoy = fechaEnZona(ahora, zona);
   const azar = generador(SEMILLA_DEL_ESCENARIO);
 
   const activoId = idDeEjemplo(0x001, 1);
@@ -135,8 +142,8 @@ export function escenarioDeEjemplo(ahora: Date): FilasDelWebinar {
       variant: "paid",
       offer_price: 997,
       currency: "USD",
-      capture_starts_on: dia(t0 - 14 * DIA),
-      closes_on: dia(t0 + 3 * DIA),
+      capture_starts_on: sumarDias(hoy, -14),
+      closes_on: sumarDias(hoy, 3),
       status: "active",
       closed_at: null,
     },
@@ -181,8 +188,8 @@ export function escenarioDeEjemplo(ahora: Date): FilasDelWebinar {
       variant: "organic",
       offer_price: 497,
       currency: "USD",
-      capture_starts_on: dia(t0 - 60 * DIA),
-      closes_on: dia(t0 - 40 * DIA),
+      capture_starts_on: sumarDias(hoy, -60),
+      closes_on: sumarDias(hoy, -40),
       status: "closed",
       closed_at: iso(t0 - 40 * DIA + 23 * HORA),
     },

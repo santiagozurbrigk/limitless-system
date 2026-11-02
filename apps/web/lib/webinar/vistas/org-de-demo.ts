@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * ¿Es la organización de demo de Limitless Webinars? (SCRUM-542)
  *

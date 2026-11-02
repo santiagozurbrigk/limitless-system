@@ -4,6 +4,9 @@
  * registrarse, cada etapa viene después de la anterior).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
 import type { TipoDeEvento } from "../contratos";
 import type { FilaEvento } from "../filas";
 import {
