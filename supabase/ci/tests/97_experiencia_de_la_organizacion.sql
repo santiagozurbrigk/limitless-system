@@ -44,6 +44,17 @@ select ci.espera(
   (select count(*) from public.organizations
     where id = '97000000-0000-0000-0000-000000000c00' and experience = 'limitless'),
   1, 'la columna acepta limitless');
+-- La definición entera del CHECK (fix-pack 1 de A1, AR BLQ-ALTO-1): un valor
+-- de más o de menos en la migración falla acá. Que estos valores sean los de
+-- EXPERIENCIAS en la app lo comprueba
+-- apps/web/lib/organization/__tests__/experiencias-de-la-base.test.ts.
+select ci.espera(
+  (select count(*) from pg_constraint
+    where conrelid = 'public.organizations'::regclass
+      and conname = 'organizations_experience_check'
+      and pg_get_constraintdef(oid) =
+        'CHECK ((experience = ANY (ARRAY[''webinar''::text, ''limitless''::text, ''full''::text])))'),
+  1, 'el CHECK de organizations.experience acepta exactamente webinar, limitless y full');
 
 -- ─── Ninguna alta por SQL ────────────────────────────────────────────────────
 -- Un INSERT o MERGE en organizations, o un COPY hacia ella, en el cuerpo de
