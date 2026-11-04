@@ -45,7 +45,10 @@ propia al final.
   `listGHLStageOptionsAction` y `listVTurbPlayerOptionsAction`. Arrancan con
   `rechazoPorModulo("funnels")` y, sin el módulo, devuelven el rechazo como valor; las 3 páginas
   dibujan `SinAcceso`. **Otras lecturas que usa el área siguen sin chequeo** (deuda de
-  `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]`):
+  `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]`). La lista que sigue es parcial: el total está en el
+  inventario de la HU (`limitless-auditoria/evidencia-sprint2/scrum-541/inventario.md`) y en las
+  listas `LECTURAS_SIN_CHEQUEO_CONOCIDAS` y `LECTURAS_SIN_LLAMADOR_CONOCIDAS` de
+  `apps/web/lib/navigation/__tests__/lecturas-por-modulo.test.ts`.
   - `listWebinarJamWebinarOptionsAction` (`app/webinarjam/actions.ts`): `configurar` la llama sin
     corte por rechazo. La alcanzan pantallas de Embudos y de Integraciones, así que necesita la
     regla de "alguno de estos módulos".

@@ -31,7 +31,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 ### 2026-11-04 — Las lecturas de Embudos chequean el módulo (SCRUM-541, primer corte)
 
 **Rama:** `fix/SCRUM-541-actions-lectura-por-modulo` (base `a9637de6`, SCRUM-540)
-**Commit(s):** `5c3ae20f` — fix(permisos): las lecturas de Embudos chequean el módulo; y este (docs)
+**Commit(s):** `5c3ae20f` — fix(permisos): las lecturas de Embudos chequean el módulo; docs: `92767f83`, `ebcbcb5f` y este
 **Módulo(s) afectado(s):** Embudos, permisos.
 - Actions: `app/funnels/actions.ts` (`listFunnelInstancesAction`, `getFunnelAction`, `listFunnelTemplatesAction`, `getFunnelBindingsAction`, `listFunnelFormOptionsAction`, `listFunnelIndexAction`), `app/ghl/opportunity-actions.ts` (`listGHLStageOptionsAction`) y `app/vturb/actions.ts` (`listVTurbPlayerOptionsAction`, y una línea de `getVTurbStatusAction`).
 - Páginas: `/funnels`, `/funnels/[funnelId]` y `/funnels/[funnelId]/configurar`.
