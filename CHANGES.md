@@ -28,6 +28,26 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-04 — Las lecturas de Embudos chequean el módulo (SCRUM-541, primer corte)
+
+**Rama:** `fix/SCRUM-541-actions-lectura-por-modulo` (base `a9637de6`, SCRUM-540)
+**Commit(s):** `5c3ae20f` — fix(permisos): las lecturas de Embudos chequean el módulo; y este (docs)
+**Módulo(s) afectado(s):** Embudos, permisos.
+- Actions: `app/funnels/actions.ts` (`listFunnelInstancesAction`, `getFunnelAction`, `listFunnelTemplatesAction`, `getFunnelBindingsAction`, `listFunnelFormOptionsAction`, `listFunnelIndexAction`), `app/ghl/opportunity-actions.ts` (`listGHLStageOptionsAction`) y `app/vturb/actions.ts` (`listVTurbPlayerOptionsAction`, y una línea de `getVTurbStatusAction`).
+- Páginas: `/funnels`, `/funnels/[funnelId]` y `/funnels/[funnelId]/configurar`.
+- Tests: `app/funnels/__tests__/lecturas-de-embudos-por-modulo.test.ts` y `app/(platform)/funnels/__tests__/pantallas-de-embudos.test.ts` (nuevos); la lista `LECTURAS_SIN_CHEQUEO_CONOCIDAS` pierde las 8.
+
+**Qué se hizo:** las 8 Server Actions de lectura de `funnels` arrancan con `rechazoPorModulo("funnels")` y devuelven `T | RechazoPorModulo`. Las 3 páginas de Embudos distinguen el rechazo con `esRechazoPorModulo` y dibujan `SinAcceso` («No tenés acceso a Embudos») antes de `notFound()`. `getVTurbStatusAction` lee los players con una función interna no exportada (`leerPlayersDeVTurb`), con el mismo cuerpo que tenía la action. La lista de deuda del test pasa de 73 a 65, y el inventario regenerado da 58 que chequean y 65 de deuda.
+
+**Por qué / finalidad:** una Server Action exportada se puede invocar a mano aunque la pantalla muestre «No tenés acceso». Sin el chequeo, un miembro sin Embudos leía los embudos, sus bindings, los formularios, las etapas de GHL y los players de VTurb de la org.
+
+**Decisiones de diseño relevantes:**
+- El retorno es la unión `T | RechazoPorModulo` y no `MutationResult<T>`: el cuerpo de cada action no cambia, quien tiene el módulo recibe exactamente lo mismo, y las lecturas que devuelven `[]` o `null` ante un error de base siguen igual. Es la forma que ya usan las lecturas del marco (`listClientsAction`).
+- Ante el rechazo, la página dibuja lo mismo que su guardia, no un estado vacío ni «no existe». Desde la interfaz sólo se ve si los permisos cambian entre el guardia y la lectura del mismo render (los permisos no se cachean por request).
+- `getVTurbStatusAction` es de Integraciones: si llamara a la action que ahora pide Embudos, quien tiene Integraciones y no Embudos vería el estado de VTurb roto o con 0 players. Por eso lee con la función interna, que no es una action porque no se exporta.
+
+**Riesgos / deuda técnica pendiente:** `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` sigue abierto (SCRUM-541) con 65 lecturas de un módulo, las 6 + 5 de más de un módulo y las 66 sin llamador. Cada render de Embudos suma lecturas de permisos (2 en `/funnels` y en el detalle, 4 en `configurar`) porque `getCurrentUserPermissions` no tiene caché por request. Las actions de escritura de Embudos siguen sin chequeo de módulo.
+
 ### 2026-10-20 — Las páginas y el marco de la plataforma chequean el módulo antes de leer, con mínimo privilegio (SCRUM-540)
 
 **Rama:** `fix/SCRUM-540-permisos-lecturas-por-modulo` (base `main` `4a542e5e`)

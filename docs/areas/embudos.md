@@ -39,8 +39,10 @@ propia al final.
   add-on**: aparece siempre y lo filtra el permiso `funnels`. El `AddOnId` `"embudos"`
   sigue declarado en `lib/auth/add-on-ids.ts` sólo por compatibilidad.
 - Permiso: `permissionModuleForPath` mapea `/funnels` y `/lanzamientos` al módulo `funnels`
-  y `app/(platform)/layout.tsx` bloquea la página. **Las server actions no chequean el
-  permiso** (sólo `requireOrganizationId()`).
+  y `app/(platform)/layout.tsx` bloquea la página. **Las server actions de lectura chequean
+  `funnels`** desde SCRUM-541: arrancan con `rechazoPorModulo("funnels")` y, sin el módulo,
+  devuelven el rechazo como valor; las 3 páginas dibujan `SinAcceso`. Las de escritura siguen
+  sin chequeo de módulo (sólo `requireOrganizationId()`).
 - `paths.platform.funnels.comparar` existe en `routes/paths.ts` pero **no hay página**.
 
 ## Modelo de datos
