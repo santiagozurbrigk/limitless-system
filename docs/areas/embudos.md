@@ -39,10 +39,23 @@ propia al final.
   add-on**: aparece siempre y lo filtra el permiso `funnels`. El `AddOnId` `"embudos"`
   sigue declarado en `lib/auth/add-on-ids.ts` sólo por compatibilidad.
 - Permiso: `permissionModuleForPath` mapea `/funnels` y `/lanzamientos` al módulo `funnels`
-  y `app/(platform)/layout.tsx` bloquea la página. **Las server actions de lectura chequean
-  `funnels`** desde SCRUM-541: arrancan con `rechazoPorModulo("funnels")` y, sin el módulo,
-  devuelven el rechazo como valor; las 3 páginas dibujan `SinAcceso`. Las de escritura siguen
-  sin chequeo de módulo (sólo `requireOrganizationId()`).
+  y `app/(platform)/layout.tsx` bloquea la página. **Desde SCRUM-541 (primer corte), chequean
+  `funnels` las 8 Server Actions de lectura que piden las 3 páginas de Embudos** (`/funnels`,
+  `/funnels/[funnelId]` y `/funnels/[funnelId]/configurar`): las 6 de `app/funnels/actions.ts`,
+  `listGHLStageOptionsAction` y `listVTurbPlayerOptionsAction`. Arrancan con
+  `rechazoPorModulo("funnels")` y, sin el módulo, devuelven el rechazo como valor; las 3 páginas
+  dibujan `SinAcceso`. **Otras lecturas que usa el área siguen sin chequeo** (deuda de
+  `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]`):
+  - `listWebinarJamWebinarOptionsAction` (`app/webinarjam/actions.ts`): `configurar` la llama sin
+    corte por rechazo. La alcanzan pantallas de Embudos y de Integraciones, así que necesita la
+    regla de "alguno de estos módulos".
+  - `getWebinarJamStatusAction` (`app/webinarjam/actions.ts`): deuda de Integraciones.
+  - `app/lanzamientos/actions.ts` (`/lanzamientos` también es del módulo `funnels`):
+    `listLaunchPickerOptionsAction` (la usa `/workboard`, deuda de ese módulo), y
+    `getLaunchesAction`, `getLaunchAction` y `getProductsForLaunchAction`, que hoy no importa
+    ninguna pantalla.
+
+  Las de escritura siguen sin chequeo de módulo (sólo `requireOrganizationId()`).
 - `paths.platform.funnels.comparar` existe en `routes/paths.ts` pero **no hay página**.
 
 ## Modelo de datos
