@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes/paths";
 import {
@@ -30,7 +34,9 @@ const INSTANCE_COLUMNS =
   "id, organization_id, template_id, name, product_id, currency, price_point, reporting_timezone, is_active";
 
 /** Lista las instancias de embudo activas de la org. */
-export async function listFunnelInstancesAction(): Promise<FunnelInstanceRow[]> {
+export async function listFunnelInstancesAction(): Promise<FunnelInstanceRow[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("funnels");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
@@ -54,7 +60,9 @@ export async function listFunnelInstancesAction(): Promise<FunnelInstanceRow[]> 
 export async function getFunnelAction(
   funnelId: string,
   presetId?: FunnelPeriodPresetId
-): Promise<ResolvedFunnelData | null> {
+): Promise<ResolvedFunnelData | null | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("funnels");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
@@ -147,6 +155,8 @@ export async function createFunnelInstanceAction(
 
 /** Catálogo de plantillas disponibles, para el formulario de alta. */
 export async function listFunnelTemplatesAction() {
+  const rechazo = await rechazoPorModulo("funnels");
+  if (rechazo) return rechazo;
   return FUNNEL_TEMPLATES.map((t) => ({
     id: t.id,
     label: t.label,
@@ -190,7 +200,11 @@ export type StepBindingRowView = {
 /** Devuelve el estado de configuración de fuentes de un embudo. */
 export async function getFunnelBindingsAction(
   funnelId: string
-): Promise<{ instanceName: string; templateLabel: string; rows: StepBindingRowView[] } | null> {
+): Promise<
+  { instanceName: string; templateLabel: string; rows: StepBindingRowView[] } | null | RechazoPorModulo
+> {
+  const rechazo = await rechazoPorModulo("funnels");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
@@ -341,7 +355,9 @@ export type FunnelFormOption = {
  * formulario para calcular scores promedio, y para un selector alcanza con la
  * lista.
  */
-export async function listFunnelFormOptionsAction(): Promise<FunnelFormOption[]> {
+export async function listFunnelFormOptionsAction(): Promise<FunnelFormOption[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("funnels");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
@@ -383,7 +399,9 @@ export type FunnelIndexItem = {
  * consultas de todas las integraciones por cada uno. Lo que el usuario necesita
  * decidir acá es a cuál entrar, y para eso alcanza con saber cuál está completo.
  */
-export async function listFunnelIndexAction(): Promise<FunnelIndexItem[]> {
+export async function listFunnelIndexAction(): Promise<FunnelIndexItem[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("funnels");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 

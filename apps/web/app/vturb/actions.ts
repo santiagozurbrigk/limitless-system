@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -59,7 +63,7 @@ export async function getVTurbStatusAction(): Promise<VTurbStatus> {
   const row = await getVTurbIntegrationForOrg(organizationId).catch(() => null);
   if (!row) return empty;
 
-  const players = await listVTurbPlayerOptionsAction();
+  const players = await leerPlayersDeVTurb(organizationId);
 
   return {
     connected: true,
@@ -71,8 +75,14 @@ export async function getVTurbStatusAction(): Promise<VTurbStatus> {
 }
 
 /** Players disponibles para bindear a un paso de embudo. */
-export async function listVTurbPlayerOptionsAction(): Promise<VTurbPlayerOption[]> {
+export async function listVTurbPlayerOptionsAction(): Promise<VTurbPlayerOption[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("funnels");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
+  return leerPlayersDeVTurb(organizationId);
+}
+
+async function leerPlayersDeVTurb(organizationId: string): Promise<VTurbPlayerOption[]> {
   const supabase = await createClient();
 
   const { data } = await supabase
