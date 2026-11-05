@@ -14,6 +14,7 @@ import {
   entradasListas,
   hijosVisiblesDelGrupo,
   pantallaDeInicio,
+  puedeVerEntrada,
   redireccionPorExperiencia,
   rutaPermitidaParaLaExperiencia,
   segmentoDe,
@@ -104,8 +105,13 @@ describe("⭐ la config de los menús", () => {
     expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["inicio", "lanzamientos", "leads", "equipo"]);
   });
 
-  it("limitless hoy: Clientes, Tablero y Ventas listas; Administración (SCRUM-551) oculta", () => {
-    expect(entradasListas(LIMITLESS).map((e) => e.id)).toEqual(["clientes", "tablero", "ventas"]);
+  it("limitless hoy: Clientes, Tablero, Ventas y Administración (SCRUM-551) listas", () => {
+    expect(entradasListas(LIMITLESS).map((e) => e.id)).toEqual(["clientes", "tablero", "ventas", "administracion"]);
+  });
+
+  it("⭐ SCRUM-551: Administración es la única entrada sólo para staff", () => {
+    const soloStaff = CON_MENU_PROPIO.flatMap((x) => MENU_POR_EXPERIENCIA[x]).filter((e) => e.soloStaff);
+    expect(soloStaff.map((e) => e.id)).toEqual(["administracion"]);
   });
 
   it("⭐ limitless usa las pantallas del menú completo con el mismo nombre, ícono y permiso", () => {
@@ -123,7 +129,7 @@ describe("⭐ la config de los menús", () => {
 
   it("⭐ una entrada con grupo: el grupo existe, sus hijos viven en el segmento de la entrada con su permiso, y href es uno de ellos", () => {
     const conGrupo = CON_MENU_PROPIO.flatMap((x) => MENU_POR_EXPERIENCIA[x]).filter((e) => e.grupo);
-    expect(conGrupo.map((e) => e.id)).toEqual(["ventas"]);
+    expect(conGrupo.map((e) => e.id)).toEqual(["ventas", "administracion"]);
     for (const entrada of conGrupo) {
       const grupo = modulesWithChildren[entrada.grupo!];
       expect(grupo.label).toBe(entrada.label);
@@ -248,11 +254,18 @@ describe("⭐ pantalla de inicio", () => {
     ).toBe("/workboard");
   });
 
-  it("limitless, un miembro con sólo Finanzas: Ajustes mientras Administración no esté lista", () => {
+  it("limitless, un miembro con sólo Finanzas: Ajustes (Administración es sólo para staff)", () => {
     expect(pantallaDeInicio("limitless", SIN_EQUIPO)).toBe("/settings");
-    expect(pantallaDeInicio("limitless", SIN_EQUIPO, conListas(LIMITLESS, "clientes", "administracion"))).toBe(
-      "/administracion"
-    );
+  });
+
+  it("⭐ SCRUM-551: Administración se ve sólo con esStaff, aunque sea founder", () => {
+    const admin = LIMITLESS.find((e) => e.id === "administracion")!;
+    expect(puedeVerEntrada(FOUNDER, admin)).toBe(false);
+    expect(puedeVerEntrada({ ...FOUNDER, esStaff: false }, admin)).toBe(false);
+    expect(puedeVerEntrada({ ...FOUNDER, esStaff: true }, admin)).toBe(true);
+    // Un staff que sólo ve Administración arranca ahí.
+    const soloAdmin = { isFounder: false, modules: { ...emptyPermissions(), settings: "view" as const }, esStaff: true };
+    expect(pantallaDeInicio("limitless", soloAdmin)).toBe(paths.platform.consola.organizaciones);
   });
 
   it("webinar con Inicio lista: /inicio", () => {
@@ -334,7 +347,7 @@ describe("⭐ rutas por experiencia", () => {
     }
   });
 
-  it("⭐ limitless: Clientes, Tablero y todo Ventas (con sus subrutas), Integraciones y las libres; ni Equipo ni Administración", () => {
+  it("⭐ limitless: Clientes, Tablero, todo Ventas y Administración (con sus subrutas), Integraciones y las libres; ni Equipo", () => {
     const abiertas = plataforma.filter((ruta) => rutaPermitidaParaLaExperiencia("limitless", ruta));
     expect(abiertas).toEqual([
       "/sales/inbox",
@@ -343,6 +356,7 @@ describe("⭐ rutas por experiencia", () => {
       "/clients/abc",
       "/workboard",
       "/integrations",
+      "/administracion",
       "/settings",
       "/holding",
       "/onboarding/holding",
@@ -359,7 +373,7 @@ describe("⭐ rutas por experiencia", () => {
   // `/administracion` todavía no tiene carpeta y da 404
   // (ver "entradas no listas" más abajo).
   it("⭐ limitless: el resto va a Clientes (para Administración, en cuanto su carpeta exista)", () => {
-    for (const ruta of ["/dashboard", "/finance", "/marketing", "/team", "/administracion", "/inicio", "/lanzamientos"]) {
+    for (const ruta of ["/dashboard", "/finance", "/marketing", "/team", "/inicio", "/lanzamientos"]) {
       expect(redireccionPorExperiencia("limitless", ruta, FOUNDER)).toBe("/clients");
     }
     expect(redireccionPorExperiencia("limitless", "/dashboard", SOLO_VENTAS)).toBe("/sales/inbox");
@@ -428,7 +442,7 @@ describe("⭐ entradas no listas: qué ve hoy quien tipea su URL (fix-pack 1 de 
     return bloquea ? "redirige" : "pantalla sin bloqueo";
   }
 
-  it("Administración no tiene pantalla: 404 (es la única entrada no lista)", () => {
+  it("⭐ SCRUM-551: no queda ninguna entrada sin pantalla", () => {
     const resultado = Object.fromEntries(
       CON_MENU_PROPIO.flatMap((experiencia) =>
         MENU_POR_EXPERIENCIA[experiencia]
@@ -436,9 +450,7 @@ describe("⭐ entradas no listas: qué ve hoy quien tipea su URL (fix-pack 1 de 
           .map((e) => [`${experiencia} ${e.href}`, queVe(e.href)])
       )
     );
-    expect(resultado).toEqual({
-      "limitless /administracion": "404",
-    });
+    expect(resultado).toEqual({});
   });
 
   it("ninguna pantalla dinámica de primer nivel las atrapa (no hay [slug] ni [...todo] en la raíz)", () => {

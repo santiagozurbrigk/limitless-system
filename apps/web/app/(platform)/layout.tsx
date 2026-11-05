@@ -7,6 +7,7 @@ import {
 } from "@/lib/holding/session";
 import { PlatformLayout } from "@/layouts";
 import { getCurrentUserPermissions } from "@/lib/auth/get-current-permissions";
+import { isStaffUser } from "@/lib/auth/require-staff";
 import { PermissionsProvider } from "@/providers/permissions-provider";
 import { OnboardingProvider } from "@/providers/onboarding-provider";
 import { TourRunner } from "@/components/onboarding/tour-runner";
@@ -80,7 +81,7 @@ export default async function PlatformRouteLayout({
    * Sentry (`lectura_degradada`) y la plataforma sigue con el valor de arriba.
    * Una sesión no válida o una cuenta desactivada no se degradan: se relanzan.
    */
-  const [holdingSession, permissions, onboarding, headerList, zona, experiencia] =
+  const [holdingSession, permisosDelRol, onboarding, headerList, zona, experiencia] =
     await Promise.all([
       lecturaDegradable(
         "layout-plataforma:holding",
@@ -105,6 +106,16 @@ export default async function PlatformRouteLayout({
       // Degradable por su cuenta: si no se puede leer, `full` (SCRUM-523).
       getOrganizationExperience(),
     ]);
+
+  /**
+   * Administración (SCRUM-551) es del menú `limitless` y sólo la ve el staff de
+   * la lista: para esa experiencia se suma `esStaff` a los permisos que usan la
+   * barra, la paleta y la pantalla de inicio. Si la lista no se puede leer,
+   * `isStaffUser` da `false` y la entrada no se muestra. El acceso real lo
+   * decide el layout de `/administracion` y cada acción (`requireStaff`).
+   */
+  const permissions =
+    experiencia === "limitless" ? { ...permisosDelRol, esStaff: await isStaffUser() } : permisosDelRol;
 
   /**
    * ⭐ El permiso se aplica acá, en el servidor, no sólo escondiendo links.

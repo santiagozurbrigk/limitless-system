@@ -33,6 +33,7 @@ const sim = vi.hoisted(() => ({
   reportes: 0,
   permisos: null as unknown as { isFounder: boolean; modules: Record<string, string> },
   lecturasDePermisos: 0,
+  esStaff: true,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -52,6 +53,8 @@ vi.mock("@/lib/auth/get-current-permissions", () => ({
   },
 }));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
+// SCRUM-551: el layout de `/administracion` pide además la lista de staff.
+vi.mock("@/lib/auth/require-staff", () => ({ isStaffUser: async () => sim.esStaff }));
 // Como `requireOrganizationId` desde SCRUM-523: una cuenta sin organización
 // (super admin) lanza con `SIN_ORGANIZACION_VINCULADA`, que la experiencia
 // toma como `full` sin reportar. La constante es la real.
@@ -141,12 +144,14 @@ beforeEach(() => {
   sim.reportes = 0;
   sim.permisos = { isFounder: true, modules: {} };
   sim.lecturasDePermisos = 0;
+  sim.esStaff = true;
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
 describe("los segmentos de la plataforma", () => {
   it("son los de hoy (si aparece uno nuevo, este test y el de disco lo señalan)", () => {
     expect(SEGMENTOS).toEqual([
+      "administracion",
       "agent",
       "business-context",
       "clients",
@@ -271,13 +276,14 @@ describe("⭐ organización limitless", () => {
     sim.organizacionActiva = "org-limitless";
   });
 
-  it("todo segmento fuera de Clientes, Tablero, Ventas, los extra de limitless y los libres redirige a Clientes, sin SinAcceso", async () => {
+  it("todo segmento fuera de Clientes, Tablero, Ventas, Administración (staff), los extra de limitless y los libres redirige a Clientes, sin SinAcceso", async () => {
     const resultado: Record<string, string> = {};
     for (const segmento of SEGMENTOS) resultado[segmento] = await entrar(segmento);
     const esperado = Object.fromEntries(
       SEGMENTOS.map((s) => [
         s,
         [
+          "administracion",
           "clients",
           "workboard",
           "sales",
@@ -293,6 +299,12 @@ describe("⭐ organización limitless", () => {
       ])
     );
     expect(resultado).toEqual(esperado);
+  });
+
+  it("⭐ SCRUM-551: /administracion abre al staff; a quien no está en la lista lo manda a su inicio", async () => {
+    expect(await entrar("administracion")).toBe("pasa");
+    sim.esStaff = false;
+    expect(await entrar("administracion")).toBe("redirect /clients");
   });
 
   it("⭐ abre /integrations, /sops y /business-context, adonde enlazan la Bandeja y el Tablero (fix-pack 1 de A1); webinar no", async () => {

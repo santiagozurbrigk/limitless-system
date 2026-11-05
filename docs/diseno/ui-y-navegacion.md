@@ -90,9 +90,9 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
     `team`). Llamadas salió del menú el 28-oct. Hoy están listas las cuatro (Lanzamientos desde SCRUM-544): la pantalla de inicio del founder (y de quien tiene el módulo del Panel) es Inicio.
   - `limitless` (28-oct-2026): Clientes (`/clients`, `clients`), Tablero de trabajo (`/workboard`,
     `workboard`), Ventas (el grupo `ventas` del menú completo, con sus hijos, `sales`; lleva a
-    `/sales/inbox`) y Administración (`/administracion`, SCRUM-551; el módulo `finance` es provisorio
-    hasta que esa tarea lo decida). Hoy están listas las tres primeras; Administración queda definida y
-    no se muestra. Clientes, Tablero y Ventas tienen el mismo nombre, ícono y módulo que en el menú completo
+    `/sales/inbox`) y Administración (el grupo `administracion`: Organizaciones, Usuarios, Holdings, Sistema y Onboarding bajo
+    `/administracion`, SCRUM-551). Las cuatro están listas; Administración es `soloStaff`: sólo la ve quien está
+    en la lista de staff (`esStaff` en los permisos), aunque sea founder. Clientes, Tablero y Ventas tienen el mismo nombre, ícono y módulo que en el menú completo
     (lo exige un test).
 
   Cada entrada tiene `lista`. Una entrada que no está lista no se muestra (sin "Próximamente") y su

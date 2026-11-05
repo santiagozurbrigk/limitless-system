@@ -1034,7 +1034,7 @@ Funcionalidad: F-PLA-22 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * [BAJAS-SIN-PROBAR] La baja del super admin nunca se ejecutó entera (P1)
 
 Funcionalidad: F-PLA-26 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-26]",H-PLA-26,Plataforma,P1,Media,BAJAS-SIN-PROBAR,
-[H-PLA-30] Que los documentos del cerebro de IA general no dependan de un bucket creado a mano,Story,High,historia,plataforma,p1,sev-media,para-confirmar,,"*Historia:* Como super admin de Limitless, quiero que el bucket donde se guardan los documentos del cerebro de IA general esté definido en las migraciones y sea privado, para que un entorno nuevo o una restauración no lo pierdan ni lo dejen público.
+[H-PLA-30] Que los documentos del cerebro de IA general no dependan de un bucket creado a mano,Story,High,historia,plataforma,p1,sev-media,,,"*Historia:* Como super admin de Limitless, quiero que el bucket donde se guardan los documentos del cerebro de IA general esté definido en las migraciones y sea privado, para que un entorno nuevo o una restauración no lo pierdan ni lo dejen público.
 
 *Criterios de aceptación:*
 * El bucket {{ai-brain-documents}} se crea desde una migración, es privado y su configuración coincide con la de producción.
@@ -1042,9 +1042,6 @@ Funcionalidad: F-PLA-26 · Sin verificar · docs/FUNCIONAL.md · Fuente: docs/ba
 
 *Tareas técnicas (PENDIENTES.md):*
 * [AUD-SEG-9] Buckets de Storage fuera de las migraciones (P1)
-
-*Para confirmar:*
-* ---
 
 Funcionalidad: F-PLA-30 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-30]",H-PLA-30,Plataforma,P1,Media,AUD-SEG-9,
 [H-CLI-09] Editar una tarea del cliente ya creada,Story,Medium,historia,clientes,p2,para-confirmar,,,"*Historia:* Como miembro del equipo, quiero corregir el detalle de una tarea del cliente después de crearla, para no tener que borrarla y cargarla de nuevo cuando cambia lo acordado.
@@ -1540,3 +1537,19 @@ Funcionalidad: F-EMB-23 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * Agustín: ¿el rol admin puede gestionar el equipo (dar de alta, cambiar roles, desactivar) o sólo el founder?
 
 Funcionalidad: F-OPS-19 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-OPS-19]",H-OPS-19,Operaciones y equipo,P3,,EQUIPO-ADMIN,
+[H-PLA-31] Administrar Limitless desde la plataforma,Story,Low,historia,plataforma,p3,octubre-cerebro-de-ia-lista-de-espera-pruebas-y-salud-siguen-en-super-admin-hasta-scrum-553,para-confirmar,,"*Historia:* Como staff de Limitless, quiero administrar organizaciones, usuarios, holdings, el sistema y el onboarding desde «Administración» dentro de la plataforma, para no tener que salir a un panel aparte.
+
+*Criterios de aceptación:*
+* Dado que estoy en la lista de staff, cuando entro a la org de Limitless, entonces veo «Administración» en el menú con Organizaciones, Usuarios, Holdings, Sistema y Onboarding, y cada función del panel viejo funciona igual desde ahí.
+* Dado que soy de la org de Limitless pero no estoy en la lista de staff, entonces no veo «Administración» y si tipeo la dirección vuelvo a mi pantalla de inicio.
+* Cuando cambio la experiencia de una organización, entonces sólo puedo elegir Limitless Webinars o Limitless completo; la org de Limitless no se puede cambiar desde ahí.
+* Dado un holding, cuando crea un negocio, entonces el negocio nunca queda como la org de Limitless.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [STAFF-GUARD-CON-PERTENENCIA] Endurecer el guard del staff con la pertenencia a la org de Limitless (nuevo, SCRUM-552) (P3)
+
+*Para confirmar:*
+* si Equipo vuelve al menú de la org de Limitless o la gestión de su gente pasa a Administración (SCRUM-524 lo deja visible hasta acá).
+* ---
+
+Funcionalidad: F-PLA-31 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-31]",H-PLA-31,Plataforma,P3,,STAFF-GUARD-CON-PERTENENCIA,"Cerebro de IA, lista de espera, pruebas y salud siguen en `/super-admin` hasta SCRUM-553"

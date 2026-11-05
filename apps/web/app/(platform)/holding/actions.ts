@@ -9,6 +9,7 @@ import { tempPasswordProfileFields } from "@/lib/auth/temp-password-expiry";
 import { regenerateUserTempPassword } from "@/lib/auth/regenerate-temp-password";
 import type { TempCredentials } from "@/lib/auth/temp-credentials";
 import { leerExperienciaDeLaOrganizacion } from "@/lib/organization/experience";
+import { experienciaDeUnNegocioNuevo } from "@/lib/administracion/experiencia";
 import {
   computeHoldingRevenue,
   type HoldingBillingModel,
@@ -147,7 +148,11 @@ export async function addBusinessToMyHoldingAction(
     // Limitless completo que suma un negocio no pierde el menú completo. Si no
     // se puede leer, no se crea nada: el default de la base (full) decidiría
     // por el holding.
-    const experience = await leerExperienciaDeLaOrganizacion(admin, holdingOrgId);
+    // Nunca `limitless` (SCRUM-551): es una sola org; un negocio de un holding
+    // marcado así nace `full`.
+    const experience = experienciaDeUnNegocioNuevo(
+      await leerExperienciaDeLaOrganizacion(admin, holdingOrgId)
+    );
 
     const { data: newOrg, error: orgError } = await admin
       .from("organizations")

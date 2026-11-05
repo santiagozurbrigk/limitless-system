@@ -28,6 +28,27 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-05 — Consola de Administración dentro de la org de Limitless (SCRUM-551, C1)
+
+**Rama:** `claude/brave-wright-s2bfcg` (con `feat/SCRUM-552-consola-acceso-staff` integrada: el guard del staff)
+**Commit(s):** este (y el merge de 552, que resuelve el destino después del login con los dos: la invitación gana, después el staff, después la pantalla de inicio de la experiencia)
+**Módulo(s) afectado(s):** Plataforma: `app/(platform)/administracion/**` (nuevo: layout, error, Organizaciones, Nueva, ficha, Usuarios, Holdings, Sistema, Onboarding); `lib/administracion/{rutas,experiencia}.ts` (nuevos); `components/super-admin/*` (prop `base` en 7 componentes, `onboarding-de-clientes.tsx` nuevo, selector de experiencia en la ficha); `app/super-admin/actions.ts` (`setOrganizationExperienceAction`, revalida `/administracion`); `lib/super-admin/queries.ts` y `types/super-admin.ts` (experiencia en la ficha); navegación `lib/navigation/{menu-por-experiencia,rutas-por-experiencia,sidebar-modules,module-for-path,page-meta}.ts`, `components/navigation/{notch-nav/platform-notch-nav,command-palette}.tsx`, `components/layout/mobile-nav.tsx`, `app/(platform)/layout.tsx`, `lib/auth/get-current-permissions.ts` (`esStaff`); holdings `app/(platform)/{holding,onboarding/holding}/actions.ts`; tests nuevos `lib/administracion/__tests__/{experiencia,consola}.test.ts` (20), `app/super-admin/__tests__/experiencia-desde-la-consola.test.ts` (4) y casos en bloqueo, rutas y guard por acción; docs `areas/plataforma.md`, `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `FUNCIONAL.md` (F-PLA-31), `backlog/historias.md` (H-PLA-31), `operacion/verificacion-manual.md` (V15)
+
+**Qué se hizo:**
+- **Menú:** «Administración» lista en `limitless` como grupo (Organizaciones, Usuarios, Holdings, Sistema, Onboarding). Entrada `soloStaff`: el layout de la plataforma suma `esStaff` (`isStaffUser`) a los permisos sólo para `limitless`; `puedeVerEntrada`, `buildPlatformSidebarNav` (barra y celular) y la paleta la sacan sin él, aunque sea founder. Módulo `settings` en lugar del provisorio `finance` (el acceso lo decide la lista).
+- **Pantallas:** `/administracion/**` con los componentes y consultas del super-admin. Layout: `exigirRutaDeLaExperiencia` y, sin estar en la lista, a la pantalla de inicio. Los componentes reciben `base` y sus enlaces quedan dentro de la consola (`lib/administracion/rutas.ts`).
+- **Experiencia:** sección en la ficha con `setOrganizationExperienceAction` (sólo `webinar`/`full`; nadie pasa a `limitless`; la org de Limitless no cambia desde la consola). Un negocio nuevo de un holding nunca hereda `limitless`: nace `full` (antes chocaba con el índice único de 552).
+- **Merge de 552:** el destino después del login suma el del staff y la invitación a la pantalla de inicio de la experiencia (524); dos tests de login adaptados al guard nuevo.
+
+**Por qué / finalidad:** C1 del plan: que el staff administre desde la plataforma, para poder cerrar `/super-admin` (553). Las decisiones del 5-nov (Jira SCRUM-551 y SCRUM-522).
+
+**Decisiones de diseño relevantes:**
+- `DESTINO_DEL_STAFF` **no** cambia todavía: sigue en `/super-admin/organizations`. Si el código saliera antes de que el staff esté asociado a la org de Limitless (migración de 552), mandar al staff a la plataforma lo dejaría sin org. Se mueve con SCRUM-553, que va "con la consola verificada en producción".
+- Equipo no se agrega al menú `limitless` (es de SCRUM-524, Fer): queda la decisión abierta en H-PLA-31.
+- Sistema reusa las dos páginas del panel viejo (infraestructura y costos) en lugar de copiar su lógica; Cerebro de IA, lista de espera, pruebas y salud quedan en `/super-admin` (553).
+
+**Riesgos / deuda técnica pendiente:** no se probó en navegador (V15). Depende de que 552 se mergee antes. Suite completa en verde.
+
 ### 2026-11-05 — Lanzamientos y Detalle del lanzamiento de Limitless Webinars, con el contrato ampliado (SCRUM-544, A6)
 
 **Rama:** `claude/brave-wright-s2bfcg`

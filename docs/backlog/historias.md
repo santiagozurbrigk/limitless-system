@@ -210,6 +210,17 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Tareas técnicas:** `[AUD-SEG-9]`
 - **Para confirmar:** —
 
+### [H-PLA-31] Administrar Limitless desde la plataforma
+- **Funcionalidad:** F-PLA-31 · A medias
+- **Historia:** Como staff de Limitless, quiero administrar organizaciones, usuarios, holdings, el sistema y el onboarding desde «Administración» dentro de la plataforma, para no tener que salir a un panel aparte.
+- **Criterios de aceptación:**
+  - Dado que estoy en la lista de staff, cuando entro a la org de Limitless, entonces veo «Administración» en el menú con Organizaciones, Usuarios, Holdings, Sistema y Onboarding, y cada función del panel viejo funciona igual desde ahí.
+  - Dado que soy de la org de Limitless pero no estoy en la lista de staff, entonces no veo «Administración» y si tipeo la dirección vuelvo a mi pantalla de inicio.
+  - Cuando cambio la experiencia de una organización, entonces sólo puedo elegir Limitless Webinars o Limitless completo; la org de Limitless no se puede cambiar desde ahí.
+  - Dado un holding, cuando crea un negocio, entonces el negocio nunca queda como la org de Limitless.
+- **Tareas técnicas:** `[STAFF-GUARD-CON-PERTENENCIA]`
+- **Para confirmar:** si Equipo vuelve al menú de la org de Limitless o la gestión de su gente pasa a Administración (SCRUM-524 lo deja visible hasta acá).
+
 ---
 
 ## Clientes

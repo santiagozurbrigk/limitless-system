@@ -38,6 +38,19 @@ export const paths = {
       lead: (id: string) => `${PLATFORM}/leads/${id}`,
     },
     administracion: `${PLATFORM}/administracion`,
+    /**
+     * La consola de Administración dentro de la org de Limitless (SCRUM-551):
+     * las mismas funciones que `/super-admin`, para el staff de la lista.
+     */
+    consola: {
+      organizaciones: `${PLATFORM}/administracion/organizaciones`,
+      organizacion: (id: string) => `${PLATFORM}/administracion/organizaciones/${id}`,
+      organizacionNueva: `${PLATFORM}/administracion/organizaciones/nueva`,
+      usuarios: `${PLATFORM}/administracion/usuarios`,
+      holdings: `${PLATFORM}/administracion/holdings`,
+      sistema: `${PLATFORM}/administracion/sistema`,
+      onboarding: `${PLATFORM}/administracion/onboarding`,
+    },
 
     finance: {
       root: `${PLATFORM}/finance`,

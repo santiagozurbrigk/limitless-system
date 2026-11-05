@@ -154,6 +154,14 @@ const PAGE_META: Record<string, PageMeta> = {
   },
   // Limitless Webinars (SCRUM-543, SCRUM-545). La ficha (`/leads/[id]`) va por prefijo, abajo.
   "/inicio": { title: "Inicio" },
+  // Consola de Administración (SCRUM-551). La ficha de una organización va por prefijo, abajo.
+  "/administracion": { title: "Administración" },
+  "/administracion/organizaciones": { title: "Organizaciones" },
+  "/administracion/organizaciones/nueva": { title: "Nueva cuenta" },
+  "/administracion/usuarios": { title: "Usuarios" },
+  "/administracion/holdings": { title: "Holdings" },
+  "/administracion/sistema": { title: "Sistema", subtitle: "Infraestructura, procesos y costos de IA" },
+  "/administracion/onboarding": { title: "Onboarding de clientes" },
   "/leads": { title: "Leads" },
   "/business-context/documents": {
     title: "Base de conocimiento",
@@ -366,6 +374,9 @@ function resolveMeta(pathname: string): PageMeta {
   }
   if (pathname.startsWith("/lanzamientos/") && pathname !== "/lanzamientos") {
     return { title: "Detalle del lanzamiento" };
+  }
+  if (pathname.startsWith("/administracion/organizaciones/")) {
+    return { title: "Organización" };
   }
   if (pathname.startsWith("/leads/") && pathname !== "/leads") {
     return { title: "Ficha del lead" };

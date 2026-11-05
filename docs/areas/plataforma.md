@@ -62,6 +62,31 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 | `/super-admin/waitlist`, `/super-admin/trials` | `lib/super-admin/waitlist-queries.ts` | `waitlist_leads` |
 | `/super-admin/ai-brain/*` | `app/super-admin/actions.ts` | "Cerebro de IA general": documentos globales, import desde Drive del super admin, batch de resúmenes |
 
+**Consola de Administración (SCRUM-551).** Las mismas funciones, dentro de la plataforma, en la org de Limitless
+(experiencia `limitless`): grupo «Administración» de la barra, sólo para el staff de la lista.
+
+| Ruta | Qué muestra (componente del super-admin) |
+|---|---|
+| `/administracion/organizaciones` (+ `/nueva`, `/[id]`) | `OrganizationsList`, `CreateFounderForm`, `OrganizationDetailView` (con **Experiencia**: webinar o full) |
+| `/administracion/usuarios` | `UsersTable` |
+| `/administracion/holdings` | `HoldingsAdminPanel` y `HoldingPortfolioContent` |
+| `/administracion/sistema` | las páginas de infraestructura y de costos de IA del panel |
+| `/administracion/onboarding` | `OnboardingDeClientes` (también la usa `/super-admin/onboarding`) |
+
+- **Quién la ve:** la entrada del menú es `soloStaff` (`EntradaDelMenu`): el layout de la plataforma suma `esStaff`
+  (`isStaffUser`) a los permisos sólo para `limitless`, y `puedeVerEntrada`/`buildPlatformSidebarNav` la sacan sin
+  él, aunque la persona sea founder. El layout de `/administracion` exige la experiencia y la lista: quien no está
+  va a su pantalla de inicio. Cada acción sigue con `requireStaff()`. El módulo `settings` sólo cumple el contrato
+  de que toda entrada tenga uno.
+- **Enlaces:** los componentes reciben `base` (`lib/administracion/rutas.ts`): con `"consola"` sus enlaces quedan
+  bajo `/administracion`; sin `base`, el panel viejo. `revalidateSuperAdmin` revalida también `/administracion`.
+- **Experiencia** (`setOrganizationExperienceAction`, `lib/administracion/experiencia.ts`): sólo `webinar` y `full`;
+  nadie pasa a `limitless` y la org de Limitless no cambia desde acá. Un negocio nuevo de un holding nunca hereda
+  `limitless`: nace `full` (`experienciaDeUnNegocioNuevo`).
+- **Qué no se mudó:** Cerebro de IA general, lista de espera, pruebas gratis y salud de clientes siguen en
+  `/super-admin` (SCRUM-553 decide). El staff sigue entrando por `/login` a `/super-admin/organizations`
+  (`DESTINO_DEL_STAFF`) hasta que SCRUM-553 cierre el panel viejo con la consola verificada en producción.
+
 Estado de la organización: el de la base, `organizations.status in ('active', 'paused', 'churned')`, con el tipo `OrganizationStatus` de `@ai-coo/types` (también lo usan `AdminOrgStatus` y `organizaciones-activas.ts`). `lib/super-admin/estado-de-org.ts` lo lee (`estadoDeOrg`; un valor desconocido no se convierte en ningún estado: queda `unknown`, se muestra "Desconocido" y no tiene botón de pausar ni activar, `accionDeEstado`), le da texto (Activa, Pausada, Dada de baja, desde `es.status.org`) y color, y estima el plan sólo por MRR (`planPorMrr`; no hay columna de plan). La lista de organizaciones filtra por esos tres estados; "Pausar" deja la org en `paused` y "Activar" la vuelve a `active` (`setOrganizationStatusAction`); ninguna pantalla pasa una org a `churned`. El estado "activo/inactivo" de `/super-admin/users` es otra cosa: si la persona puede entrar (`AdminUserStatus`, baneada en Auth o perfil inactivo).
 
 Guard doble: `app/(super-admin)/super-admin/layout.tsx` (`isStaffUser`; quien no es staff va a `/login`) y

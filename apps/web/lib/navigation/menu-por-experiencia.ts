@@ -25,7 +25,7 @@ import type { SidebarParentKey } from "./sidebar-modules";
  *
  * Una entrada con `lista: false` no se muestra (nada de "Próximamente") y su
  * ruta no se abre. Lo que ve quien la tipea depende de si su pantalla existe:
- * hoy `/administracion` no tiene carpeta en
+ * hoy ninguna entrada está en ese caso; una que no tenga carpeta en
  * `app/(platform)`, así que la URL da el 404 de la app (sin la barra); cuando
  * la tarea cree la carpeta, su `layout.tsx` llama a `exigirRutaDeLaExperiencia`
  * (lo exige un test) y esa ruta redirige a la pantalla de inicio mientras la
@@ -48,6 +48,12 @@ export type EntradaDelMenu = {
   icon: string;
   permissionId: PermissionModuleId;
   grupo?: SidebarParentKey;
+  /**
+   * Sólo la ve el staff de Limitless (la lista de `super_admin_users`), sea
+   * cual sea su rol: Administración (SCRUM-551). El rol sigue filtrando
+   * además, pero no alcanza.
+   */
+  soloStaff?: boolean;
   lista: boolean;
 };
 
@@ -118,11 +124,15 @@ export const MENU_POR_EXPERIENCIA: Record<ExperienciaConMenuPropio, readonly Ent
     {
       id: "administracion",
       label: "Administración",
-      href: paths.platform.administracion,
+      href: paths.platform.consola.organizaciones,
       icon: "building-2",
-      // Provisorio: el módulo de permisos de Administración lo decide SCRUM-551.
-      permissionId: "finance",
-      lista: false, // SCRUM-551
+      // El acceso lo decide la lista de staff (`soloStaff` y el layout de
+      // `/administracion`), no el rol: `settings` sólo cumple el contrato de
+      // que toda entrada tenga módulo (SCRUM-551).
+      permissionId: "settings",
+      grupo: "administracion",
+      soloStaff: true,
+      lista: true,
     },
   ],
 };

@@ -22,12 +22,12 @@ import type { PermissionModuleId } from "@/constants/permission-modules";
 const MODULE_BY_PREFIX: { prefix: string; moduleId: PermissionModuleId }[] = [
   { prefix: "/dashboard", moduleId: "dashboard" },
   // Menús por experiencia (SCRUM-524). `/inicio` es de SCRUM-543; `/leads` y la
-  // ficha `/leads/[id]`, de SCRUM-545. `/administracion` todavía no existe (es
-  // de SCRUM-551, con un módulo provisorio que decide esa tarea), pero el módulo
-  // queda decidido acá y en `lib/navigation/menu-por-experiencia.ts`.
+  // ficha `/leads/[id]`, de SCRUM-545. `/administracion` es la consola del
+  // staff (SCRUM-551): el acceso lo decide la lista de staff en su layout; el
+  // módulo `settings` sólo cumple el contrato de que toda ruta tenga uno.
   { prefix: "/inicio", moduleId: "dashboard" },
   { prefix: "/leads", moduleId: "sales" },
-  { prefix: "/administracion", moduleId: "finance" },
+  { prefix: "/administracion", moduleId: "settings" },
   { prefix: "/workboard", moduleId: "workboard" },
 
   { prefix: "/agent", moduleId: "agent" },

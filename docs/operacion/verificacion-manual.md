@@ -855,6 +855,15 @@ con una sesión real.
 4. Abrir el detalle en el celular y en modo oscuro. Resultado: se lee todo; el gráfico diario se desplaza de costado dentro de su caja, sin scroll horizontal de la página.
 5. Con la org `full`: tipear `/lanzamientos`. Resultado: la lista con «Sin fuente» (ya no lleva al Panel); el ítem del menú completo sigue deshabilitado.
 
+
+### V15. Consola de Administración (SCRUM-551) 🔒⭐
+**Prerrequisitos:** después de la ventana de SCRUM-532 (org de Limitless marcada `limitless` y staff asociado, SCRUM-552); una cuenta del staff y una cuenta de la org de Limitless que no esté en la lista; una org de prueba en `full`.
+1. ⭐ Como staff, entrar a la org de Limitless. Resultado: «Administración» en la barra con Organizaciones, Usuarios, Holdings, Sistema y Onboarding.
+2. ⭐ En Organizaciones, abrir la org de prueba: los enlaces y «← Volver al listado» quedan en `/administracion`. En «Experiencia», pasarla a «Limitless Webinars» y volver a «Limitless completo». Resultado: cambia; entrar con una cuenta de esa org muestra el menú de cada una.
+3. Abrir la ficha de la org de Limitless. Resultado: «Experiencia» dice que no se cambia desde acá, sin botones.
+4. Dar de alta una cuenta de prueba desde «Crear cuenta» y darla de baja. Resultado: igual que en el panel viejo.
+5. 🔒 Con la cuenta de Limitless que no está en la lista: no ve «Administración» ni en la barra ni en ⌘K; tipear `/administracion/organizaciones` la manda a Clientes.
+
 ---
 
 ## Agente de negocio e IA
