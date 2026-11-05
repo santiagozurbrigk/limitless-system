@@ -69,6 +69,7 @@ Relevadas con grep de `process.env.*` en `apps/` y `packages/` (89 nombres, incl
 | `LIMITLESS_WEBHOOK_SECRET` | sí | **no** — está `OTC_WEBHOOK_SECRET` | `lib/discord/webhook-auth.ts` (lee las dos) |
 | `META_CONVERSIONS_API_TOKEN`, `NEXT_PUBLIC_META_PIXEL_ID` | sí | sí | `lib/meta/conversions-api.ts`, `components/landing/meta-pixel.tsx` |
 | `NEXT_PUBLIC_UTM_ORGANIZATION_ID` | sí | **no** | `app/api/waitlist/route.ts` |
+| `WEBINAR_DEMO_ORGANIZATION_ID` | **no** | no | `lib/webinar/vistas/org-de-demo.ts` (SCRUM-542): UUID de la única organización que ve el escenario de ejemplo de Webinars, con el cartel "Datos de ejemplo". Sin ella (o con algo que no es un UUID), ninguna lo ve. De servidor, sin `NEXT_PUBLIC_`. Cuál es la org de demo lo decide SCRUM-522; ver [`areas/webinars-contratos-de-vista.md`](../areas/webinars-contratos-de-vista.md) |
 | `MIRO_ACCESS_TOKEN` | sí | sí | `lib/ai-brain/process-document.ts` |
 | `NEXT_PUBLIC_SOP_VIDEO_MAX_MB` | **no** | no | `lib/sops/constants.ts` (tiene default) |
 

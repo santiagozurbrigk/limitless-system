@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// SCRUM-524: el destino después del login sale de la experiencia; acá, `full`.
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/organization/experience", () => ({
+  getOrganizationExperience: async () => "full",
+}));
 import { MENSAJE_RECUPERACION_ENVIADA } from "@/lib/auth/recuperar-contrasena";
 
 /**

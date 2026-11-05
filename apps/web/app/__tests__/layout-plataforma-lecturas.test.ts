@@ -17,6 +17,11 @@
 import { createElement, Fragment, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// SCRUM-524: el layout lee la experiencia de la organización; acá, `full`.
+vi.mock("@/lib/organization/experience", () => ({
+  getOrganizationExperience: async () => "full",
+}));
 import { DynamicServerError } from "next/dist/client/components/hooks-server-context";
 import { emptyPermissions } from "@/constants/permission-modules";
 import type { UserPermissions } from "@/lib/auth/get-current-permissions";
