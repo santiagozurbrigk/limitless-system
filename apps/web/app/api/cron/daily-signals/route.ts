@@ -22,6 +22,7 @@ import { classifyDiscordMessagesForOrg } from "@/lib/discord/classify-run";
 import { proposeCheckpointsFromDiscordForOrg } from "@/lib/discord/propose-checkpoints";
 import { proposeCheckpointsFromCallsForOrg } from "@/lib/fathom/propose-checkpoints";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { filtrarOrganizacionesConProcesosDeFondo } from "@/lib/intelligence/organizaciones-activas";
 import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
@@ -81,7 +82,8 @@ async function step<T>(run: () => Promise<T>): Promise<T | { error: string }> {
  * Las organizaciones con Discord conectado **o** con llamadas de Fathom.
  *
  * Se juntan las dos fuentes en vez de recorrer todas las organizaciones: una que
- * no tiene ninguna de las dos no tiene nada que evaluar.
+ * no tiene ninguna de las dos no tiene nada que evaluar. Las cuentas webinar se
+ * descartan (SCRUM-525).
  */
 async function organizationsToProcess(): Promise<string[]> {
   const admin = createAdminClient();
@@ -101,5 +103,5 @@ async function organizationsToProcess(): Promise<string[]> {
     ...((fathom.data as { organization_id: string }[]) ?? []),
   ].map((row) => row.organization_id);
 
-  return [...new Set(ids)];
+  return filtrarOrganizacionesConProcesosDeFondo(ids);
 }

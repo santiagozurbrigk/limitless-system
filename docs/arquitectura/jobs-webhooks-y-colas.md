@@ -40,12 +40,14 @@ Vercel invoca los crons con **GET** y el header `Authorization: Bearer <CRON_SEC
 | `/api/cron/executive-report-daily` | `0 11 * * *` | Pulso diario | 60 | sí → `/api/queue/process-cron-executive-report` (`period` en el body) |
 | `/api/cron/executive-report-weekly` | `30 12 * * 1` | Reporte semanal | 60 | ídem |
 | `/api/cron/executive-report-monthly` | `0 13 1 * *` | Reporte mensual | 300 | ídem |
-| `/api/cron/sync-content-metrics` | `0 6 * * *` | Métricas de `content_pieces` vía Zernio | 60 | sí → `/api/queue/process-cron-sync-metrics` |
+| `/api/cron/sync-content-metrics` | `0 6 * * *` | Métricas de `content_pieces` vía Zernio (sin cuentas webinar, SCRUM-525) | 60 | sí → `/api/queue/process-cron-sync-metrics` |
 | `/api/cron/cleanup-trial-reels` | `0 3 * * *` | Borra del bucket `trial-reels` los archivos de jobs `done`/`failed` con más de 30 días | 60 | no |
 | `/api/cron/capture-ad-metrics` | `30 5 * * *` | Snapshot diario de anuncios de Zernio → `ad_metrics_daily` (el único histórico de Spend) | 60 | no |
-| `/api/cron/daily-signals` | `20 7 * * *` | Clasifica mensajes nuevos de Discord y propone hitos desde Discord y desde llamadas de entrega | 600 | no |
+| `/api/cron/daily-signals` | `20 7 * * *` | Clasifica mensajes nuevos de Discord y propone hitos desde Discord y desde llamadas de entrega (sin cuentas webinar, SCRUM-525) | 600 | no |
 
 Patrón de los crons con fan-out: `?organizationId=<uuid>` corre una sola org (test manual o retry); si `QSTASH_TOKEN` está configurado publica un job por org con `publishCronFanout` (2 reintentos); si no, corre en serie dentro del mismo `maxDuration`.
+
+**Cuentas webinar (SCRUM-525):** los procesos de fondo por organización no corren para `organizations.experience = 'webinar'` (`correProcesosDeFondo`, `lib/organization/procesos-de-fondo.ts`): inteligencia, tono del founder y los tres reportes ejecutivos (listado `listActiveOrganizationIds` y nueva comprobación `organizacionSigueActiva` en cada generador), señales diarias y métricas de contenido (`filtrarOrganizacionesConProcesosDeFondo` sobre la lista que sale de la integración). `full` y `limitless` siguen igual. No se filtran a propósito los que sólo sincronizan datos de una integración conectada, sin IA ni mails (`ghl-sync`, `calendly-sync*`, `capture-ad-metrics`, `mercadopago-token-refresh`), ni la limpieza de `cleanup-trial-reels`: una cuenta webinar no tiene Integraciones en su menú, y si algún día conecta GHL para Leads tiene que seguir sincronizando. Los dos de Instagram legacy recorren sólo integraciones conectadas (una en prod) y el webhook de Fathom no es un cron: quedan igual. Las consultas leen la columna `experience`: el código va con la migración de SCRUM-523 ya aplicada (ventana de SCRUM-532).
 
 Endpoints que usan `assertCronAuthorized` pero **no están agendados**: `/api/integrations/fathom/reanalyze`, `/api/integrations/manychat/reanalyze` y `/api/rag/ingest`. Se disparan a mano:
 

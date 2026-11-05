@@ -28,6 +28,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-05 — Procesos de fondo filtrados en cuentas webinar (SCRUM-525)
+
+**Rama:** `claude/brave-wright-s2bfcg` (sobre `feat/SCRUM-523-webinars-experiencia`, que necesita la columna `experience`)
+**Commit(s):** este
+**Módulo(s) afectado(s):** Agente IA / crons: `apps/web/lib/organization/procesos-de-fondo.ts` (nuevo), `lib/intelligence/organizaciones-activas.ts`, `app/api/cron/daily-signals/route.ts`, `app/api/cron/sync-content-metrics/route.ts`, `lib/marketing/sync-content-metrics.ts`; tests `lib/organization/__tests__/procesos-de-fondo.test.ts` (nuevo) y `lib/intelligence/__tests__/organizaciones-activas.test.ts`; docs `areas/agente-ia.md`, `arquitectura/jobs-webhooks-y-colas.md`
+
+**Qué se hizo:**
+- `correProcesosDeFondo(experiencia)`: una sola regla, `webinar` no corre; `full`, `limitless` y un valor desconocido sí (lógica pura, sin `server-only`).
+- `listActiveOrganizationIds()` lee `id, experience` y descarta las webinar: inteligencia, tono del founder y los tres reportes ejecutivos dejan de encolarlas.
+- `organizacionSigueActiva()` lee `status, experience`: un trabajo ya encolado, sus reintentos o una corrida con `?organizationId=` tampoco gastan IA en una webinar (devuelve `skipped`, como con una pausada).
+- `filtrarOrganizacionesConProcesosDeFondo(ids)` (nueva, mismo módulo): para los crons que arman su lista desde una integración. La usan `daily-signals` (Discord/Fathom) y `sync-content-metrics` (fan-out y modo en serie). Deduplica, mantiene el orden, descarta ids que no existen y lanza si la base falla.
+
+**Por qué / finalidad:** con 523 desplegada, toda alta nueva nace `webinar`, y esas cuentas no ven reportes, inteligencia ni Marketing (SCRUM-524). Sin este filtro, cada cuenta nueva gastaba IA y llamadas a Zernio en pantallas que no puede abrir. Tiene que ir en el mismo lote que 523 (ventana de SCRUM-532).
+
+**Decisiones de diseño relevantes:**
+- Se excluye sólo `webinar`, como pide la tarea. `limitless` sigue corriendo: tiene Clientes, donde caen los hitos de las señales diarias.
+- No se filtran los crons que sólo sincronizan una integración conectada, sin IA ni mails (GHL, Calendly, anuncios, Mercado Pago, limpieza de reels): una webinar no tiene Integraciones en el menú, y si conecta GHL para Leads tiene que seguir sincronizando.
+- Ante un valor desconocido corre (status quo, default de la columna `full`); ante una falla de la base lanza, como ya hacía el listado (el cron responde 500 y no procesa a ciegas).
+- El mensaje que ve quien pide un reporte a mano no cambia (`AVISO_ORG_NO_ACTIVA`): una webinar no llega a esas pantallas (rutas bloqueadas por 524).
+
+**Riesgos / deuda técnica pendiente:** las consultas leen `organizations.experience`: si el código se desplegara antes de la migración de 523, estos crons fallarían con 500 (no procesarían nada de más). El orden 523 → código ya está en la guía de SCRUM-532. Tests: 52 de los archivos tocados (12 nuevos); suite completa 4280 en verde.
+
 ### 2026-11-01 — `EXPERIENCIAS` comparada con el CHECK de la base y aviso para bases locales (SCRUM-523, fix-pack 1 de A1)
 
 **Rama:** `feat/SCRUM-523-webinars-experiencia`
