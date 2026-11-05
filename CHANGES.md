@@ -28,6 +28,26 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-05 — Estados de carga, vacío y error de Limitless Webinars (SCRUM-546, A8)
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Webinars: `components/webinar/esqueletos.tsx` (nuevo), `app/(platform)/inicio/{loading,error}.tsx`, `app/(platform)/leads/{loading,error}.tsx`, `app/(platform)/leads/[id]/loading.tsx` (nuevos); tests `components/webinar/__tests__/esqueletos.test.ts` (nuevo, 6) y `app/__tests__/boundaries.test.ts` (2 obligatorios más); doc `areas/webinars-contratos-de-vista.md`
+
+**Qué se hizo:**
+- Esqueletos con la forma de cada pantalla (Inicio, Leads, ficha del lead) en su `loading.tsx`, con `role="status"`, `aria-busy` y texto para lectores de pantalla.
+- `error.tsx` propio en `/inicio` y `/leads` (cubre la ficha), con `PantallaDeError`: Sentry con tag `webinar-inicio` / `webinar-leads`, sin el mensaje interno, y salida a la otra pantalla (no a la misma rota ni al Panel, que para webinar redirige).
+- Test que exige `loading.tsx` con su esqueleto en cada pantalla de Webinars, y los dos `error.tsx` en la lista de obligatorios.
+
+**Por qué / finalidad:** A8 del plan: ninguna pantalla nueva queda en blanco al navegar y una falla no tira la plataforma.
+
+**Decisiones de diseño relevantes:**
+- "Un error en una sección no tira la página" se resuelve con el contrato (cada sección trae su `Dato` con estado y motivo, SCRUM-542), no con boundaries por sección: los errores de un Server Component ocurren en el servidor y un boundary de cliente no los atrapa. Una falla de la lectura entera cae en el `error.tsx` de la ruta, con la navegación visible.
+- `global-error.tsx` y `(platform)/error.tsx` ya existían (SCRUM-108): no se tocaron.
+- Los estados vacíos con botón ya estaban en Leads (545) e Inicio (543); el botón depende de `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`.
+
+**Riesgos / deuda técnica pendiente:** Lanzamientos, Detalle y Configuración (529/544) tendrán que sumar su `loading.tsx` y entrar en la lista del test. No se miró en navegador (cubre V13). Suite completa 4779 en verde.
+
 ### 2026-11-05 — Inicio del lanzamiento activo de Limitless Webinars (SCRUM-543, A3)
 
 **Rama:** `claude/brave-wright-s2bfcg` (con `feat/SCRUM-545-webinars-leads-y-ficha` integrada, que trae 523, 524 y 542, sin mergear)

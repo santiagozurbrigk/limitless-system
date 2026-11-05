@@ -133,6 +133,23 @@ después del login.
   pasó). Nunca por un cero que no se midió.
 - Un número desactualizado muestra el valor con la marca y el motivo; uno sin valor, su estado y su motivo.
 
+## Estados de carga, vacío y error (SCRUM-546)
+
+- **Carga:** cada pantalla con lectura propia tiene `loading.tsx` con su esqueleto
+  (`components/webinar/esqueletos.tsx`: `EsqueletoDeInicio`, `EsqueletoDeLeads`, `EsqueletoDeFichaDelLead`),
+  con la forma de la pantalla, `role="status"` y `aria-busy`. Lo exige `esqueletos.test.ts`: una pantalla
+  nueva de Webinars se suma a su lista.
+- **Error:** `inicio/error.tsx` y `leads/error.tsx` (la ficha cae en el de Leads), con `PantallaDeError`
+  (Sentry, código de referencia, sin el mensaje interno) y la navegación visible; Inicio sale a Leads y Leads a
+  Inicio. Están en los obligatorios de `app/__tests__/boundaries.test.ts`. Arriba quedan `(platform)/error.tsx`
+  y `global-error.tsx`.
+- **Una sección que falla no tira la página:** la falla de una fuente o de una consulta viaja como el estado del
+  `Dato` de esa sección (`error`, `sin_fuente`...), y la pantalla dibuja el resto. Sólo una falla de la lectura
+  entera (o de render) cae en el `error.tsx` de la ruta, dentro de la cáscara. No se usan boundaries por
+  sección: los errores de un Server Component pasan en el servidor y un boundary de cliente no los ve.
+- **Vacío:** Leads sin lanzamientos y Inicio sin lanzamiento activo muestran su estado vacío; el botón «Crear
+  un lanzamiento» aparece cuando exista la ruta (`[WEBINAR-LEADS-CREAR-LANZAMIENTO]`).
+
 ## Qué recibe cada organización hoy
 
 - **La organización de demo**: el escenario de ejemplo, con `esEjemplo: true`. Se identifica con la variable
