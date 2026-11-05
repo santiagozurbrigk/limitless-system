@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { exchangeGoogleCode, getGoogleEnv } from "@/lib/google/oauth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paths } from "@/routes";
-import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import { requireStaff } from "@/lib/auth/require-staff";
 import { mismoUsuario, stateCoincide } from "@/lib/integrations/oauth-state";
 
 export const runtime = "nodejs";
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     // tiene que ser el mismo que empezó la conexión.
     let superAdminId: string;
     try {
-      superAdminId = (await requireSuperAdmin()).id;
+      superAdminId = (await requireStaff()).id;
     } catch {
       return redirectTo(origin, "error");
     }

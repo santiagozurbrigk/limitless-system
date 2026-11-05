@@ -186,6 +186,7 @@ export const paths = {
   },
 
   superAdmin: {
+    /** Legado: redirige a /login (SCRUM-552). Se borra en C3 (SCRUM-553). */
     login: "/superadmin/login",
     dashboard: "/superadmin/dashboard",
     root: "/super-admin",

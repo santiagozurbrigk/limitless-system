@@ -41,7 +41,7 @@ de negocio (clientes, ventas, marketing, etc.).
 | `/privacidad` | `app/(landing)/privacidad/page.tsx` | Política de privacidad, pública (la piden las apps OAuth) |
 | `/demo` | `app/demo/page.tsx` | Tour estático (`components/demo`, `lib/demo/tour-steps.ts`), público |
 | `/design-system`, `/design-system/charts`, `/design-system/categorias` | `app/design-system/*` | Showcase de componentes y gráficos, público |
-| `/superadmin/login` | `app/superadmin/login/page.tsx` | Login del staff (`signInSuperAdminAction`) |
+| `/superadmin/login` | `app/superadmin/login/page.tsx` | Redirige a `/login` (SCRUM-552): el staff entra por el login de todos |
 | `/super-admin/*` | `app/(super-admin)/super-admin/*` | Panel interno (tabla abajo) |
 
 `app/superadmin/` (sin guion) no es un duplicado del panel: sólo tiene `login/` y `dashboard/`, que
@@ -64,9 +64,20 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 
 Estado de la organización: el de la base, `organizations.status in ('active', 'paused', 'churned')`, con el tipo `OrganizationStatus` de `@ai-coo/types` (también lo usan `AdminOrgStatus` y `organizaciones-activas.ts`). `lib/super-admin/estado-de-org.ts` lo lee (`estadoDeOrg`; un valor desconocido no se convierte en ningún estado: queda `unknown`, se muestra "Desconocido" y no tiene botón de pausar ni activar, `accionDeEstado`), le da texto (Activa, Pausada, Dada de baja, desde `es.status.org`) y color, y estima el plan sólo por MRR (`planPorMrr`; no hay columna de plan). La lista de organizaciones filtra por esos tres estados; "Pausar" deja la org en `paused` y "Activar" la vuelve a `active` (`setOrganizationStatusAction`); ninguna pantalla pasa una org a `churned`. El estado "activo/inactivo" de `/super-admin/users` es otra cosa: si la persona puede entrar (`AdminUserStatus`, baneada en Auth o perfil inactivo).
 
-Guard doble: `app/(super-admin)/super-admin/layout.tsx` (redirect) y `requireSuperAdmin()` dentro de
-cada query/acción (incluidas las de sólo lectura, vía `lib/super-admin/queries.ts`, `org-health.ts` y
-`onboarding-progress.ts` y `getSignedFileUrl`, que lo suman desde SCRUM-111). Los dos guards (`isSuperAdminUser` y `requireSuperAdmin`) comparten una resolución memoizada con `cache` de React (`lib/auth/require-super-admin.ts`): dentro de un mismo render de server components (layout + página, p. ej. `/super-admin/ai-brain/[id]` con imagen, que encadena tres chequeos) se hace un solo `auth.getUser()` y una sola consulta a `super_admin_users`. En server actions y route handlers `cache` no memoiza: cada llamada consulta, como antes. Los mensajes de rechazo no cambiaron.
+Guard doble: `app/(super-admin)/super-admin/layout.tsx` (`isStaffUser`; quien no es staff va a `/login`) y
+`requireStaff()` dentro de cada query/acción (incluidas las de sólo lectura, vía `lib/super-admin/queries.ts`,
+`org-health.ts`, `onboarding-progress.ts` y `getSignedFileUrl`, que lo suman desde SCRUM-111), los dos en
+`lib/auth/require-staff.ts` (SCRUM-552). Decide la lista de staff (`super_admin_users`): estar en la org de
+Limitless, aunque sea como founder, no da el panel. Para quien está en la lista se lee además
+`profiles.is_active` con service role: un staff desactivado se rechaza con el motivo `desactivado` (el mensaje
+de cuenta desactivada, `CUENTA_DESACTIVADA_MESSAGE`), y si el perfil no se puede leer, falla cerrado; un staff
+sin perfil todavía no se corta. Los otros rechazos son "No autenticado", "Sin permisos de super admin" y
+"Supabase no configurado". Los dos guards comparten una resolución memoizada con `cache` de React: dentro de
+un mismo render de server components (layout + página, p. ej. `/super-admin/ai-brain/[id]` con imagen, que
+encadena tres chequeos) se hace un solo `auth.getUser()`, una sola consulta a `super_admin_users` y una sola
+lectura del perfil. En server actions y route handlers `cache` no memoiza: cada llamada consulta.
+`lib/auth/require-super-admin.ts` queda como alias `@deprecated` del mismo guard
+(`[STAFF-ALIAS-REQUIRE-SUPER-ADMIN]`). El staff entra por `/login` (`/superadmin/login` redirige ahí).
 
 ## Modelo de datos
 
@@ -178,7 +189,9 @@ configuración (`[DEMO-LAYOUT-500]`). `/demo` y `/design-system` sí funcionan.
   `moduloBloqueadoParaRuta`). El test de `module-for-path` recorre `app/` entero y falla si una queda afuera:
   es lo que le pasaba a `/founder` en su propio grupo `(founder)` hasta SCRUM-18. Super admin no tiene
   módulo: lo cuida su propio guard (`app/(super-admin)/super-admin/layout.tsx`).
-- **Super admin no tiene organización.** Todo lo que haga contra una org lo hace con service role.
+- **El staff es founder de la organización de Limitless** (SCRUM-552; la única con `experience = 'limitless'`).
+  Eso no le da el panel interno (lo da sólo `super_admin_users`), y las acciones del panel contra cualquier org
+  siguen yendo con service role.
 - **Integraciones: para agregar un proveedor** se tocan cuatro lugares y nada más (id, registro, color,
   health). La UI se arma sola.
 - `/`, `/prueba`, `/privacidad`, `/demo`, `/design-system`, `/invite`, `/onboarding-cliente/*` son públicas

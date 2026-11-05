@@ -16,8 +16,8 @@ const sim = vi.hoisted(() => ({
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/auth/require-super-admin", () => ({
-  requireSuperAdmin: async () => ({ id: "super" }),
+vi.mock("@/lib/auth/require-staff", () => ({
+  requireStaff: async () => ({ id: "super" }),
 }));
 vi.mock("@/lib/supabase/admin", async () => {
   const { crearBaseFalsa } = await import("@/lib/organization/__tests__/base-falsa");
