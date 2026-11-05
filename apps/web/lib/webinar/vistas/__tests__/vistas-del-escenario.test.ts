@@ -87,7 +87,7 @@ describe("contrato estable", () => {
       ["asistieron", "ingresos", "lanzamiento", "registrados", "ventas"].sort()
     );
     expect(claves(detalle)).toEqual(
-      ["anuncios", "embudo", "esEjemplo", "fuentes", "lanzamiento", "origenes", "sesiones", "tasas", "ventas"].sort()
+      ["anuncios", "embudo", "esEjemplo", "evolucionDiaria", "fuentes", "lanzamiento", "origenes", "registrosPorAnuncio", "sesiones", "tasas", "ventas"].sort()
     );
     expect(claves(leads)).toEqual(
       ["busqueda", "esEjemplo", "filas", "filtroElegido", "filtros", "lanzamientoElegido", "lanzamientos", "siguienteCursor", "total"].sort()

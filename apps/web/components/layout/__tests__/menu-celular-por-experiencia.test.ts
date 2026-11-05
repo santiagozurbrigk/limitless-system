@@ -102,10 +102,10 @@ describe("⭐ menú del celular de una organización full: igual que antes", () 
 });
 
 describe("⭐ menú del celular de una organización webinar", () => {
-  it("sólo las entradas listas: Inicio, Leads y Equipo, sin grupos", () => {
+  it("sólo las entradas listas: Inicio, Lanzamientos, Leads y Equipo, sin grupos", () => {
     const menu = menuAbierto("webinar", "/inicio", FOUNDER);
     expect(menu.html).toContain('data-dialogo="abierto"');
-    expect(menu.links).toEqual(["Inicio /inicio", "Leads /leads", "Equipo /team"]);
+    expect(menu.links).toEqual(["Inicio /inicio", "Lanzamientos /lanzamientos", "Leads /leads", "Equipo /team"]);
     expect(menu.grupos).toEqual([]);
   });
 

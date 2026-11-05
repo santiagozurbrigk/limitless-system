@@ -63,14 +63,14 @@ describe("⭐ bloqueo por experiencia en app/(platform)", () => {
     expect(dePlataforma.filter((p) => p.archivo.split(sep).length < 3)).toEqual([]);
   });
 
-  it("⭐ webinar: toda pantalla fuera de Inicio, Leads, Equipo y de las libres redirige a Inicio (founder)", () => {
+  it("⭐ webinar: toda pantalla fuera de Inicio, Lanzamientos, Leads, Equipo y de las libres redirige a Inicio (founder)", () => {
     const abiertas = new Set<string>();
     for (const p of dePlataforma) {
       const destino = redireccionPorExperiencia("webinar", p.ruta, FOUNDER);
       if (destino === null) abiertas.add(`/${segmento(p)}`);
       else expect(destino, p.ruta).toBe("/inicio");
     }
-    expect([...abiertas].sort()).toEqual(["/holding", "/inicio", "/leads", "/onboarding", "/settings", "/team"]);
+    expect([...abiertas].sort()).toEqual(["/holding", "/inicio", "/lanzamientos", "/leads", "/onboarding", "/settings", "/team"]);
   });
 
   it("⭐ limitless: toda pantalla fuera de Clientes, Tablero, Ventas, Integraciones, SOP, contexto del negocio y las libres redirige a Clientes", () => {

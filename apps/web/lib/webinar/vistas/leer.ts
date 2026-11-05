@@ -97,10 +97,8 @@ export async function leerDetalleDelLanzamiento(
 ): Promise<Lectura<VistaDetalleDelLanzamiento | null>> {
   const { ahora, demo } = await organizacionQueLee();
   if (!demo) return { ok: true, data: null };
-  return {
-    ok: true,
-    data: calcularDetalleDelLanzamiento((await escenario(ahora)).filas, launchId, ahora, true),
-  };
+  const { filas, zona } = await escenario(ahora);
+  return { ok: true, data: calcularDetalleDelLanzamiento(filas, launchId, ahora, true, zona) };
 }
 
 /** Leads de un lanzamiento (`/leads`, SCRUM-545), con filtro, búsqueda y página de la URL. */

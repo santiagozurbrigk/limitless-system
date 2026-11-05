@@ -74,7 +74,6 @@ Cada ítem es una bandera en `apps/web/lib/release/escondido.ts`; para volver a 
 | Canales Typeform, Google Forms, Landing y ManyChat al crear un Lead Magnet (quedan DM de Instagram y Manual) | No registran leads | `MKT-LEAD-MAGNETS-CAPTURA` · F-MKT-25 | `leadMagnetsCanalesSinCaptura` |
 | ManyChat en el catálogo de Integraciones | Lo que trae va a una bandeja que ninguna pantalla muestra; las 4 orgs conectadas siguen recibiendo | — | `integracionManyChat` |
 | `/redesign-preview`, `/demo` y `/design-system` (responden 404); "Recorrido guiado (demo)" sale del ⌘K y de la página de error | Pantallas internas o maquetas | — | `pantallasInternas` |
-| `/lanzamientos` (redirige al Panel) | "Próximamente", 0 lanzamientos | — | `lanzamientos` |
 
 Además, el buscador ⌘K ya no lista las pantallas que el menú esconde (Administrar, Conexión con Ventas, UTMs,
 Overview de Marketing): se arma desde el mismo config filtrando `hidden`.
@@ -364,6 +363,7 @@ Doc técnico: [`docs/areas/embudos.md`](./areas/embudos.md)
 | F-EMB-24 | El equipo puede asignar tareas del Tablero de trabajo a un lanzamiento y filtrar por lanzamiento | Funciona | `LANZAMIENTOS-DORMIDO` | [`areas/embudos.md` § Lanzamientos](./areas/embudos.md#lanzamientos) · `app/(platform)/workboard/page.tsx` | |
 | F-EMB-25 | En Limitless Webinars, el setter puede ver los leads de un lanzamiento en `/leads` (etapa, origen, responsable y último contacto, con los filtros de trabajo y su conteo en la URL), abrir la ficha de cada uno (WhatsApp, registros, línea de tiempo con la fuente, compras) y marcar avance, asignar responsable o agregar una nota; hoy sólo la organización de demo ve datos (de ejemplo) y esas tres acciones no se guardan: la ficha avisa que el cambio es de ejemplo y se pierde al recargar | A medias | `WEBINAR-LEADS-PERSISTIR`, `WEBINAR-VISTAS-LECTURA-REAL`, `WEBINAR-ORG-DE-DEMO`, `WEBINAR-LEADS-CREAR-LANZAMIENTO`, `WEBINAR-LEADS-SIN-ORGANIZACION` | [`areas/webinars-contratos-de-vista.md`](./areas/webinars-contratos-de-vista.md) · `app/(platform)/leads/page.tsx` · `app/(platform)/leads/[id]/page.tsx` | |
 | F-EMB-26 | En Limitless Webinars, el dueño entra a `/inicio` y ve el lanzamiento activo: cuántos días faltan para el cierre, la próxima sesión, registrados (y los de las últimas 24 h), asistencia, ventas e ingresos, lo que el equipo tiene que mover hoy (con enlace a esos leads), el embudo, las sesiones y qué fuentes no están al día, con un aviso si los registros dejan de llegar; hoy sólo la organización de demo ve datos (de ejemplo) | A medias | `WEBINAR-VISTAS-LECTURA-REAL`, `WEBINAR-ORG-DE-DEMO`, `WEBINAR-LEADS-CREAR-LANZAMIENTO` | [`areas/webinars-contratos-de-vista.md` § Inicio](./areas/webinars-contratos-de-vista.md#inicio-scrum-543) · `app/(platform)/inicio/page.tsx` | |
+| F-EMB-27 | En Limitless Webinars, el dueño y análisis ven la lista de lanzamientos (`/lanzamientos`: variante, estado, fechas, registrados, asistentes, ventas e ingresos) y el detalle de cada uno (`/lanzamientos/[id]`): las etapas de su variante con su número, el paso desde la etapa base y la fuente; números principales; registros por origen y por anuncio; evolución diaria de registros e inversión; sesiones y fuentes; cada número sin medir dice por qué y qué hacer; hoy sólo la organización de demo ve datos (de ejemplo), crear y configurar lanzamientos es de SCRUM-529 y los botones de cada estado todavía no llevan a ninguna pantalla | A medias | `WEBINAR-VISTAS-LECTURA-REAL`, `WEBINAR-ORG-DE-DEMO`, `WEBINAR-ACCIONES-SIN-DESTINO`, `WEBINAR-LEADS-CREAR-LANZAMIENTO` | [`areas/webinars-contratos-de-vista.md` § Lanzamientos y Detalle](./areas/webinars-contratos-de-vista.md#lanzamientos-y-detalle-scrum-544) · `app/(platform)/lanzamientos/page.tsx` · `app/(platform)/lanzamientos/[id]/page.tsx` | |
 
 ### Prometido y no existe
 
@@ -376,11 +376,11 @@ Doc técnico: [`docs/areas/embudos.md`](./areas/embudos.md)
 - **Whop/Fanbasis "cubierto por Stripe + Mercado Pago"** (FUNNELS_ARCHITECTURE §7). Existe distinto: los embudos sólo leen los cobros de Whop y Commas. Los de Stripe y Mercado Pago no llegan a ningún embudo.
 - **El embudo DM hardcodeado del Panel General pasa a ser la instancia DM del motor** (FUNNELS_ARCHITECTURE §8). No pasó: el Panel sigue con su propio "Embudo de conversión", que no usa el motor.
 - **Activación como add-on por super-admin y permiso separado `funnels_config`** (FUNNELS_ARCHITECTURE §1 decisión 6, §8). Existe distinto: Embudos aparece siempre y lo filtra un solo permiso `funnels`. No hay permiso aparte para editar fuentes.
-- **Lanzamientos como CRUD funcionando, con métricas diarias, tareas y post-mortem IA** (`docs/archivo/OPERATIONAL_NOTES.md` § Módulo Lanzamientos). Existe distinto: las páginas dicen "Próximamente". El backend y los componentes existen, pero ninguna página los usa.
+- **Lanzamientos como CRUD funcionando, con métricas diarias, tareas y post-mortem IA** (`docs/archivo/OPERATIONAL_NOTES.md` § Módulo Lanzamientos). Existe distinto: desde SCRUM-544 `/lanzamientos` y `/lanzamientos/[id]` son la lista y el detalle de Limitless Webinars (F-EMB-27), con otro modelo de datos; el backend y los componentes del módulo viejo existen, pero ninguna página los usa.
 
 ### Legacy visible
 
-- `/lanzamientos` y `/lanzamientos/[id]` se pueden abrir por URL y muestran "Próximamente". El ítem de la barra está deshabilitado.
+- El ítem «Lanzamientos» del menú completo sigue deshabilitado ("Próximamente"); la URL abre las pantallas de Limitless Webinars (SCRUM-544).
 - Los defaults del embudo DM apuntan al inbox viejo (ManyChat/Unipile), que quedó vacío con el paso a Zernio. Un DM recién creado muestra ceros y "sin datos" mezclados.
 - En el Panel General sigue el "Embudo de conversión" hardcodeado, paralelo al módulo Embudos y con otra lógica.
 

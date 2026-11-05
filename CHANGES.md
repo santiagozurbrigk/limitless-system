@@ -28,6 +28,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-05 — Lanzamientos y Detalle del lanzamiento de Limitless Webinars, con el contrato ampliado (SCRUM-544, A6)
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Webinars: contrato `lib/webinar/vistas/{contratos,calcular,leer}.ts` (SCRUM-542, ampliado); pantallas `app/(platform)/lanzamientos/{page,layout,loading,error}.tsx` y `[id]/{page,loading}.tsx`; componentes nuevos `components/webinar/{pantalla-de-lanzamientos,pantalla-de-detalle-del-lanzamiento,numero-del-dato,secciones-del-lanzamiento}.tsx`, `esqueletos.tsx` (+2); lógica nueva `lib/webinar/acciones-del-estado.ts`, `lib/webinar/lanzamientos/presentacion.ts`; Inicio reusa las secciones compartidas; `components/webinar/aviso-de-estado.tsx` (`ErrorDeCarga` con título opcional); `lib/release/escondido.ts` (`lanzamientos: false`); `lib/navigation/{menu-por-experiencia,page-meta}.ts`; tests nuevos `vistas/__tests__/detalle-del-lanzamiento.test.ts` (16), `lib/webinar/__tests__/acciones-del-estado.test.ts` (5), `lib/webinar/lanzamientos/__tests__/presentacion.test.ts` (3), `app/(platform)/lanzamientos/__tests__/pantallas-de-lanzamientos.test.ts` (10) y casos en esqueletos y boundaries; 9 archivos de tests actualizados; docs `areas/webinars-contratos-de-vista.md`, `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `FUNCIONAL.md` (F-EMB-27, F-EMB-23, escondidos), `backlog/historias.md` (H-EMB-27), `operacion/verificacion-manual.md` (V14), `PENDIENTES.md`
+
+**Qué se hizo:**
+- **Contrato (decisión de Santi: ampliarlo en esta rama y que Fer lo revise en el PR):** `PASOS_POR_VARIANTE` (etapas de cada variante según el diseño del producto, sección 6: VIP sólo en Pago +++, Calificados en todas) y `PASO_SE_MIDE_CONTRA`; `PasoDelEmbudo.pasoDesde` (etapa base y tasa); en el Detalle, `registrosPorAnuncio` (`utm_content`) y `evolucionDiaria` (registros por día en la zona de la org, días sin registros en cero medido, hasta 120; inversión por día `null` en orgánico). `calcularDetalleDelLanzamiento` recibe la zona y `leer` se la pasa.
+- **Pantallas:** lista de lanzamientos (variante, estado, fechas, cuatro números, enlace al detalle) y detalle (encabezado, números principales, embudo completo con paso, fuente y acción, cortes por origen y por anuncio con barras, evolución diaria en barras, sesiones y fuentes). `loading.tsx` y `error.tsx` propios.
+- **Acción de cada estado** (`accionDelEstado`, diseño sección 11): texto y destino por estado; sin destino para Webinars, se muestra como texto sin enlace (`[WEBINAR-ACCIONES-SIN-DESTINO]`, nuevo).
+- **Navegación:** Lanzamientos lista en el menú webinar y `ESCONDIDO.lanzamientos` en `false` (si no, bucle: lo exige el invariante de 524). Inicio pasó a usar `NumeroDelDato` y las secciones compartidas (mismo markup).
+
+**Por qué / finalidad:** A6 del plan: el funnel de punta a punta por lanzamiento, que es lo que lee el consultor; y la lista que lleva a él.
+
+**Decisiones de diseño relevantes:**
+- La etapa base de cada paso no siempre es la anterior: VIP, asistencia y contactados contra registrados (el equipo contacta a toda la base), ventas contra asistentes (se compra en la oferta sin llamada). Explícito en el contrato para que el día 6 se pueda cambiar en un lugar.
+- La inversión por día no se reparte ni se inventa: hoy se lee el total del lanzamiento; queda `sin_fuente` con motivo. Cuando B4 lea `ad_metrics_daily` por campaña, se llena.
+- En `full`, `/lanzamientos` ya no lleva al Panel: abre la lista de Webinars por URL (como `/leads`); el ítem del menú completo sigue deshabilitado.
+- Las barras son HTML con ancho/alto proporcional (`anchoDeBarra`), sin librería de gráficos: liviano y con texto para lectores de pantalla.
+
+**Riesgos / deuda técnica pendiente:** cambia el contrato de SCRUM-542 (Fer lo revisa en el PR; las pantallas de 545 no usan lo nuevo). Botones sin destino hasta 529 y la decisión de Integraciones (`[WEBINAR-ACCIONES-SIN-DESTINO]`); sin lectura real (`[WEBINAR-VISTAS-LECTURA-REAL]`). No se miró en navegador (V14). Tests: 34 nuevos; suite completa en verde.
+
 ### 2026-11-05 — Estados de carga, vacío y error de Limitless Webinars (SCRUM-546, A8)
 
 **Rama:** `claude/brave-wright-s2bfcg`

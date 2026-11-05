@@ -13,9 +13,8 @@ import type { SidebarParentKey } from "./sidebar-modules";
  *   - `webinar` (Limitless Webinars; PO, 19-oct y 28-oct-2026): Inicio,
  *     Lanzamientos, Leads y Equipo, en ese orden.
  *       - Inicio: SCRUM-543 (`/inicio`, el lanzamiento activo).
- *       - Lanzamientos: SCRUM-529 (la ruta es la de hoy, que sigue escondida
- *         para todos por `ESCONDIDO.lanzamientos`; encenderla obliga a revisar
- *         su layout).
+ *       - Lanzamientos: SCRUM-544 (`/lanzamientos` y el detalle
+ *         `/lanzamientos/[id]`; crear y configurar es de SCRUM-529).
  *       - Leads: SCRUM-545 (`/leads` y la ficha `/leads/[id]`).
  *       - Equipo: ya existe (`/team`).
  *   - `limitless` (Limitless de gestión; PO, 28-oct-2026): Clientes, Tablero
@@ -71,7 +70,7 @@ export const MENU_POR_EXPERIENCIA: Record<ExperienciaConMenuPropio, readonly Ent
       href: paths.platform.lanzamientos,
       icon: "rocket",
       permissionId: "funnels",
-      lista: false, // SCRUM-529
+      lista: true,
     },
     {
       id: "leads",

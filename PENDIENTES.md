@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 9 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 10 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
@@ -1474,6 +1474,12 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Qué hay que hacer:** que las funciones de lectura de Webinars traten la cuenta sin organización como "sin fuente" (o "no existe" en la ficha) sin lanzar, igual que hace `getOrganizationExperience` con `SIN_ORGANIZACION_VINCULADA`.
 - **Dónde:** `apps/web/lib/webinar/vistas/leer.ts`, `apps/web/app/(platform)/leads/`.
 
+#### [WEBINAR-ACCIONES-SIN-DESTINO] Los botones de cada estado de número no llevan a ninguna pantalla
+- **Tipo:** feature
+- **Estado verificado:** el Detalle del lanzamiento (SCRUM-544) muestra para cada número sin medir su acción ("Conectá GoHighLevel", "Ver Meta Ads", "Reconectá Commas", "Completá la configuración del lanzamiento"), pero como texto: `DESTINOS_DE_LAS_ACCIONES` (`apps/web/lib/webinar/acciones-del-estado.ts`) tiene `integraciones: null` y `configuracion: null`. Integraciones no está en el menú webinar (PO, 28-oct) y la pantalla de hoy lista las integraciones del producto completo; Configuración del lanzamiento no existe todavía.
+- **Qué hay que hacer:** SCRUM-529 pone en `configuracion` la ruta de su pantalla (`/lanzamientos/<id>/configuracion`). Para `integraciones`, decidir (SCRUM-522) si webinar abre Integraciones filtrada a sus fuentes (diseño, sección 7) y, si sí, sumarla a `RUTAS_EXTRA_POR_EXPERIENCIA.webinar` y poner su ruta. Cada `AccionDelDato` pasa sola a enlace.
+- **Dónde:** `apps/web/lib/webinar/acciones-del-estado.ts`, `apps/web/lib/navigation/menu-por-experiencia.ts`.
+
 #### [WEBINAR-LEADS-CREAR-LANZAMIENTO] Los estados vacíos de Leads e Inicio no tienen enlace para crear un lanzamiento
 - **Tipo:** feature
 - **Estado verificado:** sin lanzamientos, `/leads` muestra «Todavía no hay lanzamientos.» sin enlace: `RUTA_PARA_CREAR_LANZAMIENTO` es `null` en `apps/web/lib/webinar/leads/config.ts` porque no existe la pantalla de creación (SCRUM-544). `PantallaDeLeads` dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22). Inicio (SCRUM-543) usa la misma constante: sin lanzamiento activo muestra «No hay un lanzamiento activo.» sin botón.
@@ -1518,7 +1524,7 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 
 #### [LANZAMIENTOS-DORMIDO] Decidir qué hacer con Lanzamientos
 - **Tipo:** decisión de negocio
-- **Estado verificado:** páginas "Próximamente", nav `disabled`, `components/lanzamientos/*` sin importar, acciones vivas sólo para el picker del Workboard. OPERATIONAL_NOTES lo describe como CRUD funcionando. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
+- **Estado verificado:** desde SCRUM-544 (2026-11-05) las páginas `/lanzamientos` y `/lanzamientos/[id]` son las de Limitless Webinars (otro modelo: `webinar_launches`); el ítem del menú completo sigue `disabled`, `components/lanzamientos/*` sin importar, acciones vivas sólo para el picker del Workboard. OPERATIONAL_NOTES lo describe como CRUD funcionando. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
 - **Qué hay que hacer:** reactivarlo (montar los componentes existentes en las páginas) o borrar componentes y acciones sin uso, conservando `launches` para el Workboard. Si se reactiva: el prompt del post-mortem mete `name`/`description` sin `wrapUntrustedContent`.
 - **Dónde:** `apps/web/app/(platform)/lanzamientos/*`, `components/lanzamientos/*`, `app/lanzamientos/actions.ts`.
 

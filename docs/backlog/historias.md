@@ -797,6 +797,17 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dada una cuenta sin lanzamiento activo, entonces veo que no hay uno y cómo crearlo.
 - **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`
 
+
+### [H-EMB-27] Leer el embudo de un lanzamiento de punta a punta (Limitless Webinars)
+- **Funcionalidad:** F-EMB-27 · A medias
+- **Historia:** Como dueño o analista de una cuenta de Limitless Webinars, quiero ver cada lanzamiento con las etapas de su variante, cuánto pasa de una a otra y de dónde sale cada número, para decidir qué ajustar con el consultor.
+- **Criterios de aceptación:**
+  - Dado un lanzamiento orgánico, pago o pago +++, cuando abro su detalle, entonces veo sólo las etapas de su variante (el asiento VIP sólo en pago +++; la inversión sólo en las pagas), cada una con su número, el porcentaje de paso y su fuente.
+  - Dado un número que no se pudo medir, entonces veo por qué y qué hacer (conectar, revisar, reconectar o completar la configuración), y nunca un cero inventado.
+  - Cuando abro el detalle, entonces veo los registros por origen y por anuncio y su evolución día por día.
+  - Cuando abro Lanzamientos, entonces veo cada lanzamiento con su variante, estado, fechas, registrados, asistentes, ventas e ingresos, y llego a su detalle en un clic.
+- **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-ACCIONES-SIN-DESTINO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`
+
 ---
 
 ## Agente de negocio e IA

@@ -86,8 +86,8 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
 - **Config:** `lib/navigation/menu-por-experiencia.ts`. `MENU_POR_EXPERIENCIA` tiene un menú por
   experiencia salvo `full` (que ve el menú de siempre), con las entradas del PO en orden:
   - `webinar` (19-oct y 28-oct-2026): Inicio (`/inicio`, módulo `dashboard`, SCRUM-543), Lanzamientos
-    (`/lanzamientos`, `funnels`, SCRUM-529), Leads (`/leads`, `sales`, SCRUM-545) y Equipo (`/team`,
-    `team`). Llamadas salió del menú el 28-oct. Hoy están listas Inicio, Leads y Equipo: la pantalla de inicio del founder (y de quien tiene el módulo del Panel) es Inicio.
+    (`/lanzamientos`, `funnels`, SCRUM-544), Leads (`/leads`, `sales`, SCRUM-545) y Equipo (`/team`,
+    `team`). Llamadas salió del menú el 28-oct. Hoy están listas las cuatro (Lanzamientos desde SCRUM-544): la pantalla de inicio del founder (y de quien tiene el módulo del Panel) es Inicio.
   - `limitless` (28-oct-2026): Clientes (`/clients`, `clients`), Tablero de trabajo (`/workboard`,
     `workboard`), Ventas (el grupo `ventas` del menú completo, con sus hijos, `sales`; lleva a
     `/sales/inbox`) y Administración (`/administracion`, SCRUM-551; el módulo `finance` es provisorio

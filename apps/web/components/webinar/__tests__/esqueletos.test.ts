@@ -8,7 +8,13 @@ import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { EsqueletoDeFichaDelLead, EsqueletoDeInicio, EsqueletoDeLeads } from "../esqueletos";
+import {
+  EsqueletoDeDetalleDelLanzamiento,
+  EsqueletoDeFichaDelLead,
+  EsqueletoDeInicio,
+  EsqueletoDeLanzamientos,
+  EsqueletoDeLeads,
+} from "../esqueletos";
 
 const PLATAFORMA = join(__dirname, "..", "..", "..", "app", "(platform)");
 
@@ -17,6 +23,8 @@ const PANTALLAS: [ruta: string, esqueleto: string][] = [
   ["inicio", "EsqueletoDeInicio"],
   ["leads", "EsqueletoDeLeads"],
   ["leads/[id]", "EsqueletoDeFichaDelLead"],
+  ["lanzamientos", "EsqueletoDeLanzamientos"],
+  ["lanzamientos/[id]", "EsqueletoDeDetalleDelLanzamiento"],
 ];
 
 describe("⭐ cada pantalla de Webinars tiene su loading.tsx con su esqueleto", () => {
@@ -32,6 +40,8 @@ describe("los esqueletos", () => {
     ["Inicio", EsqueletoDeInicio],
     ["Leads", EsqueletoDeLeads],
     ["la ficha del lead", EsqueletoDeFichaDelLead],
+    ["Lanzamientos", EsqueletoDeLanzamientos],
+    ["el lanzamiento", EsqueletoDeDetalleDelLanzamiento],
   ] as const)("%s: role=status, aria-busy y el texto para lectores de pantalla", (que, Esqueleto) => {
     const html = renderToStaticMarkup(createElement(Esqueleto));
     expect(html).toMatch(/role="status" aria-busy="true"/);

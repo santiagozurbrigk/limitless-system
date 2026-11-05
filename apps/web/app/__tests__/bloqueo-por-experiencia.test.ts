@@ -181,22 +181,22 @@ describe("⭐ organización webinar", () => {
     sim.organizacionActiva = "org-webinar";
   });
 
-  it("todo segmento fuera de Inicio, Leads, Equipo y de los libres redirige a Inicio (founder), sin SinAcceso", async () => {
+  it("todo segmento fuera de Inicio, Lanzamientos, Leads, Equipo y de los libres redirige a Inicio (founder), sin SinAcceso", async () => {
     const resultado: Record<string, string> = {};
     for (const segmento of SEGMENTOS) resultado[segmento] = await entrar(segmento);
     const esperado = Object.fromEntries(
       SEGMENTOS.map((s) => [
         s,
-        ["inicio", "leads", "team", "settings", "holding", "onboarding"].includes(s) ? "pasa" : "redirect /inicio",
+        ["inicio", "lanzamientos", "leads", "team", "settings", "holding", "onboarding"].includes(s) ? "pasa" : "redirect /inicio",
       ])
     );
     expect(resultado).toEqual(esperado);
   });
 
-  it("tipear /finance, /marketing o /lanzamientos lleva a Inicio (no al Panel)", async () => {
+  it("tipear /finance o /marketing lleva a Inicio (no al Panel); ⭐ SCRUM-544: /lanzamientos abre", async () => {
     expect(await entrar("finance")).toBe("redirect /inicio");
     expect(await entrar("marketing")).toBe("redirect /inicio");
-    expect(await entrar("lanzamientos")).toBe("redirect /inicio");
+    expect(await entrar("lanzamientos")).toBe("pasa");
   });
 
   it("⭐ SCRUM-545: /leads abre; un miembro con Equipo y sin Ventas sigue yendo a Equipo", async () => {
@@ -217,8 +217,8 @@ describe("⭐ organización webinar", () => {
     expect(await entrar("finance")).toBe("redirect /leads");
   });
 
-  it("una ruta anidada tipeada (/finance/expenses, /lanzamientos/[id]) redirige por un layout de su cadena", async () => {
-    for (const ruta of ["/finance/expenses", "/lanzamientos/[id]", "/marketing/content/[id]"]) {
+  it("una ruta anidada tipeada (/finance/expenses, /marketing/content/[id]) redirige por un layout de su cadena", async () => {
+    for (const ruta of ["/finance/expenses", "/marketing/content/[id]"]) {
       const pantalla = pantallas(join(process.cwd(), "app")).find((p) => p.ruta === ruta);
       expect(pantalla, ruta).toBeDefined();
       // Los layouts de adentro de los segmentos (el de `(platform)` es el del
@@ -250,7 +250,7 @@ describe("⭐ organización webinar", () => {
     sim.permisos = { isFounder: false, modules: { finance: "full", settings: "view" } };
     expect(await entrar("finance")).toBe("redirect /settings");
     expect(await entrar("dashboard")).toBe("redirect /settings");
-    expect(await entrar("lanzamientos")).toBe("redirect /settings");
+    expect(await entrar("operations")).toBe("redirect /settings");
   });
 
   it("los permisos se leen sólo para elegir el destino de una redirección", async () => {
@@ -329,13 +329,13 @@ describe("⭐ organización limitless", () => {
 });
 
 describe("⭐ organización full: todo igual que antes", () => {
-  it("ningún segmento redirige por experiencia; /lanzamientos sigue yendo al Panel y las internas, a 404", async () => {
+  it("ningún segmento redirige por experiencia; las internas, a 404 (⭐ SCRUM-544: /lanzamientos ya no va al Panel)", async () => {
     const resultado: Record<string, string> = {};
     for (const segmento of SEGMENTOS) resultado[segmento] = await entrar(segmento);
     const esperado = Object.fromEntries(
       SEGMENTOS.map((s) => [
         s,
-        s === "lanzamientos" ? "redirect /dashboard" : s === "redesign-preview" ? "404" : "pasa",
+        s === "redesign-preview" ? "404" : "pasa",
       ])
     );
     expect(resultado).toEqual(esperado);

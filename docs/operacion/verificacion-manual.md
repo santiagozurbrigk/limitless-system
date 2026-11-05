@@ -825,6 +825,15 @@ con una sesión real.
 4. Abrir `/inicio` en el celular y en modo oscuro. Resultado: se lee todo, sin scroll horizontal.
 5. Con una org `webinar` que no es la de demo: «Sin fuente» con el motivo, sin números ni cartel.
 
+
+### V14. Lanzamientos y Detalle de Webinars (SCRUM-544) ⭐ — `[WEBINAR-ORG-DE-DEMO]`
+**Prerrequisitos:** los de V12. Los tests renderizan el HTML pero no miran la pantalla en el navegador.
+1. ⭐ Como founder de la org de demo, abrir «Lanzamientos» en el menú. Resultado: dos lanzamientos, el activo primero, con sus cuatro números.
+2. ⭐ Clic en el activo. Resultado: el detalle con el embudo (cada etapa con su número, «X % de «Etapa»» y «Fuente: …»), registros por origen y por anuncio con barras, «Registros por día» con una barra por día e «Inversión por día» con su motivo.
+3. ⭐ Resultado esperado: los números sin medir dicen su estado y su acción («Conectá GoHighLevel», «Ver Meta Ads», «Completá la configuración del lanzamiento»), sin enlace.
+4. Abrir el detalle en el celular y en modo oscuro. Resultado: se lee todo; el gráfico diario se desplaza de costado dentro de su caja, sin scroll horizontal de la página.
+5. Con la org `full`: tipear `/lanzamientos`. Resultado: la lista con «Sin fuente» (ya no lleva al Panel); el ítem del menú completo sigue deshabilitado.
+
 ---
 
 ## Agente de negocio e IA

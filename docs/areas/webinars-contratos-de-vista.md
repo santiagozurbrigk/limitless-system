@@ -4,7 +4,7 @@ SCRUM-542 (A2 del plan "UI primero, datos después"). Qué recibe cada pantalla 
 y qué cambia cuando lea la base (B4). Es la referencia para construir Inicio (SCRUM-543), Lanzamientos
 (SCRUM-544), Leads y la Ficha (SCRUM-545) y la Configuración del lanzamiento.
 
-Código: `apps/web/lib/webinar/vistas/`. Inicio (SCRUM-543) ya existe, en `apps/web/app/(platform)/inicio/` (lógica de textos y del aviso de registros en `lib/webinar/inicio/presentacion.ts`), y Leads y la ficha del lead (SCRUM-545), en `apps/web/app/(platform)/leads/`; las demás pantallas todavía no.
+Código: `apps/web/lib/webinar/vistas/`. Inicio (SCRUM-543) ya existe, en `apps/web/app/(platform)/inicio/` (lógica de textos y del aviso de registros en `lib/webinar/inicio/presentacion.ts`); Lanzamientos y el Detalle (SCRUM-544), en `apps/web/app/(platform)/lanzamientos/`; Leads y la ficha del lead (SCRUM-545), en `apps/web/app/(platform)/leads/`. Falta la Configuración del lanzamiento (SCRUM-529).
 
 ## La regla
 
@@ -87,7 +87,12 @@ Los tipos están en `contratos.ts`. Lo principal:
   pendientes del equipo (levantaron la mano sin contactar, agendados sin cerrar) y el estado de las fuentes.
 - **Lista**: `lanzamientos: Dato<FilaDeLanzamiento[]>`, activos primero; cada fila con registrados,
   asistieron, ventas e ingresos.
-- **Detalle**: lo mismo que Inicio para cualquier lanzamiento, más registros por origen (`utm_source`).
+- **Detalle**: lo mismo que Inicio para cualquier lanzamiento, más registros por origen (`utm_source`), por anuncio
+  (`registrosPorAnuncio`, `utm_content`) y la evolución diaria (`evolucionDiaria`: registros por día y, en las
+  variantes pagas, inversión por día). Ampliado en SCRUM-544, ver abajo.
+- **Embudo** (Inicio y Detalle, SCRUM-544): las etapas de la variante (`PASOS_POR_VARIANTE`: el VIP sólo en Pago +++,
+  Calificados en todas; diseño del producto, sección 6) y, en cada una, `pasoDesde`: la etapa contra la que se mide
+  (`PASO_SE_MIDE_CONTRA`) y la tasa (`tasa`, hereda el peor estado).
 - **Leads**: selector de lanzamientos, los cinco filtros listos con su conteo (`FILTROS_DE_LEADS`), el total
   del filtro y la búsqueda, la página (50 filas, `LEADS_POR_PAGINA`, del registro más nuevo al más viejo) y
   `siguienteCursor` (opaco; `null` si no hay más). Filtro, búsqueda, lanzamiento y cursor van en la URL; el
@@ -113,6 +118,29 @@ const vista = lectura.data;
 
 Fechas en ISO UTC (las de calendario, `AAAA-MM-DD`), montos en la moneda del lanzamiento, tasas entre 0 y 1.
 Las vistas son JSON: se pueden pasar enteras a un Client Component.
+
+## Lanzamientos y Detalle (SCRUM-544)
+
+`/lanzamientos` dibuja `leerListaDeLanzamientos()` con `PantallaDeLanzamientos` y `/lanzamientos/[id]`,
+`leerDetalleDelLanzamiento(id)` con `PantallaDeDetalleDelLanzamiento` (los dos Server Components sin estado).
+Reemplazan el "Próximamente" del módulo viejo (`ESCONDIDO.lanzamientos` pasó a `false`); Lanzamientos quedó lista
+en el menú webinar.
+
+- **Lista:** cada lanzamiento con variante, estado, fechas, registrados, asistieron, ventas e ingresos; enlace al
+  detalle. Vacío: "Todavía no hay lanzamientos." (botón cuando exista SCRUM-529).
+- **Detalle:** encabezado; números principales (ventas, ingresos, reembolsos, tasas y, en las pagas, inversión, costo
+  por registro, costo por venta y ROAS); embudo de la variante con su paso desde la etapa base, su fuente y la
+  acción de su estado; registros por origen y por anuncio (barras); evolución diaria (barras por día); sesiones y
+  fuentes. Si no se pudo leer, el motivo; si no existe, el 404 de la app.
+- **Evolución diaria** (`calcular.ts`): días calendario en la zona de la organización, desde el primer día de
+  captación (o el primer registro) hasta hoy, o hasta el cierre si está cerrado; los días sin registros en cero
+  medido; como mucho los últimos 120. La inversión por día **no se inventa**: con el total medido es `sin_fuente`
+  ("por ahora la inversión se lee como total del lanzamiento"); sin valor, hereda el estado del total.
+- **Acción de cada estado** (`lib/webinar/acciones-del-estado.ts`, diseño del producto, sección 11): sin fuente
+  "Conectá X", desactualizado "Ver X", error "Reconectá X" (a Integraciones); falta configurar, o una fuente que
+  no se conecta (equipo, calculado, configuración), "Completá la configuración del lanzamiento". Mientras el destino
+  no existe para Webinars (`DESTINOS_DE_LAS_ACCIONES`), se muestra como texto, sin enlace
+  (`[WEBINAR-ACCIONES-SIN-DESTINO]`).
 
 ## Inicio (SCRUM-543)
 

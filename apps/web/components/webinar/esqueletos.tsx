@@ -83,3 +83,28 @@ export function EsqueletoDeFichaDelLead() {
     </Cargando>
   );
 }
+
+/** Lista de lanzamientos: una tarjeta por lanzamiento con sus cuatro números. */
+export function EsqueletoDeLanzamientos() {
+  return (
+    <Cargando que="Lanzamientos">
+      <Lista filas={3} alto="h-28" />
+    </Cargando>
+  );
+}
+
+/** Detalle del lanzamiento: encabezado, números, embudo, cortes y la serie diaria. */
+export function EsqueletoDeDetalleDelLanzamiento() {
+  return (
+    <Cargando que="el lanzamiento">
+      <Skeleton className="h-20 rounded-xl" />
+      <Tarjetas cantidad={8} />
+      <Lista filas={11} alto="h-9" />
+      <div className="grid gap-6 md:grid-cols-2">
+        <Lista filas={4} alto="h-6" />
+        <Lista filas={4} alto="h-6" />
+      </div>
+      <Skeleton className="h-32" />
+    </Cargando>
+  );
+}

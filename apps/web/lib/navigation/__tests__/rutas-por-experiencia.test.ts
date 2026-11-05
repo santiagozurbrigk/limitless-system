@@ -100,8 +100,8 @@ describe("⭐ la config de los menús", () => {
     ]);
   });
 
-  it("webinar hoy: Inicio, Leads y Equipo están listas (Lanzamientos es de 529)", () => {
-    expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["inicio", "leads", "equipo"]);
+  it("webinar hoy: las cuatro entradas están listas (Lanzamientos desde SCRUM-544)", () => {
+    expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["inicio", "lanzamientos", "leads", "equipo"]);
   });
 
   it("limitless hoy: Clientes, Tablero y Ventas listas; Administración (SCRUM-551) oculta", () => {
@@ -170,8 +170,8 @@ describe("⭐ la config de los menús", () => {
     });
   }
 
-  it("el /lanzamientos de hoy sigue escondido para todos", () => {
-    expect(ESCONDIDO.lanzamientos).toBe(true);
+  it("⭐ SCRUM-544: /lanzamientos ya no está escondido (son las pantallas de Webinars)", () => {
+    expect(ESCONDIDO.lanzamientos).toBe(false);
   });
 
   it("⭐ rutas extra (fuera del menú): limitless abre Integraciones, SOP y contexto del negocio; webinar, ninguna", () => {
@@ -314,7 +314,17 @@ describe("⭐ rutas por experiencia", () => {
 
   it("webinar: las entradas listas (con sus subrutas) y las libres", () => {
     const abiertas = plataforma.filter((ruta) => rutaPermitidaParaLaExperiencia("webinar", ruta));
-    expect(abiertas).toEqual(["/inicio", "/leads", "/team", "/team/roles", "/settings", "/holding", "/onboarding/holding"]);
+    expect(abiertas).toEqual([
+      "/lanzamientos",
+      "/lanzamientos/abc",
+      "/inicio",
+      "/leads",
+      "/team",
+      "/team/roles",
+      "/settings",
+      "/holding",
+      "/onboarding/holding",
+    ]);
   });
 
   it("⭐ SCRUM-545 (AC-13): /leads y /leads/abc en full no redirigen, con cualquier permiso", () => {
@@ -340,7 +350,7 @@ describe("⭐ rutas por experiencia", () => {
   });
 
   it("webinar: el resto, incluidas las rutas anidadas, va a Inicio para el founder (las entradas no listas, en cuanto su carpeta exista)", () => {
-    for (const ruta of ["/finance", "/marketing", "/lanzamientos", "/finance/expenses", "/llamadas", "/dashboard", "/clients"]) {
+    for (const ruta of ["/finance", "/marketing", "/finance/expenses", "/llamadas", "/dashboard", "/clients"]) {
       expect(redireccionPorExperiencia("webinar", ruta, FOUNDER)).toBe("/inicio");
     }
   });
@@ -418,7 +428,7 @@ describe("⭐ entradas no listas: qué ve hoy quien tipea su URL (fix-pack 1 de 
     return bloquea ? "redirige" : "pantalla sin bloqueo";
   }
 
-  it("Administración no tiene pantalla: 404; Lanzamientos tiene pantalla y layout con el bloqueo: redirige", () => {
+  it("Administración no tiene pantalla: 404 (es la única entrada no lista)", () => {
     const resultado = Object.fromEntries(
       CON_MENU_PROPIO.flatMap((experiencia) =>
         MENU_POR_EXPERIENCIA[experiencia]
@@ -427,7 +437,6 @@ describe("⭐ entradas no listas: qué ve hoy quien tipea su URL (fix-pack 1 de 
       )
     );
     expect(resultado).toEqual({
-      "webinar /lanzamientos": "redirige",
       "limitless /administracion": "404",
     });
   });
@@ -471,11 +480,18 @@ describe("⭐ invariante: una entrada lista no puede seguir escondida (SCRUM-529
     }
   });
 
-  it("la regla ve el caso de hoy: Lanzamientos lista con ESCONDIDO.lanzamientos en true", () => {
-    const problemas = entradasListasEscondidas(conListas(WEBINAR, "lanzamientos", "equipo"));
-    expect(problemas).toHaveLength(1);
-    expect(problemas[0]).toContain("ESCONDIDO.lanzamientos");
-    expect(problemas[0]).toContain("bucle de redirecciones");
+  it("la regla ve el caso: Lanzamientos lista con ESCONDIDO.lanzamientos en true", () => {
+    const banderas = ESCONDIDO as { lanzamientos: boolean };
+    const antes = banderas.lanzamientos;
+    banderas.lanzamientos = true;
+    try {
+      const problemas = entradasListasEscondidas(conListas(WEBINAR, "lanzamientos", "equipo"));
+      expect(problemas).toHaveLength(1);
+      expect(problemas[0]).toContain("ESCONDIDO.lanzamientos");
+      expect(problemas[0]).toContain("bucle de redirecciones");
+    } finally {
+      banderas.lanzamientos = antes;
+    }
   });
 });
 

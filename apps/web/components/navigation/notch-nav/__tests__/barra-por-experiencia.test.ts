@@ -157,7 +157,7 @@ describe("⭐ barra de una organización webinar", () => {
   });
 
   it("sólo las entradas listas del menú", () => {
-    expect(barra.items).toEqual(["Inicio", "Leads", "Equipo"]);
+    expect(barra.items).toEqual(["Inicio", "Lanzamientos", "Leads", "Equipo"]);
   });
 
   it("⭐ la isla sin reportes ejecutivos, sin configuración pendiente y sin Integraciones: sólo Ajustes", () => {

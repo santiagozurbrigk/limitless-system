@@ -211,7 +211,7 @@ organizaciones.
 Qué cambia con cada valor (SCRUM-524): con `full`, nada (mismo menú, mismas rutas, mismo destino
 después del login). Con `webinar` o `limitless`, la barra y la paleta muestran sólo las entradas
 listas del menú de esa experiencia (`lib/navigation/menu-por-experiencia.ts`: Inicio, Lanzamientos,
-Inicio, Leads y Equipo para `webinar`; Clientes, Tablero de trabajo, Ventas y Administración para
+Inicio, Lanzamientos, Leads y Equipo para `webinar`; Clientes, Tablero de trabajo, Ventas y Administración para
 `limitless`) y toda otra ruta de `app/(platform)`, salvo `/onboarding`, `/holding` y `/settings`
 y las rutas extra de la experiencia (para `limitless`, los segmentos de `/integrations`, `/sops/[id]`
 y `/business-context/[id]`, adonde enlazan la Bandeja y el Tablero, con todo su contenido:

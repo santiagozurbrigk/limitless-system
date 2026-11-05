@@ -32,9 +32,9 @@ function activo(cambios: Partial<InicioDelLanzamientoActivo> = {}): InicioDelLan
     registrados: medido(210, "landing", AHORA),
     registradosUltimas24h: medido(12, "landing", AHORA),
     embudo: [
-      { paso: "registrados", etiqueta: "Se registraron", personas: medido(210, "landing", AHORA) },
-      { paso: "confirmaron_el_email", etiqueta: "Confirmaron el email", personas: sinFuente("ghl", "GoHighLevel no está conectado.") },
-      { paso: "se_quedaron_a_la_oferta", etiqueta: "Se quedaron a la oferta", personas: faltaConfigurar("configuracion", "Falta el minuto de la oferta de la sesión 2.") },
+      { paso: "registrados", etiqueta: "Se registraron", personas: medido(210, "landing", AHORA), pasoDesde: null },
+      { paso: "confirmaron_el_email", etiqueta: "Confirmaron el email", personas: sinFuente("ghl", "GoHighLevel no está conectado."), pasoDesde: null },
+      { paso: "se_quedaron_a_la_oferta", etiqueta: "Se quedaron a la oferta", personas: faltaConfigurar("configuracion", "Falta el minuto de la oferta de la sesión 2."), pasoDesde: null },
     ],
     tasas: {
       asistencia: medido(0.4, "calculado", AHORA),
