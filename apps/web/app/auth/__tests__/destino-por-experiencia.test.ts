@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * SCRUM-524 · ⭐ Después del login, cada organización va a su pantalla de
  * inicio: el Panel para `full`, la primera entrada lista del menú de su
- * experiencia para `webinar` (hoy, Leads con Ventas; sin Ventas, Equipo) y `limitless` (Clientes). Vale para el login con contraseña
+ * experiencia para `webinar` (hoy, Inicio para el founder o con el Panel; si no, Leads con Ventas o Equipo) y `limitless` (Clientes). Vale para el login con contraseña
  * (`signInAction`) y para `/auth/callback`. Se respetan `destinoSeguro` y el
  * `next` de las invitaciones. Las pantallas del cliente que mandan a
  * `/dashboard` (recuperar contraseña, cambio obligatorio, aceptar invitación)
@@ -37,7 +37,11 @@ vi.mock("@/lib/auth/limite-login", () => ({
   limiteDeLogin: async () => ({ allowed: true, resetAt: 0 }),
 }));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
-vi.mock("@/lib/auth/require-super-admin", () => ({ isSuperAdminEmail: async () => sim.superAdmin }));
+// SCRUM-552: el destino del staff lo decide `isStaffEmail` (antes `isSuperAdminEmail`).
+vi.mock("@/lib/auth/require-staff", () => ({
+  isStaffEmail: async () => sim.superAdmin,
+  DESTINO_DEL_STAFF: "/administracion/organizaciones",
+}));
 vi.mock("@/lib/auth/get-current-permissions", () => ({
   getCurrentUserPermissions: async () => {
     sim.lecturasDePermisos += 1;
@@ -134,8 +138,10 @@ describe("⭐ login con contraseña", () => {
     expect(await login()).toBe("/settings");
   });
 
-  it("webinar: a su pantalla de inicio (hoy, Leads con Ventas o founder; sin Ventas, Equipo)", async () => {
+  it("webinar: a su pantalla de inicio (hoy, Inicio para el founder; Leads con sólo Ventas; Equipo con sólo Equipo)", async () => {
     sim.experiencia = "webinar";
+    expect(await login()).toBe("/inicio");
+    sim.permisos = { isFounder: false, modules: { sales: "view" } };
     expect(await login()).toBe("/leads");
     sim.permisos = { isFounder: false, modules: { team: "view" } };
     expect(await login()).toBe("/team");
@@ -148,7 +154,7 @@ describe("⭐ login con contraseña", () => {
 
   it("webinar con un next que no es invitación: se ignora, como siempre, y va a su inicio", async () => {
     sim.experiencia = "webinar";
-    expect(await login("https://evil.com")).toBe("/leads");
+    expect(await login("https://evil.com")).toBe("/inicio");
   });
 
   it("⭐ limitless: a Clientes; un miembro con sólo Ventas, a la Bandeja", async () => {
@@ -164,18 +170,18 @@ describe("⭐ login con contraseña", () => {
     expect(await login()).toBe("/holding");
   });
 
-  it("el super admin sigue yendo a su panel", async () => {
+  it("el staff va a la consola de Administración (SCRUM-553)", async () => {
     sim.superAdmin = true;
     sim.experiencia = "webinar";
-    expect(await login()).toBe("/super-admin/organizations");
+    expect(await login()).toBe("/administracion/organizaciones");
   });
 });
 
 describe("⭐ /auth/callback", () => {
-  it("sin next: full al Panel, webinar a Leads (con Ventas o founder) o a Equipo (sin Ventas)", async () => {
+  it("sin next: full al Panel, webinar a Inicio (founder) o a Equipo (sólo Equipo)", async () => {
     expect(await volverDelMail()).toBe("/dashboard");
     sim.experiencia = "webinar";
-    expect(await volverDelMail()).toBe("/leads");
+    expect(await volverDelMail()).toBe("/inicio");
     sim.permisos = { isFounder: false, modules: { team: "view" } };
     expect(await volverDelMail()).toBe("/team");
   });
@@ -198,8 +204,8 @@ describe("⭐ /auth/callback", () => {
 
   it("un next que no pasa destinoSeguro cae en la pantalla de inicio de la experiencia", async () => {
     sim.experiencia = "webinar";
-    expect(await volverDelMail("//evil.com")).toBe("/leads");
-    expect(await volverDelMail("https://evil.com/x")).toBe("/leads");
+    expect(await volverDelMail("//evil.com")).toBe("/inicio");
+    expect(await volverDelMail("https://evil.com/x")).toBe("/inicio");
   });
 
   it("la invitación en el next: vuelve a ella sin crear organización", async () => {
@@ -208,9 +214,9 @@ describe("⭐ /auth/callback", () => {
     expect(sim.bootstraps).toBe(0);
   });
 
-  it("el super admin sigue yendo a su panel", async () => {
+  it("el staff va a la consola de Administración (SCRUM-553)", async () => {
     sim.superAdmin = true;
-    expect(await volverDelMail()).toBe("/super-admin/organizations");
+    expect(await volverDelMail()).toBe("/administracion/organizaciones");
   });
 
   it("⭐ sin next, una cuenta holding va a su holding como en el login, sea cual sea la experiencia (fix-pack 1 de A1, MNR-1)", async () => {

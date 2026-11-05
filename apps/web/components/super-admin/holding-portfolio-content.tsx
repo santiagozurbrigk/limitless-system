@@ -14,8 +14,8 @@ import type {
   HoldingKPIs,
   HoldingPortfolioOrg,
 } from "@/lib/super-admin/holding-queries";
-import { paths } from "@/routes";
 import { HoldingCreateOrgDialog } from "./holding-create-org-dialog";
+import { rutasDeAdministracion, type BaseDeAdministracion } from "@/lib/administracion/rutas";
 
 type HealthFilter = "all" | HoldingHealthStatus;
 
@@ -44,11 +44,14 @@ export function HoldingPortfolioContent({
   holdingName,
   kpis,
   organizations,
+  base,
 }: {
   holdingName: string;
   kpis: HoldingKPIs;
   organizations: HoldingPortfolioOrg[];
+  base?: BaseDeAdministracion;
 }) {
+  const rutas = rutasDeAdministracion(base);
   const [healthFilter, setHealthFilter] = useState<HealthFilter>("all");
 
   const filtered = useMemo(() => {
@@ -175,7 +178,7 @@ export function HoldingPortfolioContent({
 
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button asChild size="sm" variant="outline" className="flex-1">
-                  <Link href={paths.superAdmin.organizationDetail(org.id)}>
+                  <Link href={rutas.organizacion(org.id)}>
                     Ver detalle
                   </Link>
                 </Button>

@@ -12,7 +12,7 @@ sumá su bloque en la sección de su área con el mismo formato.
 
 | Área | Bloques |
 |---|---|
-| [Plataforma](#plataforma) | 12 |
+| [Plataforma](#plataforma) | 13 |
 | [Clientes](#clientes) | 14 |
 | [Ventas](#ventas) | 11 |
 | [Marketing](#marketing) | 14 |
@@ -194,6 +194,27 @@ provocar a mano sin tocar la base es un `notFound()`.
 5. En Sentry, buscar el código de referencia que mostró la pantalla (tag `error_digest`). Resultado: un evento del navegador con el tag `boundary` y, si vino del servidor, el evento del servidor con el mismo código y el mensaje real (el stack del error); ninguno con cookies, query ni cuerpo del pedido.
 6. Si alguna vez aparece un evento con el tag `lectura_degradada`, la plataforma siguió andando con un valor por defecto (barra de holding sin negocio activo, sin checklist, con la zona por defecto): revisar qué lectura falló.
 7. 🔒⭐ Si hay un incidente de la base (timeouts de PostgREST), un miembro con rol limitado que abre un módulo que no tiene ve "No pudimos cargar la plataforma", nunca la pantalla del módulo. En Sentry, el evento `FallaDeLaBase` del servidor.
+
+---
+
+### 13. Staff por `/login` y org de Limitless 🔒⭐ (SCRUM-552)
+
+Lo que cubren los tests (Supabase simulado y la base del CI): `app/auth/__tests__/login-del-staff.test.ts`,
+`lib/supabase/__tests__/middleware-login-del-staff.test.ts`, `app/super-admin/__tests__/guard-de-staff-por-accion.test.ts`
+y `supabase/ci/tests/98_staff_en_org_de_limitless.sql`. Queda verlo en producción, después de la ventana de
+SCRUM-532 ([`staff-en-org-de-limitless.md`](staff-en-org-de-limitless.md), paso 8).
+
+**Prerrequisitos:** 523 y 552 aplicadas; la org de Limitless marcada (`experience = 'limitless'`); una cuenta
+del staff (en `super_admin_users`) y una cuenta de la org de Limitless que **no** está en la lista.
+
+1. ⭐ Entrar con la cuenta del staff por `https://otc-plaform.vercel.app/login`. Resultado: llega a
+   `/super-admin/organizations`; en la base, su perfil está en la org de Limitless como `founder`.
+2. Abrir `https://otc-plaform.vercel.app/superadmin/login`. Resultado: redirige a `/login`.
+3. 🔒⭐ Entrar con la cuenta de la org de Limitless que no está en la lista. Resultado: va al Panel de clientes
+   (`/dashboard`), no al panel interno; abrir `/super-admin/organizations` a mano la manda a `/login`.
+4. 🔒 Con la cuenta del staff, si la org de Limitless no completó el onboarding y no tiene `skip_onboarding`,
+   abrir `/super-admin/organizations`. Resultado esperado: el gate de onboarding redirige a `/onboarding`
+   (esperado, ver el paso 3b de la guía); anotarlo si pasa sin haberse decidido el paso 3b.
 
 ---
 
@@ -816,6 +837,41 @@ con una sesión real.
 5. Clic en cualquier parte de una fila de la tabla, no sólo en el nombre. Resultado: abre la ficha.
 6. 🔒 Con la organización `full`: tipear `/leads` con la cuenta con Ventas. Resultado: la pantalla, sin entrada «Leads» en el menú. Con la cuenta con rol configurado sin Ventas: «No tenés acceso a Ventas». Como founder y con la cuenta sin rol configurado: la pantalla.
 
+
+### V13. Inicio de Webinars (SCRUM-543) ⭐ — `[WEBINAR-ORG-DE-DEMO]`
+**Prerrequisitos:** los de V12 (organización `webinar` de demo con `WEBINAR_DEMO_ORGANIZATION_ID` cargada). Los tests de Vitest renderizan el HTML pero no miran la pantalla en el navegador (estilos, celular, modo oscuro).
+1. ⭐ Iniciar sesión como founder de la org de demo. Resultado: llega a `/inicio`, con «Inicio» primero en el menú y el cartel «Datos de ejemplo».
+2. Resultado esperado en pantalla: «Cierra en 3 días», la próxima sesión (o «No hay sesiones por delante»), los números principales, Commas y GoHighLevel arriba de todo en «Estado de las fuentes».
+3. ⭐ Tocar «Ver leads» en «Levantaron la mano y nadie los contactó». Resultado: `/leads` con ese filtro aplicado y el lanzamiento activo elegido.
+4. Abrir `/inicio` en el celular y en modo oscuro. Resultado: se lee todo, sin scroll horizontal.
+5. Con una org `webinar` que no es la de demo: «Sin fuente» con el motivo, sin números ni cartel.
+
+
+### V14. Lanzamientos y Detalle de Webinars (SCRUM-544) ⭐ — `[WEBINAR-ORG-DE-DEMO]`
+**Prerrequisitos:** los de V12. Los tests renderizan el HTML pero no miran la pantalla en el navegador.
+1. ⭐ Como founder de la org de demo, abrir «Lanzamientos» en el menú. Resultado: dos lanzamientos, el activo primero, con sus cuatro números.
+2. ⭐ Clic en el activo. Resultado: el detalle con el embudo (cada etapa con su número, «X % de «Etapa»» y «Fuente: …»), registros por origen y por anuncio con barras, «Registros por día» con una barra por día e «Inversión por día» con su motivo.
+3. ⭐ Resultado esperado: los números sin medir dicen su estado y su acción («Conectá GoHighLevel», «Ver Meta Ads», «Completá la configuración del lanzamiento»), sin enlace.
+4. Abrir el detalle en el celular y en modo oscuro. Resultado: se lee todo; el gráfico diario se desplaza de costado dentro de su caja, sin scroll horizontal de la página.
+5. Con la org `full`: tipear `/lanzamientos`. Resultado: la lista con «Sin fuente» (ya no lleva al Panel); el ítem del menú completo sigue deshabilitado.
+
+
+### V15. Consola de Administración (SCRUM-551) 🔒⭐
+**Prerrequisitos:** después de la ventana de SCRUM-532 (org de Limitless marcada `limitless` y staff asociado, SCRUM-552); una cuenta del staff y una cuenta de la org de Limitless que no esté en la lista; una org de prueba en `full`.
+1. ⭐ Como staff, entrar a la org de Limitless. Resultado: «Administración» en la barra con Organizaciones, Usuarios, Holdings, Sistema y Onboarding.
+2. ⭐ En Organizaciones, abrir la org de prueba: los enlaces y «← Volver al listado» quedan en `/administracion`. En «Experiencia», pasarla a «Limitless Webinars» y volver a «Limitless completo». Resultado: cambia; entrar con una cuenta de esa org muestra el menú de cada una.
+3. Abrir la ficha de la org de Limitless. Resultado: «Experiencia» dice que no se cambia desde acá, sin botones.
+4. Dar de alta una cuenta de prueba desde «Crear cuenta» y darla de baja. Resultado: igual que en el panel viejo.
+5. 🔒 Con la cuenta de Limitless que no está en la lista: no ve «Administración» ni en la barra ni en ⌘K; tipear `/administracion/organizaciones` la manda a Clientes.
+
+
+### V16. Panel viejo cerrado (SCRUM-553) ⭐ — después de V15 en producción
+**Prerrequisitos:** V15 pasado en producción (la tarea va recién con la consola verificada).
+1. ⭐ Como staff, iniciar sesión en `/login`. Resultado: llega a `/administracion/organizaciones`.
+2. Abrir links viejos: `/super-admin`, `/super-admin/organizations/<id>`, `/super-admin/users`, `/super-admin/costs`, `/super-admin/onboarding`. Resultado: cada uno abre su pantalla de la consola.
+3. Abrir `/super-admin/ai-brain`, `/super-admin/waitlist`, `/super-admin/trials`, `/super-admin/client-health`. Resultado: Organizaciones de la consola.
+4. `/superadmin/login`. Resultado: `/login`.
+
 ---
 
 ## Agente de negocio e IA
@@ -1000,8 +1056,13 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
    - Volver a abrir el link. → "Esta invitación ya se usó…".
    - Con otra fila pendiente, abrir el link con la sesión de **otra** cuenta. → "Iniciaste sesión como…" y botón
      para cerrar sesión; la fila sigue `pending`.
-   - Con una invitación para el email de alguien del staff (`super_admin_users`), entrar con esa cuenta y tocar
-     "Unirme al equipo". → "Esta cuenta es del equipo de Limitless…"; la fila sigue `pending` y no se crea perfil.
+   - Con una invitación **a una org que no es la de Limitless** para el email de alguien del staff
+     (`super_admin_users`), entrar con esa cuenta y tocar "Unirme al equipo". → "Esta cuenta es del equipo de
+     Limitless y sólo se puede sumar a la organización de Limitless…"; la fila sigue `pending` y no se crea
+     perfil.
+   - Con una invitación **a la org de Limitless** para el email de alguien del staff que todavía no tiene perfil,
+     tocar "Unirme al equipo". → Entra a la org de Limitless como **founder** (SCRUM-552); la fila queda
+     `accepted`.
    - Al terminar, borrar las filas y la cuenta de prueba.
 
 ---

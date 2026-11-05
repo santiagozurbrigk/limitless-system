@@ -1,6 +1,6 @@
 import "server-only";
 
-import { diasEntre, esFechaCalendario, fechaEnZona } from "@/lib/fechas/calendario";
+import { diasEntre, esFechaCalendario, fechaEnZona, sumarDias } from "@/lib/fechas/calendario";
 import {
   conError,
   derivar,
@@ -11,6 +11,7 @@ import {
   medido,
   sinFuente,
   tasa,
+  tieneValor,
   cociente,
   type Dato,
   type FuenteDelDato,
@@ -20,6 +21,9 @@ import {
   ETIQUETA_DEL_FILTRO,
   FILTROS_DE_LEADS,
   LEADS_POR_PAGINA,
+  PASO_SE_MIDE_CONTRA,
+  PASOS_POR_VARIANTE,
+  type AnuncioConRegistros,
   type AnunciosDelLanzamiento,
   type CompraDelLead,
   type ConteoDeFiltro,
@@ -36,7 +40,9 @@ import {
   type OrigenDelRegistro,
   type ParametrosDeLeads,
   type PasoDelEmbudo,
+  type PasoDelEmbudoId,
   type PersonaDelEquipo,
+  type PuntoDiario,
   type SesionDelLanzamiento,
   type TasasDelLanzamiento,
   type TipoDeEvento,
@@ -184,6 +190,7 @@ const MOTIVO_FALTA = {
   segundoDeLaOferta: (sesion: number) =>
     `Cargá el minuto de la oferta de la sesión ${sesion} para saber quién se quedó hasta la oferta.`,
   productoPrincipal: "Cargá el producto de la oferta principal para contar las ventas.",
+  productoVip: "Cargá el producto del asiento VIP para contar quién lo compró.",
   campanas: "Asociá las campañas de anuncios del lanzamiento para medir la inversión.",
 } as const;
 
@@ -503,11 +510,6 @@ function numerosDelLanzamiento(ctx: Contexto, l: FilaLanzamiento): Numeros {
   const asistieronALaLlamada = conteoDeTipo(ctx, l.id, "call_attended");
   const ventas = ventasDelLanzamiento(ctx, l.id);
   const anuncios = anunciosDelLanzamiento(ctx, l, registrados, ventas);
-  const paso = (p: PasoDelEmbudo["paso"], etiqueta: string, personas: Dato<number>) => ({
-    paso: p,
-    etiqueta,
-    personas,
-  });
   return {
     registrados,
     sesiones,
@@ -519,24 +521,54 @@ function numerosDelLanzamiento(ctx: Contexto, l: FilaLanzamiento): Numeros {
     asistieronALaLlamada,
     ventas,
     anuncios,
-    embudo: [
-      paso("visitas", "Visitaron la landing", visitas),
-      paso("registrados", "Se registraron", registrados),
-      paso("confirmaron_el_email", "Confirmaron el email", conteoDeTipo(ctx, l.id, "email_confirmed")),
-      paso("asistieron", "Asistieron", asistieron),
-      paso("se_quedaron_a_la_oferta", "Se quedaron a la oferta", seQuedaron),
-      paso("levantaron_la_mano", "Levantaron la mano", levantaron),
-      paso("contactados", "Contactados", contactados),
-      paso("agendados", "Agendaron llamada", agendados),
-      paso("asistieron_a_la_llamada", "Asistieron a la llamada", asistieronALaLlamada),
-      paso("compraron", "Compraron", ventas.ventas),
-    ],
+    embudo: embudoDeLaVariante(l.variant, {
+      visitas: ["Visitaron la landing", visitas],
+      registrados: ["Se registraron", registrados],
+      confirmaron_el_email: ["Confirmaron el email", conteoDeTipo(ctx, l.id, "email_confirmed")],
+      compraron_el_vip: [
+        "Compraron el asiento VIP",
+        ventas.ventasVip ?? faltaConfigurar("configuracion", MOTIVO_FALTA.productoVip),
+      ],
+      asistieron: ["Asistieron", asistieron],
+      se_quedaron_a_la_oferta: ["Se quedaron a la oferta", seQuedaron],
+      levantaron_la_mano: ["Levantaron la mano", levantaron],
+      contactados: ["Contactados", contactados],
+      calificados: ["Calificados", conteoDeTipo(ctx, l.id, "qualified")],
+      agendados: ["Agendaron llamada", agendados],
+      asistieron_a_la_llamada: ["Asistieron a la llamada", asistieronALaLlamada],
+      compraron: ["Compraron", ventas.ventas],
+    }),
     tasas: {
       asistencia: tasa(asistieron, registrados),
       conversionDeAsistentes: tasa(ventas.ventas, asistieron),
       conversionDeRegistrados: tasa(ventas.ventas, registrados),
     },
   };
+}
+
+/**
+ * Las etapas de la variante (`PASOS_POR_VARIANTE`), cada una con el paso desde
+ * la etapa contra la que se mide (`PASO_SE_MIDE_CONTRA`), si esa etapa está en
+ * el embudo de la variante (SCRUM-544).
+ */
+function embudoDeLaVariante(
+  variante: FilaLanzamiento["variant"],
+  etapas: Record<PasoDelEmbudoId, [etiqueta: string, personas: Dato<number>]>
+): PasoDelEmbudo[] {
+  const pasos = PASOS_POR_VARIANTE[variante];
+  return pasos.map((paso) => {
+    const [etiqueta, personas] = etapas[paso];
+    const contra = PASO_SE_MIDE_CONTRA[paso];
+    return {
+      paso,
+      etiqueta,
+      personas,
+      pasoDesde:
+        contra && pasos.includes(contra)
+          ? { desde: contra, tasa: tasa(personas, etapas[contra][1]) }
+          : null,
+    };
+  });
 }
 
 function lanzamientosOrdenados(filas: FilasDelWebinar): FilaLanzamiento[] {
@@ -621,11 +653,51 @@ export function calcularListaDeLanzamientos(
 
 // ─── 3. Detalle del lanzamiento ────────────────────────────────────────────
 
+/** Hasta cuántos días muestra la evolución diaria (los más recientes). */
+const DIAS_MAXIMOS_DE_LA_EVOLUCION = 120;
+
+/**
+ * Registros por día en la zona de la organización, desde el primer día de
+ * captación (o el primer registro, si es anterior) hasta hoy, o hasta el
+ * cierre si el lanzamiento está cerrado. Los días sin registros van en cero:
+ * la landing los midió (SCRUM-544).
+ */
+function registrosPorDia(
+  l: FilaLanzamiento,
+  registros: readonly FilaRegistro[],
+  ahora: Date,
+  zona: string | null
+): PuntoDiario[] {
+  const porDia = new Map<string, number>();
+  for (const r of registros) {
+    const dia = fechaEnZona(new Date(r.registered_at), zona);
+    porDia.set(dia, (porDia.get(dia) ?? 0) + 1);
+  }
+  const dias = [...porDia.keys()].sort();
+  const captacion = l.capture_starts_on && esFechaCalendario(l.capture_starts_on) ? l.capture_starts_on : null;
+  const desde = [captacion, dias[0]].filter((d): d is string => !!d).sort()[0];
+  if (!desde) return [];
+  const hoy = fechaEnZona(ahora, zona);
+  const cierre = l.closes_on && esFechaCalendario(l.closes_on) ? l.closes_on : null;
+  let hasta = l.status === "closed" && cierre ? cierre : hoy;
+  const ultimoRegistro = dias[dias.length - 1];
+  if (ultimoRegistro && ultimoRegistro > hasta) hasta = ultimoRegistro;
+  if (desde > hasta) return [];
+  const total = diasEntre(desde, hasta);
+  const inicio = total >= DIAS_MAXIMOS_DE_LA_EVOLUCION ? sumarDias(hasta, -(DIAS_MAXIMOS_DE_LA_EVOLUCION - 1)) : desde;
+  const puntos: PuntoDiario[] = [];
+  for (let dia = inicio; dia <= hasta; dia = sumarDias(dia, 1)) {
+    puntos.push({ dia, valor: porDia.get(dia) ?? 0 });
+  }
+  return puntos;
+}
+
 export function calcularDetalleDelLanzamiento(
   filas: FilasDelWebinar,
   launchId: string,
   ahora: Date,
-  esEjemplo: boolean
+  esEjemplo: boolean,
+  zona: string | null = null
 ): VistaDetalleDelLanzamiento | null {
   const ctx = contexto(filas, ahora);
   const l = filas.lanzamientos.find((x) => x.id === launchId);
@@ -639,6 +711,27 @@ export function calcularDetalleDelLanzamiento(
   const origenes = [...porOrigen.entries()]
     .map(([origen, registros]) => ({ origen, registros }))
     .sort((a, b) => b.registros - a.registros || (a.origen ?? "~").localeCompare(b.origen ?? "~"));
+  const registrosDelLanzamiento = filas.registros.filter((r) => r.launch_id === l.id);
+  const porAnuncio = new Map<string | null, number>();
+  for (const r of registrosDelLanzamiento) {
+    porAnuncio.set(r.utm_content, (porAnuncio.get(r.utm_content) ?? 0) + 1);
+  }
+  const anuncios: AnuncioConRegistros[] = [...porAnuncio.entries()]
+    .map(([anuncio, registros]) => ({ anuncio, registros }))
+    .sort((a, b) => b.registros - a.registros || (a.anuncio ?? "~").localeCompare(b.anuncio ?? "~"));
+  // La inversión se lee como total del lanzamiento: no hay serie por día. Sin
+  // valor, hereda el estado y el motivo del total; con valor, no se inventa
+  // un reparto por día.
+  const inversionTotal = n.anuncios?.inversion ?? null;
+  const inversionDiaria: Dato<PuntoDiario[]> | null =
+    inversionTotal === null
+      ? null
+      : tieneValor(inversionTotal)
+        ? sinFuente(
+            "meta_ads",
+            "Por ahora la inversión se lee como total del lanzamiento: todavía no tenemos el gasto de cada día."
+          )
+        : inversionTotal;
   return {
     esEjemplo,
     lanzamiento: resumen(l),
@@ -648,6 +741,11 @@ export function calcularDetalleDelLanzamiento(
     anuncios: n.anuncios,
     sesiones: n.sesiones,
     origenes: datoDeFuente(ctx, "landing", origenes),
+    registrosPorAnuncio: datoDeFuente(ctx, "landing", anuncios),
+    evolucionDiaria: {
+      registros: datoDeFuente(ctx, "landing", registrosPorDia(l, registrosDelLanzamiento, ahora, zona)),
+      inversion: inversionDiaria,
+    },
     fuentes: filas.fuentes,
   };
 }

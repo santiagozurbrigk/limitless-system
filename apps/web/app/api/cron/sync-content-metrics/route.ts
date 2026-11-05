@@ -10,6 +10,7 @@ import {
   getCronSyncMetricsWorkerUrl,
 } from "@/lib/queue/qstash-client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { filtrarOrganizacionesConProcesosDeFondo } from "@/lib/intelligence/organizaciones-activas";
 import { conMonitorDeCron } from "@/lib/observability/cron-monitor";
 
 export const runtime = "nodejs";
@@ -43,11 +44,10 @@ export async function POST(request: Request) {
 
       if (error) throw new Error(error.message);
 
-      const orgIds = [
-        ...new Set(
-          (integrations ?? []).map((row) => row.organization_id as string)
-        ),
-      ];
+      // Las cuentas webinar no sincronizan métricas de contenido (SCRUM-525).
+      const orgIds = await filtrarOrganizacionesConProcesosDeFondo(
+        (integrations ?? []).map((row) => row.organization_id as string)
+      );
 
       const { published, failed } = await publishCronFanout(
         getCronSyncMetricsWorkerUrl(),

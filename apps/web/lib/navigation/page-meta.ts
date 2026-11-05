@@ -51,10 +51,7 @@ const PAGE_META: Record<string, PageMeta> = {
     title: "Producto",
     subtitle: "Avatares, ofertas, escalera de valor y propuesta",
   },
-  "/lanzamientos": {
-    title: "Lanzamientos",
-    subtitle: "Planificá, ejecutá y medí el impacto de cada lanzamiento",
-  },
+  "/lanzamientos": { title: "Lanzamientos" },
   "/product/value-ladder": {
     title: "Escalera de valor",
     subtitle: "Escalones de precio y ascenso del cliente",
@@ -155,7 +152,16 @@ const PAGE_META: Record<string, PageMeta> = {
     title: "Equipo",
     subtitle: "Miembros y roles de la organización",
   },
-  // Limitless Webinars (SCRUM-545). La ficha (`/leads/[id]`) va por prefijo, abajo.
+  // Limitless Webinars (SCRUM-543, SCRUM-545). La ficha (`/leads/[id]`) va por prefijo, abajo.
+  "/inicio": { title: "Inicio" },
+  // Consola de Administración (SCRUM-551). La ficha de una organización va por prefijo, abajo.
+  "/administracion": { title: "Administración" },
+  "/administracion/organizaciones": { title: "Organizaciones" },
+  "/administracion/organizaciones/nueva": { title: "Nueva cuenta" },
+  "/administracion/usuarios": { title: "Usuarios" },
+  "/administracion/holdings": { title: "Holdings" },
+  "/administracion/sistema": { title: "Sistema", subtitle: "Infraestructura, procesos y costos de IA" },
+  "/administracion/onboarding": { title: "Onboarding de clientes" },
   "/leads": { title: "Leads" },
   "/business-context/documents": {
     title: "Base de conocimiento",
@@ -367,7 +373,10 @@ function resolveMeta(pathname: string): PageMeta {
     return { title: "Embudo", subtitle: "Las siete etapas de esta oferta" };
   }
   if (pathname.startsWith("/lanzamientos/") && pathname !== "/lanzamientos") {
-    return { title: "Lanzamiento", subtitle: "Plan, ejecución e impacto" };
+    return { title: "Detalle del lanzamiento" };
+  }
+  if (pathname.startsWith("/administracion/organizaciones/")) {
+    return { title: "Organización" };
   }
   if (pathname.startsWith("/leads/") && pathname !== "/leads") {
     return { title: "Ficha del lead" };

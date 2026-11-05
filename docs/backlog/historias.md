@@ -210,6 +210,17 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Tareas técnicas:** `[AUD-SEG-9]`
 - **Para confirmar:** —
 
+### [H-PLA-31] Administrar Limitless desde la plataforma
+- **Funcionalidad:** F-PLA-31 · A medias
+- **Historia:** Como staff de Limitless, quiero administrar organizaciones, usuarios, holdings, el sistema y el onboarding desde «Administración» dentro de la plataforma, para no tener que salir a un panel aparte.
+- **Criterios de aceptación:**
+  - Dado que estoy en la lista de staff, cuando entro a la org de Limitless, entonces veo «Administración» en el menú con Organizaciones, Usuarios, Holdings, Sistema y Onboarding, y cada función del panel viejo funciona igual desde ahí.
+  - Dado que soy de la org de Limitless pero no estoy en la lista de staff, entonces no veo «Administración» y si tipeo la dirección vuelvo a mi pantalla de inicio.
+  - Cuando cambio la experiencia de una organización, entonces sólo puedo elegir Limitless Webinars o Limitless completo; la org de Limitless no se puede cambiar desde ahí.
+  - Dado un holding, cuando crea un negocio, entonces el negocio nunca queda como la org de Limitless.
+- **Tareas técnicas:** `[STAFF-GUARD-CON-PERTENENCIA]`
+- **Para confirmar:** si Equipo vuelve al menú de la org de Limitless o la gestión de su gente pasa a Administración (SCRUM-524 lo deja visible hasta acá).
+
 ---
 
 ## Clientes
@@ -784,6 +795,29 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dada una organización sin lanzamientos, cuando abro `/leads`, entonces veo cómo crear uno.
 - **Tareas técnicas:** `[WEBINAR-LEADS-PERSISTIR]`, `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`, `[WEBINAR-LEADS-SIN-ORGANIZACION]`
 - **Para confirmar:** Martín: "menos de 3 clics" se interpretó como 2 desde la lista ya filtrada (abrir la ficha y pulsar el botón de avance).
+
+
+### [H-EMB-26] Ver cómo va el lanzamiento activo de un vistazo (Limitless Webinars)
+- **Funcionalidad:** F-EMB-26 · A medias
+- **Historia:** Como dueño de una cuenta de Limitless Webinars, quiero abrir la plataforma y ver de un vistazo cómo va el lanzamiento activo y qué tiene que mover hoy el equipo, para reaccionar a tiempo si algo se frena.
+- **Criterios de aceptación:**
+  - Dado un lanzamiento activo, cuando entro, entonces llego a Inicio y veo cuántos días faltan para el cierre, la próxima sesión, registrados, asistencia, ventas e ingresos.
+  - Dado que hay leads que levantaron la mano sin que nadie los contacte, cuando toco ese pendiente, entonces llego a Leads con ese filtro aplicado.
+  - Dado que la landing deja de enviar registros, cuando entro a Inicio, entonces veo un aviso con el motivo.
+  - Dada una fuente que no está conectada o falló, entonces Inicio la muestra con su motivo y nunca muestra un cero inventado en los números que dependen de ella.
+  - Dada una cuenta sin lanzamiento activo, entonces veo que no hay uno y cómo crearlo.
+- **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`
+
+
+### [H-EMB-27] Leer el embudo de un lanzamiento de punta a punta (Limitless Webinars)
+- **Funcionalidad:** F-EMB-27 · A medias
+- **Historia:** Como dueño o analista de una cuenta de Limitless Webinars, quiero ver cada lanzamiento con las etapas de su variante, cuánto pasa de una a otra y de dónde sale cada número, para decidir qué ajustar con el consultor.
+- **Criterios de aceptación:**
+  - Dado un lanzamiento orgánico, pago o pago +++, cuando abro su detalle, entonces veo sólo las etapas de su variante (el asiento VIP sólo en pago +++; la inversión sólo en las pagas), cada una con su número, el porcentaje de paso y su fuente.
+  - Dado un número que no se pudo medir, entonces veo por qué y qué hacer (conectar, revisar, reconectar o completar la configuración), y nunca un cero inventado.
+  - Cuando abro el detalle, entonces veo los registros por origen y por anuncio y su evolución día por día.
+  - Cuando abro Lanzamientos, entonces veo cada lanzamiento con su variante, estado, fechas, registrados, asistentes, ventas e ingresos, y llego a su detalle en un clic.
+- **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-ACCIONES-SIN-DESTINO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`
 
 ---
 

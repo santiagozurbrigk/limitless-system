@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { isSuperAdminUser } from "@/lib/auth/require-super-admin";
+import { isStaffUser } from "@/lib/auth/require-staff";
 import { paths } from "@/routes";
 
 export default async function SuperAdminGuardLayout({
@@ -7,9 +7,9 @@ export default async function SuperAdminGuardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const allowed = await isSuperAdminUser();
+  const allowed = await isStaffUser();
   if (!allowed) {
-    redirect(paths.superAdmin.login);
+    redirect(paths.auth.login);
   }
   return children;
 }

@@ -93,12 +93,12 @@ describe("Agregar negocio desde el holding", () => {
     expect(experienciaGuardada(sim.estado, "Negocio W")).toBe("webinar");
   });
 
-  it("⭐ holding en Limitless de gestión: el negocio nuevo queda en limitless", async () => {
+  it("⭐ SCRUM-551: holding en Limitless de gestión: el negocio nuevo nace en full, nunca en limitless", async () => {
     holdingCon("limitless");
     const r = await addBusinessToMyHoldingAction({ businessName: "Negocio L", revenueSharePct: 10 });
     expect(r.success).toBe(true);
-    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ experience: "limitless" });
-    expect(experienciaGuardada(sim.estado, "Negocio L")).toBe("limitless");
+    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ experience: "full" });
+    expect(experienciaGuardada(sim.estado, "Negocio L")).toBe("full");
   });
 
   it("⭐ si no se puede leer la experiencia del holding, no se crea el negocio", async () => {
@@ -135,12 +135,12 @@ describe("Onboarding del holding", () => {
     for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila).toMatchObject({ experience: "webinar" });
   });
 
-  it("⭐ holding en Limitless de gestión: los negocios quedan en limitless", async () => {
+  it("⭐ SCRUM-551: holding en Limitless de gestión: los negocios nacen en full, nunca en limitless", async () => {
     holdingCon("limitless");
     await completeHoldingOnboardingAction(NEGOCIOS);
-    expect(experienciaGuardada(sim.estado, "Uno")).toBe("limitless");
-    expect(experienciaGuardada(sim.estado, "Dos")).toBe("limitless");
-    for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila).toMatchObject({ experience: "limitless" });
+    expect(experienciaGuardada(sim.estado, "Uno")).toBe("full");
+    expect(experienciaGuardada(sim.estado, "Dos")).toBe("full");
+    for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila).toMatchObject({ experience: "full" });
   });
 
   it("⭐ si no se puede leer la experiencia del holding, no se crea ningún negocio", async () => {

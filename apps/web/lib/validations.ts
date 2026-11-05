@@ -192,6 +192,12 @@ export const setOrganizationStatusSchema = z.object({
   active: z.boolean(),
 });
 
+/** SCRUM-551: el valor se valida aparte (`motivoParaNoCambiarLaExperiencia`). */
+export const setOrganizationExperienceSchema = z.object({
+  organizationId: uuidSchema,
+  experiencia: z.string().max(32),
+});
+
 export const updateOrganizationMrrSchema = z.object({
   organizationId: uuidSchema,
   mrrUsd: moneySchema,

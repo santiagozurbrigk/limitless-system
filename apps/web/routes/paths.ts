@@ -26,7 +26,7 @@ export const paths = {
 
     /**
      * Rutas de los menús por experiencia (SCRUM-524). Limitless Webinars:
-     * `/inicio` es de SCRUM-534 y su pantalla todavía no existe; Leads y la
+     * `/inicio` es de SCRUM-543; Leads y la
      * ficha del lead son de SCRUM-545 (Lanzamientos usa `lanzamientos`,
      * SCRUM-529). Limitless de gestión: Administración es de SCRUM-551 y su
      * pantalla todavía no existe. Qué entradas ve cada
@@ -38,6 +38,19 @@ export const paths = {
       lead: (id: string) => `${PLATFORM}/leads/${id}`,
     },
     administracion: `${PLATFORM}/administracion`,
+    /**
+     * La consola de Administración dentro de la org de Limitless (SCRUM-551):
+     * las mismas funciones que `/super-admin`, para el staff de la lista.
+     */
+    consola: {
+      organizaciones: `${PLATFORM}/administracion/organizaciones`,
+      organizacion: (id: string) => `${PLATFORM}/administracion/organizaciones/${id}`,
+      organizacionNueva: `${PLATFORM}/administracion/organizaciones/nueva`,
+      usuarios: `${PLATFORM}/administracion/usuarios`,
+      holdings: `${PLATFORM}/administracion/holdings`,
+      sistema: `${PLATFORM}/administracion/sistema`,
+      onboarding: `${PLATFORM}/administracion/onboarding`,
+    },
 
     finance: {
       root: `${PLATFORM}/finance`,
@@ -186,6 +199,7 @@ export const paths = {
   },
 
   superAdmin: {
+    /** Legado: redirige a /login (SCRUM-552). Se borra en C3 (SCRUM-553). */
     login: "/superadmin/login",
     dashboard: "/superadmin/dashboard",
     root: "/super-admin",

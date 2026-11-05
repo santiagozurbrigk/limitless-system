@@ -105,7 +105,7 @@ const ALL_ITEMS = [...QUICK_ACTIONS, ...flattenNav()];
  */
 export function itemsDeLaPaleta(
   experiencia: OrganizationExperience,
-  permisos: Pick<UserPermissions, "isFounder" | "modules">
+  permisos: Pick<UserPermissions, "isFounder" | "modules" | "esStaff">
 ): PaletteItem[] {
   if (experiencia === "full") return ALL_ITEMS;
   return entradasVisibles(permisos, menuPorDefecto(experiencia)).flatMap((entrada) => {
@@ -127,11 +127,11 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const experiencia = useExperiencia();
   const inicio = usePantallaDeInicio();
-  const { isFounder, modules } = usePermissions();
+  const { isFounder, modules, esStaff } = usePermissions();
 
   const items = useMemo(
-    () => itemsDeLaPaleta(experiencia, { isFounder, modules }),
-    [experiencia, isFounder, modules]
+    () => itemsDeLaPaleta(experiencia, { isFounder, modules, esStaff }),
+    [experiencia, isFounder, modules, esStaff]
   );
 
   const filtered = useMemo(() => {
