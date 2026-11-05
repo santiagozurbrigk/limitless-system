@@ -785,6 +785,18 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Tareas técnicas:** `[WEBINAR-LEADS-PERSISTIR]`, `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`, `[WEBINAR-LEADS-SIN-ORGANIZACION]`
 - **Para confirmar:** Martín: "menos de 3 clics" se interpretó como 2 desde la lista ya filtrada (abrir la ficha y pulsar el botón de avance).
 
+
+### [H-EMB-26] Ver cómo va el lanzamiento activo de un vistazo (Limitless Webinars)
+- **Funcionalidad:** F-EMB-26 · A medias
+- **Historia:** Como dueño de una cuenta de Limitless Webinars, quiero abrir la plataforma y ver de un vistazo cómo va el lanzamiento activo y qué tiene que mover hoy el equipo, para reaccionar a tiempo si algo se frena.
+- **Criterios de aceptación:**
+  - Dado un lanzamiento activo, cuando entro, entonces llego a Inicio y veo cuántos días faltan para el cierre, la próxima sesión, registrados, asistencia, ventas e ingresos.
+  - Dado que hay leads que levantaron la mano sin que nadie los contacte, cuando toco ese pendiente, entonces llego a Leads con ese filtro aplicado.
+  - Dado que la landing deja de enviar registros, cuando entro a Inicio, entonces veo un aviso con el motivo.
+  - Dada una fuente que no está conectada o falló, entonces Inicio la muestra con su motivo y nunca muestra un cero inventado en los números que dependen de ella.
+  - Dada una cuenta sin lanzamiento activo, entonces veo que no hay uno y cómo crearlo.
+- **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`
+
 ---
 
 ## Agente de negocio e IA

@@ -211,13 +211,13 @@ organizaciones.
 Qué cambia con cada valor (SCRUM-524): con `full`, nada (mismo menú, mismas rutas, mismo destino
 después del login). Con `webinar` o `limitless`, la barra y la paleta muestran sólo las entradas
 listas del menú de esa experiencia (`lib/navigation/menu-por-experiencia.ts`: Inicio, Lanzamientos,
-Leads y Equipo para `webinar`; Clientes, Tablero de trabajo, Ventas y Administración para
+Inicio, Leads y Equipo para `webinar`; Clientes, Tablero de trabajo, Ventas y Administración para
 `limitless`) y toda otra ruta de `app/(platform)`, salvo `/onboarding`, `/holding` y `/settings`
 y las rutas extra de la experiencia (para `limitless`, los segmentos de `/integrations`, `/sops/[id]`
 y `/business-context/[id]`, adonde enlazan la Bandeja y el Tablero, con todo su contenido:
 `/integrations/*`, `/sops/*` y `/business-context/*`; fix-pack 1 de A1), redirige a la
 pantalla de inicio de esa experiencia. Una entrada no lista cuya pantalla todavía no existe
-(`/inicio`, `/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
+(`/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
 el layout de cada segmento de primer nivel, porque el de `(platform)` no se vuelve a ejecutar en
 una navegación del cliente. Detalle en
 [`diseno/ui-y-navegacion.md` § Menú por experiencia](../diseno/ui-y-navegacion.md#menú-por-experiencia-limitless-webinars-y-limitless-de-gestión).

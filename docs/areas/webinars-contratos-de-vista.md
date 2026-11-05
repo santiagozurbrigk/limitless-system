@@ -4,7 +4,7 @@ SCRUM-542 (A2 del plan "UI primero, datos después"). Qué recibe cada pantalla 
 y qué cambia cuando lea la base (B4). Es la referencia para construir Inicio (SCRUM-543), Lanzamientos
 (SCRUM-544), Leads y la Ficha (SCRUM-545) y la Configuración del lanzamiento.
 
-Código: `apps/web/lib/webinar/vistas/`. Leads y la ficha del lead (SCRUM-545) ya existen, en `apps/web/app/(platform)/leads/`; las demás pantallas todavía no.
+Código: `apps/web/lib/webinar/vistas/`. Inicio (SCRUM-543) ya existe, en `apps/web/app/(platform)/inicio/` (lógica de textos y del aviso de registros en `lib/webinar/inicio/presentacion.ts`), y Leads y la ficha del lead (SCRUM-545), en `apps/web/app/(platform)/leads/`; las demás pantallas todavía no.
 
 ## La regla
 
@@ -113,6 +113,25 @@ const vista = lectura.data;
 
 Fechas en ISO UTC (las de calendario, `AAAA-MM-DD`), montos en la moneda del lanzamiento, tasas entre 0 y 1.
 Las vistas son JSON: se pueden pasar enteras a un Client Component.
+
+## Inicio (SCRUM-543)
+
+`/inicio` dibuja `leerInicio()` con `PantallaDeInicio` (`components/webinar/pantalla-de-inicio.tsx`, Server
+Component sin estado). Es la entrada de inicio del menú webinar (módulo `dashboard`): el founder llega ahí
+después del login.
+
+- **Sin lanzamiento activo** (`activo` medido con `null`): estado vacío; el botón «Crear un lanzamiento» aparece
+  cuando `RUTA_PARA_CREAR_LANZAMIENTO` tenga ruta (SCRUM-529, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`).
+- **El activo no se pudo leer** (cualquier otro estado sin valor): el estado y su motivo; ni números ni vacío.
+- **Con lanzamiento activo:** nombre, variante, precio y cuenta regresiva (`textoDelCierre`: "Cierra en N días",
+  "Cierra hoy", "La fecha de cierre ya pasó"); próxima sesión; números principales (registrados con las últimas
+  24 h, asistencia, ventas, ingresos, conversión de asistentes, VIP y anuncios si vienen); lo que el equipo tiene
+  que mover hoy, con enlace a Leads con su filtro y el lanzamiento; embudo; sesiones; estado de las fuentes, las
+  que no están al día primero.
+- **Aviso de registros que dejan de llegar** (`avisoDeRegistros`): si la fuente `landing` no está `medido`, con
+  su motivo; o si las últimas 24 h son un cero **medido** y el lanzamiento sigue captando (activo y su cierre no
+  pasó). Nunca por un cero que no se midió.
+- Un número desactualizado muestra el valor con la marca y el motivo; uno sin valor, su estado y su motivo.
 
 ## Qué recibe cada organización hoy
 

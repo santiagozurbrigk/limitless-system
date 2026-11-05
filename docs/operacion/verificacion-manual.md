@@ -816,6 +816,15 @@ con una sesión real.
 5. Clic en cualquier parte de una fila de la tabla, no sólo en el nombre. Resultado: abre la ficha.
 6. 🔒 Con la organización `full`: tipear `/leads` con la cuenta con Ventas. Resultado: la pantalla, sin entrada «Leads» en el menú. Con la cuenta con rol configurado sin Ventas: «No tenés acceso a Ventas». Como founder y con la cuenta sin rol configurado: la pantalla.
 
+
+### V13. Inicio de Webinars (SCRUM-543) ⭐ — `[WEBINAR-ORG-DE-DEMO]`
+**Prerrequisitos:** los de V12 (organización `webinar` de demo con `WEBINAR_DEMO_ORGANIZATION_ID` cargada). Los tests de Vitest renderizan el HTML pero no miran la pantalla en el navegador (estilos, celular, modo oscuro).
+1. ⭐ Iniciar sesión como founder de la org de demo. Resultado: llega a `/inicio`, con «Inicio» primero en el menú y el cartel «Datos de ejemplo».
+2. Resultado esperado en pantalla: «Cierra en 3 días», la próxima sesión (o «No hay sesiones por delante»), los números principales, Commas y GoHighLevel arriba de todo en «Estado de las fuentes».
+3. ⭐ Tocar «Ver leads» en «Levantaron la mano y nadie los contactó». Resultado: `/leads` con ese filtro aplicado y el lanzamiento activo elegido.
+4. Abrir `/inicio` en el celular y en modo oscuro. Resultado: se lee todo, sin scroll horizontal.
+5. Con una org `webinar` que no es la de demo: «Sin fuente» con el motivo, sin números ni cartel.
+
 ---
 
 ## Agente de negocio e IA

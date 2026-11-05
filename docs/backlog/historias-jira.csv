@@ -1139,14 +1139,28 @@ Funcionalidad: F-EMB-22 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * [WEBINAR-LEADS-PERSISTIR] Las acciones de la ficha del lead guardan de verdad y /leads lee la base (B4) (P2)
 * [WEBINAR-VISTAS-LECTURA-REAL] Las funciones de lectura de Webinars leen la base (B4) (P2)
 * [WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars (P2)
-* [WEBINAR-LEADS-CREAR-LANZAMIENTO] El estado vacío de Leads no tiene enlace para crear un lanzamiento (P3)
+* [WEBINAR-LEADS-CREAR-LANZAMIENTO] Los estados vacíos de Leads e Inicio no tienen enlace para crear un lanzamiento (P3)
 * [WEBINAR-LEADS-SIN-ORGANIZACION] Una cuenta sin organización que abre /leads deja dos eventos en Sentry (P3)
 
 *Para confirmar:*
 * Martín: ""menos de 3 clics"" se interpretó como 2 desde la lista ya filtrada (abrir la ficha y pulsar el botón de avance).
-* ---
 
 Funcionalidad: F-EMB-25 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-25]",H-EMB-25,Embudos y Lanzamientos,P2,,WEBINAR-LEADS-PERSISTIR WEBINAR-VISTAS-LECTURA-REAL WEBINAR-ORG-DE-DEMO WEBINAR-LEADS-CREAR-LANZAMIENTO WEBINAR-LEADS-SIN-ORGANIZACION,
+[H-EMB-26] Ver cómo va el lanzamiento activo de un vistazo (Limitless Webinars),Story,Medium,historia,embudos-y-lanzamientos,p2,,,,"*Historia:* Como dueño de una cuenta de Limitless Webinars, quiero abrir la plataforma y ver de un vistazo cómo va el lanzamiento activo y qué tiene que mover hoy el equipo, para reaccionar a tiempo si algo se frena.
+
+*Criterios de aceptación:*
+* Dado un lanzamiento activo, cuando entro, entonces llego a Inicio y veo cuántos días faltan para el cierre, la próxima sesión, registrados, asistencia, ventas e ingresos.
+* Dado que hay leads que levantaron la mano sin que nadie los contacte, cuando toco ese pendiente, entonces llego a Leads con ese filtro aplicado.
+* Dado que la landing deja de enviar registros, cuando entro a Inicio, entonces veo un aviso con el motivo.
+* Dada una fuente que no está conectada o falló, entonces Inicio la muestra con su motivo y nunca muestra un cero inventado en los números que dependen de ella.
+* Dada una cuenta sin lanzamiento activo, entonces veo que no hay uno y cómo crearlo.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [WEBINAR-VISTAS-LECTURA-REAL] Las funciones de lectura de Webinars leen la base (B4) (P2)
+* [WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars (P2)
+* [WEBINAR-LEADS-CREAR-LANZAMIENTO] Los estados vacíos de Leads e Inicio no tienen enlace para crear un lanzamiento (P3)
+
+Funcionalidad: F-EMB-26 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-26]",H-EMB-26,Embudos y Lanzamientos,P2,,WEBINAR-VISTAS-LECTURA-REAL WEBINAR-ORG-DE-DEMO WEBINAR-LEADS-CREAR-LANZAMIENTO,
 [H-FIN-11] Ver cobros y saldo de Stripe,Story,Medium,historia,operaciones-y-equipo,p2,para-confirmar,,,"*Historia:* Como founder, quiero conectar mi cuenta de Stripe y ver mis cobros y saldo, para tener mi plata en un solo lugar.
 
 *Criterios de aceptación:*

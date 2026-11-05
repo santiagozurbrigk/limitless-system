@@ -12,7 +12,7 @@ import type { SidebarParentKey } from "./sidebar-modules";
  *
  *   - `webinar` (Limitless Webinars; PO, 19-oct y 28-oct-2026): Inicio,
  *     Lanzamientos, Leads y Equipo, en ese orden.
- *       - Inicio: SCRUM-534.
+ *       - Inicio: SCRUM-543 (`/inicio`, el lanzamiento activo).
  *       - Lanzamientos: SCRUM-529 (la ruta es la de hoy, que sigue escondida
  *         para todos por `ESCONDIDO.lanzamientos`; encenderla obliga a revisar
  *         su layout).
@@ -26,7 +26,7 @@ import type { SidebarParentKey } from "./sidebar-modules";
  *
  * Una entrada con `lista: false` no se muestra (nada de "Próximamente") y su
  * ruta no se abre. Lo que ve quien la tipea depende de si su pantalla existe:
- * hoy `/inicio` y `/administracion` no tienen carpeta en
+ * hoy `/administracion` no tiene carpeta en
  * `app/(platform)`, así que la URL da el 404 de la app (sin la barra); cuando
  * la tarea cree la carpeta, su `layout.tsx` llama a `exigirRutaDeLaExperiencia`
  * (lo exige un test) y esa ruta redirige a la pantalla de inicio mientras la
@@ -63,7 +63,7 @@ export const MENU_POR_EXPERIENCIA: Record<ExperienciaConMenuPropio, readonly Ent
       href: paths.platform.inicio,
       icon: "layout-dashboard",
       permissionId: "dashboard",
-      lista: false, // SCRUM-534
+      lista: true,
     },
     {
       id: "lanzamientos",

@@ -28,6 +28,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-05 — Inicio del lanzamiento activo de Limitless Webinars (SCRUM-543, A3)
+
+**Rama:** `claude/brave-wright-s2bfcg` (con `feat/SCRUM-545-webinars-leads-y-ficha` integrada, que trae 523, 524 y 542, sin mergear)
+**Commit(s):** este
+**Módulo(s) afectado(s):** Embudos y Lanzamientos (Webinars) y Plataforma (menú por experiencia): `app/(platform)/inicio/{layout,page}.tsx` (nuevos), `components/webinar/pantalla-de-inicio.tsx` (nuevo), `lib/webinar/inicio/presentacion.ts` (nuevo), `lib/navigation/{menu-por-experiencia,module-for-path,page-meta}.ts`, `routes/paths.ts`; tests nuevos `lib/webinar/inicio/__tests__/presentacion.test.ts` (10), `components/webinar/__tests__/pantalla-de-inicio.test.ts` (13), `app/(platform)/inicio/__tests__/pantalla-de-inicio.test.ts` (7) y casos nuevos en `bloqueo-por-experiencia` y `rutas-por-experiencia`; 8 archivos de tests de navegación actualizados; docs `areas/webinars-contratos-de-vista.md`, `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `FUNCIONAL.md` (F-EMB-26), `backlog/historias.md` (H-EMB-26), `operacion/verificacion-manual.md` (V13)
+
+**Qué se hizo:**
+- Pantalla `/inicio` que dibuja sólo `leerInicio()` (regla de SCRUM-542): encabezado con variante, precio, cuenta regresiva en días y próxima sesión; aviso de registros que dejan de llegar; números principales; "lo que el equipo tiene que mover hoy" con enlace a Leads con su filtro y el lanzamiento; embudo; sesiones; estado de las fuentes (las caídas primero).
+- Tres estados de pantalla: con lanzamiento activo, sin lanzamiento activo (vacío con botón cuando exista la ruta de creación) y activo que no se pudo leer (estado y motivo).
+- `avisoDeRegistros`: avisa si la fuente `landing` no está al día (con su motivo) o si las últimas 24 h son un cero medido con el lanzamiento captando. Nunca por un cero sin medir.
+- Entrada «Inicio» lista en el menú webinar: es la pantalla de inicio del founder y de quien tiene el módulo del Panel (`dashboard`); quien sólo tiene Ventas sigue yendo a Leads y quien sólo tiene Equipo, a Equipo. Layout con `exigirRutaDeLaExperiencia("/inicio")`; `limitless` la redirige a Clientes; en `full` abre tipeando la URL, como `/leads`.
+
+**Por qué / finalidad:** A3 del plan "UI primero, datos después": la pantalla que el dueño ve primero, lista para la sesión de validación del día 6 (SCRUM-547) sobre el escenario de ejemplo.
+
+**Decisiones de diseño relevantes:**
+- La cuenta regresiva es en días (lo que trae el contrato), sin reloj en vivo: no necesita un Client Component ni efectos.
+- Sin enlace al detalle del lanzamiento: `/lanzamientos` sigue escondida hasta SCRUM-529/544; se suma cuando exista.
+- Los textos y reglas (cierre, formatos, aviso, orden de fuentes) viven en `lib/webinar/inicio/presentacion.ts`, lógica pura con tests, para cambiarlos después de la sesión del día 6 sin tocar la pantalla.
+- Se cierra `[WEBINAR-NUMEROS-DE-TICKET]`: Inicio ahora cita SCRUM-543 en código y docs, y Lanzamientos sigue en SCRUM-529, que en Jira es "Lista y configuración de lanzamientos" (544 es el detalle). SCRUM-534 queda sólo donde se habla de "Inicio en vivo", que es otra tarea.
+
+**Riesgos / deuda técnica pendiente:** hoy sólo la org de demo ve datos (`[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-VISTAS-LECTURA-REAL]`); el estado vacío no tiene botón hasta SCRUM-529 (`[WEBINAR-LEADS-CREAR-LANZAMIENTO]`, ampliado a Inicio). No se miró en navegador (V13 de verificación manual). Tests: 30 nuevos; suite completa 4765 en verde.
+
 ### 2026-11-05 — Procesos de fondo filtrados en cuentas webinar (SCRUM-525)
 
 **Rama:** `claude/brave-wright-s2bfcg` (sobre `feat/SCRUM-523-webinars-experiencia`, que necesita la columna `experience`)

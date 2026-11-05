@@ -2998,7 +2998,7 @@ Fuente: PENDIENTES.md [FECHAS-UTC-RESTO] · Doc del área: docs/arquitectura/vis
 
 *Estado verificado:* medido en el QA final de SCRUM-524 con una organización webinar creada por el alta real del super admin ({{evidencia-sprint2/scrum-524/qa-final.md}} § MENOR-2, {{qa/prueba/alta-webinar.txt}}): el founder cae en {{/auth/force-password-change}}, después en {{/onboarding}}, y en el siguiente login ve en {{/team}} el asistente «Tu negocio» (paso 1 de 3: negocio, oferta y avatar, {{components/onboarding/onboarding-gate.tsx}}). Es el gate de siempre ({{shouldRedirectToGate}} en el middleware, salvo {{skip_onboarding}}), no lo agrega SCRUM-524, y {{/onboarding}} es una ruta libre a propósito para no armar un bucle con el bloqueo por experiencia. SCRUM-524 no lo cambia.
 
-*Qué hay que hacer:* que el PO decida si una organización webinar pasa por ese gate (son preguntas del producto completo: oferta y avatar), por uno propio de Webinars o por ninguno ({{skip_onboarding}} en el alta), y cuándo se revisa (probablemente con Inicio, SCRUM-534).
+*Qué hay que hacer:* que el PO decida si una organización webinar pasa por ese gate (son preguntas del producto completo: oferta y avatar), por uno propio de Webinars o por ninguno ({{skip_onboarding}} en el alta), y cuándo se revisa (probablemente con Inicio en vivo, SCRUM-534).
 
 *Dónde:* {{apps/web/lib/onboarding/gate-routing.ts}}, {{apps/web/lib/supabase/middleware.ts}}, {{apps/web/components/onboarding/onboarding-gate.tsx}}, {{app/super-admin/actions.ts}} (altas).
 
@@ -3330,24 +3330,15 @@ Fuente: PENDIENTES.md [MKT-TESTS-SYNC-WORKER] · Doc del área: docs/areas/marke
 *Dónde:* {{apps/web/lib/webinar/vistas/leer.ts}}, {{apps/web/app/(platform)/leads/}}.
 
 Fuente: PENDIENTES.md [WEBINAR-LEADS-SIN-ORGANIZACION] · Doc del área: docs/areas/embudos.md",WEBINAR-LEADS-SIN-ORGANIZACION,Embudos y Lanzamientos,P3,,bug
-[WEBINAR-LEADS-CREAR-LANZAMIENTO] El estado vacío de Leads no tiene enlace para crear un lanzamiento,Story,Low,embudos,p3,feature,,,,"*Tipo:* feature
+[WEBINAR-LEADS-CREAR-LANZAMIENTO] Los estados vacíos de Leads e Inicio no tienen enlace para crear un lanzamiento,Story,Low,embudos,p3,feature,,,,"*Tipo:* feature
 
-*Estado verificado:* sin lanzamientos, {{/leads}} muestra «Todavía no hay lanzamientos.» sin enlace: {{RUTA_PARA_CREAR_LANZAMIENTO}} es {{null}} en {{apps/web/lib/webinar/leads/config.ts}} porque no existe la pantalla de creación (SCRUM-544). {{PantallaDeLeads}} dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22).
+*Estado verificado:* sin lanzamientos, {{/leads}} muestra «Todavía no hay lanzamientos.» sin enlace: {{RUTA_PARA_CREAR_LANZAMIENTO}} es {{null}} en {{apps/web/lib/webinar/leads/config.ts}} porque no existe la pantalla de creación (SCRUM-544). {{PantallaDeLeads}} dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22). Inicio (SCRUM-543) usa la misma constante: sin lanzamiento activo muestra «No hay un lanzamiento activo.» sin botón.
 
-*Qué hay que hacer:* que SCRUM-544 ponga en {{RUTA_PARA_CREAR_LANZAMIENTO}} la ruta de su pantalla de creación (desde {{routes/paths.ts}}).
+*Qué hay que hacer:* que SCRUM-529 (lista y configuración de lanzamientos) ponga en {{RUTA_PARA_CREAR_LANZAMIENTO}} la ruta de su pantalla de creación (desde {{routes/paths.ts}}); Leads e Inicio la toman solos.
 
 *Dónde:* {{apps/web/lib/webinar/leads/config.ts}}.
 
 Fuente: PENDIENTES.md [WEBINAR-LEADS-CREAR-LANZAMIENTO] · Doc del área: docs/areas/embudos.md",WEBINAR-LEADS-CREAR-LANZAMIENTO,Embudos y Lanzamientos,P3,,feature
-[WEBINAR-NUMEROS-DE-TICKET] Los comentarios y docs de Webinars citan SCRUM-534 y SCRUM-529 donde corresponde 543 y 544,Task,Low,embudos,p3,deuda-tecnica,,,,"*Tipo:* deuda técnica
-
-*Estado verificado:* Inicio figura como SCRUM-534 y Lanzamientos como SCRUM-529, y el plan de Webinars los tiene como SCRUM-543 y SCRUM-544 (drift detectado en el SDD de SCRUM-545, que no los corrigió): {{apps/web/lib/navigation/menu-por-experiencia.ts:15,16,66,74}}, {{apps/web/routes/paths.ts:29,31}}, {{apps/web/lib/navigation/module-for-path.ts:26}}, {{apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts:103}}, {{docs/diseno/ui-y-navegacion.md:88-89}} y {{PENDIENTES.md:457}}.
-
-*Qué hay que hacer:* confirmar con Martín qué ticket es cada pantalla y corregir los números donde corresponda.
-
-*Dónde:* archivos citados.
-
-Fuente: PENDIENTES.md [WEBINAR-NUMEROS-DE-TICKET] · Doc del área: docs/areas/embudos.md",WEBINAR-NUMEROS-DE-TICKET,Embudos y Lanzamientos,P3,,deuda técnica
 [FEAT-GHL-OAUTH] App del Marketplace de GHL,Story,Low,embudos,p3,feature,,,,"*Tipo:* feature
 
 *Estado verificado:* sólo PIT + {{location_id}} ({{ghl-connect-dialog.tsx}}); no hay rutas OAuth de GHL.

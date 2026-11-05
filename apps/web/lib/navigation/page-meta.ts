@@ -155,7 +155,8 @@ const PAGE_META: Record<string, PageMeta> = {
     title: "Equipo",
     subtitle: "Miembros y roles de la organización",
   },
-  // Limitless Webinars (SCRUM-545). La ficha (`/leads/[id]`) va por prefijo, abajo.
+  // Limitless Webinars (SCRUM-543, SCRUM-545). La ficha (`/leads/[id]`) va por prefijo, abajo.
+  "/inicio": { title: "Inicio" },
   "/leads": { title: "Leads" },
   "/business-context/documents": {
     title: "Base de conocimiento",

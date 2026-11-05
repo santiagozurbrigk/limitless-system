@@ -100,8 +100,8 @@ describe("⭐ la config de los menús", () => {
     ]);
   });
 
-  it("webinar hoy: Leads y Equipo están listas (las demás pantallas son de 534 y 529)", () => {
-    expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["leads", "equipo"]);
+  it("webinar hoy: Inicio, Leads y Equipo están listas (Lanzamientos es de 529)", () => {
+    expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["inicio", "leads", "equipo"]);
   });
 
   it("limitless hoy: Clientes, Tablero y Ventas listas; Administración (SCRUM-551) oculta", () => {
@@ -209,9 +209,16 @@ describe("⭐ pantalla de inicio", () => {
     expect(pantallaDeInicio("full", SIN_NADA)).toBe("/dashboard");
   });
 
-  it("webinar hoy: la primera entrada lista que se ve, Leads para el founder; Equipo para quien no ve Leads", () => {
-    expect(pantallaDeInicio("webinar", FOUNDER)).toBe("/leads");
+  it("webinar hoy: Inicio para el founder; Equipo para quien sólo ve Equipo", () => {
+    expect(pantallaDeInicio("webinar", FOUNDER)).toBe("/inicio");
     expect(pantallaDeInicio("webinar", CON_EQUIPO)).toBe("/team");
+  });
+
+  it("⭐ SCRUM-543: un miembro con el módulo del Panel va a Inicio; sin él, a la primera que ve (Leads con Ventas)", () => {
+    expect(
+      pantallaDeInicio("webinar", { isFounder: false, modules: { ...emptyPermissions(), dashboard: "view" } })
+    ).toBe("/inicio");
+    expect(pantallaDeInicio("webinar", SOLO_VENTAS)).toBe("/leads");
   });
 
   it("⭐ SCRUM-545: webinar sin Ventas sigue yendo a Equipo; con Ventas, a Leads", () => {
@@ -307,7 +314,7 @@ describe("⭐ rutas por experiencia", () => {
 
   it("webinar: las entradas listas (con sus subrutas) y las libres", () => {
     const abiertas = plataforma.filter((ruta) => rutaPermitidaParaLaExperiencia("webinar", ruta));
-    expect(abiertas).toEqual(["/leads", "/team", "/team/roles", "/settings", "/holding", "/onboarding/holding"]);
+    expect(abiertas).toEqual(["/inicio", "/leads", "/team", "/team/roles", "/settings", "/holding", "/onboarding/holding"]);
   });
 
   it("⭐ SCRUM-545 (AC-13): /leads y /leads/abc en full no redirigen, con cualquier permiso", () => {
@@ -332,14 +339,14 @@ describe("⭐ rutas por experiencia", () => {
     ]);
   });
 
-  it("webinar: el resto, incluidas las rutas anidadas, va a Leads para el founder (las entradas no listas, en cuanto su carpeta exista)", () => {
-    for (const ruta of ["/finance", "/marketing", "/lanzamientos", "/finance/expenses", "/inicio", "/llamadas", "/dashboard", "/clients"]) {
-      expect(redireccionPorExperiencia("webinar", ruta, FOUNDER)).toBe("/leads");
+  it("webinar: el resto, incluidas las rutas anidadas, va a Inicio para el founder (las entradas no listas, en cuanto su carpeta exista)", () => {
+    for (const ruta of ["/finance", "/marketing", "/lanzamientos", "/finance/expenses", "/llamadas", "/dashboard", "/clients"]) {
+      expect(redireccionPorExperiencia("webinar", ruta, FOUNDER)).toBe("/inicio");
     }
   });
 
   // La decisión de la función. En la app la aplica el layout del segmento:
-  // `/administracion` e `/inicio` todavía no tienen carpeta y dan 404
+  // `/administracion` todavía no tiene carpeta y da 404
   // (ver "entradas no listas" más abajo).
   it("⭐ limitless: el resto va a Clientes (para Administración, en cuanto su carpeta exista)", () => {
     for (const ruta of ["/dashboard", "/finance", "/marketing", "/team", "/administracion", "/inicio", "/lanzamientos"]) {
@@ -348,7 +355,7 @@ describe("⭐ rutas por experiencia", () => {
     expect(redireccionPorExperiencia("limitless", "/dashboard", SOLO_VENTAS)).toBe("/sales/inbox");
   });
 
-  it("⭐ limitless abre las pantallas fuera del menú adonde enlazan la Bandeja y el Tablero; webinar las manda a su inicio (Leads, founder)", () => {
+  it("⭐ limitless abre las pantallas fuera del menú adonde enlazan la Bandeja y el Tablero; webinar las manda a su inicio (Inicio, founder)", () => {
     // sales-inbox-layout y zernio-inbox-panel: «Conectar integración», «Conectar
     // Zernio», «Gestionar Zernio». workboard-task-resources: el SOP vinculado y
     // los documentos del contexto del negocio de una tarea.
@@ -362,7 +369,7 @@ describe("⭐ rutas por experiencia", () => {
     for (const ruta of enlazadas) {
       expect(rutaPermitidaParaLaExperiencia("limitless", ruta), ruta).toBe(true);
       expect(redireccionPorExperiencia("limitless", ruta, FOUNDER), ruta).toBeNull();
-      expect(redireccionPorExperiencia("webinar", ruta, FOUNDER), ruta).toBe("/leads");
+      expect(redireccionPorExperiencia("webinar", ruta, FOUNDER), ruta).toBe("/inicio");
     }
     // La biblioteca de SOP (/operations/sops) no: nadie de limitless enlaza ahí.
     // `/sops/create` sí pasa el bloqueo, pero next.config la manda a la biblioteca.
@@ -411,7 +418,7 @@ describe("⭐ entradas no listas: qué ve hoy quien tipea su URL (fix-pack 1 de 
     return bloquea ? "redirige" : "pantalla sin bloqueo";
   }
 
-  it("Inicio y Administración no tienen pantalla: 404; Lanzamientos tiene pantalla y layout con el bloqueo: redirige", () => {
+  it("Administración no tiene pantalla: 404; Lanzamientos tiene pantalla y layout con el bloqueo: redirige", () => {
     const resultado = Object.fromEntries(
       CON_MENU_PROPIO.flatMap((experiencia) =>
         MENU_POR_EXPERIENCIA[experiencia]
@@ -420,7 +427,6 @@ describe("⭐ entradas no listas: qué ve hoy quien tipea su URL (fix-pack 1 de 
       )
     );
     expect(resultado).toEqual({
-      "webinar /inicio": "404",
       "webinar /lanzamientos": "redirige",
       "limitless /administracion": "404",
     });

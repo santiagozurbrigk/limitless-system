@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 10 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 9 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
@@ -454,7 +454,7 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Tipo:** decisión de negocio
 - **Severidad:** Baja
 - **Estado verificado:** medido en el QA final de SCRUM-524 con una organización webinar creada por el alta real del super admin (`evidencia-sprint2/scrum-524/qa-final.md` § MENOR-2, `qa/prueba/alta-webinar.txt`): el founder cae en `/auth/force-password-change`, después en `/onboarding`, y en el siguiente login ve en `/team` el asistente «Tu negocio» (paso 1 de 3: negocio, oferta y avatar, `components/onboarding/onboarding-gate.tsx`). Es el gate de siempre (`shouldRedirectToGate` en el middleware, salvo `skip_onboarding`), no lo agrega SCRUM-524, y `/onboarding` es una ruta libre a propósito para no armar un bucle con el bloqueo por experiencia. SCRUM-524 no lo cambia.
-- **Qué hay que hacer:** que el PO decida si una organización webinar pasa por ese gate (son preguntas del producto completo: oferta y avatar), por uno propio de Webinars o por ninguno (`skip_onboarding` en el alta), y cuándo se revisa (probablemente con Inicio, SCRUM-534).
+- **Qué hay que hacer:** que el PO decida si una organización webinar pasa por ese gate (son preguntas del producto completo: oferta y avatar), por uno propio de Webinars o por ninguno (`skip_onboarding` en el alta), y cuándo se revisa (probablemente con Inicio en vivo, SCRUM-534).
 - **Dónde:** `apps/web/lib/onboarding/gate-routing.ts`, `apps/web/lib/supabase/middleware.ts`, `apps/web/components/onboarding/onboarding-gate.tsx`, `app/super-admin/actions.ts` (altas).
 
 #### [MIDDLEWARE-COOKIE-REFRESCADA] El middleware le pasa a la página la cookie de sesión vieja después de refrescarla (nuevo)
@@ -1474,17 +1474,11 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Qué hay que hacer:** que las funciones de lectura de Webinars traten la cuenta sin organización como "sin fuente" (o "no existe" en la ficha) sin lanzar, igual que hace `getOrganizationExperience` con `SIN_ORGANIZACION_VINCULADA`.
 - **Dónde:** `apps/web/lib/webinar/vistas/leer.ts`, `apps/web/app/(platform)/leads/`.
 
-#### [WEBINAR-LEADS-CREAR-LANZAMIENTO] El estado vacío de Leads no tiene enlace para crear un lanzamiento
+#### [WEBINAR-LEADS-CREAR-LANZAMIENTO] Los estados vacíos de Leads e Inicio no tienen enlace para crear un lanzamiento
 - **Tipo:** feature
-- **Estado verificado:** sin lanzamientos, `/leads` muestra «Todavía no hay lanzamientos.» sin enlace: `RUTA_PARA_CREAR_LANZAMIENTO` es `null` en `apps/web/lib/webinar/leads/config.ts` porque no existe la pantalla de creación (SCRUM-544). `PantallaDeLeads` dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22).
-- **Qué hay que hacer:** que SCRUM-544 ponga en `RUTA_PARA_CREAR_LANZAMIENTO` la ruta de su pantalla de creación (desde `routes/paths.ts`).
+- **Estado verificado:** sin lanzamientos, `/leads` muestra «Todavía no hay lanzamientos.» sin enlace: `RUTA_PARA_CREAR_LANZAMIENTO` es `null` en `apps/web/lib/webinar/leads/config.ts` porque no existe la pantalla de creación (SCRUM-544). `PantallaDeLeads` dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22). Inicio (SCRUM-543) usa la misma constante: sin lanzamiento activo muestra «No hay un lanzamiento activo.» sin botón.
+- **Qué hay que hacer:** que SCRUM-529 (lista y configuración de lanzamientos) ponga en `RUTA_PARA_CREAR_LANZAMIENTO` la ruta de su pantalla de creación (desde `routes/paths.ts`); Leads e Inicio la toman solos.
 - **Dónde:** `apps/web/lib/webinar/leads/config.ts`.
-
-#### [WEBINAR-NUMEROS-DE-TICKET] Los comentarios y docs de Webinars citan SCRUM-534 y SCRUM-529 donde corresponde 543 y 544
-- **Tipo:** deuda técnica
-- **Estado verificado:** Inicio figura como SCRUM-534 y Lanzamientos como SCRUM-529, y el plan de Webinars los tiene como SCRUM-543 y SCRUM-544 (drift detectado en el SDD de SCRUM-545, que no los corrigió): `apps/web/lib/navigation/menu-por-experiencia.ts:15,16,66,74`, `apps/web/routes/paths.ts:29,31`, `apps/web/lib/navigation/module-for-path.ts:26`, `apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts:103`, `docs/diseno/ui-y-navegacion.md:88-89` y `PENDIENTES.md:457`.
-- **Qué hay que hacer:** confirmar con Martín qué ticket es cada pantalla y corregir los números donde corresponda.
-- **Dónde:** archivos citados.
 
 #### [FEAT-GHL-OAUTH] App del Marketplace de GHL
 - **Tipo:** feature
