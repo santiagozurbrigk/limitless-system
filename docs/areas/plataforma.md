@@ -50,6 +50,14 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 
 ### Super Admin
 
+> **Panel viejo cerrado (SCRUM-553).** `/super-admin/*` redirige a la consola de Administración
+> (`lib/navigation/redirects.ts`, `redireccionesDelPanelViejo`, aplicado en `next.config.ts`): cada pantalla que se
+> mudó va a la suya y lo que no se mudó (Cerebro de IA general, lista de espera, pruebas gratis, salud de clientes)
+> queda escondido sin borrar el código, llevando a Organizaciones. El staff entra por `/login` a
+> `/administracion/organizaciones` (`DESTINO_DEL_STAFF`). La tabla de abajo describe el código del panel, que sigue
+> en `app/(super-admin)` (y que la consola reusa: Sistema dibuja sus páginas de infraestructura y costos). Lo
+> verifica `lib/navigation/__tests__/panel-viejo-cerrado.test.ts`.
+
 | Ruta | Datos | Qué hace |
 |---|---|---|
 | `/super-admin/organizations` (+ `/new`, `/[id]`) | `lib/super-admin/queries.ts` | Lista, alta de founder, detalle: estado, MRR, notas, add-ons, contraseña temporal, **baja** |
@@ -83,9 +91,9 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 - **Experiencia** (`setOrganizationExperienceAction`, `lib/administracion/experiencia.ts`): sólo `webinar` y `full`;
   nadie pasa a `limitless` y la org de Limitless no cambia desde acá. Un negocio nuevo de un holding nunca hereda
   `limitless`: nace `full` (`experienciaDeUnNegocioNuevo`).
-- **Qué no se mudó:** Cerebro de IA general, lista de espera, pruebas gratis y salud de clientes siguen en
-  `/super-admin` (SCRUM-553 decide). El staff sigue entrando por `/login` a `/super-admin/organizations`
-  (`DESTINO_DEL_STAFF`) hasta que SCRUM-553 cierre el panel viejo con la consola verificada en producción.
+- **Qué no se mudó:** Cerebro de IA general, lista de espera, pruebas gratis y salud de clientes quedan escondidos
+  desde SCRUM-553 (sus rutas llevan a Organizaciones; el código sigue). El staff entra por `/login` a la consola
+  (`DESTINO_DEL_STAFF`).
 
 Estado de la organización: el de la base, `organizations.status in ('active', 'paused', 'churned')`, con el tipo `OrganizationStatus` de `@ai-coo/types` (también lo usan `AdminOrgStatus` y `organizaciones-activas.ts`). `lib/super-admin/estado-de-org.ts` lo lee (`estadoDeOrg`; un valor desconocido no se convierte en ningún estado: queda `unknown`, se muestra "Desconocido" y no tiene botón de pausar ni activar, `accionDeEstado`), le da texto (Activa, Pausada, Dada de baja, desde `es.status.org`) y color, y estima el plan sólo por MRR (`planPorMrr`; no hay columna de plan). La lista de organizaciones filtra por esos tres estados; "Pausar" deja la org en `paused` y "Activar" la vuelve a `active` (`setOrganizationStatusAction`); ninguna pantalla pasa una org a `churned`. El estado "activo/inactivo" de `/super-admin/users` es otra cosa: si la persona puede entrar (`AdminUserStatus`, baneada en Auth o perfil inactivo).
 

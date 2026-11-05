@@ -358,8 +358,8 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
 - **Super admin (staff de Limitless, SCRUM-552)**: allowlist por email, no por rol ni por pertenencia. El staff
   es **founder de la organización de Limitless**, la única con `organizations.experience = 'limitless'` (el
   índice único parcial `organizations_una_sola_limitless` impide una segunda). Entra por `/login` como todos
-  (`/superadmin/login` redirige ahí) y va a `DESTINO_DEL_STAFF` (`/super-admin/organizations`; pasa a la consola de
-  Administración, `/administracion`, cuando SCRUM-553 cierre el panel viejo). La consola (SCRUM-551) es una entrada
+  (`/superadmin/login` redirige ahí) y va a `DESTINO_DEL_STAFF` (desde SCRUM-553, `/administracion/organizaciones`, la consola de
+  Administración; el panel viejo `/super-admin` redirige ahí). La consola (SCRUM-551) es una entrada
   `soloStaff` del menú `limitless`: el layout de la plataforma suma `esStaff` a los permisos para esa experiencia. El panel vive en
   `/super-admin/*`; el layout (`app/(super-admin)/super-admin/layout.tsx`) y cada acción y lectura del panel
   pasan por `requireStaff()`/`isStaffUser()` (`lib/auth/require-staff.ts`), que deciden **sólo por la lista**

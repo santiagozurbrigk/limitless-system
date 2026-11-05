@@ -1,6 +1,6 @@
 # Alta de un super admin
 
-Procedimiento para darle acceso al panel interno (`/super-admin`) a alguien del staff de Limitless.
+Procedimiento para darle acceso a la consola de Administración (`/administracion`, dentro de la org de Limitless) a alguien del staff de Limitless. Desde SCRUM-553 el panel viejo (`/super-admin`) está cerrado: sus links redirigen a la consola.
 Origen: `[AUTH-ALTA-EMAIL-AJENO]`, parte b (SCRUM-494, de SCRUM-15).
 
 ## La regla
@@ -135,14 +135,14 @@ where s.email = lower(trim('nombre@ejemplo.com'));
 2. La persona entra por **`/login`**, el mismo login de todos (en producción,
    `https://otc-plaform.vercel.app/login`). `/superadmin/login` redirige ahí (SCRUM-552). La app le crea el
    perfil como **founder de la organización de Limitless** (la única con `experience = 'limitless'`) y la lleva
-   a `/super-admin/organizations` (`lib/auth/__tests__/bootstrap-staff-en-limitless.test.ts` y
+   a `/administracion/organizaciones` (`lib/auth/__tests__/bootstrap-staff-en-limitless.test.ts` y
    `app/auth/__tests__/login-del-staff.test.ts`). Si todavía no hay ninguna organización marcada como Limitless,
    el perfil nace sin organización, como antes.
    Si la organización de Limitless no completó el onboarding (y no tiene `skip_onboarding`), el founder recién
    llegado cae en `/onboarding` en cualquier ruta, incluido el panel: ver el paso 3b de
    [staff-en-org-de-limitless.md](staff-en-org-de-limitless.md).
 3. Cambia la contraseña en **`/auth/update-password`**. Al guardar, la app la manda al Panel de clientes, que no es
-   para super admins (puede mostrar un error): tiene que volver a `/super-admin/organizations`.
+   para super admins (puede mostrar un error): tiene que volver a `/administracion/organizaciones`.
 
 ### 6. Verificar el perfil
 

@@ -123,8 +123,8 @@ beforeEach(() => {
 });
 
 describe("login del staff por /login", () => {
-  it("el destino del staff es el panel de organizaciones", () => {
-    expect(DESTINO_DEL_STAFF).toBe(paths.superAdmin.organizations);
+  it("el destino del staff es Organizaciones de la consola (SCRUM-553)", () => {
+    expect(DESTINO_DEL_STAFF).toBe(paths.platform.consola.organizaciones);
   });
 
   it("⭐ el staff entra por /login y va a su destino, con el bootstrap una vez", async () => {

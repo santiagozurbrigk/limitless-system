@@ -28,6 +28,26 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-05 — Panel viejo de super-admin cerrado: todo lleva a la consola (SCRUM-553, C3)
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma: `lib/navigation/redirects.ts` (`redireccionesDelPanelViejo`), `lib/auth/require-staff.ts` (`DESTINO_DEL_STAFF`), `app/superadmin/dashboard/page.tsx`; test nuevo `lib/navigation/__tests__/panel-viejo-cerrado.test.ts` (44 casos); tests `login-del-staff`, `require-staff`, `destino-por-experiencia`; docs `areas/plataforma.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `operacion/alta-super-admin.md`, `FUNCIONAL.md` (F-PLA-24, escondidos), `operacion/verificacion-manual.md` (V16)
+
+**Qué se hizo:**
+- `/super-admin/*` redirige (temporal, en `next.config.ts`) a la consola: Organizaciones (lista, nueva, ficha), Usuarios, Holdings, Sistema (infraestructura y costos, y los alias viejos `ai-usage`, `cost-tracking`, `profitability`) y Onboarding. Lo que no se mudó (Cerebro de IA general, lista de espera, pruebas gratis, salud de clientes) y cualquier otra ruta del panel llevan a Organizaciones: escondido sin borrar el código.
+- El staff entra por `/login` a `/administracion/organizaciones` (`DESTINO_DEL_STAFF`); `/superadmin/dashboard` también. `/superadmin/login` sigue yendo a `/login` (552).
+- Test que recorre cada página de `app/(super-admin)/super-admin`, le aplica los redirects como Next y exige que caiga en una pantalla que existe en la consola; y que ningún componente que dibuja la consola enlace a lo escondido.
+
+**Por qué / finalidad:** C3 del plan: un solo lugar para administrar.
+
+**Decisiones de diseño relevantes:**
+- Redirects en `next.config.ts` (como el resto de `sectionRedirects`) en vez de tocar cada página: el código del panel queda intacto y la consola sigue reusando sus páginas de infraestructura y costos (los redirects actúan sobre la URL, no sobre los imports). Para reabrirlo alcanza con sacar esas entradas.
+- Temporales (`permanent: false`), como el resto: un 308 cacheado esconderría el panel si se reabre.
+- El flujo de importar desde Drive del Cerebro de IA (callback OAuth a `/super-admin/ai-brain/add`) queda llevando a Organizaciones: es parte de lo escondido.
+
+**Riesgos / deuda técnica pendiente:** **mergear recién con la consola verificada en producción (V15)** y con el staff ya asociado a la org de Limitless (migración de 552): si no, el staff cae en la plataforma sin organización. No se probó en navegador (V16). Suite completa en verde.
+
 ### 2026-11-05 — Consola de Administración dentro de la org de Limitless (SCRUM-551, C1)
 
 **Rama:** `claude/brave-wright-s2bfcg` (con `feat/SCRUM-552-consola-acceso-staff` integrada: el guard del staff)

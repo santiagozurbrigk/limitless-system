@@ -262,8 +262,8 @@ describe("contrato del módulo", () => {
     expect(alias.isSuperAdminEmail).toBe(isStaffEmail);
   });
 
-  it("el staff va al panel al iniciar sesión", () => {
-    expect(DESTINO_DEL_STAFF).toBe(paths.superAdmin.organizations);
+  it("el staff va a la consola de Administración al iniciar sesión (SCRUM-553)", () => {
+    expect(DESTINO_DEL_STAFF).toBe(paths.platform.consola.organizaciones);
   });
 
   it("los textos de rechazo son los tres de siempre más el de cuenta desactivada", () => {

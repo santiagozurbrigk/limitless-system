@@ -40,7 +40,7 @@ vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
 // SCRUM-552: el destino del staff lo decide `isStaffEmail` (antes `isSuperAdminEmail`).
 vi.mock("@/lib/auth/require-staff", () => ({
   isStaffEmail: async () => sim.superAdmin,
-  DESTINO_DEL_STAFF: "/super-admin/organizations",
+  DESTINO_DEL_STAFF: "/administracion/organizaciones",
 }));
 vi.mock("@/lib/auth/get-current-permissions", () => ({
   getCurrentUserPermissions: async () => {
@@ -170,10 +170,10 @@ describe("⭐ login con contraseña", () => {
     expect(await login()).toBe("/holding");
   });
 
-  it("el super admin sigue yendo a su panel", async () => {
+  it("el staff va a la consola de Administración (SCRUM-553)", async () => {
     sim.superAdmin = true;
     sim.experiencia = "webinar";
-    expect(await login()).toBe("/super-admin/organizations");
+    expect(await login()).toBe("/administracion/organizaciones");
   });
 });
 
@@ -214,9 +214,9 @@ describe("⭐ /auth/callback", () => {
     expect(sim.bootstraps).toBe(0);
   });
 
-  it("el super admin sigue yendo a su panel", async () => {
+  it("el staff va a la consola de Administración (SCRUM-553)", async () => {
     sim.superAdmin = true;
-    expect(await volverDelMail()).toBe("/super-admin/organizations");
+    expect(await volverDelMail()).toBe("/administracion/organizaciones");
   });
 
   it("⭐ sin next, una cuenta holding va a su holding como en el login, sea cual sea la experiencia (fix-pack 1 de A1, MNR-1)", async () => {
