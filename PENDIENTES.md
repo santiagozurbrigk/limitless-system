@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 10 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 12 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
@@ -1514,17 +1514,29 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Qué hay que hacer:** que las funciones de lectura de Webinars traten la cuenta sin organización como "sin fuente" (o "no existe" en la ficha) sin lanzar, igual que hace `getOrganizationExperience` con `SIN_ORGANIZACION_VINCULADA`.
 - **Dónde:** `apps/web/lib/webinar/vistas/leer.ts`, `apps/web/app/(platform)/leads/`.
 
-#### [WEBINAR-ACCIONES-SIN-DESTINO] Los botones de cada estado de número no llevan a ninguna pantalla
+#### [WEBINAR-ACCIONES-SIN-DESTINO] Los botones de conectar una fuente no llevan a ninguna pantalla
 - **Tipo:** feature
-- **Estado verificado:** el Detalle del lanzamiento (SCRUM-544) muestra para cada número sin medir su acción ("Conectá GoHighLevel", "Ver Meta Ads", "Reconectá Commas", "Completá la configuración del lanzamiento"), pero como texto: `DESTINOS_DE_LAS_ACCIONES` (`apps/web/lib/webinar/acciones-del-estado.ts`) tiene `integraciones: null` y `configuracion: null`. Integraciones no está en el menú webinar (PO, 28-oct) y la pantalla de hoy lista las integraciones del producto completo; Configuración del lanzamiento no existe todavía.
-- **Qué hay que hacer:** SCRUM-529 pone en `configuracion` la ruta de su pantalla (`/lanzamientos/<id>/configuracion`). Para `integraciones`, decidir (SCRUM-522) si webinar abre Integraciones filtrada a sus fuentes (diseño, sección 7) y, si sí, sumarla a `RUTAS_EXTRA_POR_EXPERIENCIA.webinar` y poner su ruta. Cada `AccionDelDato` pasa sola a enlace.
+- **Estado verificado:** en el Detalle del lanzamiento (SCRUM-544), «Completá la configuración del lanzamiento» ya lleva a la Configuración (SCRUM-529), pero «Conectá X», «Ver X» y «Reconectá X» siguen como texto: `DESTINOS_DE_LAS_ACCIONES.integraciones` es `null` (`apps/web/lib/webinar/acciones-del-estado.ts`). Integraciones no está en el menú webinar (PO, 28-oct) y la pantalla de hoy lista las integraciones del producto completo.
+- **Qué hay que hacer:** decidir (SCRUM-522) si webinar abre Integraciones filtrada a sus fuentes (diseño, sección 7) y, si sí, sumarla a `RUTAS_EXTRA_POR_EXPERIENCIA.webinar` y poner su ruta en `DESTINOS_DE_LAS_ACCIONES`.
 - **Dónde:** `apps/web/lib/webinar/acciones-del-estado.ts`, `apps/web/lib/navigation/menu-por-experiencia.ts`.
 
-#### [WEBINAR-LEADS-CREAR-LANZAMIENTO] Los estados vacíos de Leads e Inicio no tienen enlace para crear un lanzamiento
+#### [WEBINAR-LANZAMIENTOS-PERSISTIR] Crear y editar un lanzamiento no guarda nada
 - **Tipo:** feature
-- **Estado verificado:** sin lanzamientos, `/leads` muestra «Todavía no hay lanzamientos.» sin enlace: `RUTA_PARA_CREAR_LANZAMIENTO` es `null` en `apps/web/lib/webinar/leads/config.ts` porque no existe la pantalla de creación (SCRUM-544). `PantallaDeLeads` dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22). Inicio (SCRUM-543) usa la misma constante: sin lanzamiento activo muestra «No hay un lanzamiento activo.» sin botón.
-- **Qué hay que hacer:** que SCRUM-529 (lista y configuración de lanzamientos) ponga en `RUTA_PARA_CREAR_LANZAMIENTO` la ruta de su pantalla de creación (desde `routes/paths.ts`); Leads e Inicio la toman solos.
-- **Dónde:** `apps/web/lib/webinar/leads/config.ts`.
+- **Estado verificado:** `crearLanzamientoAction` y `guardarLanzamientoAction` (`apps/web/app/lanzamientos/webinar-actions.ts`, SCRUM-529) validan y devuelven éxito sin escribir; la pantalla avisa que es de ejemplo. El modelo (`webinar_launches`, `webinar_sessions`, SCRUM-526) no está en producción. El criterio de SCRUM-529 "lo ve en la lista con su public_id" queda pendiente de esto.
+- **Qué hay que hacer:** después de migrar el modelo (SCRUM-532), insertar y actualizar el lanzamiento y sus sesiones con `requireOrganizationId()` y el cliente de usuario (RLS), generar el `public_id`, mostrarlo en la lista y revalidar `/lanzamientos`. Chequear el módulo `funnels` en la acción.
+- **Dónde:** `apps/web/app/lanzamientos/webinar-actions.ts`, `apps/web/lib/webinar/vistas/leer.ts`.
+
+#### [WEBINAR-LANZAMIENTOS-EN-PARALELO] Cuántos lanzamientos puede correr una cuenta a la vez
+- **Tipo:** decisión de negocio
+- **Estado verificado:** `LANZAMIENTOS_EN_PARALELO` (`apps/web/lib/webinar/lanzamientos/esquemas.ts`) está en `null`: sin límite. La regla ya está escrita y probada (`motivoDeSuperposicion`) para 1 o más.
+- **Qué hay que hacer:** que SCRUM-522 lo decida (pregunta 6 del diseño) y poner el número en la constante; también afecta a Inicio (cuál es "el" lanzamiento activo).
+- **Dónde:** `apps/web/lib/webinar/lanzamientos/esquemas.ts`.
+
+#### [WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS] Elegir campañas y productos de un lanzamiento
+- **Tipo:** feature
+- **Estado verificado:** la Configuración (SCRUM-529) muestra campañas y productos asociados pero no deja elegirlos: hay que listarlos desde Meta (Zernio) y desde el procesador de pagos.
+- **Qué hay que hacer:** selector de campañas (con `campaign_external_id` de `ad_metrics_daily`) y de productos principal y VIP de Whop/Commas, con acciones persistentes.
+- **Dónde:** `apps/web/components/webinar/pantalla-de-configuracion.tsx`.
 
 #### [FEAT-GHL-OAUTH] App del Marketplace de GHL
 - **Tipo:** feature

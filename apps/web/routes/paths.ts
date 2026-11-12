@@ -74,6 +74,9 @@ export const paths = {
 
     lanzamientos: `${PLATFORM}/lanzamientos`,
     lanzamientosDetail: (id: string) => `${PLATFORM}/lanzamientos/${id}`,
+    /** Crear y configurar un lanzamiento de Webinars (SCRUM-529). */
+    lanzamientosNuevo: `${PLATFORM}/lanzamientos/nuevo`,
+    lanzamientosConfiguracion: (id: string) => `${PLATFORM}/lanzamientos/${id}/configuracion`,
 
     agent: {
       root: `${PLATFORM}/agent`,

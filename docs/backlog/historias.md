@@ -793,7 +793,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado que marco avance, asigno responsable o agrego una nota, entonces el cambio queda guardado y lo ve el resto del equipo al recargar (hoy es de ejemplo y la ficha lo avisa).
   - Dada una organización que no es la de demo, cuando abro `/leads`, entonces veo sus leads reales y nunca un cero ni una lista inventada cuando una fuente no está conectada.
   - Dada una organización sin lanzamientos, cuando abro `/leads`, entonces veo cómo crear uno.
-- **Tareas técnicas:** `[WEBINAR-LEADS-PERSISTIR]`, `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`, `[WEBINAR-LEADS-SIN-ORGANIZACION]`
+- **Tareas técnicas:** `[WEBINAR-LEADS-PERSISTIR]`, `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-LEADS-SIN-ORGANIZACION]`
 - **Para confirmar:** Martín: "menos de 3 clics" se interpretó como 2 desde la lista ya filtrada (abrir la ficha y pulsar el botón de avance).
 
 
@@ -806,7 +806,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado que la landing deja de enviar registros, cuando entro a Inicio, entonces veo un aviso con el motivo.
   - Dada una fuente que no está conectada o falló, entonces Inicio la muestra con su motivo y nunca muestra un cero inventado en los números que dependen de ella.
   - Dada una cuenta sin lanzamiento activo, entonces veo que no hay uno y cómo crearlo.
-- **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`
+- **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`
 
 
 ### [H-EMB-27] Leer el embudo de un lanzamiento de punta a punta (Limitless Webinars)
@@ -817,7 +817,19 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un número que no se pudo medir, entonces veo por qué y qué hacer (conectar, revisar, reconectar o completar la configuración), y nunca un cero inventado.
   - Cuando abro el detalle, entonces veo los registros por origen y por anuncio y su evolución día por día.
   - Cuando abro Lanzamientos, entonces veo cada lanzamiento con su variante, estado, fechas, registrados, asistentes, ventas e ingresos, y llego a su detalle en un clic.
-- **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-ACCIONES-SIN-DESTINO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`
+- **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-ACCIONES-SIN-DESTINO]`
+
+
+### [H-EMB-28] Crear y configurar un lanzamiento (Limitless Webinars)
+- **Funcionalidad:** F-EMB-28 · A medias
+- **Historia:** Como dueño de una cuenta de Limitless Webinars, quiero crear un lanzamiento con sus sesiones y ver qué me falta cargar para que se midan todos los números, para dejarlo listo antes de empezar a captar.
+- **Criterios de aceptación:**
+  - Cuando creo un lanzamiento con nombre, variante, oferta, fechas y sesiones, entonces aparece en la lista de Lanzamientos con su identificador para la landing.
+  - Dado un lanzamiento con datos que faltan (minuto de la oferta, ID de Zoom, producto, campañas), cuando abro su configuración, entonces veo qué falta y lo puedo completar.
+  - Dado que una cuenta tiene un límite de lanzamientos en paralelo, cuando creo uno que se pisa en fechas con otros, entonces se rechaza con el motivo.
+  - Desde el número de un lanzamiento que dice «Falta configurar», llego a su configuración en un clic.
+- **Tareas técnicas:** `[WEBINAR-LANZAMIENTOS-PERSISTIR]`, `[WEBINAR-LANZAMIENTOS-EN-PARALELO]`, `[WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS]`, `[WEBINAR-ORG-DE-DEMO]`
+- **Para confirmar:** cuántos lanzamientos en paralelo (SCRUM-522).
 
 ---
 

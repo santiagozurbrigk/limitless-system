@@ -23,9 +23,12 @@ describe("⭐ accionDelEstado", () => {
     expect(accionDelEstado("error", "calculado", "l1").texto).toBe("Completá la configuración del lanzamiento");
   });
 
-  it("⭐ sin pantalla de destino, sin enlace (nunca un enlace muerto)", () => {
+  it("⭐ sin pantalla de destino, sin enlace (nunca un enlace muerto): Integraciones todavía no tiene", () => {
     expect(accionDelEstado("sin_fuente", "zoom", "l1").href).toBeNull();
-    expect(accionDelEstado("falta_configurar", "configuracion", "l1").href).toBeNull();
+  });
+
+  it("⭐ SCRUM-529: «Completá la configuración» lleva a la Configuración del lanzamiento", () => {
+    expect(accionDelEstado("falta_configurar", "configuracion", "l1").href).toBe("/lanzamientos/l1/configuracion");
   });
 
   it("cuando una tarea pone su ruta, el botón la usa con el lanzamiento", () => {

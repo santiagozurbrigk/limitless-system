@@ -108,3 +108,17 @@ export function EsqueletoDeDetalleDelLanzamiento() {
     </Cargando>
   );
 }
+
+/** Configuración del lanzamiento: faltantes, formulario y campañas y productos. */
+export function EsqueletoDeConfiguracion() {
+  return (
+    <Cargando que="la configuración">
+      <Skeleton className="h-20 rounded-lg" />
+      <Lista filas={6} alto="h-9" />
+      <div className="grid gap-6 md:grid-cols-2">
+        <Lista filas={2} alto="h-10" />
+        <Lista filas={2} alto="h-10" />
+      </div>
+    </Cargando>
+  );
+}

@@ -872,6 +872,15 @@ con una sesión real.
 3. Abrir `/super-admin/ai-brain`, `/super-admin/waitlist`, `/super-admin/trials`, `/super-admin/client-health`. Resultado: Organizaciones de la consola.
 4. `/superadmin/login`. Resultado: `/login`.
 
+
+### V17. Crear y configurar un lanzamiento (SCRUM-529) ⭐ — `[WEBINAR-ORG-DE-DEMO]`
+**Prerrequisitos:** los de V12.
+1. ⭐ En Lanzamientos, «Crear un lanzamiento». Cargar nombre, variante, precio, fechas y dos sesiones (una con minuto de la oferta). «Crear lanzamiento». Resultado: «Cambio de ejemplo: no se guardó y se pierde al recargar.»
+2. Poner el cierre antes de la captación. Resultado: aviso «El cierre no puede ser antes del inicio de la captación» y no se crea.
+3. ⭐ En el Detalle del lanzamiento activo, tocar «Completá la configuración del lanzamiento» de un número. Resultado: la Configuración, con «Falta cargar» arriba (el minuto de la oferta de la sesión 2).
+4. En la Configuración, cambiar el nombre y «Guardar cambios». Resultado: el aviso de ejemplo; al recargar vuelve el nombre de antes.
+5. Mirar el formulario en el celular. Resultado: los campos se apilan y se leen.
+
 ---
 
 ## Agente de negocio e IA

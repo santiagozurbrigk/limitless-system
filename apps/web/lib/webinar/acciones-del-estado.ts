@@ -1,4 +1,5 @@
 import { ETIQUETA_DE_FUENTE, type Dato, type EstadoDelDato, type FuenteDelDato } from "@/lib/webinar/vistas/dato";
+import { paths } from "@/routes/paths";
 
 /**
  * ⭐ Qué puede hacer el usuario con un número que no llegó medido (SCRUM-544;
@@ -32,12 +33,13 @@ export type AccionDelEstado = {
 
 /**
  * Integraciones no está en el menú webinar (PO, 28-oct) y la pantalla de
- * hoy lista todas las integraciones del producto completo; Configuración del
- * lanzamiento es de SCRUM-529. Cada tarea pone su ruta acá.
+ * hoy lista todas las integraciones del producto completo: sin destino hasta
+ * que se decida. Configuración del lanzamiento existe desde SCRUM-529.
  */
 export const DESTINOS_DE_LAS_ACCIONES: Record<DestinoDeLaAccion, ((launchId: string) => string) | null> = {
   integraciones: null,
-  configuracion: null,
+  // SCRUM-529: la Configuración del lanzamiento.
+  configuracion: paths.platform.lanzamientosConfiguracion,
 };
 
 const FUENTES_QUE_NO_SE_CONECTAN: readonly FuenteDelDato[] = ["manual", "calculado", "configuracion"];

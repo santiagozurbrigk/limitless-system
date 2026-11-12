@@ -32,6 +32,7 @@ vi.mock("@/lib/auth/bootstrap", async () => {
 });
 vi.mock("@/lib/fechas/organizacion-activa", () => ({ zonaDeLaOrganizacionActiva: async () => null }));
 vi.mock("@/lib/observability/reportar-falla", () => ({ reportarFalla: vi.fn() }));
+vi.mock("@/providers/toast-provider", () => ({ useToast: () => ({ push: () => undefined }) }));
 // Sin tipos del escenario: fuera de lib/webinar/vistas sólo se importan leer,
 // contratos y dato (las-pantallas-leen-de-su-funcion.test.ts).
 type Escenario = (...args: unknown[]) => { lanzamientos: Record<string, unknown>[] };
@@ -51,6 +52,8 @@ import { getPageMeta } from "@/lib/navigation/page-meta";
 import { PASOS_POR_VARIANTE } from "@/lib/webinar/vistas/contratos";
 import LanzamientosPage from "../page";
 import DetalleDelLanzamientoPage from "../[id]/page";
+import ConfiguracionPage from "../[id]/configuracion/page";
+import NuevoLanzamientoPage from "../nuevo/page";
 
 async function lista(): Promise<string> {
   return renderToStaticMarkup(await LanzamientosPage());
@@ -59,7 +62,7 @@ async function detalle(id: string): Promise<string> {
   return renderToStaticMarkup(await DetalleDelLanzamientoPage({ params: Promise.resolve({ id }) }));
 }
 function primerLanzamiento(html: string): string {
-  const m = /href="\/lanzamientos\/([^"]+)"/.exec(html);
+  const m = /data-lanzamiento="[^"]+"><a[^>]*href="\/lanzamientos\/([^"]+)"/.exec(html);
   expect(m, "no hay enlace al detalle").not.toBeNull();
   return m![1]!;
 }
@@ -147,5 +150,55 @@ describe("títulos (getPageMeta)", () => {
   it("/lanzamientos y /lanzamientos/<id>", () => {
     expect(getPageMeta("/lanzamientos").title).toBe("Lanzamientos");
     expect(getPageMeta("/lanzamientos/abc").title).toBe("Detalle del lanzamiento");
+  });
+});
+
+async function configuracion(id: string): Promise<string> {
+  return renderToStaticMarkup(await ConfiguracionPage({ params: Promise.resolve({ id }) }));
+}
+
+describe("⭐ SCRUM-529 · crear y configurar", () => {
+  it("la lista tiene «Crear un lanzamiento» y el detalle enlaza a su Configuración", async () => {
+    const html = await lista();
+    expect(html).toMatch(/href="\/lanzamientos\/nuevo"[^>]*>Crear un lanzamiento</);
+    const id = primerLanzamiento(html);
+    expect(await detalle(id)).toContain(`href="/lanzamientos/${id}/configuracion"`);
+  });
+
+  it("⭐ «Completá la configuración» del detalle lleva a la Configuración", async () => {
+    const id = primerLanzamiento(await lista());
+    const enlaces = (await detalle(id)).match(/<a [^>]*data-accion="configuracion"[^>]*>/g) ?? [];
+    expect(enlaces.length).toBeGreaterThan(0);
+    for (const enlace of enlaces) expect(enlace).toContain(`href="/lanzamientos/${id}/configuracion"`);
+  });
+
+  it("⭐ la Configuración muestra lo que falta cargar, el formulario con los datos y las sesiones, campañas y productos", async () => {
+    const id = primerLanzamiento(await lista());
+    const html = await configuracion(id);
+    expect(html).toContain('data-cartel="datos-de-ejemplo"');
+    expect(html).toContain("data-faltantes");
+    expect(html).toContain('data-faltante="segundo_de_la_oferta"');
+    expect(html).toContain('data-formulario="editar"');
+    expect(html).toMatch(/data-sesion-formulario="0"/);
+    expect(html).toContain("Oferta principal");
+    expect(html).toContain("Guardar cambios");
+  });
+
+  it("la Configuración de un lanzamiento que no existe: el 404 de la app", async () => {
+    await expect(configuracion("99999999-0000-4000-8000-000000000000")).rejects.toMatchObject({
+      digest: "NEXT_HTTP_ERROR_FALLBACK;404",
+    });
+  });
+
+  it("/lanzamientos/nuevo: el formulario vacío para crear", () => {
+    const html = renderToStaticMarkup(NuevoLanzamientoPage());
+    expect(html).toContain('data-formulario="crear"');
+    expect(html).toContain("Crear lanzamiento");
+    expect(html).toContain("Todavía no hay sesiones.");
+  });
+
+  it("títulos", () => {
+    expect(getPageMeta("/lanzamientos/nuevo").title).toBe("Nuevo lanzamiento");
+    expect(getPageMeta("/lanzamientos/abc/configuracion").title).toBe("Configuración del lanzamiento");
   });
 });

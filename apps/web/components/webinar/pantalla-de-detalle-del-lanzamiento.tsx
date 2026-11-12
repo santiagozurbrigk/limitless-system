@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { Badge } from "@ai-coo/ui";
+import { paths } from "@/routes/paths";
 import { CartelDatosDeEjemplo } from "@/components/webinar/cartel-datos-de-ejemplo";
 import {
   ETIQUETA_DE_VARIANTE,
@@ -51,6 +53,13 @@ export function PantallaDeDetalleDelLanzamiento({ vista }: { vista: VistaDetalle
           {textoDeLasFechas(l.captaDesde, l.cierraEl)}
           {l.precioDeLaOferta !== null ? ` · Oferta: ${monto(l.precioDeLaOferta)}` : ""}
         </p>
+        <Link
+          href={paths.platform.lanzamientosConfiguracion(l.id)}
+          data-enlace="configuracion"
+          className="self-start text-sm text-primary hover:underline"
+        >
+          Configuración del lanzamiento
+        </Link>
       </section>
 
       <section aria-label="Números principales" className="flex flex-col gap-3">

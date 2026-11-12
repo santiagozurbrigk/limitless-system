@@ -1136,13 +1136,12 @@ Funcionalidad: F-EMB-22 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * [WEBINAR-LEADS-PERSISTIR] Las acciones de la ficha del lead guardan de verdad y /leads lee la base (B4) (P2)
 * [WEBINAR-VISTAS-LECTURA-REAL] Las funciones de lectura de Webinars leen la base (B4) (P2)
 * [WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars (P2)
-* [WEBINAR-LEADS-CREAR-LANZAMIENTO] Los estados vacíos de Leads e Inicio no tienen enlace para crear un lanzamiento (P3)
 * [WEBINAR-LEADS-SIN-ORGANIZACION] Una cuenta sin organización que abre /leads deja dos eventos en Sentry (P3)
 
 *Para confirmar:*
 * Martín: ""menos de 3 clics"" se interpretó como 2 desde la lista ya filtrada (abrir la ficha y pulsar el botón de avance).
 
-Funcionalidad: F-EMB-25 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-25]",H-EMB-25,Embudos y Lanzamientos,P2,,WEBINAR-LEADS-PERSISTIR WEBINAR-VISTAS-LECTURA-REAL WEBINAR-ORG-DE-DEMO WEBINAR-LEADS-CREAR-LANZAMIENTO WEBINAR-LEADS-SIN-ORGANIZACION,
+Funcionalidad: F-EMB-25 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-25]",H-EMB-25,Embudos y Lanzamientos,P2,,WEBINAR-LEADS-PERSISTIR WEBINAR-VISTAS-LECTURA-REAL WEBINAR-ORG-DE-DEMO WEBINAR-LEADS-SIN-ORGANIZACION,
 [H-EMB-26] Ver cómo va el lanzamiento activo de un vistazo (Limitless Webinars),Story,Medium,historia,embudos-y-lanzamientos,p2,,,,"*Historia:* Como dueño de una cuenta de Limitless Webinars, quiero abrir la plataforma y ver de un vistazo cómo va el lanzamiento activo y qué tiene que mover hoy el equipo, para reaccionar a tiempo si algo se frena.
 
 *Criterios de aceptación:*
@@ -1155,9 +1154,8 @@ Funcionalidad: F-EMB-25 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 *Tareas técnicas (PENDIENTES.md):*
 * [WEBINAR-VISTAS-LECTURA-REAL] Las funciones de lectura de Webinars leen la base (B4) (P2)
 * [WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars (P2)
-* [WEBINAR-LEADS-CREAR-LANZAMIENTO] Los estados vacíos de Leads e Inicio no tienen enlace para crear un lanzamiento (P3)
 
-Funcionalidad: F-EMB-26 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-26]",H-EMB-26,Embudos y Lanzamientos,P2,,WEBINAR-VISTAS-LECTURA-REAL WEBINAR-ORG-DE-DEMO WEBINAR-LEADS-CREAR-LANZAMIENTO,
+Funcionalidad: F-EMB-26 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-26]",H-EMB-26,Embudos y Lanzamientos,P2,,WEBINAR-VISTAS-LECTURA-REAL WEBINAR-ORG-DE-DEMO,
 [H-EMB-27] Leer el embudo de un lanzamiento de punta a punta (Limitless Webinars),Story,Medium,historia,embudos-y-lanzamientos,p2,,,,"*Historia:* Como dueño o analista de una cuenta de Limitless Webinars, quiero ver cada lanzamiento con las etapas de su variante, cuánto pasa de una a otra y de dónde sale cada número, para decidir qué ajustar con el consultor.
 
 *Criterios de aceptación:*
@@ -1169,10 +1167,28 @@ Funcionalidad: F-EMB-26 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 *Tareas técnicas (PENDIENTES.md):*
 * [WEBINAR-VISTAS-LECTURA-REAL] Las funciones de lectura de Webinars leen la base (B4) (P2)
 * [WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars (P2)
-* [WEBINAR-ACCIONES-SIN-DESTINO] Los botones de cada estado de número no llevan a ninguna pantalla (P3)
-* [WEBINAR-LEADS-CREAR-LANZAMIENTO] Los estados vacíos de Leads e Inicio no tienen enlace para crear un lanzamiento (P3)
+* [WEBINAR-ACCIONES-SIN-DESTINO] Los botones de conectar una fuente no llevan a ninguna pantalla (P3)
 
-Funcionalidad: F-EMB-27 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-27]",H-EMB-27,Embudos y Lanzamientos,P2,,WEBINAR-VISTAS-LECTURA-REAL WEBINAR-ORG-DE-DEMO WEBINAR-ACCIONES-SIN-DESTINO WEBINAR-LEADS-CREAR-LANZAMIENTO,
+Funcionalidad: F-EMB-27 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-27]",H-EMB-27,Embudos y Lanzamientos,P2,,WEBINAR-VISTAS-LECTURA-REAL WEBINAR-ORG-DE-DEMO WEBINAR-ACCIONES-SIN-DESTINO,
+[H-EMB-28] Crear y configurar un lanzamiento (Limitless Webinars),Story,Medium,historia,embudos-y-lanzamientos,p2,para-confirmar,,,"*Historia:* Como dueño de una cuenta de Limitless Webinars, quiero crear un lanzamiento con sus sesiones y ver qué me falta cargar para que se midan todos los números, para dejarlo listo antes de empezar a captar.
+
+*Criterios de aceptación:*
+* Cuando creo un lanzamiento con nombre, variante, oferta, fechas y sesiones, entonces aparece en la lista de Lanzamientos con su identificador para la landing.
+* Dado un lanzamiento con datos que faltan (minuto de la oferta, ID de Zoom, producto, campañas), cuando abro su configuración, entonces veo qué falta y lo puedo completar.
+* Dado que una cuenta tiene un límite de lanzamientos en paralelo, cuando creo uno que se pisa en fechas con otros, entonces se rechaza con el motivo.
+* Desde el número de un lanzamiento que dice «Falta configurar», llego a su configuración en un clic.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [WEBINAR-LANZAMIENTOS-PERSISTIR] Crear y editar un lanzamiento no guarda nada (P3)
+* [WEBINAR-LANZAMIENTOS-EN-PARALELO] Cuántos lanzamientos puede correr una cuenta a la vez (P3)
+* [WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS] Elegir campañas y productos de un lanzamiento (P3)
+* [WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars (P2)
+
+*Para confirmar:*
+* cuántos lanzamientos en paralelo (SCRUM-522).
+* ---
+
+Funcionalidad: F-EMB-28 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-28]",H-EMB-28,Embudos y Lanzamientos,P2,,WEBINAR-LANZAMIENTOS-PERSISTIR WEBINAR-LANZAMIENTOS-EN-PARALELO WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS WEBINAR-ORG-DE-DEMO,
 [H-FIN-11] Ver cobros y saldo de Stripe,Story,Medium,historia,operaciones-y-equipo,p2,para-confirmar,,,"*Historia:* Como founder, quiero conectar mi cuenta de Stripe y ver mis cobros y saldo, para tener mi plata en un solo lugar.
 
 *Criterios de aceptación:*

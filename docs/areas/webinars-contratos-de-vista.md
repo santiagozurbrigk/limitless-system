@@ -142,6 +142,23 @@ en el menú webinar.
   no existe para Webinars (`DESTINOS_DE_LAS_ACCIONES`), se muestra como texto, sin enlace
   (`[WEBINAR-ACCIONES-SIN-DESTINO]`).
 
+## Crear y configurar (SCRUM-529)
+
+- **`/lanzamientos/nuevo`** y **`/lanzamientos/[id]/configuracion`**, con `FormularioDelLanzamiento` (cliente):
+  nombre, variante, moneda, precio, captación y cierre, y sesiones (fecha y hora en la hora del navegador, ID del
+  webinar de Zoom y **minuto** de la oferta, que viaja en segundos). Lógica del formulario en
+  `lib/webinar/lanzamientos/formulario.ts`; entrada validada con `datosDelLanzamientoSchema` (`esquemas.ts`: el
+  cierre no puede ser antes de la captación, hasta 10 sesiones, moneda de 3 letras).
+- **Guardado de ejemplo:** `crearLanzamientoAction` y `guardarLanzamientoAction` (`app/lanzamientos/webinar-actions.ts`)
+  exigen organización y validan, pero no escriben nada; la pantalla avisa «Cambio de ejemplo: no se guardó y se
+  pierde al recargar», como la ficha del lead (`[WEBINAR-LANZAMIENTOS-PERSISTIR]`).
+- **Lanzamientos en paralelo:** `motivoDeSuperposicion` rechaza un lanzamiento cuyas fechas se pisan con otros no
+  cerrados por encima de `LANZAMIENTOS_EN_PARALELO`, que está en `null` (sin límite) hasta que SCRUM-522 lo decida
+  (`[WEBINAR-LANZAMIENTOS-EN-PARALELO]`). Sin límite, la acción ni siquiera lee la lista.
+- **Configuración:** lo que falta cargar (`faltantes`), el formulario con los datos y sesiones, campañas y productos
+  (sólo lectura: `[WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS]`) y el estado de las fuentes. Es el destino de «Completá la
+  configuración del lanzamiento» (`DESTINOS_DE_LAS_ACCIONES.configuracion`) y del enlace del Detalle.
+
 ## Inicio (SCRUM-543)
 
 `/inicio` dibuja `leerInicio()` con `PantallaDeInicio` (`components/webinar/pantalla-de-inicio.tsx`, Server
@@ -149,7 +166,7 @@ Component sin estado). Es la entrada de inicio del menú webinar (módulo `dashb
 después del login.
 
 - **Sin lanzamiento activo** (`activo` medido con `null`): estado vacío; el botón «Crear un lanzamiento» aparece
-  cuando `RUTA_PARA_CREAR_LANZAMIENTO` tenga ruta (SCRUM-529, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`).
+  que lleva a `/lanzamientos/nuevo` (`RUTA_PARA_CREAR_LANZAMIENTO`, SCRUM-529).
 - **El activo no se pudo leer** (cualquier otro estado sin valor): el estado y su motivo; ni números ni vacío.
 - **Con lanzamiento activo:** nombre, variante, precio y cuenta regresiva (`textoDelCierre`: "Cierra en N días",
   "Cierra hoy", "La fecha de cierre ya pasó"); próxima sesión; números principales (registrados con las últimas
@@ -176,7 +193,7 @@ después del login.
   entera (o de render) cae en el `error.tsx` de la ruta, dentro de la cáscara. No se usan boundaries por
   sección: los errores de un Server Component pasan en el servidor y un boundary de cliente no los ve.
 - **Vacío:** Leads sin lanzamientos y Inicio sin lanzamiento activo muestran su estado vacío; el botón «Crear
-  un lanzamiento» aparece cuando exista la ruta (`[WEBINAR-LEADS-CREAR-LANZAMIENTO]`).
+  un lanzamiento» lleva a `/lanzamientos/nuevo` (SCRUM-529).
 
 ## Qué recibe cada organización hoy
 

@@ -25,6 +25,7 @@ const PANTALLAS: [ruta: string, esqueleto: string][] = [
   ["leads/[id]", "EsqueletoDeFichaDelLead"],
   ["lanzamientos", "EsqueletoDeLanzamientos"],
   ["lanzamientos/[id]", "EsqueletoDeDetalleDelLanzamiento"],
+  ["lanzamientos/[id]/configuracion", "EsqueletoDeConfiguracion"],
 ];
 
 describe("⭐ cada pantalla de Webinars tiene su loading.tsx con su esqueleto", () => {

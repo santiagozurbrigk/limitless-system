@@ -52,6 +52,7 @@ const PAGE_META: Record<string, PageMeta> = {
     subtitle: "Avatares, ofertas, escalera de valor y propuesta",
   },
   "/lanzamientos": { title: "Lanzamientos" },
+  "/lanzamientos/nuevo": { title: "Nuevo lanzamiento" },
   "/product/value-ladder": {
     title: "Escalera de valor",
     subtitle: "Escalones de precio y ascenso del cliente",
@@ -371,6 +372,9 @@ function resolveMeta(pathname: string): PageMeta {
   }
   if (pathname.startsWith("/funnels/") && pathname !== "/funnels") {
     return { title: "Embudo", subtitle: "Las siete etapas de esta oferta" };
+  }
+  if (pathname.startsWith("/lanzamientos/") && pathname.endsWith("/configuracion")) {
+    return { title: "Configuración del lanzamiento" };
   }
   if (pathname.startsWith("/lanzamientos/") && pathname !== "/lanzamientos") {
     return { title: "Detalle del lanzamiento" };

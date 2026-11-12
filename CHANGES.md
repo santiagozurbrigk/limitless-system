@@ -28,6 +28,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-12 — Crear y configurar un lanzamiento de Limitless Webinars (SCRUM-529)
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Webinars: `app/(platform)/lanzamientos/nuevo/page.tsx`, `app/(platform)/lanzamientos/[id]/configuracion/{page,loading}.tsx`, `app/lanzamientos/webinar-actions.ts` (nuevos; `app/lanzamientos/actions.ts`, del módulo viejo que usa el Tablero, no se toca); `components/webinar/{formulario-del-lanzamiento,pantalla-de-configuracion}.tsx` (nuevos), `pantalla-de-lanzamientos.tsx` y `pantalla-de-detalle-del-lanzamiento.tsx` (botón crear y enlace a Configuración), `esqueletos.tsx`; `lib/webinar/lanzamientos/{esquemas,formulario}.ts` (nuevos); `lib/webinar/leads/config.ts` (`RUTA_PARA_CREAR_LANZAMIENTO`), `lib/webinar/acciones-del-estado.ts` (destino de Configuración); `routes/paths.ts`, `lib/navigation/page-meta.ts`; tests nuevos `lib/webinar/lanzamientos/__tests__/{esquemas,formulario}.test.ts` (13), `app/lanzamientos/__tests__/webinar-actions.test.ts` (4) y 6 casos en `pantallas-de-lanzamientos.test.ts`; docs `areas/webinars-contratos-de-vista.md`, `FUNCIONAL.md` (F-EMB-28), `backlog/historias.md` (H-EMB-28), `operacion/verificacion-manual.md` (V17), `PENDIENTES.md`
+
+**Qué se hizo:**
+- Crear (`/lanzamientos/nuevo`) y configurar (`/lanzamientos/[id]/configuracion`) un lanzamiento: nombre, variante, moneda, precio, captación y cierre, y hasta 10 sesiones con ID de Zoom y minuto de la oferta. La Configuración suma lo que falta cargar, campañas y productos (lectura) y fuentes.
+- Acciones **simuladas**, como las de la ficha del lead: organización, validación (`datosDelLanzamientoSchema`) y regla de paralelos; éxito sin escribir y aviso de ejemplo en la pantalla.
+- Regla de lanzamientos en paralelo escrita y probada (`motivoDeSuperposicion`) con el límite en `null` hasta que SCRUM-522 decida.
+- Destinos encendidos: «Crear un lanzamiento» (Leads, Inicio y Lanzamientos) y «Completá la configuración del lanzamiento» (Detalle) llevan a sus pantallas; el Detalle enlaza a su Configuración. Se cierra `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`; `[WEBINAR-ACCIONES-SIN-DESTINO]` queda sólo para Integraciones.
+
+**Por qué / finalidad:** SCRUM-529 en el plan "UI primero": que el flujo de crear y completar un lanzamiento se pueda recorrer en la sesión de validación, sin esperar a que el modelo esté en producción.
+
+**Decisiones de diseño relevantes:**
+- Guardado de ejemplo (no persiste): el modelo de SCRUM-526 no está migrado. El criterio "lo ve en la lista con su public_id" queda en `[WEBINAR-LANZAMIENTOS-PERSISTIR]`.
+- No se inventa la regla de paralelos: sin límite hasta la decisión; la validación ya está y se activa poniendo el número.
+- El minuto de la oferta se carga en minutos (como habla el diseño) y viaja en segundos (como el modelo).
+- Las acciones van en `webinar-actions.ts` para no tocar `app/lanzamientos/actions.ts` del módulo viejo (lo usa el picker del Tablero).
+
+**Riesgos / deuda técnica pendiente:** `[WEBINAR-LANZAMIENTOS-PERSISTIR]`, `[WEBINAR-LANZAMIENTOS-EN-PARALELO]`, `[WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS]` (nuevos). La fecha y hora de una sesión se escribe en la hora del navegador, no en la zona de la organización. No se miró en navegador (V17). Suite completa 5291 en verde.
+
 ### 2026-11-05 — Panel viejo de super-admin cerrado: todo lleva a la consola (SCRUM-553, C3)
 
 **Rama:** `claude/brave-wright-s2bfcg`
