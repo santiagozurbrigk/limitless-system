@@ -225,10 +225,16 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
   `getExecutiveReportByIdAction` (`app/executive-reports/actions.ts`), `getSalesFrameworksAction`
   (`app/product/actions.ts`) y `getSopVideoJobAction` (`app/sops/video-actions.ts`) chequean `operations`: a quien no
   lo tiene le devuelven el rechazo, y `/operations/inputs`, `/operations/overview`, `/executive-reports/history`,
-  `/executive-reports/[id]` y los componentes que recargan dibujan `SinAcceso`. Siguen sin chequeo
-  `countWeeklyInputsForWeek` y `listSopVideoJobsAction` (ninguna pantalla las importa: están en
-  `LECTURAS_SIN_LLAMADOR_CONOCIDAS`) y las escrituras de esos 4 archivos. Esto cierra la vía de esas Server Actions, no
-  la de la base: ver la viñeta siguiente.
+  `/executive-reports/[id]` y los componentes que recargan dibujan `SinAcceso`. En esos 4 archivos siguen sin chequeo
+  de módulo: las 9 lecturas que están en `LECTURAS_SIN_LLAMADOR_CONOCIDAS` (`countWeeklyInputsForWeek` en
+  `app/operations/actions.ts`; `listSopVideoJobsAction` en `app/sops/video-actions.ts`; y `getAvatarsAction`,
+  `getProductsAction`, `getValueLadderAction`, `getValuePropositionAction`, `getProductContextForOrg`,
+  `getProductContextForAgentAction` y `getProductContextTextForOrg` en `app/product/actions.ts`, ver
+  `docs/areas/producto.md`); `resolveSopAttachmentUrlsAction` (`app/sops/video-actions.ts`), que sí la llaman
+  `sop-content-viewer.tsx` y `sop-content-with-attachments.tsx` pero el test de inventario no la ve porque su nombre
+  empieza con `resolve` (deuda en `PENDIENTES.md`); y todas las escrituras. Esta enumeración sale de la lista del test
+  y de esa excepción: no es una prueba de que no haya otras. Esto cierra la vía de esas Server Actions, no la de la
+  base: ver la viñeta siguiente.
 - **Permisos sólo en el render**: actions y RLS abiertas a cualquier miembro `[PERMISOS-SERVER-ACTIONS]`.
 - **Buckets `sop-attachments` y `workboard-task-attachments` no están en migraciones** `[OPS-STORAGE-BUCKETS]` (auditoría §3.9).
 - **`/invite` y `team_invitations` no tienen productor** `[EQUIPO-INVITE-LEGADO]`: nada crea invitaciones (la parte B de

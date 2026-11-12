@@ -1440,6 +1440,17 @@ Fuente: PENDIENTES.md [UI-EMOJIS] · Doc del área: docs/areas/plataforma.md",UI
 *Dónde:* las dos listas del test; {{apps/web/app/<dominio>/*actions.ts}}.
 
 Fuente: PENDIENTES.md [PERMISOS-ACTIONS-LECTURA-SIN-MODULO] · Doc del área: docs/areas/plataforma.md",PERMISOS-ACTIONS-LECTURA-SIN-MODULO,Plataforma,P2,Media,seguridad / deuda técnica
+"[PERMISOS-RESOLVE-SOP-ADJUNTOS] resolveSopAttachmentUrlsAction lee sin chequear el módulo y el test de inventario no la ve (nuevo, AR del corte B de SCRUM-541)",Bug,Medium,plataforma,p2,sev-media,seguridad,deuda-tecnica,,"*Tipo:* seguridad / deuda técnica
+
+*Severidad:* Media
+
+*Estado verificado:* {{resolveSopAttachmentUrlsAction}} ({{apps/web/app/sops/video-actions.ts:241}}) es una Server Action de lectura: con {{requireOrganizationId()}} busca en {{sop_attachments}} los adjuntos de la org por id y devuelve sus URLs firmadas por 1 hora con el cliente admin, sin {{rechazoPorModulo}}. La llaman desde el cliente {{components/sops/sop-content-viewer.tsx}} y {{components/sops/sop-content-with-attachments.tsx}}, así que tiene ID en el build y se puede invocar a mano. El test {{apps/web/lib/navigation/__tests__/lecturas-por-modulo.test.ts}} no la detecta: {{NOMBRE_DE_LECTURA}} ({{lecturas-de-app.ts:57}}) sólo reconoce nombres que empiezan con {{get}}, {{list}}, {{fetch}}, {{load}}, {{read}}, {{leer}}, {{obtener}}, {{search}}, {{buscar}}, {{count}} o {{preview}}, y ésta empieza con {{resolve}}. Por eso no está en {{LECTURAS_SIN_CHEQUEO_CONOCIDAS}} ni en {{LECTURAS_SIN_LLAMADOR_CONOCIDAS}}, ni en los totales de {{[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]}}. Existía antes de SCRUM-541; el corte B no la tocó.
+
+*Qué hay que hacer:* decidir si {{resolve}} entra en {{NOMBRE_DE_LECTURA}} (y revisar qué otras actions aparecen al sumarlo), y darle a esta el chequeo del módulo {{operations}} con su pantalla tratando el rechazo, como las del corte B.
+
+*Dónde:* {{apps/web/app/sops/video-actions.ts}}, {{apps/web/components/sops/sop-content-viewer.tsx}}, {{apps/web/components/sops/sop-content-with-attachments.tsx}}, {{apps/web/lib/navigation/__tests__/lecturas-de-app.ts}}.
+
+Fuente: PENDIENTES.md [PERMISOS-RESOLVE-SOP-ADJUNTOS] · Doc del área: docs/areas/plataforma.md",PERMISOS-RESOLVE-SOP-ADJUNTOS,Plataforma,P2,Media,seguridad / deuda técnica
 [PANEL-EN-VIVO-SOLO-PANEL] El Panel no se actualiza en vivo para quien tiene sólo el Panel (nuevo),Task,Medium,plataforma,p2,mejora,decision-de-producto,,,"*Tipo:* mejora / decisión de producto
 
 *Estado verificado:*  - Desde SCRUM-540 el Panel se calcula en el servidor. Se actualiza en vivo ({{lib/dashboard/panel-en-vivo.ts}}) sólo para quien puede leer conversaciones: founder, sin rol o con Ventas. El canal manda la fila de {{conversations}} al navegador, y quien tiene sólo el Panel no debe recibirla. - Para esa persona el Panel se actualiza al recargar o navegar. En {{main}} sí se actualizaba, porque le llegaban todas las conversaciones. - Hoy no se nota: {{conversations}} (el inbox viejo) está vacía en producción desde que el inbox pasó a Zernio (ver {{[MKT-SALES-CONN-VACIA]}}), y no hay una bandera en {{lib/release/escondido.ts}} que lo vuelva a encender.
