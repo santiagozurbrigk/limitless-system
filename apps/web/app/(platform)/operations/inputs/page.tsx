@@ -14,7 +14,9 @@ import { mapWeeklyInputRowsToTeamInputs } from "@/lib/operations/weekly-input-ma
 import { formatWeekRange } from "@/lib/operations/weekly-utils";
 import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
+import { esRechazoPorModulo, exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function InputsPage() {
   const sinAcceso = await exigirModuloDeLaPagina("operations");
@@ -22,12 +24,23 @@ export default async function InputsPage() {
 
   // La semana de la organización, no la del reloj del servidor (UTC).
   const weekStart = await getCurrentWeekStartAction();
+  // Sin Operaciones la lectura vuelve rechazada: pasa si los permisos cambian
+  // entre el guardia y la lectura, que los vuelve a mirar (SCRUM-541).
+  if (esRechazoPorModulo(weekStart)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(weekStart.moduleId)} />;
+  }
 
   const [rows, completionStatus, profile] = await Promise.all([
     getWeeklyInputsAction(weekStart),
     isSupabaseConfigured() ? getWeeklyCompletionStatus(weekStart) : Promise.resolve({ completed: [], total: 5 }),
     getCurrentProfile(),
   ]);
+  if (esRechazoPorModulo(rows)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(rows.moduleId)} />;
+  }
+  if (esRechazoPorModulo(completionStatus)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(completionStatus.moduleId)} />;
+  }
 
   const teamInputs = mapWeeklyInputRowsToTeamInputs(rows);
   const isFounder = profile?.role === "founder";

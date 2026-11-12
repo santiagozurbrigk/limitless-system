@@ -4,6 +4,7 @@ import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
 import {
   rechazoDeLecturaDelMarco,
+  rechazoPorModulo,
   type RechazoPorModulo,
 } from "@/lib/auth/acceso-a-modulo";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -116,7 +117,9 @@ export async function getLatestReportsByCadenceAction(): Promise<
   return empty;
 }
 
-export async function listExecutiveReportsAction(): Promise<ExecutiveReport[]> {
+export async function listExecutiveReportsAction(): Promise<ExecutiveReport[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
   if (!isSupabaseConfigured()) return [];
 
   const organizationId = await requireOrganizationId();
@@ -137,7 +140,9 @@ export async function listExecutiveReportsAction(): Promise<ExecutiveReport[]> {
 
 export async function getExecutiveReportByIdAction(
   id: string
-): Promise<ExecutiveReport | null> {
+): Promise<ExecutiveReport | null | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
   const parsedId = uuidSchema.safeParse(id);
   if (!parsedId.success) return null;
 

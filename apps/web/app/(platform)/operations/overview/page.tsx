@@ -9,7 +9,9 @@ import { mockOperationsOverview } from "@/mocks/operations-overview";
 import { OperationsOverview } from "@/components/operations/operations-overview";
 import { PageHeader } from "@/components/shared/page-header";
 import type { OperationsDepartment } from "@/types/operations-overview";
-import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
+import { esRechazoPorModulo, exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 async function loadDepartments(): Promise<OperationsDepartment[]> {
   if (!isSupabaseConfigured()) {
@@ -39,6 +41,11 @@ export default async function OperationsOverviewPage() {
     loadDepartments(),
     getCurrentProfile(),
   ]);
+  // Sin Operaciones la lectura vuelve rechazada: pasa si los permisos cambian
+  // entre el guardia y la lectura, que los vuelve a mirar (SCRUM-541).
+  if (esRechazoPorModulo(weeklyReport)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(weeklyReport.moduleId)} />;
+  }
 
   return (
     <div className="space-y-6">

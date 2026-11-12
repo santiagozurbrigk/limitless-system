@@ -4,7 +4,9 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { listExecutiveReportsAction } from "@/app/executive-reports/actions";
 import { REPORT_CADENCES } from "@/lib/executive-reports/cadences";
-import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
+import { esRechazoPorModulo, exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Historial de reportes.
@@ -18,6 +20,11 @@ export default async function ExecutiveReportsHistoryPage() {
   if (sinAcceso) return sinAcceso;
 
   const reports = await listExecutiveReportsAction();
+  // Sin Operaciones la lectura vuelve rechazada: pasa si los permisos cambian
+  // entre el guardia y la lectura, que los vuelve a mirar (SCRUM-541).
+  if (esRechazoPorModulo(reports)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(reports.moduleId)} />;
+  }
 
   return (
     <div className="space-y-6 p-6">

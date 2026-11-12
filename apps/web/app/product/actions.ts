@@ -5,6 +5,10 @@ import {
   isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { invalidateOrgContext } from "@/lib/ai/org-context";
 import {
   buildProductContextText,
@@ -391,7 +395,9 @@ export async function getValueLadderAction() {
   return data ?? [];
 }
 
-export async function getSalesFrameworksAction(): Promise<SalesFrameworkRow[]> {
+export async function getSalesFrameworksAction(): Promise<SalesFrameworkRow[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
   if (!isSupabaseConfigured()) return [];
 
   const organizationId = await requireOrganizationId();
