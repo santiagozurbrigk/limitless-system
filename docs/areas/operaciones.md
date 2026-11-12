@@ -232,9 +232,11 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
   `getProductContextForAgentAction` y `getProductContextTextForOrg` en `app/product/actions.ts`, ver
   `docs/areas/producto.md`); `resolveSopAttachmentUrlsAction` (`app/sops/video-actions.ts`), que sí la llaman
   `sop-content-viewer.tsx` y `sop-content-with-attachments.tsx` pero el test de inventario no la ve porque su nombre
-  empieza con `resolve` (deuda en `PENDIENTES.md`); y todas las escrituras. Esta enumeración sale de la lista del test
-  y de esa excepción: no es una prueba de que no haya otras. Esto cierra la vía de esas Server Actions, no la de la
-  base: ver la viñeta siguiente.
+  empieza con `resolve`; `extractAndSuggestProductContextAction` (`app/product/actions.ts`), que la llama
+  `product-rag-suggest.tsx` y el test tampoco ve porque su nombre empieza con `extract` (las dos, deuda en
+  `PENDIENTES.md` `[PERMISOS-RESOLVE-SOP-ADJUNTOS]`); y todas las escrituras. Esta enumeración sale de la lista del
+  test y de esas dos excepciones: no es una prueba de que no haya otras. Esto cierra la vía de esas Server Actions,
+  no la de la base: ver la viñeta siguiente.
 - **Permisos sólo en el render**: actions y RLS abiertas a cualquier miembro `[PERMISOS-SERVER-ACTIONS]`.
 - **Buckets `sop-attachments` y `workboard-task-attachments` no están en migraciones** `[OPS-STORAGE-BUCKETS]` (auditoría §3.9).
 - **`/invite` y `team_invitations` no tienen productor** `[EQUIPO-INVITE-LEGADO]`: nada crea invitaciones (la parte B de
