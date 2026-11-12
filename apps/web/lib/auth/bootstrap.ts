@@ -1,13 +1,14 @@
 import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isSuperAdminEmail } from "@/lib/auth/require-super-admin";
+import { isStaffEmail } from "@/lib/auth/require-staff";
 import {
   readAccountType,
   resolveEffectiveOrganizationId,
 } from "@/lib/holding/resolve-org";
 import { createClient } from "@/lib/supabase/server";
 import { ErrorEsperable } from "@/lib/server/error-esperable";
+import { FallaDeLaBase } from "@/lib/server/action-result";
 import {
   CUENTA_DESACTIVADA_MESSAGE,
   estaDesactivado,
@@ -39,12 +40,34 @@ export async function ensureUserBootstrap(user: User) {
     (user.user_metadata?.name as string | undefined) ??
     null;
 
-  if (email && (await isSuperAdminEmail(email))) {
+  // SCRUM-552: el staff nace founder de la org de Limitless (la única con
+  // experience = 'limitless'). Sin org marcada (o sin la columna, base sin
+  // 20261019120000) nace sin org, como antes; con más de una, no se adivina.
+  if (email && (await isStaffEmail(email))) {
+    const { data: limitless, error: limitlessError } = await admin
+      .from("organizations")
+      .select("id")
+      .eq("experience", "limitless")
+      .limit(2);
+
+    let orgDeLimitless: string | null = null;
+    if (limitlessError) {
+      if (!isMissingColumnError(limitlessError.message, "experience")) {
+        throw new FallaDeLaBase(limitlessError);
+      }
+    } else {
+      const filas = limitless ?? [];
+      if (filas.length > 1) {
+        throw new Error("Hay más de una organización marcada como Limitless");
+      }
+      orgDeLimitless = filas[0]?.id ?? null;
+    }
+
     const { data: profile, error: profileError } = await admin
       .from("profiles")
       .insert({
         id: user.id,
-        organization_id: null,
+        organization_id: orgDeLimitless,
         email,
         full_name: fullName ?? "Super Admin",
         role: "founder",

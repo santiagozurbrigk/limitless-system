@@ -7,7 +7,7 @@ import {
   TEMP_PASSWORD_EXPIRED_QUERY,
 } from "@/lib/auth/temp-password-expiry";
 import { createAdminClient } from "./admin";
-import { isSuperAdminEmail } from "@/lib/auth/require-super-admin";
+import { DESTINO_DEL_STAFF, isStaffEmail } from "@/lib/auth/require-staff";
 import { shouldRedirectToGate } from "@/lib/onboarding/gate-routing";
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured } from "./env";
 import { isPublicPath } from "./public-paths";
@@ -213,8 +213,8 @@ export async function updateSession(request: NextRequest) {
 
   if (user && pathname === paths.auth.login) {
     const url = request.nextUrl.clone();
-    if (user.email && (await isSuperAdminEmail(user.email))) {
-      url.pathname = paths.superAdmin.organizations;
+    if (user.email && (await isStaffEmail(user.email))) {
+      url.pathname = DESTINO_DEL_STAFF;
     } else {
       const admin = createAdminClient();
       const { data: profile } = await admin

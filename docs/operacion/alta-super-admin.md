@@ -1,6 +1,6 @@
 # Alta de un super admin
 
-Procedimiento para darle acceso al panel interno (`/super-admin`) a alguien del staff de Limitless.
+Procedimiento para darle acceso a la consola de Administración (`/administracion`, dentro de la org de Limitless) a alguien del staff de Limitless. Desde SCRUM-553 el panel viejo (`/super-admin`) está cerrado: sus links redirigen a la consola.
 Origen: `[AUTH-ALTA-EMAIL-AJENO]`, parte b (SCRUM-494, de SCRUM-15).
 
 ## La regla
@@ -10,9 +10,11 @@ de agregar su email a `super_admin_users`. Y la persona no entra a la app hasta 
 
 ## Por qué el orden importa
 
-Hoy la app decide quién es super admin **sólo por el email** (`isSuperAdminEmail` en
-`apps/web/lib/auth/require-super-admin.ts`): cualquier cuenta con un email de la lista entra al panel interno,
-sin importar quién la creó. De ahí salen dos problemas, uno por cada orden equivocado:
+Hoy la app decide quién es super admin **sólo por el email** (`isStaffEmail` en
+`apps/web/lib/auth/require-staff.ts`, SCRUM-552; `require-super-admin.ts` quedó como alias): cualquier cuenta
+con un email de la lista entra al panel interno, sin importar quién la creó. Estar en la organización de
+Limitless no da el panel: lo da sólo la lista (`app/super-admin/__tests__/guard-de-staff-por-accion.test.ts`,
+escenarios "miembro común" y "founder de Limitless fuera de la lista"). De ahí salen dos problemas, uno por cada orden equivocado:
 
 1. **Email en la lista antes de que exista la cuenta.** Cualquier founder puede invitar ese email a su
    organización desde Equipo. La invitación crea la cuenta ya confirmada y le muestra al founder la contraseña
@@ -130,10 +132,17 @@ where s.email = lower(trim('nombre@ejemplo.com'));
 ### 5. Primer ingreso de la persona
 
 1. Pásale la contraseña por el gestor de contraseñas o en persona.
-2. La persona entra por **`/superadmin/login`** (en producción, `https://otc-plaform.vercel.app/superadmin/login`).
-   La app le crea un perfil sin organización y la lleva a `/super-admin/organizations`.
+2. La persona entra por **`/login`**, el mismo login de todos (en producción,
+   `https://otc-plaform.vercel.app/login`). `/superadmin/login` redirige ahí (SCRUM-552). La app le crea el
+   perfil como **founder de la organización de Limitless** (la única con `experience = 'limitless'`) y la lleva
+   a `/administracion/organizaciones` (`lib/auth/__tests__/bootstrap-staff-en-limitless.test.ts` y
+   `app/auth/__tests__/login-del-staff.test.ts`). Si todavía no hay ninguna organización marcada como Limitless,
+   el perfil nace sin organización, como antes.
+   Si la organización de Limitless no completó el onboarding (y no tiene `skip_onboarding`), el founder recién
+   llegado cae en `/onboarding` en cualquier ruta, incluido el panel: ver el paso 3b de
+   [staff-en-org-de-limitless.md](staff-en-org-de-limitless.md).
 3. Cambia la contraseña en **`/auth/update-password`**. Al guardar, la app la manda al Panel de clientes, que no es
-   para super admins (puede mostrar un error): tiene que volver a `/super-admin/organizations`.
+   para super admins (puede mostrar un error): tiene que volver a `/administracion/organizaciones`.
 
 ### 6. Verificar el perfil
 
@@ -144,13 +153,44 @@ join auth.users u on u.id = p.id
 where lower(u.email) = lower(trim('nombre@ejemplo.com'));
 ```
 
-**Resultado esperado:** 1 fila con `organization_id` vacío y `must_change_password` en `false`.
+**Resultado esperado:** 1 fila con `organization_id` igual al id de la organización de Limitless, `role` en
+`founder` y `must_change_password` en `false`. Si todavía no se marcó la organización de Limitless,
+`organization_id` vacío (se asocia después con `select public.asociar_staff_a_la_org_de_limitless();`, ver
+[staff-en-org-de-limitless.md](staff-en-org-de-limitless.md)).
 
-Si `organization_id` tiene un valor, la app le creó una organización a esa cuenta antes de que estuviera en la
-lista. Primero haz la baja (sección siguiente) para que no conserve el acceso al panel interno, y después avisa
-en el canal del equipo. No borres la organización a mano, porque puede tener datos y roles colgando.
+Para saber si el `organization_id` es el de Limitless:
+
+```sql
+select id, name from public.organizations where experience = 'limitless';
+```
+
+Si `organization_id` es **otra** organización, la app le creó una organización propia a esa cuenta antes de que
+estuviera en la lista. Primero haz la baja (sección siguiente) para que no conserve el acceso al panel interno, y
+después avisa en el canal del equipo. No borres la organización a mano, porque puede tener datos y roles
+colgando.
+
+### Invitaciones a alguien del staff
+
+Una cuenta del staff sólo se suma por invitación de equipo a la **organización de Limitless**, y si la invitación
+le crea el perfil entra como **founder** (no como member). A cualquier otra organización la invitación se rechaza
+("Esta cuenta es del equipo de Limitless y sólo se puede sumar a la organización de Limitless…") y queda
+pendiente; sin organización marcada como Limitless también se rechaza. Una invitación nunca le cambia el rol a
+un perfil que ya existe. Testigo: `supabase/ci/tests/98_staff_en_org_de_limitless.sql`, caso 8.
 
 ## Dar de baja a un super admin
+
+Desde SCRUM-552 el staff es founder de la organización de Limitless, así que **sacar el email de la lista ya no
+alcanza**: le quita el panel interno en el próximo request, pero la persona sigue siendo founder de la
+organización de Limitless y conserva sus datos (Clientes, Ventas, Administración). La baja tiene dos partes, las
+dos obligatorias:
+
+1. sacar el email de la lista (abajo);
+2. **desactivar su perfil** (`profiles.is_active = false`) o sacarlo de la organización de Limitless. Con el
+   perfil desactivado el guard del panel también la rechaza (`lib/auth/__tests__/require-staff.test.ts`, "un staff
+   con el perfil desactivado no entra"). Si la persona deja el equipo, borrar también la cuenta (al final de esta
+   sección).
+
+No hay automatización de las dos partes juntas (queda en `PENDIENTES.md`).
 
 Sacar el email de la lista le quita el acceso al panel interno en el próximo request:
 

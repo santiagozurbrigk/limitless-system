@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Input, Textarea } from "@ai-coo/ui";
 import { useToast } from "@/providers/toast-provider";
 import { SparklineChart } from "@/components/charts/platform";
-import { paths } from "@/routes";
 import {
   addOrganizationNoteAction,
   regenerateTempPasswordAction,
+  setOrganizationExperienceAction,
   setOrganizationStatusAction,
   updateOrganizationMrrAction,
   updateOrgAddOnsAction,
@@ -32,6 +32,8 @@ import {
   accionDeEstado,
 } from "@/lib/super-admin/estado-de-org";
 import { OrgClientHealthSection } from "@/components/super-admin/org-client-health-section";
+import { rutasDeAdministracion, type BaseDeAdministracion } from "@/lib/administracion/rutas";
+import { ETIQUETA_DE_LA_EXPERIENCIA, EXPERIENCIAS_ELEGIBLES } from "@/lib/administracion/experiencia";
 
 function formatDate(iso: string | null, timezone: string | null): string {
   return formatOrgDateTime(iso, timezone, {
@@ -51,10 +53,13 @@ function onboardingField(data: Record<string, unknown> | null, key: string): str
 export function OrganizationDetailView({
   detail,
   clientHealth = [],
+  base,
 }: {
   detail: AdminOrganizationDetail;
   clientHealth?: ClientHealthTimelineItem[];
+  base?: BaseDeAdministracion;
 }) {
+  const rutas = rutasDeAdministracion(base);
   const [note, setNote] = useState("");
   const [mrrInput, setMrrInput] = useState(String(detail.mrrUsd));
   const [activeAddOns, setActiveAddOns] = useState<string[]>(detail.enabledAddOns ?? []);
@@ -152,7 +157,7 @@ export function OrganizationDetailView({
         onEliminado={() => {
           // Esta pantalla ya no tiene qué mostrar: la organización no existe.
           push({ title: "Organización eliminada", variant: "success" });
-          router.push(paths.superAdmin.organizations);
+          router.push(rutas.organizaciones);
         }}
       />
 
@@ -233,6 +238,33 @@ export function OrganizationDetailView({
             Guardar MRR
           </Button>
         </div>
+      </section>
+
+      <section className="rounded-xl border border-border/60 p-6" data-seccion="experiencia">
+        <h3 className="text-sm font-semibold">Experiencia</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Qué producto ve la organización: el menú y las pantallas cambian en la próxima navegación.
+        </p>
+        {detail.experience === "limitless" ? (
+          <p className="mt-3 text-sm">
+            {ETIQUETA_DE_LA_EXPERIENCIA.limitless}. No se cambia desde acá.
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {EXPERIENCIAS_ELEGIBLES.map((experiencia) => (
+              <Button
+                key={experiencia}
+                size="sm"
+                variant={detail.experience === experiencia ? "default" : "outline"}
+                aria-pressed={detail.experience === experiencia}
+                disabled={pending || detail.experience === experiencia}
+                onClick={() => runAction(() => setOrganizationExperienceAction(detail.id, experiencia))}
+              >
+                {ETIQUETA_DE_LA_EXPERIENCIA[experiencia]}
+              </Button>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="rounded-xl border border-border/60 p-6">
@@ -406,7 +438,7 @@ export function OrganizationDetailView({
       </section>
 
       <Button asChild variant="outline" size="sm">
-        <Link href={paths.superAdmin.organizations}>← Volver al listado</Link>
+        <Link href={rutas.organizaciones}>← Volver al listado</Link>
       </Button>
 
       {tempCredentials ? (

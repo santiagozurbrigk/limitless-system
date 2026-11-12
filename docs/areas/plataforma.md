@@ -41,7 +41,7 @@ de negocio (clientes, ventas, marketing, etc.).
 | `/privacidad` | `app/(landing)/privacidad/page.tsx` | Política de privacidad, pública (la piden las apps OAuth) |
 | `/demo` | `app/demo/page.tsx` | Tour estático (`components/demo`, `lib/demo/tour-steps.ts`), público |
 | `/design-system`, `/design-system/charts`, `/design-system/categorias` | `app/design-system/*` | Showcase de componentes y gráficos, público |
-| `/superadmin/login` | `app/superadmin/login/page.tsx` | Login del staff (`signInSuperAdminAction`) |
+| `/superadmin/login` | `app/superadmin/login/page.tsx` | Redirige a `/login` (SCRUM-552): el staff entra por el login de todos |
 | `/super-admin/*` | `app/(super-admin)/super-admin/*` | Panel interno (tabla abajo) |
 
 `app/superadmin/` (sin guion) no es un duplicado del panel: sólo tiene `login/` y `dashboard/`, que
@@ -49,6 +49,14 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 `app/super-admin/*.ts`.
 
 ### Super Admin
+
+> **Panel viejo cerrado (SCRUM-553).** `/super-admin/*` redirige a la consola de Administración
+> (`lib/navigation/redirects.ts`, `redireccionesDelPanelViejo`, aplicado en `next.config.ts`): cada pantalla que se
+> mudó va a la suya y lo que no se mudó (Cerebro de IA general, lista de espera, pruebas gratis, salud de clientes)
+> queda escondido sin borrar el código, llevando a Organizaciones. El staff entra por `/login` a
+> `/administracion/organizaciones` (`DESTINO_DEL_STAFF`). La tabla de abajo describe el código del panel, que sigue
+> en `app/(super-admin)` (y que la consola reusa: Sistema dibuja sus páginas de infraestructura y costos). Lo
+> verifica `lib/navigation/__tests__/panel-viejo-cerrado.test.ts`.
 
 | Ruta | Datos | Qué hace |
 |---|---|---|
@@ -62,11 +70,47 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
 | `/super-admin/waitlist`, `/super-admin/trials` | `lib/super-admin/waitlist-queries.ts` | `waitlist_leads` |
 | `/super-admin/ai-brain/*` | `app/super-admin/actions.ts` | "Cerebro de IA general": documentos globales, import desde Drive del super admin, batch de resúmenes |
 
+**Consola de Administración (SCRUM-551).** Las mismas funciones, dentro de la plataforma, en la org de Limitless
+(experiencia `limitless`): grupo «Administración» de la barra, sólo para el staff de la lista.
+
+| Ruta | Qué muestra (componente del super-admin) |
+|---|---|
+| `/administracion/organizaciones` (+ `/nueva`, `/[id]`) | `OrganizationsList`, `CreateFounderForm`, `OrganizationDetailView` (con **Experiencia**: webinar o full) |
+| `/administracion/usuarios` | `UsersTable` |
+| `/administracion/holdings` | `HoldingsAdminPanel` y `HoldingPortfolioContent` |
+| `/administracion/sistema` | las páginas de infraestructura y de costos de IA del panel |
+| `/administracion/onboarding` | `OnboardingDeClientes` (también la usa `/super-admin/onboarding`) |
+
+- **Quién la ve:** la entrada del menú es `soloStaff` (`EntradaDelMenu`): el layout de la plataforma suma `esStaff`
+  (`isStaffUser`) a los permisos sólo para `limitless`, y `puedeVerEntrada`/`buildPlatformSidebarNav` la sacan sin
+  él, aunque la persona sea founder. El layout de `/administracion` exige la experiencia y la lista: quien no está
+  va a su pantalla de inicio. Cada acción sigue con `requireStaff()`. El módulo `settings` sólo cumple el contrato
+  de que toda entrada tenga uno.
+- **Enlaces:** los componentes reciben `base` (`lib/administracion/rutas.ts`): con `"consola"` sus enlaces quedan
+  bajo `/administracion`; sin `base`, el panel viejo. `revalidateSuperAdmin` revalida también `/administracion`.
+- **Experiencia** (`setOrganizationExperienceAction`, `lib/administracion/experiencia.ts`): sólo `webinar` y `full`;
+  nadie pasa a `limitless` y la org de Limitless no cambia desde acá. Un negocio nuevo de un holding nunca hereda
+  `limitless`: nace `full` (`experienciaDeUnNegocioNuevo`).
+- **Qué no se mudó:** Cerebro de IA general, lista de espera, pruebas gratis y salud de clientes quedan escondidos
+  desde SCRUM-553 (sus rutas llevan a Organizaciones; el código sigue). El staff entra por `/login` a la consola
+  (`DESTINO_DEL_STAFF`).
+
 Estado de la organización: el de la base, `organizations.status in ('active', 'paused', 'churned')`, con el tipo `OrganizationStatus` de `@ai-coo/types` (también lo usan `AdminOrgStatus` y `organizaciones-activas.ts`). `lib/super-admin/estado-de-org.ts` lo lee (`estadoDeOrg`; un valor desconocido no se convierte en ningún estado: queda `unknown`, se muestra "Desconocido" y no tiene botón de pausar ni activar, `accionDeEstado`), le da texto (Activa, Pausada, Dada de baja, desde `es.status.org`) y color, y estima el plan sólo por MRR (`planPorMrr`; no hay columna de plan). La lista de organizaciones filtra por esos tres estados; "Pausar" deja la org en `paused` y "Activar" la vuelve a `active` (`setOrganizationStatusAction`); ninguna pantalla pasa una org a `churned`. El estado "activo/inactivo" de `/super-admin/users` es otra cosa: si la persona puede entrar (`AdminUserStatus`, baneada en Auth o perfil inactivo).
 
-Guard doble: `app/(super-admin)/super-admin/layout.tsx` (redirect) y `requireSuperAdmin()` dentro de
-cada query/acción (incluidas las de sólo lectura, vía `lib/super-admin/queries.ts`, `org-health.ts` y
-`onboarding-progress.ts` y `getSignedFileUrl`, que lo suman desde SCRUM-111). Los dos guards (`isSuperAdminUser` y `requireSuperAdmin`) comparten una resolución memoizada con `cache` de React (`lib/auth/require-super-admin.ts`): dentro de un mismo render de server components (layout + página, p. ej. `/super-admin/ai-brain/[id]` con imagen, que encadena tres chequeos) se hace un solo `auth.getUser()` y una sola consulta a `super_admin_users`. En server actions y route handlers `cache` no memoiza: cada llamada consulta, como antes. Los mensajes de rechazo no cambiaron.
+Guard doble: `app/(super-admin)/super-admin/layout.tsx` (`isStaffUser`; quien no es staff va a `/login`) y
+`requireStaff()` dentro de cada query/acción (incluidas las de sólo lectura, vía `lib/super-admin/queries.ts`,
+`org-health.ts`, `onboarding-progress.ts` y `getSignedFileUrl`, que lo suman desde SCRUM-111), los dos en
+`lib/auth/require-staff.ts` (SCRUM-552). Decide la lista de staff (`super_admin_users`): estar en la org de
+Limitless, aunque sea como founder, no da el panel. Para quien está en la lista se lee además
+`profiles.is_active` con service role: un staff desactivado se rechaza con el motivo `desactivado` (el mensaje
+de cuenta desactivada, `CUENTA_DESACTIVADA_MESSAGE`), y si el perfil no se puede leer, falla cerrado; un staff
+sin perfil todavía no se corta. Los otros rechazos son "No autenticado", "Sin permisos de super admin" y
+"Supabase no configurado". Los dos guards comparten una resolución memoizada con `cache` de React: dentro de
+un mismo render de server components (layout + página, p. ej. `/super-admin/ai-brain/[id]` con imagen, que
+encadena tres chequeos) se hace un solo `auth.getUser()`, una sola consulta a `super_admin_users` y una sola
+lectura del perfil. En server actions y route handlers `cache` no memoiza: cada llamada consulta.
+`lib/auth/require-super-admin.ts` queda como alias `@deprecated` del mismo guard
+(`[STAFF-ALIAS-REQUIRE-SUPER-ADMIN]`). El staff entra por `/login` (`/superadmin/login` redirige ahí).
 
 ## Modelo de datos
 
@@ -178,7 +222,9 @@ configuración (`[DEMO-LAYOUT-500]`). `/demo` y `/design-system` sí funcionan.
   `moduloBloqueadoParaRuta`). El test de `module-for-path` recorre `app/` entero y falla si una queda afuera:
   es lo que le pasaba a `/founder` en su propio grupo `(founder)` hasta SCRUM-18. Super admin no tiene
   módulo: lo cuida su propio guard (`app/(super-admin)/super-admin/layout.tsx`).
-- **Super admin no tiene organización.** Todo lo que haga contra una org lo hace con service role.
+- **El staff es founder de la organización de Limitless** (SCRUM-552; la única con `experience = 'limitless'`).
+  Eso no le da el panel interno (lo da sólo `super_admin_users`), y las acciones del panel contra cualquier org
+  siguen yendo con service role.
 - **Integraciones: para agregar un proveedor** se tocan cuatro lugares y nada más (id, registro, color,
   health). La UI se arma sola.
 - `/`, `/prueba`, `/privacidad`, `/demo`, `/design-system`, `/invite`, `/onboarding-cliente/*` son públicas

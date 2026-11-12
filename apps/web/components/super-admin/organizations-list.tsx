@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge, Button, DataTable, Input } from "@ai-coo/ui";
-import { paths } from "@/routes";
 import type { OrganizationStatus } from "@ai-coo/types";
 import type { AdminOrganizationListRow } from "@/types/super-admin";
 import {
@@ -18,15 +17,19 @@ import {
   previewOrganizationDeletionAction,
 } from "@/app/super-admin/delete-actions";
 import { DeletionDialog } from "@/components/super-admin/deletion-dialog";
+import { rutasDeAdministracion, type BaseDeAdministracion } from "@/lib/administracion/rutas";
 
 // "Desconocido" no tiene filtro propio: se ve en "Todas".
 type Filter = "all" | OrganizationStatus;
 
 export function OrganizationsList({
   organizations,
+  base,
 }: {
   organizations: AdminOrganizationListRow[];
+  base?: BaseDeAdministracion;
 }) {
+  const rutas = rutasDeAdministracion(base);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -75,7 +78,7 @@ export function OrganizationsList({
           ))}
         </div>
         <Button asChild size="sm">
-          <Link href={paths.superAdmin.organizationsNew}>Crear cuenta</Link>
+          <Link href={rutas.organizacionNueva}>Crear cuenta</Link>
         </Button>
       </div>
 
@@ -130,7 +133,7 @@ export function OrganizationsList({
             cell: (r) => (
               <div className="flex flex-wrap gap-2">
                 <Button asChild size="sm" variant="outline">
-                  <Link href={paths.superAdmin.organizationDetail(r.id)}>
+                  <Link href={rutas.organizacion(r.id)}>
                     Ver detalle
                   </Link>
                 </Button>

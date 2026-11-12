@@ -2,7 +2,13 @@ import { paths } from "@/routes/paths";
 import { ESCONDIDO } from "@/lib/release/escondido";
 import type { AddOnId } from "@/lib/auth/get-current-permissions";
 import type { OrganizationExperience } from "@/lib/organization/experience";
-import { coincide, entradasListas, menuPorDefecto, segmentoDe } from "./rutas-por-experiencia";
+import {
+  coincide,
+  entradasListas,
+  menuParaQuienMira,
+  menuPorDefecto,
+  segmentoDe,
+} from "./rutas-por-experiencia";
 import type { EntradaDelMenu } from "./menu-por-experiencia";
 import type {
   SidebarDirectModule,
@@ -18,6 +24,7 @@ export const SIDEBAR_PARENT_KEYS = [
   "operaciones",
   "agente",
   "configuracion",
+  "administracion",
 ] as const;
 
 export type SidebarParentKey = (typeof SIDEBAR_PARENT_KEYS)[number];
@@ -129,6 +136,19 @@ export const modulesWithChildren: Record<SidebarParentKey, SidebarParentModule> 
           href: paths.platform.marketing.leadMagnets,
           permissionId: "marketing",
         },
+      ],
+    },
+    // La consola de Administración (SCRUM-551). Sólo la usa el menú
+    // `limitless` (entrada `soloStaff`); el menú completo no la muestra.
+    administracion: {
+      label: "Administración",
+      icon: "building-2",
+      children: [
+        { label: "Organizaciones", href: paths.platform.consola.organizaciones, permissionId: "settings" },
+        { label: "Usuarios", href: paths.platform.consola.usuarios, permissionId: "settings" },
+        { label: "Holdings", href: paths.platform.consola.holdings, permissionId: "settings" },
+        { label: "Sistema", href: paths.platform.consola.sistema, permissionId: "settings" },
+        { label: "Onboarding", href: paths.platform.consola.onboarding, permissionId: "settings" },
       ],
     },
     ventas: {
@@ -382,9 +402,13 @@ export function buildSidebarNavDelMenu(menu: readonly EntradaDelMenu[]): Sidebar
  */
 export function buildPlatformSidebarNav(
   enabledAddOns: AddOnId[],
-  experiencia: OrganizationExperience = "full"
+  experiencia: OrganizationExperience = "full",
+  /** Si quien mira es staff: sin eso, las entradas `soloStaff` no se arman (SCRUM-551). */
+  esStaff = false
 ): SidebarNavConfig {
-  if (experiencia !== "full") return buildSidebarNavDelMenu(menuPorDefecto(experiencia));
+  if (experiencia !== "full") {
+    return buildSidebarNavDelMenu(menuParaQuienMira(menuPorDefecto(experiencia), esStaff));
+  }
   return {
     modulesWithChildren,
     getParentFromPath,

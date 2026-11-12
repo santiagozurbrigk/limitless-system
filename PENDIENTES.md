@@ -80,11 +80,11 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 33 | 19 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 38 | 20 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 10 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 13 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
@@ -448,14 +448,54 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Criterio de aceptación:** el super admin pasa una organización entre `webinar`, `limitless` y `full` sin SQL; un usuario de la organización sigue sin poder cambiarla (`supabase/ci/tests/97_experiencia_de_la_organizacion.sql`).
 - **Dónde:** `app/super-admin/actions.ts`, `organizations.experience`, `lib/organization/experience.ts`.
 
+#### [STAFF-INVITAR-DESDE-OTRA-ORG] Un founder puede invitar a su org el email de alguien del staff (nuevo, SCRUM-552)
+- **Tipo:** deuda técnica
+- **Estado verificado:** `inviteTeamMemberAction` (`apps/web/app/team/actions.ts:328`) no mira `super_admin_users`: crea la invitación aunque el email sea del staff. La aceptación la rechaza con `cuenta_de_staff` si la org no es la de Limitless (`aceptar_invitacion_de_equipo`, `supabase/migrations/20261101120000_staff_en_org_de_limitless.sql`; `supabase/ci/tests/98_staff_en_org_de_limitless.sql`, caso 8), así que la invitación queda pendiente sin efecto. Viene de antes de SCRUM-552 (riesgo R5 del SDD), que no lo empeora.
+- **Qué hay que hacer:** rechazar en `inviteTeamMemberAction` un email de la lista cuando la org que invita no es la de Limitless, con el mismo mensaje de `MENSAJE_INVITACION.cuenta_de_staff`.
+- **Dónde:** `apps/web/app/team/actions.ts`, `apps/web/lib/team/invitacion.ts`.
+
+#### [STAFF-BAJA-EN-DOS-PASOS] La baja de alguien del staff son dos pasos a mano (nuevo, SCRUM-552)
+- **Tipo:** deuda técnica
+- **Estado verificado:** desde SCRUM-552 el staff es founder de la org de Limitless. Sacar el email de `super_admin_users` le quita el panel interno, pero la persona sigue siendo founder de esa org con sus datos; la baja completa exige además desactivar el perfil o sacarlo de la org (`docs/operacion/alta-super-admin.md`, "Dar de baja a un super admin"). No hay acción que haga las dos cosas (riesgo R10 del SDD).
+- **Qué hay que hacer:** una acción de baja del staff (o un procedimiento SQL en una transacción) que saque el email de la lista y desactive el perfil a la vez, con su test.
+- **Dónde:** `docs/operacion/alta-super-admin.md`, `apps/web/app/super-admin/`.
+
+#### [STAFF-BORRAR-ORG-DE-LIMITLESS] Nada impide dar de baja la org de Limitless desde el panel (nuevo, SCRUM-552)
+- **Tipo:** deuda técnica
+- **Estado verificado:** `deleteOrganizationAction` (`apps/web/app/super-admin/delete-actions.ts`) y `advertenciasDeOrganizacion` (`apps/web/lib/super-admin/deletion-plan.ts`) no miran `organizations.experience`: un staff puede dar de baja la org de Limitless, donde está todo el staff como founder, con la confirmación por nombre de siempre. Preexistente (riesgo R11 del SDD); SCRUM-552 sólo hace que esa org tenga al staff adentro.
+- **Qué hay que hacer:** que la vista previa de la baja bloquee (`estaBloqueada`) la org con `experience = 'limitless'`, con su test en `deletion-plan`.
+- **Dónde:** `apps/web/lib/super-admin/deletion-plan.ts`, `apps/web/app/super-admin/delete-actions.ts`.
+
+#### [STAFF-RESTOS-LOGIN-VIEJO] Restos del login propio del staff (nuevo, SCRUM-552)
+- **Tipo:** deuda técnica
+- **Estado verificado:** desde SCRUM-552 el staff entra por `/login` y `/superadmin/login` redirige ahí (`apps/web/app/superadmin/login/page.tsx`). Quedan sin uso o con un salto de más:
+  - la variante `"superAdmin"` de `LoginScreen` (`apps/web/components/auth/login-screen.tsx:15`), que ya no renderiza nadie;
+  - el flujo `"signin-superadmin"` de `apps/web/lib/auth/limite-login.ts:23`, que sólo usa su test (lo usaba `signInSuperAdminAction`, borrada);
+  - `apps/web/lib/navigation/redirects.ts:37` (`/superadmin` → `/superadmin/login`), que ahora es un doble salto hasta `/login`;
+  - `paths.superAdmin.login` (`apps/web/routes/paths.ts`), marcado como legado.
+- **Qué hay que hacer:** borrarlos en C3 (SCRUM-553), junto con `/superadmin/login`.
+- **Dónde:** los archivos de arriba y `apps/web/lib/supabase/public-paths.ts`.
+
+#### [STAFF-ALIAS-REQUIRE-SUPER-ADMIN] Seis módulos del panel siguen en el alias `require-super-admin` (nuevo, SCRUM-552)
+- **Tipo:** deuda técnica
+- **Estado verificado:** `apps/web/lib/auth/require-super-admin.ts` es un re-export `@deprecated` de `require-staff.ts` (mismo guard, mismo `cache`; `lib/auth/__tests__/require-staff.test.ts`, "el alias de require-super-admin es el mismo guard"). Lo importan todavía `lib/super-admin/{org-health,waitlist-queries,client-health,onboarding-progress,holding-queries,holdings-admin}.ts` y los tests `lib/super-admin/__tests__/load-onboarding-progress.test.ts` y `lib/auth/__tests__/super-admin-una-consulta.test.ts`. El test por acción del panel ya los cubre a través del alias.
+- **Qué hay que hacer:** pasarlos a `requireStaff` y borrar el alias en C3 (SCRUM-553).
+- **Dónde:** `apps/web/lib/super-admin/`, `apps/web/lib/auth/require-super-admin.ts`.
+
 ### Plataforma · P3
 
 #### [WEBINAR-ONBOARDING-GATE] Una cuenta webinar nueva pasa por el gate de onboarding del producto completo (nuevo)
 - **Tipo:** decisión de negocio
 - **Severidad:** Baja
 - **Estado verificado:** medido en el QA final de SCRUM-524 con una organización webinar creada por el alta real del super admin (`evidencia-sprint2/scrum-524/qa-final.md` § MENOR-2, `qa/prueba/alta-webinar.txt`): el founder cae en `/auth/force-password-change`, después en `/onboarding`, y en el siguiente login ve en `/team` el asistente «Tu negocio» (paso 1 de 3: negocio, oferta y avatar, `components/onboarding/onboarding-gate.tsx`). Es el gate de siempre (`shouldRedirectToGate` en el middleware, salvo `skip_onboarding`), no lo agrega SCRUM-524, y `/onboarding` es una ruta libre a propósito para no armar un bucle con el bloqueo por experiencia. SCRUM-524 no lo cambia.
-- **Qué hay que hacer:** que el PO decida si una organización webinar pasa por ese gate (son preguntas del producto completo: oferta y avatar), por uno propio de Webinars o por ninguno (`skip_onboarding` en el alta), y cuándo se revisa (probablemente con Inicio, SCRUM-534).
+- **Qué hay que hacer:** que el PO decida si una organización webinar pasa por ese gate (son preguntas del producto completo: oferta y avatar), por uno propio de Webinars o por ninguno (`skip_onboarding` en el alta), y cuándo se revisa (probablemente con Inicio en vivo, SCRUM-534).
 - **Dónde:** `apps/web/lib/onboarding/gate-routing.ts`, `apps/web/lib/supabase/middleware.ts`, `apps/web/components/onboarding/onboarding-gate.tsx`, `app/super-admin/actions.ts` (altas).
+
+#### [STAFF-GUARD-CON-PERTENENCIA] Endurecer el guard del staff con la pertenencia a la org de Limitless (nuevo, SCRUM-552)
+- **Tipo:** decisión de negocio
+- **Estado verificado:** `isStaffUser`/`requireStaff` (`apps/web/lib/auth/require-staff.ts`) deciden por la lista y por el perfil no desactivado; no exigen estar en la org de Limitless, para que el panel siga andando si el código se despliega antes de la migración de SCRUM-552 (decisión DT-6 del SDD).
+- **Qué hay que hacer:** después de la ventana de SCRUM-532, decidir si el guard exige además `organization_id` = la org de Limitless, y si es así cambiarlo con su test.
+- **Dónde:** `apps/web/lib/auth/require-staff.ts`.
 
 #### [MIDDLEWARE-COOKIE-REFRESCADA] El middleware le pasa a la página la cookie de sesión vieja después de refrescarla (nuevo)
 - **Tipo:** bug
@@ -1474,17 +1514,35 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Qué hay que hacer:** que las funciones de lectura de Webinars traten la cuenta sin organización como "sin fuente" (o "no existe" en la ficha) sin lanzar, igual que hace `getOrganizationExperience` con `SIN_ORGANIZACION_VINCULADA`.
 - **Dónde:** `apps/web/lib/webinar/vistas/leer.ts`, `apps/web/app/(platform)/leads/`.
 
-#### [WEBINAR-LEADS-CREAR-LANZAMIENTO] El estado vacío de Leads no tiene enlace para crear un lanzamiento
+#### [WEBINAR-ACCIONES-SIN-DESTINO] Los botones de conectar una fuente no llevan a ninguna pantalla
 - **Tipo:** feature
-- **Estado verificado:** sin lanzamientos, `/leads` muestra «Todavía no hay lanzamientos.» sin enlace: `RUTA_PARA_CREAR_LANZAMIENTO` es `null` en `apps/web/lib/webinar/leads/config.ts` porque no existe la pantalla de creación (SCRUM-544). `PantallaDeLeads` dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22).
-- **Qué hay que hacer:** que SCRUM-544 ponga en `RUTA_PARA_CREAR_LANZAMIENTO` la ruta de su pantalla de creación (desde `routes/paths.ts`).
-- **Dónde:** `apps/web/lib/webinar/leads/config.ts`.
+- **Estado verificado:** en el Detalle del lanzamiento (SCRUM-544), «Completá la configuración del lanzamiento» ya lleva a la Configuración (SCRUM-529), pero «Conectá X», «Ver X» y «Reconectá X» siguen como texto: `DESTINOS_DE_LAS_ACCIONES.integraciones` es `null` (`apps/web/lib/webinar/acciones-del-estado.ts`). Integraciones no está en el menú webinar (PO, 28-oct) y la pantalla de hoy lista las integraciones del producto completo.
+- **Qué hay que hacer:** decidir (SCRUM-522) si webinar abre Integraciones filtrada a sus fuentes (diseño, sección 7) y, si sí, sumarla a `RUTAS_EXTRA_POR_EXPERIENCIA.webinar` y poner su ruta en `DESTINOS_DE_LAS_ACCIONES`.
+- **Dónde:** `apps/web/lib/webinar/acciones-del-estado.ts`, `apps/web/lib/navigation/menu-por-experiencia.ts`.
 
-#### [WEBINAR-NUMEROS-DE-TICKET] Los comentarios y docs de Webinars citan SCRUM-534 y SCRUM-529 donde corresponde 543 y 544
+#### [WEBINAR-FICHAS-HUECOS-DEL-MODELO] Datos de las pantallas que el contrato o el modelo todavía no tienen
 - **Tipo:** deuda técnica
-- **Estado verificado:** Inicio figura como SCRUM-534 y Lanzamientos como SCRUM-529, y el plan de Webinars los tiene como SCRUM-543 y SCRUM-544 (drift detectado en el SDD de SCRUM-545, que no los corrigió): `apps/web/lib/navigation/menu-por-experiencia.ts:15,16,66,74`, `apps/web/routes/paths.ts:29,31`, `apps/web/lib/navigation/module-for-path.ts:26`, `apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts:103`, `docs/diseno/ui-y-navegacion.md:88-89` y `PENDIENTES.md:457`.
-- **Qué hay que hacer:** confirmar con Martín qué ticket es cada pantalla y corregir los números donde corresponda.
-- **Dónde:** archivos citados.
+- **Estado verificado:** el cruce de las fichas de datos (SCRUM-548, `docs/areas/webinars-fichas-de-datos.md` § 5) con el modelo de SCRUM-526 encontró: `public_id` existe en `webinar_launches` pero no en `LanzamientoResumen` (lo pide el criterio de SCRUM-529); `ad_metrics_daily` no tiene `campaign_external_id`, así que la inversión no se ata a `launch_ad_campaigns` ni por día; el estado y la última lectura de cada fuente (`EstadoDeFuente`) no tienen tabla.
+- **Qué hay que hacer:** antes de B4 (SCRUM-550): sumar `publicId` al contrato y a la lista; decidir la columna de campaña en `ad_metrics_daily` (verificar si Zernio la entrega); definir de dónde sale el estado de cada fuente (landing: `landing_events`; zoom: `webinar_sessions.report_status`; el resto: su integración).
+- **Dónde:** `apps/web/lib/webinar/vistas/contratos.ts`, `supabase/migrations/`, `docs/areas/webinars-fichas-de-datos.md`.
+
+#### [WEBINAR-LANZAMIENTOS-PERSISTIR] Crear y editar un lanzamiento no guarda nada
+- **Tipo:** feature
+- **Estado verificado:** `crearLanzamientoAction` y `guardarLanzamientoAction` (`apps/web/app/lanzamientos/webinar-actions.ts`, SCRUM-529) validan y devuelven éxito sin escribir; la pantalla avisa que es de ejemplo. El modelo (`webinar_launches`, `webinar_sessions`, SCRUM-526) no está en producción. El criterio de SCRUM-529 "lo ve en la lista con su public_id" queda pendiente de esto.
+- **Qué hay que hacer:** después de migrar el modelo (SCRUM-532), insertar y actualizar el lanzamiento y sus sesiones con `requireOrganizationId()` y el cliente de usuario (RLS), generar el `public_id`, mostrarlo en la lista y revalidar `/lanzamientos`. Chequear el módulo `funnels` en la acción.
+- **Dónde:** `apps/web/app/lanzamientos/webinar-actions.ts`, `apps/web/lib/webinar/vistas/leer.ts`.
+
+#### [WEBINAR-LANZAMIENTOS-EN-PARALELO] Cuántos lanzamientos puede correr una cuenta a la vez
+- **Tipo:** decisión de negocio
+- **Estado verificado:** `LANZAMIENTOS_EN_PARALELO` (`apps/web/lib/webinar/lanzamientos/esquemas.ts`) está en `null`: sin límite. La regla ya está escrita y probada (`motivoDeSuperposicion`) para 1 o más.
+- **Qué hay que hacer:** que SCRUM-522 lo decida (pregunta 6 del diseño) y poner el número en la constante; también afecta a Inicio (cuál es "el" lanzamiento activo).
+- **Dónde:** `apps/web/lib/webinar/lanzamientos/esquemas.ts`.
+
+#### [WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS] Elegir campañas y productos de un lanzamiento
+- **Tipo:** feature
+- **Estado verificado:** la Configuración (SCRUM-529) muestra campañas y productos asociados pero no deja elegirlos: hay que listarlos desde Meta (Zernio) y desde el procesador de pagos.
+- **Qué hay que hacer:** selector de campañas (con `campaign_external_id` de `ad_metrics_daily`) y de productos principal y VIP de Whop/Commas, con acciones persistentes.
+- **Dónde:** `apps/web/components/webinar/pantalla-de-configuracion.tsx`.
 
 #### [FEAT-GHL-OAUTH] App del Marketplace de GHL
 - **Tipo:** feature
@@ -1524,7 +1582,7 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 
 #### [LANZAMIENTOS-DORMIDO] Decidir qué hacer con Lanzamientos
 - **Tipo:** decisión de negocio
-- **Estado verificado:** páginas "Próximamente", nav `disabled`, `components/lanzamientos/*` sin importar, acciones vivas sólo para el picker del Workboard. OPERATIONAL_NOTES lo describe como CRUD funcionando. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
+- **Estado verificado:** desde SCRUM-544 (2026-11-05) las páginas `/lanzamientos` y `/lanzamientos/[id]` son las de Limitless Webinars (otro modelo: `webinar_launches`); el ítem del menú completo sigue `disabled`, `components/lanzamientos/*` sin importar, acciones vivas sólo para el picker del Workboard. OPERATIONAL_NOTES lo describe como CRUD funcionando. **Escondido para el release de octubre (SCRUM-490, 2026-10-02)**: la pieza no se muestra; volver a mostrarla es una bandera en `apps/web/lib/release/escondido.ts`. El pendiente sigue abierto.
 - **Qué hay que hacer:** reactivarlo (montar los componentes existentes en las páginas) o borrar componentes y acciones sin uso, conservando `launches` para el Workboard. Si se reactiva: el prompt del post-mortem mete `name`/`description` sin `wrapUntrustedContent`.
 - **Dónde:** `apps/web/app/(platform)/lanzamientos/*`, `components/lanzamientos/*`, `app/lanzamientos/actions.ts`.
 

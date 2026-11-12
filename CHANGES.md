@@ -28,6 +28,169 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-12 — Fichas de datos de Inicio, Lanzamientos, Detalle y Configuración (SCRUM-548)
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** docs: `docs/areas/webinars-fichas-de-datos.md` (nuevo), `docs/README.md`, `docs/areas/webinars-contratos-de-vista.md`, `PENDIENTES.md`
+
+**Qué se hizo:** una ficha por pantalla (Inicio, Lanzamientos, Detalle, Configuración) con Elemento, Qué muestra, Fuente, Se ata a (tabla.columna del modelo de SCRUM-526), Frescura, Estados posibles y Quién lo ve, más volumen esperado y filtros. Al final, el cruce con el modelo y sus huecos. Deja la sección de Leads y Ficha para SCRUM-549.
+
+**Por qué / finalidad:** llevar a la sesión del día 6 (SCRUM-547) un documento para confirmar qué muestra cada pantalla y con qué dato, y saber qué falta en el modelo antes de migrar (B4, SCRUM-550).
+
+**Decisiones de diseño relevantes:** las fichas salen del contrato y de `calcular.ts`, no del diseño a mano: lo que dicen es lo que el código hace hoy. `goal_sales` y `goal_revenue` quedan fuera (sin metas, Martín, 28-oct).
+
+**Riesgos / deuda técnica pendiente:** la tarea se acepta con las fichas confirmadas en la sesión del día 6, que todavía no ocurrió. Huecos nuevos en `[WEBINAR-FICHAS-HUECOS-DEL-MODELO]`: `public_id` fuera del contrato, inversión sin id de campaña, estado de las fuentes sin tabla.
+
+### 2026-11-12 — Crear y configurar un lanzamiento de Limitless Webinars (SCRUM-529)
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Webinars: `app/(platform)/lanzamientos/nuevo/page.tsx`, `app/(platform)/lanzamientos/[id]/configuracion/{page,loading}.tsx`, `app/lanzamientos/webinar-actions.ts` (nuevos; `app/lanzamientos/actions.ts`, del módulo viejo que usa el Tablero, no se toca); `components/webinar/{formulario-del-lanzamiento,pantalla-de-configuracion}.tsx` (nuevos), `pantalla-de-lanzamientos.tsx` y `pantalla-de-detalle-del-lanzamiento.tsx` (botón crear y enlace a Configuración), `esqueletos.tsx`; `lib/webinar/lanzamientos/{esquemas,formulario}.ts` (nuevos); `lib/webinar/leads/config.ts` (`RUTA_PARA_CREAR_LANZAMIENTO`), `lib/webinar/acciones-del-estado.ts` (destino de Configuración); `routes/paths.ts`, `lib/navigation/page-meta.ts`; tests nuevos `lib/webinar/lanzamientos/__tests__/{esquemas,formulario}.test.ts` (13), `app/lanzamientos/__tests__/webinar-actions.test.ts` (4) y 6 casos en `pantallas-de-lanzamientos.test.ts`; docs `areas/webinars-contratos-de-vista.md`, `FUNCIONAL.md` (F-EMB-28), `backlog/historias.md` (H-EMB-28), `operacion/verificacion-manual.md` (V17), `PENDIENTES.md`
+
+**Qué se hizo:**
+- Crear (`/lanzamientos/nuevo`) y configurar (`/lanzamientos/[id]/configuracion`) un lanzamiento: nombre, variante, moneda, precio, captación y cierre, y hasta 10 sesiones con ID de Zoom y minuto de la oferta. La Configuración suma lo que falta cargar, campañas y productos (lectura) y fuentes.
+- Acciones **simuladas**, como las de la ficha del lead: organización, validación (`datosDelLanzamientoSchema`) y regla de paralelos; éxito sin escribir y aviso de ejemplo en la pantalla.
+- Regla de lanzamientos en paralelo escrita y probada (`motivoDeSuperposicion`) con el límite en `null` hasta que SCRUM-522 decida.
+- Destinos encendidos: «Crear un lanzamiento» (Leads, Inicio y Lanzamientos) y «Completá la configuración del lanzamiento» (Detalle) llevan a sus pantallas; el Detalle enlaza a su Configuración. Se cierra `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`; `[WEBINAR-ACCIONES-SIN-DESTINO]` queda sólo para Integraciones.
+
+**Por qué / finalidad:** SCRUM-529 en el plan "UI primero": que el flujo de crear y completar un lanzamiento se pueda recorrer en la sesión de validación, sin esperar a que el modelo esté en producción.
+
+**Decisiones de diseño relevantes:**
+- Guardado de ejemplo (no persiste): el modelo de SCRUM-526 no está migrado. El criterio "lo ve en la lista con su public_id" queda en `[WEBINAR-LANZAMIENTOS-PERSISTIR]`.
+- No se inventa la regla de paralelos: sin límite hasta la decisión; la validación ya está y se activa poniendo el número.
+- El minuto de la oferta se carga en minutos (como habla el diseño) y viaja en segundos (como el modelo).
+- Las acciones van en `webinar-actions.ts` para no tocar `app/lanzamientos/actions.ts` del módulo viejo (lo usa el picker del Tablero).
+
+**Riesgos / deuda técnica pendiente:** `[WEBINAR-LANZAMIENTOS-PERSISTIR]`, `[WEBINAR-LANZAMIENTOS-EN-PARALELO]`, `[WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS]` (nuevos). La fecha y hora de una sesión se escribe en la hora del navegador, no en la zona de la organización. No se miró en navegador (V17). Suite completa 5291 en verde.
+
+### 2026-11-05 — Panel viejo de super-admin cerrado: todo lleva a la consola (SCRUM-553, C3)
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Plataforma: `lib/navigation/redirects.ts` (`redireccionesDelPanelViejo`), `lib/auth/require-staff.ts` (`DESTINO_DEL_STAFF`), `app/superadmin/dashboard/page.tsx`; test nuevo `lib/navigation/__tests__/panel-viejo-cerrado.test.ts` (44 casos); tests `login-del-staff`, `require-staff`, `destino-por-experiencia`; docs `areas/plataforma.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `operacion/alta-super-admin.md`, `FUNCIONAL.md` (F-PLA-24, escondidos), `operacion/verificacion-manual.md` (V16)
+
+**Qué se hizo:**
+- `/super-admin/*` redirige (temporal, en `next.config.ts`) a la consola: Organizaciones (lista, nueva, ficha), Usuarios, Holdings, Sistema (infraestructura y costos, y los alias viejos `ai-usage`, `cost-tracking`, `profitability`) y Onboarding. Lo que no se mudó (Cerebro de IA general, lista de espera, pruebas gratis, salud de clientes) y cualquier otra ruta del panel llevan a Organizaciones: escondido sin borrar el código.
+- El staff entra por `/login` a `/administracion/organizaciones` (`DESTINO_DEL_STAFF`); `/superadmin/dashboard` también. `/superadmin/login` sigue yendo a `/login` (552).
+- Test que recorre cada página de `app/(super-admin)/super-admin`, le aplica los redirects como Next y exige que caiga en una pantalla que existe en la consola; y que ningún componente que dibuja la consola enlace a lo escondido.
+
+**Por qué / finalidad:** C3 del plan: un solo lugar para administrar.
+
+**Decisiones de diseño relevantes:**
+- Redirects en `next.config.ts` (como el resto de `sectionRedirects`) en vez de tocar cada página: el código del panel queda intacto y la consola sigue reusando sus páginas de infraestructura y costos (los redirects actúan sobre la URL, no sobre los imports). Para reabrirlo alcanza con sacar esas entradas.
+- Temporales (`permanent: false`), como el resto: un 308 cacheado esconderría el panel si se reabre.
+- El flujo de importar desde Drive del Cerebro de IA (callback OAuth a `/super-admin/ai-brain/add`) queda llevando a Organizaciones: es parte de lo escondido.
+
+**Riesgos / deuda técnica pendiente:** **mergear recién con la consola verificada en producción (V15)** y con el staff ya asociado a la org de Limitless (migración de 552): si no, el staff cae en la plataforma sin organización. No se probó en navegador (V16). Suite completa en verde.
+
+### 2026-11-05 — Consola de Administración dentro de la org de Limitless (SCRUM-551, C1)
+
+**Rama:** `claude/brave-wright-s2bfcg` (con `feat/SCRUM-552-consola-acceso-staff` integrada: el guard del staff)
+**Commit(s):** este (y el merge de 552, que resuelve el destino después del login con los dos: la invitación gana, después el staff, después la pantalla de inicio de la experiencia)
+**Módulo(s) afectado(s):** Plataforma: `app/(platform)/administracion/**` (nuevo: layout, error, Organizaciones, Nueva, ficha, Usuarios, Holdings, Sistema, Onboarding); `lib/administracion/{rutas,experiencia}.ts` (nuevos); `components/super-admin/*` (prop `base` en 7 componentes, `onboarding-de-clientes.tsx` nuevo, selector de experiencia en la ficha); `app/super-admin/actions.ts` (`setOrganizationExperienceAction`, revalida `/administracion`); `lib/super-admin/queries.ts` y `types/super-admin.ts` (experiencia en la ficha); navegación `lib/navigation/{menu-por-experiencia,rutas-por-experiencia,sidebar-modules,module-for-path,page-meta}.ts`, `components/navigation/{notch-nav/platform-notch-nav,command-palette}.tsx`, `components/layout/mobile-nav.tsx`, `app/(platform)/layout.tsx`, `lib/auth/get-current-permissions.ts` (`esStaff`); holdings `app/(platform)/{holding,onboarding/holding}/actions.ts`; tests nuevos `lib/administracion/__tests__/{experiencia,consola}.test.ts` (20), `app/super-admin/__tests__/experiencia-desde-la-consola.test.ts` (4) y casos en bloqueo, rutas y guard por acción; docs `areas/plataforma.md`, `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `FUNCIONAL.md` (F-PLA-31), `backlog/historias.md` (H-PLA-31), `operacion/verificacion-manual.md` (V15)
+
+**Qué se hizo:**
+- **Menú:** «Administración» lista en `limitless` como grupo (Organizaciones, Usuarios, Holdings, Sistema, Onboarding). Entrada `soloStaff`: el layout de la plataforma suma `esStaff` (`isStaffUser`) a los permisos sólo para `limitless`; `puedeVerEntrada`, `buildPlatformSidebarNav` (barra y celular) y la paleta la sacan sin él, aunque sea founder. Módulo `settings` en lugar del provisorio `finance` (el acceso lo decide la lista).
+- **Pantallas:** `/administracion/**` con los componentes y consultas del super-admin. Layout: `exigirRutaDeLaExperiencia` y, sin estar en la lista, a la pantalla de inicio. Los componentes reciben `base` y sus enlaces quedan dentro de la consola (`lib/administracion/rutas.ts`).
+- **Experiencia:** sección en la ficha con `setOrganizationExperienceAction` (sólo `webinar`/`full`; nadie pasa a `limitless`; la org de Limitless no cambia desde la consola). Un negocio nuevo de un holding nunca hereda `limitless`: nace `full` (antes chocaba con el índice único de 552).
+- **Merge de 552:** el destino después del login suma el del staff y la invitación a la pantalla de inicio de la experiencia (524); dos tests de login adaptados al guard nuevo.
+
+**Por qué / finalidad:** C1 del plan: que el staff administre desde la plataforma, para poder cerrar `/super-admin` (553). Las decisiones del 5-nov (Jira SCRUM-551 y SCRUM-522).
+
+**Decisiones de diseño relevantes:**
+- `DESTINO_DEL_STAFF` **no** cambia todavía: sigue en `/super-admin/organizations`. Si el código saliera antes de que el staff esté asociado a la org de Limitless (migración de 552), mandar al staff a la plataforma lo dejaría sin org. Se mueve con SCRUM-553, que va "con la consola verificada en producción".
+- Equipo no se agrega al menú `limitless` (es de SCRUM-524, Fer): queda la decisión abierta en H-PLA-31.
+- Sistema reusa las dos páginas del panel viejo (infraestructura y costos) en lugar de copiar su lógica; Cerebro de IA, lista de espera, pruebas y salud quedan en `/super-admin` (553).
+
+**Riesgos / deuda técnica pendiente:** no se probó en navegador (V15). Depende de que 552 se mergee antes. Suite completa en verde.
+
+### 2026-11-05 — Lanzamientos y Detalle del lanzamiento de Limitless Webinars, con el contrato ampliado (SCRUM-544, A6)
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Webinars: contrato `lib/webinar/vistas/{contratos,calcular,leer}.ts` (SCRUM-542, ampliado); pantallas `app/(platform)/lanzamientos/{page,layout,loading,error}.tsx` y `[id]/{page,loading}.tsx`; componentes nuevos `components/webinar/{pantalla-de-lanzamientos,pantalla-de-detalle-del-lanzamiento,numero-del-dato,secciones-del-lanzamiento}.tsx`, `esqueletos.tsx` (+2); lógica nueva `lib/webinar/acciones-del-estado.ts`, `lib/webinar/lanzamientos/presentacion.ts`; Inicio reusa las secciones compartidas; `components/webinar/aviso-de-estado.tsx` (`ErrorDeCarga` con título opcional); `lib/release/escondido.ts` (`lanzamientos: false`); `lib/navigation/{menu-por-experiencia,page-meta}.ts`; tests nuevos `vistas/__tests__/detalle-del-lanzamiento.test.ts` (16), `lib/webinar/__tests__/acciones-del-estado.test.ts` (5), `lib/webinar/lanzamientos/__tests__/presentacion.test.ts` (3), `app/(platform)/lanzamientos/__tests__/pantallas-de-lanzamientos.test.ts` (10) y casos en esqueletos y boundaries; 9 archivos de tests actualizados; docs `areas/webinars-contratos-de-vista.md`, `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `FUNCIONAL.md` (F-EMB-27, F-EMB-23, escondidos), `backlog/historias.md` (H-EMB-27), `operacion/verificacion-manual.md` (V14), `PENDIENTES.md`
+
+**Qué se hizo:**
+- **Contrato (decisión de Santi: ampliarlo en esta rama y que Fer lo revise en el PR):** `PASOS_POR_VARIANTE` (etapas de cada variante según el diseño del producto, sección 6: VIP sólo en Pago +++, Calificados en todas) y `PASO_SE_MIDE_CONTRA`; `PasoDelEmbudo.pasoDesde` (etapa base y tasa); en el Detalle, `registrosPorAnuncio` (`utm_content`) y `evolucionDiaria` (registros por día en la zona de la org, días sin registros en cero medido, hasta 120; inversión por día `null` en orgánico). `calcularDetalleDelLanzamiento` recibe la zona y `leer` se la pasa.
+- **Pantallas:** lista de lanzamientos (variante, estado, fechas, cuatro números, enlace al detalle) y detalle (encabezado, números principales, embudo completo con paso, fuente y acción, cortes por origen y por anuncio con barras, evolución diaria en barras, sesiones y fuentes). `loading.tsx` y `error.tsx` propios.
+- **Acción de cada estado** (`accionDelEstado`, diseño sección 11): texto y destino por estado; sin destino para Webinars, se muestra como texto sin enlace (`[WEBINAR-ACCIONES-SIN-DESTINO]`, nuevo).
+- **Navegación:** Lanzamientos lista en el menú webinar y `ESCONDIDO.lanzamientos` en `false` (si no, bucle: lo exige el invariante de 524). Inicio pasó a usar `NumeroDelDato` y las secciones compartidas (mismo markup).
+
+**Por qué / finalidad:** A6 del plan: el funnel de punta a punta por lanzamiento, que es lo que lee el consultor; y la lista que lleva a él.
+
+**Decisiones de diseño relevantes:**
+- La etapa base de cada paso no siempre es la anterior: VIP, asistencia y contactados contra registrados (el equipo contacta a toda la base), ventas contra asistentes (se compra en la oferta sin llamada). Explícito en el contrato para que el día 6 se pueda cambiar en un lugar.
+- La inversión por día no se reparte ni se inventa: hoy se lee el total del lanzamiento; queda `sin_fuente` con motivo. Cuando B4 lea `ad_metrics_daily` por campaña, se llena.
+- En `full`, `/lanzamientos` ya no lleva al Panel: abre la lista de Webinars por URL (como `/leads`); el ítem del menú completo sigue deshabilitado.
+- Las barras son HTML con ancho/alto proporcional (`anchoDeBarra`), sin librería de gráficos: liviano y con texto para lectores de pantalla.
+
+**Riesgos / deuda técnica pendiente:** cambia el contrato de SCRUM-542 (Fer lo revisa en el PR; las pantallas de 545 no usan lo nuevo). Botones sin destino hasta 529 y la decisión de Integraciones (`[WEBINAR-ACCIONES-SIN-DESTINO]`); sin lectura real (`[WEBINAR-VISTAS-LECTURA-REAL]`). No se miró en navegador (V14). Tests: 34 nuevos; suite completa en verde.
+
+### 2026-11-05 — Estados de carga, vacío y error de Limitless Webinars (SCRUM-546, A8)
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Webinars: `components/webinar/esqueletos.tsx` (nuevo), `app/(platform)/inicio/{loading,error}.tsx`, `app/(platform)/leads/{loading,error}.tsx`, `app/(platform)/leads/[id]/loading.tsx` (nuevos); tests `components/webinar/__tests__/esqueletos.test.ts` (nuevo, 6) y `app/__tests__/boundaries.test.ts` (2 obligatorios más); doc `areas/webinars-contratos-de-vista.md`
+
+**Qué se hizo:**
+- Esqueletos con la forma de cada pantalla (Inicio, Leads, ficha del lead) en su `loading.tsx`, con `role="status"`, `aria-busy` y texto para lectores de pantalla.
+- `error.tsx` propio en `/inicio` y `/leads` (cubre la ficha), con `PantallaDeError`: Sentry con tag `webinar-inicio` / `webinar-leads`, sin el mensaje interno, y salida a la otra pantalla (no a la misma rota ni al Panel, que para webinar redirige).
+- Test que exige `loading.tsx` con su esqueleto en cada pantalla de Webinars, y los dos `error.tsx` en la lista de obligatorios.
+
+**Por qué / finalidad:** A8 del plan: ninguna pantalla nueva queda en blanco al navegar y una falla no tira la plataforma.
+
+**Decisiones de diseño relevantes:**
+- "Un error en una sección no tira la página" se resuelve con el contrato (cada sección trae su `Dato` con estado y motivo, SCRUM-542), no con boundaries por sección: los errores de un Server Component ocurren en el servidor y un boundary de cliente no los atrapa. Una falla de la lectura entera cae en el `error.tsx` de la ruta, con la navegación visible.
+- `global-error.tsx` y `(platform)/error.tsx` ya existían (SCRUM-108): no se tocaron.
+- Los estados vacíos con botón ya estaban en Leads (545) e Inicio (543); el botón depende de `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`.
+
+**Riesgos / deuda técnica pendiente:** Lanzamientos, Detalle y Configuración (529/544) tendrán que sumar su `loading.tsx` y entrar en la lista del test. No se miró en navegador (cubre V13). Suite completa 4779 en verde.
+
+### 2026-11-05 — Inicio del lanzamiento activo de Limitless Webinars (SCRUM-543, A3)
+
+**Rama:** `claude/brave-wright-s2bfcg` (con `feat/SCRUM-545-webinars-leads-y-ficha` integrada, que trae 523, 524 y 542, sin mergear)
+**Commit(s):** este
+**Módulo(s) afectado(s):** Embudos y Lanzamientos (Webinars) y Plataforma (menú por experiencia): `app/(platform)/inicio/{layout,page}.tsx` (nuevos), `components/webinar/pantalla-de-inicio.tsx` (nuevo), `lib/webinar/inicio/presentacion.ts` (nuevo), `lib/navigation/{menu-por-experiencia,module-for-path,page-meta}.ts`, `routes/paths.ts`; tests nuevos `lib/webinar/inicio/__tests__/presentacion.test.ts` (10), `components/webinar/__tests__/pantalla-de-inicio.test.ts` (13), `app/(platform)/inicio/__tests__/pantalla-de-inicio.test.ts` (7) y casos nuevos en `bloqueo-por-experiencia` y `rutas-por-experiencia`; 8 archivos de tests de navegación actualizados; docs `areas/webinars-contratos-de-vista.md`, `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `FUNCIONAL.md` (F-EMB-26), `backlog/historias.md` (H-EMB-26), `operacion/verificacion-manual.md` (V13)
+
+**Qué se hizo:**
+- Pantalla `/inicio` que dibuja sólo `leerInicio()` (regla de SCRUM-542): encabezado con variante, precio, cuenta regresiva en días y próxima sesión; aviso de registros que dejan de llegar; números principales; "lo que el equipo tiene que mover hoy" con enlace a Leads con su filtro y el lanzamiento; embudo; sesiones; estado de las fuentes (las caídas primero).
+- Tres estados de pantalla: con lanzamiento activo, sin lanzamiento activo (vacío con botón cuando exista la ruta de creación) y activo que no se pudo leer (estado y motivo).
+- `avisoDeRegistros`: avisa si la fuente `landing` no está al día (con su motivo) o si las últimas 24 h son un cero medido con el lanzamiento captando. Nunca por un cero sin medir.
+- Entrada «Inicio» lista en el menú webinar: es la pantalla de inicio del founder y de quien tiene el módulo del Panel (`dashboard`); quien sólo tiene Ventas sigue yendo a Leads y quien sólo tiene Equipo, a Equipo. Layout con `exigirRutaDeLaExperiencia("/inicio")`; `limitless` la redirige a Clientes; en `full` abre tipeando la URL, como `/leads`.
+
+**Por qué / finalidad:** A3 del plan "UI primero, datos después": la pantalla que el dueño ve primero, lista para la sesión de validación del día 6 (SCRUM-547) sobre el escenario de ejemplo.
+
+**Decisiones de diseño relevantes:**
+- La cuenta regresiva es en días (lo que trae el contrato), sin reloj en vivo: no necesita un Client Component ni efectos.
+- Sin enlace al detalle del lanzamiento: `/lanzamientos` sigue escondida hasta SCRUM-529/544; se suma cuando exista.
+- Los textos y reglas (cierre, formatos, aviso, orden de fuentes) viven en `lib/webinar/inicio/presentacion.ts`, lógica pura con tests, para cambiarlos después de la sesión del día 6 sin tocar la pantalla.
+- Se cierra `[WEBINAR-NUMEROS-DE-TICKET]`: Inicio ahora cita SCRUM-543 en código y docs, y Lanzamientos sigue en SCRUM-529, que en Jira es "Lista y configuración de lanzamientos" (544 es el detalle). SCRUM-534 queda sólo donde se habla de "Inicio en vivo", que es otra tarea.
+
+**Riesgos / deuda técnica pendiente:** hoy sólo la org de demo ve datos (`[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-VISTAS-LECTURA-REAL]`); el estado vacío no tiene botón hasta SCRUM-529 (`[WEBINAR-LEADS-CREAR-LANZAMIENTO]`, ampliado a Inicio). No se miró en navegador (V13 de verificación manual). Tests: 30 nuevos; suite completa 4765 en verde.
+
+### 2026-11-05 — Procesos de fondo filtrados en cuentas webinar (SCRUM-525)
+
+**Rama:** `claude/brave-wright-s2bfcg` (sobre `feat/SCRUM-523-webinars-experiencia`, que necesita la columna `experience`)
+**Commit(s):** este
+**Módulo(s) afectado(s):** Agente IA / crons: `apps/web/lib/organization/procesos-de-fondo.ts` (nuevo), `lib/intelligence/organizaciones-activas.ts`, `app/api/cron/daily-signals/route.ts`, `app/api/cron/sync-content-metrics/route.ts`, `lib/marketing/sync-content-metrics.ts`; tests `lib/organization/__tests__/procesos-de-fondo.test.ts` (nuevo) y `lib/intelligence/__tests__/organizaciones-activas.test.ts`; docs `areas/agente-ia.md`, `arquitectura/jobs-webhooks-y-colas.md`
+
+**Qué se hizo:**
+- `correProcesosDeFondo(experiencia)`: una sola regla, `webinar` no corre; `full`, `limitless` y un valor desconocido sí (lógica pura, sin `server-only`).
+- `listActiveOrganizationIds()` lee `id, experience` y descarta las webinar: inteligencia, tono del founder y los tres reportes ejecutivos dejan de encolarlas.
+- `organizacionSigueActiva()` lee `status, experience`: un trabajo ya encolado, sus reintentos o una corrida con `?organizationId=` tampoco gastan IA en una webinar (devuelve `skipped`, como con una pausada).
+- `filtrarOrganizacionesConProcesosDeFondo(ids)` (nueva, mismo módulo): para los crons que arman su lista desde una integración. La usan `daily-signals` (Discord/Fathom) y `sync-content-metrics` (fan-out y modo en serie). Deduplica, mantiene el orden, descarta ids que no existen y lanza si la base falla.
+
+**Por qué / finalidad:** con 523 desplegada, toda alta nueva nace `webinar`, y esas cuentas no ven reportes, inteligencia ni Marketing (SCRUM-524). Sin este filtro, cada cuenta nueva gastaba IA y llamadas a Zernio en pantallas que no puede abrir. Tiene que ir en el mismo lote que 523 (ventana de SCRUM-532).
+
+**Decisiones de diseño relevantes:**
+- Se excluye sólo `webinar`, como pide la tarea. `limitless` sigue corriendo: tiene Clientes, donde caen los hitos de las señales diarias.
+- No se filtran los crons que sólo sincronizan una integración conectada, sin IA ni mails (GHL, Calendly, anuncios, Mercado Pago, limpieza de reels): una webinar no tiene Integraciones en el menú, y si conecta GHL para Leads tiene que seguir sincronizando.
+- Ante un valor desconocido corre (status quo, default de la columna `full`); ante una falla de la base lanza, como ya hacía el listado (el cron responde 500 y no procesa a ciegas).
+- El mensaje que ve quien pide un reporte a mano no cambia (`AVISO_ORG_NO_ACTIVA`): una webinar no llega a esas pantallas (rutas bloqueadas por 524).
+
+**Riesgos / deuda técnica pendiente:** las consultas leen `organizations.experience`: si el código se desplegara antes de la migración de 523, estos crons fallarían con 500 (no procesarían nada de más). El orden 523 → código ya está en la guía de SCRUM-532. Tests: 52 de los archivos tocados (12 nuevos); suite completa 4280 en verde.
+
 ### 2026-11-02 — Leads y ficha del lead de Limitless Webinars (SCRUM-545, A7)
 
 **Rama:** `feat/SCRUM-545-webinars-leads-y-ficha` (base: integración local `09131c63` de #148 y #150, sin mergear)
@@ -151,6 +314,62 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:**
 - No se repitió la prueba en navegador contra el Supabase local con una organización `limitless` (la de SCRUM-524 fue con `webinar`): lo cubren los tests de layouts y componentes reales, no un navegador.
 - Un rol de `limitless` sin Clientes, Tablero ni Ventas cae en Ajustes, igual que un rol de `webinar` sin Equipo.
+
+### 2026-11-02 — SCRUM-552, fix-pack 1 de AR y CR: lo que la guía promete del 98, founder determinístico, callback con invitación y test por acción que puede fallar
+
+**Rama:** `feat/SCRUM-552-consola-acceso-staff`
+**Commit(s):** `3ccafc03` — test(auth): el 98 verifica must_change_password y custom_role_id; `a2522c5d` — fix(auth): founder determinístico en la ficha y el listado; `ac1edf1b` — fix(auth): el callback de Auth respeta la invitación; `1bd3dd4c` — test(auth): el test por acción recorre todo el panel y "siguió después del guard" puede fallar; `86cd1037` — docs(auth): guard del staff en plataforma y seguridad, CSV de Jira; `bd9f5a50` — test(auth): email del fixture; `5d116276` — docs(auth): entrada en CHANGES y números en testing.md; `c1658787` — test(auth): saca 2 parámetros sin usar que marcaba lint
+**Módulo(s) afectado(s):** Plataforma (auth y super admin): `supabase/ci/tests/98_staff_en_org_de_limitless.sql`, `apps/web/lib/super-admin/queries.ts`, `apps/web/app/auth/callback/route.ts`, tests `lib/super-admin/__tests__/founder-de-la-org.test.ts` (nuevo), `app/auth/__tests__/login-del-staff.test.ts`, `app/super-admin/__tests__/guard-de-staff-por-accion.test.ts`; docs `operacion/staff-en-org-de-limitless.md`, `operacion/testing.md`, `areas/plataforma.md`, `arquitectura/seguridad.md`, `backlog/jira-import.csv`, `PENDIENTES.md`
+
+**Qué se hizo:**
+- **BLQ-1 (AR):** la guía decía que la migración no toca `role`, `is_active`, `custom_role_id` ni `must_change_password`, y el 98 sólo miraba rol y estado (el mutante del AR, `must_change_password = true, custom_role_id = null` en el `update`, pasaba `check-migrations`). Ahora s6 (staff pendiente) se siembra con `must_change_password = true` y s1/s4 con `false`; el caso 6 verifica que ninguno cambie y que `custom_role_id` siga null, y la foto del caso 7 suma las dos columnas. Mutantes: el del AR muere por `no le pone must_change_password a quien no lo tenía`; `must_change_password = false`, por `no le saca must_change_password al staff a mitad del alta`; `custom_role_id = <rol de la org>`, por `no le asigna un rol de la org`. `custom_role_id` no se siembra en un perfil sin org (lo impide `validar_rol_de_la_org`): la guía dice que no pisar uno existente queda por código.
+- **MNR-1 (AR):** la ficha de una org con varios founders (la de Limitless) mostraba "—" (`maybeSingle` con varias filas da error) y el listado tomaba uno arbitrario. Los dos ordenan por `created_at` e `id` y muestran el más antiguo (la ficha con `limit(1)`). Test con tres founders, dos con la misma fecha, y un mock que se comporta como PostgREST; sacar cualquiera de los `order` lo pone rojo.
+- **MNR-2 (AR):** `/auth/callback` mandaba al staff al panel aunque volviera de una invitación de equipo. Usa `destinoDeInvitacion` y el mismo orden que `signInAction`: la invitación primero (sólo el token), después el destino del staff. La ruta de la invitación es `/invite?token=…` (el fix-pack decía `/invite/<token>`).
+- **MNR-3 (AR):** el inventario del test por acción sólo leía los `.ts` directos de `app/super-admin/`. Ahora recorre `app/super-admin/` y todo route group `(super-admin)` con subcarpetas (sin `__tests__`): todo `.ts` y todo `.tsx` que arranca con `"use server"`. Un archivo de acciones nuevo en `app/super-admin/<sub>/`, en `app/(super-admin)/…` (`.ts` o `.tsx` con `"use server"`) hace fallar el Test 1 con su nombre; con el test anterior, el de la subcarpeta pasaba en verde. Una página `.tsx` sin `"use server"` no cuenta.
+- **MNR-4 (CR):** "la acción no hizo nada después del guard" no podía fallar, porque el guard ya lee `profiles`. Esa lectura queda etiquetada `guard:profiles` y no cuenta (también en las operaciones permitidas del escenario "staff desactivado"). La ruta OAuth de inicio, que pasado el guard no toca la base ni la red, prueba que siguió con la redirección a Google y la cookie (`despuesDelGuard`). Mutante `runMutation(async () => { await requireStaff(); return undefined; })` en `removePlatformClaudeKeyAction`: verde con el test anterior, rojo ahora por ese assert.
+- **MNR-5 (CR):** en `login-del-staff.test.ts` el caso "miembro" simula `role: member` (antes, founder como el caso siguiente).
+- **MNR-6 (CR):** `jira-import.csv` regenerado (`pendientes_a_jira.py --actualizar-indices`): 334 filas, con los 6 `[STAFF-*]`.
+- **MNR-7 (CR):** `docs/areas/plataforma.md` ("Guard doble") y `docs/arquitectura/seguridad.md` describen `require-staff.ts`, la lectura de `profiles.is_active` y el motivo `desactivado`.
+- Observación del CR: `lib/auth/__tests__/super-admin-una-consulta.test.ts` se suma a `[STAFF-ALIAS-REQUIRE-SUPER-ADMIN]`.
+- Números (una corrida, `pnpm exec vitest run` en `apps/web` y `contar-casos.py apps/web`): 278 archivos, 4.636 tests del runner, ~3.270 casos declarados (antes del fix-pack: 277, 4.629 y ~3.263). El test por acción sigue en 318.
+
+**Por qué / finalidad:** cerrar el AR (rechazado por BLQ-1) y los menores de AR y CR de SCRUM-552.
+
+**Decisiones de diseño relevantes:** el founder se elige en la consulta (`order` + `limit`), sin función nueva; el callback reusa `destinoDeInvitacion` en vez de repetir la regla. En el 98 se siembran los dos valores de `must_change_password`: sembrar sólo `true` no mata al mutante del AR, que escribe `true`.
+
+**Riesgos / deuda técnica pendiente:** una server action declarada inline (`"use server"` dentro de una función) en una página del route group no la ve el inventario; hoy no hay ninguna. Una acción que lea `profiles` con `select("is_active")` se contaría como lectura del guard.
+
+### 2026-11-01 — El staff es founder de la org de Limitless, entra por `/login` y el panel queda detrás de `requireStaff` (SCRUM-552)
+
+**Rama:** `feat/SCRUM-552-consola-acceso-staff` (rebasada sobre `feat/SCRUM-523-webinars-experiencia` @ `e0171311`)
+**Commit(s):** `9deebfec` — feat(db): staff en la org de Limitless — índice único, asociación e invitación; `db2d86f3` — feat(auth): requireStaff/isStaffUser y alias de require-super-admin; `a843dc03` — feat(auth): el panel interno pasa al guard de staff; `1ed70694` — feat(auth): login único del staff por /login; `be0ddab1` — test(auth): guard de staff por acción, login, middleware y bootstrap; este (docs)
+**Módulo(s) afectado(s):** Plataforma (auth y super admin): `supabase/migrations/20261101120000_staff_en_org_de_limitless.sql` (nueva), `supabase/ci/tests/98_staff_en_org_de_limitless.sql` (nuevo), `apps/web/lib/auth/require-staff.ts` (nuevo), `lib/auth/require-super-admin.ts` (alias), `lib/auth/bootstrap.ts` (rama del staff), `app/auth/actions.ts`, `app/auth/callback/route.ts`, `lib/supabase/middleware.ts`, `app/(super-admin)/super-admin/layout.tsx`, `app/superadmin/login/page.tsx`, `app/super-admin/*.ts`, `lib/super-admin/queries.ts`, las dos rutas OAuth de `super-admin-google`, `lib/team/invitacion.ts`; borrado `components/auth/super-admin-login-form.tsx`; docs `operacion/staff-en-org-de-limitless.md` (nuevo), `operacion/alta-super-admin.md`, `operacion/verificacion-manual.md`, `operacion/testing.md`, `arquitectura/auth-organizaciones-y-permisos.md`, `areas/plataforma.md`, `FUNCIONAL.md` (F-PLA-24), `PENDIENTES.md`
+
+**Qué se hizo:**
+- **Migración** (se aplica en la ventana de SCRUM-532, después de marcar la org): verifica que esté aplicada la de SCRUM-523 (columna `experience` con `'limitless'` en el CHECK) y aborta si no; índice único parcial `organizations_una_sola_limitless` (a lo sumo una org `limitless`); función `asociar_staff_a_la_org_de_limitless()` (`security invoker`, sin EXECUTE para ningún rol de la API), que pone en esa org los perfiles sin organización cuyo email de Auth normalizado es igual a una fila de la lista tal cual (la comparación de la app); y `aceptar_invitacion_de_equipo` con la regla nueva: el staff sólo acepta una invitación a la org de Limitless y, si la invitación le crea el perfil, entra **founder** (decisión del humano del 2026-11-01). No toca la columna ni su CHECK.
+- Testigos SQL (`98_staff_en_org_de_limitless.sql`): caso 1, el índice y la segunda org `limitless` con `unique_violation`; caso 2, sin EXECUTE para anon, authenticated ni service_role; caso 6, asocia 3 (s1, s4 con el email de Auth en mayúsculas y espacios, s6) y no mueve a quien está en otra org, no asocia una fila de la lista con mayúsculas y no cambia rol ni estado; caso 7, **idempotente** (la segunda corrida devuelve 0 y los perfiles quedan iguales); casos 3 y 5, **fail-closed** (sin org marcada y con staff pendiente, o con dos orgs marcadas, aborta sin cambios); caso 4, sin nada pendiente devuelve 0 sin error; caso 8, la invitación del staff a la org de Limitless **entra founder**, a otra org o sin org marcada da `cuenta_de_staff`, un perfil existente no cambia de rol y una fila mal cargada entra member; caso 9, `aceptar_invitacion_de_equipo` sigue `security definer` con EXECUTE sólo para service_role. `80_aceptar_invitacion.sql` sigue verde sin cambiar aserciones.
+- **Guard** `requireStaff()`/`isStaffUser()`/`isStaffEmail()` en `lib/auth/require-staff.ts`: decide por la lista (misma consulta de siempre) y, sólo para quien está en ella, por el perfil no desactivado; un error al leer el perfil rechaza. No lee `organization_id` ni `role`. Un solo `cache` de React por pedido. `require-super-admin.ts` quedó como re-export `@deprecated` (testigo: `lib/auth/__tests__/require-staff.test.ts`).
+- Todo el panel interno pasa por `requireStaff` (las 4 acciones de `app/super-admin`, `lib/super-admin/queries.ts` y las rutas OAuth); los otros 6 módulos de `lib/super-admin` siguen en el alias. Testigo: `app/super-admin/__tests__/guard-de-staff-por-accion.test.ts`, que invoca los 55 exports guardados y las 2 rutas OAuth con Supabase simulado y el guard real, en cinco escenarios: sin sesión, miembro común y founder de la org de Limitless fuera de la lista, staff desactivado (los cuatro rechazados en la forma de siempre y **sin acceso** con service role más allá del guard) y staff de la lista (pasa). La tabla es literal y se compara contra el disco (archivos del panel, exports de cada módulo, rutas OAuth); el detector de imports del guard tiene su auto-test.
+- **Login único:** el staff entra por `/login` y va a `DESTINO_DEL_STAFF` (`/super-admin/organizations`) desde `signInAction`, el middleware y el callback de Auth; quien no está en la lista sigue igual que antes aunque sea founder de la org de Limitless. `/superadmin/login` redirige a `/login` y el layout del panel rechaza con un redirect a `/login`. Se borraron `signInSuperAdminAction` y `SuperAdminLoginForm`. Testigos: `app/auth/__tests__/login-del-staff.test.ts`, `lib/supabase/__tests__/middleware-login-del-staff.test.ts`.
+- **Bootstrap:** un staff sin perfil nace **founder de la org de Limitless** (`limit(2)` sobre `experience = 'limitless'`; sin org marcada o sin la columna, nace sin org como antes; con dos, lanza; otra falla de la base lanza `FallaDeLaBase` sin crear el perfil), sin crear org propia ni roles por defecto. Testigo: `lib/auth/__tests__/bootstrap-staff-en-limitless.test.ts`.
+- Mensaje `cuenta_de_staff`: "Esta cuenta es del equipo de Limitless y sólo se puede sumar a la organización de Limitless…".
+- Precheck SQL de sólo lectura (P0a-P5) y los pasos del día 5 en `docs/operacion/staff-en-org-de-limitless.md`, con qué hacer ante cada uno de los tres mensajes con que puede abortar la migración.
+- Validez (mutantes aplicados, verificados en el archivo, vistos en rojo por su motivo y revertidos): sin guard en `setOrganizationStatusAction` o en `updateOrgAddOnsAction`, falla esa acción en los cuatro escenarios de rechazo; una lectura con service role antes del guard en `loadWaitlistLeads` falla con "operaciones con service role antes del rechazo"; un export nuevo en `delete-actions.ts` falla el Test 2; un archivo nuevo en `app/super-admin` falla el Test 1; el callback OAuth sin guard falla porque intercambia el código con Google; en el bootstrap, `role: "member"` o `organization_id: null` fallan; en la migración, la invitación con `'member'` falla en 98 ("el staff que entra por invitación a la org de Limitless queda founder…"), y normalizar la lista para dar founder o para asociar falla en 98 (fila `S7@test` y "esperado 3, real 4").
+- Corrida final (una sola, después del último cambio de código): `tsc` 0; `pnpm lint` 0 errores; `pnpm test` **277 archivos y 4.629 tests** en verde (la base de 523 @ `e0171311` tenía 272 y 4.271); `check-migrations.sh` 0 con 14 archivos de tests de RLS (`OK: 98_staff_en_org_de_limitless.sql`); backlog `--check` 0; `next build` 0.
+
+**Por qué / finalidad:** C2 de la consola: que el staff de Limitless tenga organización (la de Limitless) para usar las pantallas de gestión, sin que estar en esa organización dé el panel interno, y con un solo login.
+
+**Decisiones de diseño relevantes:**
+- La org de Limitless es la única con `experience = 'limitless'` (sin uuid en el código ni en las migraciones); el índice único lo hace cumplir.
+- La asociación y el founder por invitación usan la comparación de la app (fila de la lista tal cual, email de Auth normalizado): una fila mal cargada nunca dio el panel y tampoco asocia ni da founder. El rechazo `cuenta_de_staff` sigue normalizando los dos lados (más restrictivo).
+- El guard no exige estar en la org de Limitless: así el orden entre el deploy y la migración es indistinto (`[STAFF-GUARD-CON-PERTENENCIA]` para endurecerlo después).
+- Un founder por invitación conserva el `custom_role_id` de la invitación (para un founder se ignora).
+
+**Riesgos / deuda técnica pendiente:**
+- La baja del staff ahora son dos pasos (sacar de la lista y desactivar el perfil): `[STAFF-BAJA-EN-DOS-PASOS]`, documentada en `alta-super-admin.md`.
+- `[STAFF-INVITAR-DESDE-OTRA-ORG]`, `[STAFF-BORRAR-ORG-DE-LIMITLESS]` (preexistentes), `[STAFF-RESTOS-LOGIN-VIEJO]` y `[STAFF-ALIAS-REQUIRE-SUPER-ADMIN]` (para C3, SCRUM-553).
+- Si la org de Limitless no completó el onboarding, el staff (ahora founder con org) cae en `/onboarding` también dentro de `/super-admin/*`: paso 3b de la guía.
+- Lo no probado contra producción está en `verificacion-manual.md`, Plataforma, bloque 13.
 
 ### 2026-11-01 — `EXPERIENCIAS` comparada con el CHECK de la base y aviso para bases locales (SCRUM-523, fix-pack 1 de A1)
 

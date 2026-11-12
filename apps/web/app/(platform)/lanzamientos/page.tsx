@@ -1,24 +1,13 @@
-import Link from "next/link";
-import { Rocket } from "lucide-react";
-import { Button } from "@ai-coo/ui";
-import { EmptyState } from "@/components/shared/empty-state";
-import { PageHeader } from "@/components/shared/page-header";
-import { paths } from "@/routes";
+import { PantallaDeLanzamientos } from "@/components/webinar/pantalla-de-lanzamientos";
+import { leerListaDeLanzamientos } from "@/lib/webinar/vistas/leer";
 
-export default function LanzamientosPage() {
-  return (
-    <div className="space-y-8">
-      <PageHeader title="Lanzamientos" />
-      <EmptyState
-        icon={<Rocket className="h-8 w-8" />}
-        title="Próximamente"
-        description="Estamos trabajando en este módulo. Estará disponible muy pronto."
-        action={
-          <Button asChild variant="outline">
-            <Link href={paths.platform.dashboard}>Volver al inicio</Link>
-          </Button>
-        }
-      />
-    </div>
-  );
+/**
+ * Lista de lanzamientos de Limitless Webinars (SCRUM-544). Reemplaza el
+ * "Próximamente" del módulo viejo (`[LANZAMIENTOS-DORMIDO]`), como pide el
+ * documento técnico (sección 7). Dibuja sólo lo que devuelve
+ * `leerListaDeLanzamientos` (SCRUM-542).
+ */
+export default async function LanzamientosPage() {
+  const vista = await leerListaDeLanzamientos();
+  return <PantallaDeLanzamientos vista={vista} />;
 }

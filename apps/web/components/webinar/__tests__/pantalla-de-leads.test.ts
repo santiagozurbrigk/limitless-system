@@ -213,8 +213,10 @@ describe("vacíos (AC-6)", () => {
     expect(html).not.toContain("<table");
   });
 
-  it("sin lanzamientos y sin ruta (hoy): el texto, sin enlace", () => {
-    const html = render(vista({ lanzamientos: medido([], "landing", AHORA), lanzamientoElegido: null }));
+  it("sin lanzamientos y sin ruta: el texto, sin enlace", () => {
+    const html = render(vista({ lanzamientos: medido([], "landing", AHORA), lanzamientoElegido: null }), {
+      hrefCrearLanzamiento: null,
+    });
     expect(html).toContain("Todavía no hay lanzamientos.");
     expect(html).toContain("Cuando exista uno, sus leads van a aparecer acá.");
     expect(html).not.toContain("Crear un lanzamiento");

@@ -23,7 +23,7 @@ permisos por módulo sólo cortan el render de pantallas**.
 | Gate de pantallas | `apps/web/app/(platform)/layout.tsx` + `apps/web/lib/navigation/module-for-path.ts` | Si el módulo de la ruta está en `none`, renderiza `SinAcceso` |
 | Add-ons | `apps/web/lib/auth/add-on-ids.ts`, `apps/web/lib/auth/add-ons.ts` | `organizations.enabled_add_ons`; `requireAddOn()` en server actions |
 | Experiencia | `apps/web/lib/organization/experience.ts` | `organizations.experience` (`webinar`, `limitless` o `full`, SCRUM-523); `getOrganizationExperience()` la lee para la org activa, una vez por request. Ver "Experiencia de la organización" |
-| Super admin | `apps/web/lib/auth/require-super-admin.ts` | Allowlist por email en `super_admin_users`. Alta y baja: [`operacion/alta-super-admin.md`](../operacion/alta-super-admin.md) (primero la cuenta, después la lista) |
+| Super admin (staff) | `apps/web/lib/auth/require-staff.ts` (`requireStaff`/`isStaffUser`; `require-super-admin.ts` es un alias hasta C3, SCRUM-553) | Allowlist por email en `super_admin_users` y perfil no desactivado. El staff es founder de la org de Limitless (SCRUM-552), pero estar en esa org no da el panel. Alta y baja: [`operacion/alta-super-admin.md`](../operacion/alta-super-admin.md) (primero la cuenta, después la lista; la baja además desactiva el perfil) |
 | Rate limit | `apps/web/lib/rate-limit.ts` | RPC `consume_rate_limit` (Postgres), fallback en memoria |
 | Clientes Supabase | `apps/web/lib/supabase/{server,client,admin,env}.ts` | `createClient()` respeta RLS; `createAdminClient()` = service role |
 
@@ -211,13 +211,13 @@ organizaciones.
 Qué cambia con cada valor (SCRUM-524): con `full`, nada (mismo menú, mismas rutas, mismo destino
 después del login). Con `webinar` o `limitless`, la barra y la paleta muestran sólo las entradas
 listas del menú de esa experiencia (`lib/navigation/menu-por-experiencia.ts`: Inicio, Lanzamientos,
-Leads y Equipo para `webinar`; Clientes, Tablero de trabajo, Ventas y Administración para
+Inicio, Lanzamientos, Leads y Equipo para `webinar`; Clientes, Tablero de trabajo, Ventas y Administración para
 `limitless`) y toda otra ruta de `app/(platform)`, salvo `/onboarding`, `/holding` y `/settings`
 y las rutas extra de la experiencia (para `limitless`, los segmentos de `/integrations`, `/sops/[id]`
 y `/business-context/[id]`, adonde enlazan la Bandeja y el Tablero, con todo su contenido:
 `/integrations/*`, `/sops/*` y `/business-context/*`; fix-pack 1 de A1), redirige a la
 pantalla de inicio de esa experiencia. Una entrada no lista cuya pantalla todavía no existe
-(`/inicio`, `/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
+(`/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
 el layout de cada segmento de primer nivel, porque el de `(platform)` no se vuelve a ejecutar en
 una navegación del cliente. Detalle en
 [`diseno/ui-y-navegacion.md` § Menú por experiencia](../diseno/ui-y-navegacion.md#menú-por-experiencia-limitless-webinars-y-limitless-de-gestión).
@@ -355,8 +355,20 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
   sesión y cada handler valida firma/secreto (fail-closed).
 - **El rate limit de login es por email** (5 intentos / 15 min, `signin:<email>`). Con la DB caída es
   fail-open con contador en memoria.
-- **Super admin**: allowlist por email, no por rol. `/superadmin/login` es el login propio; el resto del
-  panel vive en `/super-admin/*` con guard en `app/(super-admin)/super-admin/layout.tsx`.
+- **Super admin (staff de Limitless, SCRUM-552)**: allowlist por email, no por rol ni por pertenencia. El staff
+  es **founder de la organización de Limitless**, la única con `organizations.experience = 'limitless'` (el
+  índice único parcial `organizations_una_sola_limitless` impide una segunda). Entra por `/login` como todos
+  (`/superadmin/login` redirige ahí) y va a `DESTINO_DEL_STAFF` (desde SCRUM-553, `/administracion/organizaciones`, la consola de
+  Administración; el panel viejo `/super-admin` redirige ahí). La consola (SCRUM-551) es una entrada
+  `soloStaff` del menú `limitless`: el layout de la plataforma suma `esStaff` a los permisos para esa experiencia. El panel vive en
+  `/super-admin/*`; el layout (`app/(super-admin)/super-admin/layout.tsx`) y cada acción y lectura del panel
+  pasan por `requireStaff()`/`isStaffUser()` (`lib/auth/require-staff.ts`), que deciden **sólo por la lista**
+  (más el perfil no desactivado): un miembro o un founder de la org de Limitless que no está en la lista no tiene
+  el panel (`app/super-admin/__tests__/guard-de-staff-por-accion.test.ts`, 57 casos por escenario). Las acciones
+  del panel siguen yendo con service role. Invitación de equipo: una cuenta del staff sólo se suma a la org de
+  Limitless, y si la invitación le crea el perfil entra founder; a otra org, `cuenta_de_staff`
+  (`aceptar_invitacion_de_equipo`, `supabase/ci/tests/98_staff_en_org_de_limitless.sql`). Como founder con org,
+  el staff opera las pantallas de la plataforma sobre la org de Limitless.
 
 ## Limitaciones conocidas y deuda
 

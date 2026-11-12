@@ -4,7 +4,7 @@ SCRUM-542 (A2 del plan "UI primero, datos después"). Qué recibe cada pantalla 
 y qué cambia cuando lea la base (B4). Es la referencia para construir Inicio (SCRUM-543), Lanzamientos
 (SCRUM-544), Leads y la Ficha (SCRUM-545) y la Configuración del lanzamiento.
 
-Código: `apps/web/lib/webinar/vistas/`. Leads y la ficha del lead (SCRUM-545) ya existen, en `apps/web/app/(platform)/leads/`; las demás pantallas todavía no.
+Código: `apps/web/lib/webinar/vistas/`. De dónde sale cada número y a qué tabla se ata: [`webinars-fichas-de-datos.md`](./webinars-fichas-de-datos.md) (SCRUM-548). Inicio (SCRUM-543) ya existe, en `apps/web/app/(platform)/inicio/` (lógica de textos y del aviso de registros en `lib/webinar/inicio/presentacion.ts`); Lanzamientos y el Detalle (SCRUM-544), en `apps/web/app/(platform)/lanzamientos/`; Leads y la ficha del lead (SCRUM-545), en `apps/web/app/(platform)/leads/`. Falta la Configuración del lanzamiento (SCRUM-529).
 
 ## La regla
 
@@ -87,7 +87,12 @@ Los tipos están en `contratos.ts`. Lo principal:
   pendientes del equipo (levantaron la mano sin contactar, agendados sin cerrar) y el estado de las fuentes.
 - **Lista**: `lanzamientos: Dato<FilaDeLanzamiento[]>`, activos primero; cada fila con registrados,
   asistieron, ventas e ingresos.
-- **Detalle**: lo mismo que Inicio para cualquier lanzamiento, más registros por origen (`utm_source`).
+- **Detalle**: lo mismo que Inicio para cualquier lanzamiento, más registros por origen (`utm_source`), por anuncio
+  (`registrosPorAnuncio`, `utm_content`) y la evolución diaria (`evolucionDiaria`: registros por día y, en las
+  variantes pagas, inversión por día). Ampliado en SCRUM-544, ver abajo.
+- **Embudo** (Inicio y Detalle, SCRUM-544): las etapas de la variante (`PASOS_POR_VARIANTE`: el VIP sólo en Pago +++,
+  Calificados en todas; diseño del producto, sección 6) y, en cada una, `pasoDesde`: la etapa contra la que se mide
+  (`PASO_SE_MIDE_CONTRA`) y la tasa (`tasa`, hereda el peor estado).
 - **Leads**: selector de lanzamientos, los cinco filtros listos con su conteo (`FILTROS_DE_LEADS`), el total
   del filtro y la búsqueda, la página (50 filas, `LEADS_POR_PAGINA`, del registro más nuevo al más viejo) y
   `siguienteCursor` (opaco; `null` si no hay más). Filtro, búsqueda, lanzamiento y cursor van en la URL; el
@@ -113,6 +118,82 @@ const vista = lectura.data;
 
 Fechas en ISO UTC (las de calendario, `AAAA-MM-DD`), montos en la moneda del lanzamiento, tasas entre 0 y 1.
 Las vistas son JSON: se pueden pasar enteras a un Client Component.
+
+## Lanzamientos y Detalle (SCRUM-544)
+
+`/lanzamientos` dibuja `leerListaDeLanzamientos()` con `PantallaDeLanzamientos` y `/lanzamientos/[id]`,
+`leerDetalleDelLanzamiento(id)` con `PantallaDeDetalleDelLanzamiento` (los dos Server Components sin estado).
+Reemplazan el "Próximamente" del módulo viejo (`ESCONDIDO.lanzamientos` pasó a `false`); Lanzamientos quedó lista
+en el menú webinar.
+
+- **Lista:** cada lanzamiento con variante, estado, fechas, registrados, asistieron, ventas e ingresos; enlace al
+  detalle. Vacío: "Todavía no hay lanzamientos." (botón cuando exista SCRUM-529).
+- **Detalle:** encabezado; números principales (ventas, ingresos, reembolsos, tasas y, en las pagas, inversión, costo
+  por registro, costo por venta y ROAS); embudo de la variante con su paso desde la etapa base, su fuente y la
+  acción de su estado; registros por origen y por anuncio (barras); evolución diaria (barras por día); sesiones y
+  fuentes. Si no se pudo leer, el motivo; si no existe, el 404 de la app.
+- **Evolución diaria** (`calcular.ts`): días calendario en la zona de la organización, desde el primer día de
+  captación (o el primer registro) hasta hoy, o hasta el cierre si está cerrado; los días sin registros en cero
+  medido; como mucho los últimos 120. La inversión por día **no se inventa**: con el total medido es `sin_fuente`
+  ("por ahora la inversión se lee como total del lanzamiento"); sin valor, hereda el estado del total.
+- **Acción de cada estado** (`lib/webinar/acciones-del-estado.ts`, diseño del producto, sección 11): sin fuente
+  "Conectá X", desactualizado "Ver X", error "Reconectá X" (a Integraciones); falta configurar, o una fuente que
+  no se conecta (equipo, calculado, configuración), "Completá la configuración del lanzamiento". Mientras el destino
+  no existe para Webinars (`DESTINOS_DE_LAS_ACCIONES`), se muestra como texto, sin enlace
+  (`[WEBINAR-ACCIONES-SIN-DESTINO]`).
+
+## Crear y configurar (SCRUM-529)
+
+- **`/lanzamientos/nuevo`** y **`/lanzamientos/[id]/configuracion`**, con `FormularioDelLanzamiento` (cliente):
+  nombre, variante, moneda, precio, captación y cierre, y sesiones (fecha y hora en la hora del navegador, ID del
+  webinar de Zoom y **minuto** de la oferta, que viaja en segundos). Lógica del formulario en
+  `lib/webinar/lanzamientos/formulario.ts`; entrada validada con `datosDelLanzamientoSchema` (`esquemas.ts`: el
+  cierre no puede ser antes de la captación, hasta 10 sesiones, moneda de 3 letras).
+- **Guardado de ejemplo:** `crearLanzamientoAction` y `guardarLanzamientoAction` (`app/lanzamientos/webinar-actions.ts`)
+  exigen organización y validan, pero no escriben nada; la pantalla avisa «Cambio de ejemplo: no se guardó y se
+  pierde al recargar», como la ficha del lead (`[WEBINAR-LANZAMIENTOS-PERSISTIR]`).
+- **Lanzamientos en paralelo:** `motivoDeSuperposicion` rechaza un lanzamiento cuyas fechas se pisan con otros no
+  cerrados por encima de `LANZAMIENTOS_EN_PARALELO`, que está en `null` (sin límite) hasta que SCRUM-522 lo decida
+  (`[WEBINAR-LANZAMIENTOS-EN-PARALELO]`). Sin límite, la acción ni siquiera lee la lista.
+- **Configuración:** lo que falta cargar (`faltantes`), el formulario con los datos y sesiones, campañas y productos
+  (sólo lectura: `[WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS]`) y el estado de las fuentes. Es el destino de «Completá la
+  configuración del lanzamiento» (`DESTINOS_DE_LAS_ACCIONES.configuracion`) y del enlace del Detalle.
+
+## Inicio (SCRUM-543)
+
+`/inicio` dibuja `leerInicio()` con `PantallaDeInicio` (`components/webinar/pantalla-de-inicio.tsx`, Server
+Component sin estado). Es la entrada de inicio del menú webinar (módulo `dashboard`): el founder llega ahí
+después del login.
+
+- **Sin lanzamiento activo** (`activo` medido con `null`): estado vacío; el botón «Crear un lanzamiento» aparece
+  que lleva a `/lanzamientos/nuevo` (`RUTA_PARA_CREAR_LANZAMIENTO`, SCRUM-529).
+- **El activo no se pudo leer** (cualquier otro estado sin valor): el estado y su motivo; ni números ni vacío.
+- **Con lanzamiento activo:** nombre, variante, precio y cuenta regresiva (`textoDelCierre`: "Cierra en N días",
+  "Cierra hoy", "La fecha de cierre ya pasó"); próxima sesión; números principales (registrados con las últimas
+  24 h, asistencia, ventas, ingresos, conversión de asistentes, VIP y anuncios si vienen); lo que el equipo tiene
+  que mover hoy, con enlace a Leads con su filtro y el lanzamiento; embudo; sesiones; estado de las fuentes, las
+  que no están al día primero.
+- **Aviso de registros que dejan de llegar** (`avisoDeRegistros`): si la fuente `landing` no está `medido`, con
+  su motivo; o si las últimas 24 h son un cero **medido** y el lanzamiento sigue captando (activo y su cierre no
+  pasó). Nunca por un cero que no se midió.
+- Un número desactualizado muestra el valor con la marca y el motivo; uno sin valor, su estado y su motivo.
+
+## Estados de carga, vacío y error (SCRUM-546)
+
+- **Carga:** cada pantalla con lectura propia tiene `loading.tsx` con su esqueleto
+  (`components/webinar/esqueletos.tsx`: `EsqueletoDeInicio`, `EsqueletoDeLeads`, `EsqueletoDeFichaDelLead`),
+  con la forma de la pantalla, `role="status"` y `aria-busy`. Lo exige `esqueletos.test.ts`: una pantalla
+  nueva de Webinars se suma a su lista.
+- **Error:** `inicio/error.tsx` y `leads/error.tsx` (la ficha cae en el de Leads), con `PantallaDeError`
+  (Sentry, código de referencia, sin el mensaje interno) y la navegación visible; Inicio sale a Leads y Leads a
+  Inicio. Están en los obligatorios de `app/__tests__/boundaries.test.ts`. Arriba quedan `(platform)/error.tsx`
+  y `global-error.tsx`.
+- **Una sección que falla no tira la página:** la falla de una fuente o de una consulta viaja como el estado del
+  `Dato` de esa sección (`error`, `sin_fuente`...), y la pantalla dibuja el resto. Sólo una falla de la lectura
+  entera (o de render) cae en el `error.tsx` de la ruta, dentro de la cáscara. No se usan boundaries por
+  sección: los errores de un Server Component pasan en el servidor y un boundary de cliente no los ve.
+- **Vacío:** Leads sin lanzamientos y Inicio sin lanzamiento activo muestran su estado vacío; el botón «Crear
+  un lanzamiento» lleva a `/lanzamientos/nuevo` (SCRUM-529).
 
 ## Qué recibe cada organización hoy
 

@@ -47,7 +47,7 @@ export function menuPorDefecto(experiencia: OrganizationExperience): readonly En
 }
 
 /** Lo que hace falta de los permisos para saber qué entradas ve alguien. */
-export type PermisosDeLaBarra = Pick<UserPermissions, "isFounder" | "modules">;
+export type PermisosDeLaBarra = Pick<UserPermissions, "isFounder" | "modules" | "esStaff">;
 
 /**
  * Si alguien ve una entrada del menú: la misma regla que la barra y la paleta
@@ -56,9 +56,20 @@ export type PermisosDeLaBarra = Pick<UserPermissions, "isFounder" | "modules">;
  */
 export function puedeVerEntrada(
   permisos: PermisosDeLaBarra,
-  entrada: Pick<EntradaDelMenu, "permissionId">
+  entrada: Pick<EntradaDelMenu, "permissionId" | "soloStaff">
 ): boolean {
+  // Administración (SCRUM-551): sin estar en la lista de staff no se ve,
+  // aunque sea founder de la org de Limitless.
+  if (entrada.soloStaff && permisos.esStaff !== true) return false;
   return permisos.isFounder || (permisos.modules[entrada.permissionId] ?? "none") !== "none";
+}
+
+/** El menú sin las entradas que esta persona no ve por no ser staff (SCRUM-551). */
+export function menuParaQuienMira(
+  menu: readonly EntradaDelMenu[],
+  esStaff: boolean | undefined
+): EntradaDelMenu[] {
+  return menu.filter((entrada) => !entrada.soloStaff || esStaff === true);
 }
 
 /**

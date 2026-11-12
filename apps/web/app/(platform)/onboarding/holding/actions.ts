@@ -11,6 +11,7 @@ import {
   type HoldingOnboardingData,
 } from "@/lib/holding/billing";
 import { leerExperienciaDeLaOrganizacion } from "@/lib/organization/experience";
+import { experienciaDeUnNegocioNuevo } from "@/lib/administracion/experiencia";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { actionErrorMessage } from "@/lib/server/action-result";
@@ -173,7 +174,11 @@ export async function completeHoldingOnboardingAction(data: unknown) {
 
   // Los negocios heredan la experiencia del holding (SCRUM-523). Se lee antes
   // de crear ninguno: si falla, no queda nada a medias.
-  const experience = await leerExperienciaDeLaOrganizacion(admin, holdingOrgId);
+  // Nunca `limitless` (SCRUM-551): es una sola org; un negocio de un holding
+  // marcado así nace `full`.
+  const experience = experienciaDeUnNegocioNuevo(
+    await leerExperienciaDeLaOrganizacion(admin, holdingOrgId)
+  );
 
   const createdOrgIds: string[] = [];
 

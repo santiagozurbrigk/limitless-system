@@ -120,19 +120,71 @@ export type PasoDelEmbudoId =
   | "visitas"
   | "registrados"
   | "confirmaron_el_email"
+  | "compraron_el_vip"
   | "asistieron"
   | "se_quedaron_a_la_oferta"
   | "levantaron_la_mano"
   | "contactados"
+  | "calificados"
   | "agendados"
   | "asistieron_a_la_llamada"
   | "compraron";
+
+/**
+ * Las etapas del embudo de cada variante, en orden (diseño del producto,
+ * sección 6: "cada etapa aparece sólo si corresponde a la variante"). El VIP
+ * es sólo de Pago +++; la inversión no es una etapa de personas: va en
+ * `anuncios`, que es `null` en orgánico (SCRUM-544).
+ */
+export const PASOS_POR_VARIANTE: Record<VarianteDelLanzamiento, readonly PasoDelEmbudoId[]> = {
+  organic: [
+    "visitas", "registrados", "confirmaron_el_email", "asistieron", "se_quedaron_a_la_oferta",
+    "levantaron_la_mano", "contactados", "calificados", "agendados", "asistieron_a_la_llamada", "compraron",
+  ],
+  paid: [
+    "visitas", "registrados", "confirmaron_el_email", "asistieron", "se_quedaron_a_la_oferta",
+    "levantaron_la_mano", "contactados", "calificados", "agendados", "asistieron_a_la_llamada", "compraron",
+  ],
+  paid_plus: [
+    "visitas", "registrados", "confirmaron_el_email", "compraron_el_vip", "asistieron",
+    "se_quedaron_a_la_oferta", "levantaron_la_mano", "contactados", "calificados", "agendados",
+    "asistieron_a_la_llamada", "compraron",
+  ],
+};
+
+/**
+ * Contra qué etapa se mide el paso de cada una (SCRUM-544). No siempre es la
+ * anterior en la lista: el VIP y la asistencia se miden contra los
+ * registrados, los contactados también (el equipo contacta a toda la base, no
+ * sólo a quien levantó la mano) y las ventas contra los asistentes (se puede
+ * comprar en la oferta sin llamada). `null` = la primera etapa.
+ */
+export const PASO_SE_MIDE_CONTRA: Record<PasoDelEmbudoId, PasoDelEmbudoId | null> = {
+  visitas: null,
+  registrados: "visitas",
+  confirmaron_el_email: "registrados",
+  compraron_el_vip: "registrados",
+  asistieron: "registrados",
+  se_quedaron_a_la_oferta: "asistieron",
+  levantaron_la_mano: "asistieron",
+  contactados: "registrados",
+  calificados: "contactados",
+  agendados: "contactados",
+  asistieron_a_la_llamada: "agendados",
+  compraron: "asistieron",
+};
 
 export type PasoDelEmbudo = {
   paso: PasoDelEmbudoId;
   etiqueta: string;
   /** Personas distintas (visitantes en `visitas`). */
   personas: Dato<number>;
+  /**
+   * El paso desde la etapa contra la que se mide (`PASO_SE_MIDE_CONTRA`):
+   * personas de esta etapa / personas de aquella, entre 0 y 1. `null` en la
+   * primera etapa o si aquella no está en el embudo de la variante (SCRUM-544).
+   */
+  pasoDesde: { desde: PasoDelEmbudoId; tasa: Dato<number | null> } | null;
 };
 
 export type VentasDelLanzamiento = {
@@ -235,6 +287,20 @@ export type OrigenConRegistros = {
   registros: number;
 };
 
+/** Registros por anuncio (SCRUM-544): el `utm_content` del registro. */
+export type AnuncioConRegistros = {
+  /** `utm_content`; `null` = sin dato de anuncio. */
+  anuncio: string | null;
+  registros: number;
+};
+
+/** Un valor de un día calendario en la zona de la organización (SCRUM-544). */
+export type PuntoDiario = {
+  /** `AAAA-MM-DD`. */
+  dia: string;
+  valor: number;
+};
+
 export type VistaDetalleDelLanzamiento = {
   esEjemplo: boolean;
   lanzamiento: LanzamientoResumen;
@@ -245,6 +311,17 @@ export type VistaDetalleDelLanzamiento = {
   sesiones: SesionDelLanzamiento[];
   /** Registros por origen, de más a menos. */
   origenes: Dato<OrigenConRegistros[]>;
+  /** Registros por anuncio (`utm_content`), de más a menos (SCRUM-544). */
+  registrosPorAnuncio: Dato<AnuncioConRegistros[]>;
+  /**
+   * Evolución diaria en la zona de la organización, desde el primer día de
+   * captación (o el primer registro) hasta hoy o el cierre, con los días sin
+   * registros en cero medido (SCRUM-544). `inversion` es `null` en orgánico.
+   */
+  evolucionDiaria: {
+    registros: Dato<PuntoDiario[]>;
+    inversion: Dato<PuntoDiario[]> | null;
+  };
   fuentes: EstadoDeFuente[];
 };
 

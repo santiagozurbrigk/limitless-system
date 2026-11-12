@@ -88,6 +88,8 @@ export type TokenUsageDailyPoint = {
 export type AdminOrganizationDetail = {
   id: string;
   name: string;
+  /** `organizations.experience` (SCRUM-523); `null` si el valor no es uno de los tres. */
+  experience: "webinar" | "limitless" | "full" | null;
   status: AdminOrgStatus;
   plan: AdminOrgPlan;
   timezone: string | null;

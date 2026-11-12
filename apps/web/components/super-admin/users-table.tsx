@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge, Button, DataTable, Input } from "@ai-coo/ui";
-import { paths } from "@/routes";
 import {
   deactivateUserAction,
   regenerateTempPasswordAction,
@@ -17,6 +16,7 @@ import { TempCredentialsDialog } from "@/components/shared/temp-credentials-dial
 import type { TempCredentials } from "@/lib/auth/temp-credentials";
 import { formatOrgDateTime } from "@/lib/super-admin/format-org-datetime";
 import type { AdminUserRow } from "@/types/super-admin";
+import { rutasDeAdministracion, type BaseDeAdministracion } from "@/lib/administracion/rutas";
 
 type RoleFilter = "all" | "founder" | "admin" | "other";
 
@@ -36,7 +36,14 @@ function formatDate(iso: string | null, timezone: string | null): string {
   });
 }
 
-export function UsersTable({ users }: { users: AdminUserRow[] }) {
+export function UsersTable({
+  users,
+  base,
+}: {
+  users: AdminUserRow[];
+  base?: BaseDeAdministracion;
+}) {
+  const rutas = rutasDeAdministracion(base);
   const [filter, setFilter] = useState<RoleFilter>("all");
   const [orgFilter, setOrgFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -158,7 +165,7 @@ export function UsersTable({ users }: { users: AdminUserRow[] }) {
               <div className="flex flex-wrap gap-2">
                 <Button asChild size="sm" variant="outline">
                   <Link
-                    href={paths.superAdmin.organizationDetail(
+                    href={rutas.organizacion(
                       r.organizationId
                     )}
                   >
