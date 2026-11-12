@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 12 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 13 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
@@ -1519,6 +1519,12 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Estado verificado:** en el Detalle del lanzamiento (SCRUM-544), «Completá la configuración del lanzamiento» ya lleva a la Configuración (SCRUM-529), pero «Conectá X», «Ver X» y «Reconectá X» siguen como texto: `DESTINOS_DE_LAS_ACCIONES.integraciones` es `null` (`apps/web/lib/webinar/acciones-del-estado.ts`). Integraciones no está en el menú webinar (PO, 28-oct) y la pantalla de hoy lista las integraciones del producto completo.
 - **Qué hay que hacer:** decidir (SCRUM-522) si webinar abre Integraciones filtrada a sus fuentes (diseño, sección 7) y, si sí, sumarla a `RUTAS_EXTRA_POR_EXPERIENCIA.webinar` y poner su ruta en `DESTINOS_DE_LAS_ACCIONES`.
 - **Dónde:** `apps/web/lib/webinar/acciones-del-estado.ts`, `apps/web/lib/navigation/menu-por-experiencia.ts`.
+
+#### [WEBINAR-FICHAS-HUECOS-DEL-MODELO] Datos de las pantallas que el contrato o el modelo todavía no tienen
+- **Tipo:** deuda técnica
+- **Estado verificado:** el cruce de las fichas de datos (SCRUM-548, `docs/areas/webinars-fichas-de-datos.md` § 5) con el modelo de SCRUM-526 encontró: `public_id` existe en `webinar_launches` pero no en `LanzamientoResumen` (lo pide el criterio de SCRUM-529); `ad_metrics_daily` no tiene `campaign_external_id`, así que la inversión no se ata a `launch_ad_campaigns` ni por día; el estado y la última lectura de cada fuente (`EstadoDeFuente`) no tienen tabla.
+- **Qué hay que hacer:** antes de B4 (SCRUM-550): sumar `publicId` al contrato y a la lista; decidir la columna de campaña en `ad_metrics_daily` (verificar si Zernio la entrega); definir de dónde sale el estado de cada fuente (landing: `landing_events`; zoom: `webinar_sessions.report_status`; el resto: su integración).
+- **Dónde:** `apps/web/lib/webinar/vistas/contratos.ts`, `supabase/migrations/`, `docs/areas/webinars-fichas-de-datos.md`.
 
 #### [WEBINAR-LANZAMIENTOS-PERSISTIR] Crear y editar un lanzamiento no guarda nada
 - **Tipo:** feature

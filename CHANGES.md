@@ -28,6 +28,20 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-12 — Fichas de datos de Inicio, Lanzamientos, Detalle y Configuración (SCRUM-548)
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** docs: `docs/areas/webinars-fichas-de-datos.md` (nuevo), `docs/README.md`, `docs/areas/webinars-contratos-de-vista.md`, `PENDIENTES.md`
+
+**Qué se hizo:** una ficha por pantalla (Inicio, Lanzamientos, Detalle, Configuración) con Elemento, Qué muestra, Fuente, Se ata a (tabla.columna del modelo de SCRUM-526), Frescura, Estados posibles y Quién lo ve, más volumen esperado y filtros. Al final, el cruce con el modelo y sus huecos. Deja la sección de Leads y Ficha para SCRUM-549.
+
+**Por qué / finalidad:** llevar a la sesión del día 6 (SCRUM-547) un documento para confirmar qué muestra cada pantalla y con qué dato, y saber qué falta en el modelo antes de migrar (B4, SCRUM-550).
+
+**Decisiones de diseño relevantes:** las fichas salen del contrato y de `calcular.ts`, no del diseño a mano: lo que dicen es lo que el código hace hoy. `goal_sales` y `goal_revenue` quedan fuera (sin metas, Martín, 28-oct).
+
+**Riesgos / deuda técnica pendiente:** la tarea se acepta con las fichas confirmadas en la sesión del día 6, que todavía no ocurrió. Huecos nuevos en `[WEBINAR-FICHAS-HUECOS-DEL-MODELO]`: `public_id` fuera del contrato, inversión sin id de campaña, estado de las fuentes sin tabla.
+
 ### 2026-11-12 — Crear y configurar un lanzamiento de Limitless Webinars (SCRUM-529)
 
 **Rama:** `claude/brave-wright-s2bfcg`

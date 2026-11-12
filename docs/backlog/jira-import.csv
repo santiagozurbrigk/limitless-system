@@ -3393,6 +3393,15 @@ Fuente: PENDIENTES.md [WEBINAR-LEADS-SIN-ORGANIZACION] · Doc del área: docs/ar
 *Dónde:* {{apps/web/lib/webinar/acciones-del-estado.ts}}, {{apps/web/lib/navigation/menu-por-experiencia.ts}}.
 
 Fuente: PENDIENTES.md [WEBINAR-ACCIONES-SIN-DESTINO] · Doc del área: docs/areas/embudos.md",WEBINAR-ACCIONES-SIN-DESTINO,Embudos y Lanzamientos,P3,,feature
+[WEBINAR-FICHAS-HUECOS-DEL-MODELO] Datos de las pantallas que el contrato o el modelo todavía no tienen,Task,Low,embudos,p3,deuda-tecnica,,,,"*Tipo:* deuda técnica
+
+*Estado verificado:* el cruce de las fichas de datos (SCRUM-548, {{docs/areas/webinars-fichas-de-datos.md}} § 5) con el modelo de SCRUM-526 encontró: {{public_id}} existe en {{webinar_launches}} pero no en {{LanzamientoResumen}} (lo pide el criterio de SCRUM-529); {{ad_metrics_daily}} no tiene {{campaign_external_id}}, así que la inversión no se ata a {{launch_ad_campaigns}} ni por día; el estado y la última lectura de cada fuente ({{EstadoDeFuente}}) no tienen tabla.
+
+*Qué hay que hacer:* antes de B4 (SCRUM-550): sumar {{publicId}} al contrato y a la lista; decidir la columna de campaña en {{ad_metrics_daily}} (verificar si Zernio la entrega); definir de dónde sale el estado de cada fuente (landing: {{landing_events}}; zoom: {{webinar_sessions.report_status}}; el resto: su integración).
+
+*Dónde:* {{apps/web/lib/webinar/vistas/contratos.ts}}, {{supabase/migrations/}}, {{docs/areas/webinars-fichas-de-datos.md}}.
+
+Fuente: PENDIENTES.md [WEBINAR-FICHAS-HUECOS-DEL-MODELO] · Doc del área: docs/areas/embudos.md",WEBINAR-FICHAS-HUECOS-DEL-MODELO,Embudos y Lanzamientos,P3,,deuda técnica
 [WEBINAR-LANZAMIENTOS-PERSISTIR] Crear y editar un lanzamiento no guarda nada,Story,Low,embudos,p3,feature,,,,"*Tipo:* feature
 
 *Estado verificado:* {{crearLanzamientoAction}} y {{guardarLanzamientoAction}} ({{apps/web/app/lanzamientos/webinar-actions.ts}}, SCRUM-529) validan y devuelven éxito sin escribir; la pantalla avisa que es de ejemplo. El modelo ({{webinar_launches}}, {{webinar_sessions}}, SCRUM-526) no está en producción. El criterio de SCRUM-529 ""lo ve en la lista con su public_id"" queda pendiente de esto.

@@ -4,7 +4,7 @@ SCRUM-542 (A2 del plan "UI primero, datos después"). Qué recibe cada pantalla 
 y qué cambia cuando lea la base (B4). Es la referencia para construir Inicio (SCRUM-543), Lanzamientos
 (SCRUM-544), Leads y la Ficha (SCRUM-545) y la Configuración del lanzamiento.
 
-Código: `apps/web/lib/webinar/vistas/`. Inicio (SCRUM-543) ya existe, en `apps/web/app/(platform)/inicio/` (lógica de textos y del aviso de registros en `lib/webinar/inicio/presentacion.ts`); Lanzamientos y el Detalle (SCRUM-544), en `apps/web/app/(platform)/lanzamientos/`; Leads y la ficha del lead (SCRUM-545), en `apps/web/app/(platform)/leads/`. Falta la Configuración del lanzamiento (SCRUM-529).
+Código: `apps/web/lib/webinar/vistas/`. De dónde sale cada número y a qué tabla se ata: [`webinars-fichas-de-datos.md`](./webinars-fichas-de-datos.md) (SCRUM-548). Inicio (SCRUM-543) ya existe, en `apps/web/app/(platform)/inicio/` (lógica de textos y del aviso de registros en `lib/webinar/inicio/presentacion.ts`); Lanzamientos y el Detalle (SCRUM-544), en `apps/web/app/(platform)/lanzamientos/`; Leads y la ficha del lead (SCRUM-545), en `apps/web/app/(platform)/leads/`. Falta la Configuración del lanzamiento (SCRUM-529).
 
 ## La regla
 
