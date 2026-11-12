@@ -116,6 +116,11 @@ Ninguna directa. Usa Anthropic (sugerencia desde contexto) y el RAG (OpenAI embe
 - **Oferta duplicada al reintentar el onboarding** `[PRODUCTO-GATE-OFERTA-DUP]`.
 - **`getProductContextForOrg` exportado desde un archivo `"use server"`** (es un endpoint) `[AUD-SALUD-6]`.
 - Permisos: módulo prestado de `operations`, sin distinción `view`/`full` `[PERMISOS-SERVER-ACTIONS]`.
+- `getSalesFrameworksAction` chequea `operations` (SCRUM-541, corte B): a quien no lo tiene le devuelve el rechazo y
+  `SalesFrameworksSection` dibuja `SinAcceso`. Las lecturas de `app/product/actions.ts` que están en
+  `LECTURAS_SIN_LLAMADOR_CONOCIDAS` (por ejemplo `getProductsAction` y `getAvatarsAction`) siguen sin chequeo.
+  `extractAndSuggestProductContextAction` también: la llama `product-rag-suggest.tsx`, pero el test de inventario no
+  la ve porque su nombre empieza con `extract` `[PERMISOS-RESOLVE-SOP-ADJUNTOS]`.
 - Avatar principal y core offer únicos sólo por la action `[PRODUCTO-UNICIDAD]`.
 
 ## Tests

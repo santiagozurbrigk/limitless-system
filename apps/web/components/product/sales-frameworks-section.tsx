@@ -19,6 +19,9 @@ import {
 } from "@/app/product/actions";
 import type { SalesFrameworkRow } from "@/lib/product/mapper";
 import { useToast } from "@/providers/toast-provider";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
 
 const FRAMEWORK_TYPES = [
   { value: "script", label: "Script" },
@@ -42,12 +45,14 @@ export function SalesFrameworksSection({
   const [description, setDescription] = useState("");
   const [content, setContent] = useState("");
   const [type, setType] = useState<string>("otro");
+  const [rechazo, setRechazo] = useState<RechazoPorModulo | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
       const rows = await getSalesFrameworksAction();
-      setFrameworks(rows);
+      if (esRechazoPorModulo(rows)) setRechazo(rows);
+      else setFrameworks(rows);
       setLoaded(true);
     });
   }, []);
@@ -83,7 +88,9 @@ export function SalesFrameworksSection({
         push({ title: "No se pudo guardar", description: result.error });
         return;
       }
-      setFrameworks(await getSalesFrameworksAction());
+      const recargados = await getSalesFrameworksAction();
+      if (esRechazoPorModulo(recargados)) setRechazo(recargados);
+      else setFrameworks(recargados);
       setOpen(false);
       push({ title: "Framework guardado", variant: "success" });
     });
@@ -96,13 +103,21 @@ export function SalesFrameworksSection({
         push({ title: "No se pudo eliminar", description: result.error });
         return;
       }
-      setFrameworks(await getSalesFrameworksAction());
+      const recargados = await getSalesFrameworksAction();
+      if (esRechazoPorModulo(recargados)) setRechazo(recargados);
+      else setFrameworks(recargados);
       push({ title: "Framework archivado", variant: "success" });
     });
   };
 
   const selectClass =
     "flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm";
+
+  // Sin Operaciones la recarga vuelve rechazada: pasa si los permisos cambian
+  // con la pantalla abierta (SCRUM-541).
+  if (rechazo) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(rechazo.moduleId)} />;
+  }
 
   return (
     <section id="frameworks" className="scroll-mt-6 space-y-4">

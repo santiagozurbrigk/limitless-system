@@ -8,6 +8,9 @@ import {
 import { mapWeeklyInputRowsToTeamInputs } from "@/lib/operations/weekly-input-mapper";
 import { formatWeekRange } from "@/lib/operations/weekly-utils";
 import { Panel } from "@/components/shared/panel";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
 import { WeeklyInputsList } from "./weekly-inputs-list";
 
 export function WeeklyInputsHistory({
@@ -21,6 +24,10 @@ export function WeeklyInputsHistory({
 
   useEffect(() => {
     void getWeeklyInputsHistoryAction().then((history) => {
+      if (esRechazoPorModulo(history)) {
+        setRechazo(history);
+        return;
+      }
       const unique = history.length > 0 ? history : [currentWeekStart];
       setWeeks(unique);
       if (!unique.includes(selectedWeek)) {
@@ -32,13 +39,24 @@ export function WeeklyInputsHistory({
   const [inputs, setInputs] = useState(
     mapWeeklyInputRowsToTeamInputs([])
   );
+  const [rechazo, setRechazo] = useState<RechazoPorModulo | null>(null);
 
   useEffect(() => {
     startLoad(async () => {
       const rows = await getWeeklyInputsForWeekAction(selectedWeek);
+      if (esRechazoPorModulo(rows)) {
+        setRechazo(rows);
+        return;
+      }
       setInputs(mapWeeklyInputRowsToTeamInputs(rows));
     });
   }, [selectedWeek]);
+
+  // Sin Operaciones la recarga vuelve rechazada: pasa si los permisos cambian
+  // con la pantalla abierta (SCRUM-541).
+  if (rechazo) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(rechazo.moduleId)} />;
+  }
 
   if (weeks.length <= 1 && inputs.length === 0) return null;
 
@@ -67,6 +85,10 @@ export function WeeklyInputsHistory({
         editable
         onChanged={() => {
           void getWeeklyInputsForWeekAction(selectedWeek).then((rows) => {
+            if (esRechazoPorModulo(rows)) {
+              setRechazo(rows);
+              return;
+            }
             setInputs(mapWeeklyInputRowsToTeamInputs(rows));
           });
         }}

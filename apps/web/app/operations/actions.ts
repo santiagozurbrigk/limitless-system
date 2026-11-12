@@ -5,6 +5,10 @@ import {
   isMissingTableError,
   tryRequireOrganizationId,
 } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { requireAuthContext } from "@/lib/auth/require-auth";
 import { callClaudeJson } from "@/lib/ai/anthropic";
 import {
@@ -48,7 +52,9 @@ async function semanaActualDeLaOrganizacion(
 }
 
 /** El lunes de la semana actual de la organización activa (para la pantalla de inputs). */
-export async function getCurrentWeekStartAction(): Promise<string> {
+export async function getCurrentWeekStartAction(): Promise<string | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
   // Sin base o sin organización no hay zona que leer: la de por defecto.
   if (!isSupabaseConfigured()) return getCurrentWeekStart(fechaDeHoyEnZona(null));
   const organizationId = await tryRequireOrganizationId();
@@ -227,13 +233,21 @@ export async function deleteWeeklyInputAction(id: string): Promise<MutationResul
 
 export async function getWeeklyInputsForWeekAction(
   weekStart: string
-): Promise<WeeklyInputRow[]> {
-  return getWeeklyInputsAction(weekStart);
+): Promise<WeeklyInputRow[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
+  return leerInputsDeLaSemana(weekStart);
 }
 
 export async function getWeeklyInputsAction(
   weekStart?: string
-): Promise<WeeklyInputRow[]> {
+): Promise<WeeklyInputRow[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
+  return leerInputsDeLaSemana(weekStart);
+}
+
+async function leerInputsDeLaSemana(weekStart?: string): Promise<WeeklyInputRow[]> {
   if (!isSupabaseConfigured()) return [];
 
   const organizationId = await tryRequireOrganizationId();
@@ -267,7 +281,9 @@ export async function getWeeklyInputsAction(
   });
 }
 
-export async function getWeeklyInputsHistoryAction(): Promise<string[]> {
+export async function getWeeklyInputsHistoryAction(): Promise<string[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
   if (!isSupabaseConfigured()) return [];
 
   const organizationId = await tryRequireOrganizationId();
@@ -292,7 +308,7 @@ export async function getWeeklyInputsHistoryAction(): Promise<string[]> {
 export async function countWeeklyInputsForWeek(
   weekStart?: string
 ): Promise<number> {
-  const rows = await getWeeklyInputsAction(weekStart);
+  const rows = await leerInputsDeLaSemana(weekStart);
   return new Set(rows.map((row) => row.department)).size;
 }
 
@@ -452,7 +468,9 @@ JSON:
 
 export async function getWeeklyReportAction(
   weekStart?: string
-): Promise<WeeklyReportRow | null> {
+): Promise<WeeklyReportRow | null | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
   if (!isSupabaseConfigured()) return null;
 
   const organizationId = await tryRequireOrganizationId();
@@ -478,8 +496,10 @@ export async function getWeeklyReportAction(
 
 export async function getWeeklyCompletionStatus(
   weekStart?: string
-): Promise<{ completed: Department[]; total: number }> {
-  const rows = await getWeeklyInputsAction(weekStart);
+): Promise<{ completed: Department[]; total: number } | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
+  const rows = await leerInputsDeLaSemana(weekStart);
 
   const completed = [
     ...new Set(

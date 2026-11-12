@@ -219,6 +219,24 @@ Video:  prepareSopVideoUploadAction (signed URL a sop-videos) → navegador sube
 - **El SOP desde video no puede tener capturas**: ninguna pantalla las sube contra el job `[OPS-SOP-VIDEO-CAPTURAS]`.
 - **No hay edición ni borrado de SOPs** en la UI: `updateSOPAction` existe pero nadie la llama, y no hay delete;
   por eso el versionado nunca se ejercita `[SOPS-EDITAR]`. `sop_versions` tiene 0 filas con 3 SOPs (producción, al 2026-09-23).
+- **Lecturas de Operaciones por Server Action** (SCRUM-541, corte B, 2026-11-12): `getCurrentWeekStartAction`,
+  `getWeeklyInputsAction`, `getWeeklyInputsForWeekAction`, `getWeeklyInputsHistoryAction`, `getWeeklyReportAction`
+  y `getWeeklyCompletionStatus` (`app/operations/actions.ts`), `listExecutiveReportsAction` y
+  `getExecutiveReportByIdAction` (`app/executive-reports/actions.ts`), `getSalesFrameworksAction`
+  (`app/product/actions.ts`) y `getSopVideoJobAction` (`app/sops/video-actions.ts`) chequean `operations`: a quien no
+  lo tiene le devuelven el rechazo, y `/operations/inputs`, `/operations/overview`, `/executive-reports/history`,
+  `/executive-reports/[id]` y los componentes que recargan dibujan `SinAcceso`. En esos 4 archivos siguen sin chequeo
+  de módulo: las 9 lecturas que están en `LECTURAS_SIN_LLAMADOR_CONOCIDAS` (`countWeeklyInputsForWeek` en
+  `app/operations/actions.ts`; `listSopVideoJobsAction` en `app/sops/video-actions.ts`; y `getAvatarsAction`,
+  `getProductsAction`, `getValueLadderAction`, `getValuePropositionAction`, `getProductContextForOrg`,
+  `getProductContextForAgentAction` y `getProductContextTextForOrg` en `app/product/actions.ts`, ver
+  `docs/areas/producto.md`); `resolveSopAttachmentUrlsAction` (`app/sops/video-actions.ts`), que sí la llaman
+  `sop-content-viewer.tsx` y `sop-content-with-attachments.tsx` pero el test de inventario no la ve porque su nombre
+  empieza con `resolve`; `extractAndSuggestProductContextAction` (`app/product/actions.ts`), que la llama
+  `product-rag-suggest.tsx` y el test tampoco ve porque su nombre empieza con `extract` (las dos, deuda en
+  `PENDIENTES.md` `[PERMISOS-RESOLVE-SOP-ADJUNTOS]`); y todas las escrituras. Esta enumeración sale de la lista del
+  test y de esas dos excepciones: no es una prueba de que no haya otras. Esto cierra la vía de esas Server Actions,
+  no la de la base: ver la viñeta siguiente.
 - **Permisos sólo en el render**: actions y RLS abiertas a cualquier miembro `[PERMISOS-SERVER-ACTIONS]`.
 - **Buckets `sop-attachments` y `workboard-task-attachments` no están en migraciones** `[OPS-STORAGE-BUCKETS]` (auditoría §3.9).
 - **`/invite` y `team_invitations` no tienen productor** `[EQUIPO-INVITE-LEGADO]`: nada crea invitaciones (la parte B de

@@ -13,6 +13,9 @@ import { mapWeeklyInputRowsToTeamInputs } from "@/lib/operations/weekly-input-ma
 import { manejarReporteSemanal } from "@/lib/operations/resultado-reporte-semanal";
 import { correrAccion } from "@/lib/client/correr-accion";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
 import { paths } from "@/routes";
 import { useToast } from "@/providers/toast-provider";
 import type { Department, WeeklyInputRow } from "@/types/operations";
@@ -37,6 +40,7 @@ export function WeeklyInputsPageContent({
   const [inputs, setInputs] = useState(initialInputs);
   const [completed, setCompleted] = useState<Department[]>(initialCompleted);
   const [inputCount, setInputCount] = useState(initialInputCount);
+  const [rechazo, setRechazo] = useState<RechazoPorModulo | null>(null);
   const [generating, startGenerate] = useTransition();
   const useSupabase = isSupabaseConfigured();
   const totalDepartments = 5;
@@ -53,6 +57,14 @@ export function WeeklyInputsPageContent({
         getWeeklyInputsAction(weekStart),
         getWeeklyCompletionStatus(weekStart),
       ]);
+      if (esRechazoPorModulo(rows)) {
+        setRechazo(rows);
+        return;
+      }
+      if (esRechazoPorModulo(status)) {
+        setRechazo(status);
+        return;
+      }
       setInputs(rows);
       setCompleted(status.completed);
       setInputCount(status.completed.length);
@@ -83,6 +95,12 @@ export function WeeklyInputsPageContent({
   };
 
   const progressPct = Math.round((completed.length / totalDepartments) * 100);
+
+  // Sin Operaciones la recarga vuelve rechazada: pasa si los permisos cambian
+  // con la pantalla abierta (SCRUM-541).
+  if (rechazo) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(rechazo.moduleId)} />;
+  }
 
   return (
     <div className="space-y-6">

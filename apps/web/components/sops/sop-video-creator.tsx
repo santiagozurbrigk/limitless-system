@@ -40,6 +40,9 @@ import {
   retrySopVideoJobAction,
   type SopVideoJob,
 } from "@/app/sops/video-actions";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
 
 const STATUS_LABEL: Record<SopVideoJob["status"], string> = {
   pending: "En cola…",
@@ -64,6 +67,7 @@ export function SopVideoCreator({
   const [progress, setProgress] = useState(0);
   const [job, setJob] = useState<SopVideoJob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rechazo, setRechazo] = useState<RechazoPorModulo | null>(null);
   const deliveredRef = useRef(false);
 
   const jobId = job?.id ?? null;
@@ -72,6 +76,12 @@ export function SopVideoCreator({
   const refreshJob = useCallback(async () => {
     if (!jobId) return;
     const next = await getSopVideoJobAction(jobId);
+    // Sin job, el efecto de abajo cierra el canal y el intervalo: no se sigue sondeando.
+    if (esRechazoPorModulo(next)) {
+      setRechazo(next);
+      setJob(null);
+      return;
+    }
     if (next) setJob(next);
   }, [jobId]);
 
@@ -171,6 +181,12 @@ export function SopVideoCreator({
     job?.status === "pending" ||
     job?.status === "transcribing" ||
     job?.status === "generating";
+
+  // Sin Operaciones la recarga vuelve rechazada: pasa si los permisos cambian
+  // con la pantalla abierta (SCRUM-541).
+  if (rechazo) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(rechazo.moduleId)} />;
+  }
 
   return (
     <div className="space-y-4">

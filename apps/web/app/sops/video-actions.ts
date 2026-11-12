@@ -14,6 +14,10 @@ import {
   isMissingTableError,
   requireOrganizationId,
 } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
@@ -186,7 +190,9 @@ export async function listSopVideoJobsAction(): Promise<SopVideoJob[]> {
   }
 }
 
-export async function getSopVideoJobAction(id: string): Promise<SopVideoJob | null> {
+export async function getSopVideoJobAction(id: string): Promise<SopVideoJob | null | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
   try {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
