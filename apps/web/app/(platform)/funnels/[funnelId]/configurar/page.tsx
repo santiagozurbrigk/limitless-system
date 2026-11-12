@@ -12,7 +12,9 @@ import { listVTurbPlayerOptionsAction } from "@/app/vturb/actions";
 import { listWebinarJamWebinarOptionsAction } from "@/app/webinarjam/actions";
 import { blockingTools } from "@/lib/funnels";
 import { paths } from "@/routes/paths";
-import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
+import { esRechazoPorModulo, exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function FunnelConfigurePage({
   params,
@@ -24,6 +26,11 @@ export default async function FunnelConfigurePage({
 
   const { funnelId } = await params;
   const data = await getFunnelBindingsAction(funnelId);
+  // Sin Embudos la lectura vuelve rechazada: pasa si los permisos cambian
+  // entre el guardia y la lectura, que los vuelve a mirar (SCRUM-541).
+  if (esRechazoPorModulo(data)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(data.moduleId)} />;
+  }
   if (!data) notFound();
 
   // Dos fuentes piden un parámetro: las de GHL, la etapa del pipeline; las de
@@ -35,6 +42,15 @@ export default async function FunnelConfigurePage({
     listWebinarJamWebinarOptionsAction(),
     listFunnelFormOptionsAction(),
   ]);
+  if (esRechazoPorModulo(ghlStages)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(ghlStages.moduleId)} />;
+  }
+  if (esRechazoPorModulo(vturbPlayers)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(vturbPlayers.moduleId)} />;
+  }
+  if (esRechazoPorModulo(forms)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(forms.moduleId)} />;
+  }
 
   const pendientes = blockingTools();
 

@@ -976,7 +976,7 @@ Funcionalidad: F-PLA-01 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * Se probó con una segunda cuenta con rol limitado y el resultado de cada paso quedó anotado.
 
 *Tareas técnicas (PENDIENTES.md):*
-* [PERMISOS-ACTIONS-LECTURA-SIN-MODULO] 73 Server Actions de lectura de un módulo no chequean el módulo (nuevo, SCRUM-541) (P2)
+* [PERMISOS-ACTIONS-LECTURA-SIN-MODULO] 65 Server Actions de lectura de un módulo no chequean el módulo (nuevo, SCRUM-541) (P2)
 * [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo) (P2)
 * [PERMISOS-SIN-ROL-NAV] Un member sin rol pasa el gate pero no ve ningún ítem (nuevo) (P2)
 * [PERMISOS-VERIFICAR-SESION] Probar el bloqueo con un rol limitado (ex bloque de PLAN_VERIFICACION) (P1)

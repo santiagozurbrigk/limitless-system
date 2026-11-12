@@ -218,9 +218,10 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
     `agent-layout-cliente.tsx`. `/clients` era una página de cliente (`"use client"`): ahora la página es de
     servidor y la pantalla vive en `clients-page-cliente.tsx`.
   - **Server Actions de lectura de un módulo** arrancan con `rechazoPorModulo("<módulo>")`, porque se pueden
-    llamar a mano sin abrir la pantalla. Hoy lo hacen 50 (las que ya devolvían `MutationResult`, donde el
-    rechazo entra sin cambiar la forma). Las otras 73 devuelven el dato directo: quedan en la lista de deuda
-    del test (`[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]`). Sus pantallas ya no se dibujan sin el módulo.
+    llamar a mano sin abrir la pantalla. Hoy lo hacen 58: las 50 que ya devolvían `MutationResult`, donde el
+    rechazo entra sin cambiar la forma, y las 8 de Embudos (SCRUM-541, primer corte). Las otras 65 devuelven
+    el dato directo: quedan en la lista de deuda del test (`[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]`). Sus
+    pantallas ya no se dibujan sin el módulo.
   - El test `lib/navigation/__tests__/lecturas-por-modulo.test.ts` exige todo esto leyendo el código con el
     parser de TypeScript: que cada página con módulo arranque con el guardia y el módulo de su ruta, que cada
     layout con módulo que lee también, y que cada action de lectura de un solo módulo arranque con
@@ -373,7 +374,7 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
   dato sólo si la persona tiene alguno de los módulos que lo muestran, y las actions lo chequean en el
   servidor; Ventas recibe los totales de Finanzas ya calculados y el Panel calcula los suyos en su página
   (mínimo privilegio, AR 1).
-- `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (nuevo, SCRUM-541) 73 Server Actions de lectura de un solo módulo devuelven
+- `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (nuevo, SCRUM-541) 65 Server Actions de lectura de un solo módulo devuelven
   el dato directo y no chequean el módulo; se alcanzan llamándolas a mano.
 - `[PERMISOS-FOUNDER-AREA]` resuelto el 2026-10-05 (SCRUM-18): `/founder` vive en `app/(platform)/founder` y
   pasa por el mismo bloqueo que el resto; la action que lee su resumen exige Operaciones.

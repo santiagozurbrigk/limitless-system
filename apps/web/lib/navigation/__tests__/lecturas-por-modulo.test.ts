@@ -127,14 +127,7 @@ const LECTURAS_SIN_CHEQUEO_CONOCIDAS: string[] = [
   "app/forms/actions.ts#getFormDetailAction",
   "app/forms/actions.ts#getGoogleFormsIntegrationStatusAction",
   "app/forms/actions.ts#listFormsAction",
-  "app/funnels/actions.ts#getFunnelAction",
-  "app/funnels/actions.ts#getFunnelBindingsAction",
-  "app/funnels/actions.ts#listFunnelFormOptionsAction",
-  "app/funnels/actions.ts#listFunnelIndexAction",
-  "app/funnels/actions.ts#listFunnelInstancesAction",
-  "app/funnels/actions.ts#listFunnelTemplatesAction",
   "app/ghl/opportunity-actions.ts#getGHLOpportunitiesStatusAction",
-  "app/ghl/opportunity-actions.ts#listGHLStageOptionsAction",
   "app/hyros/actions.ts#getHyrosStatusAction",
   "app/integrations/actions.ts#getIntegrationsOverviewAction",
   "app/integrations/clickup/import-actions.ts#fetchClickUpListsAction",
@@ -168,7 +161,6 @@ const LECTURAS_SIN_CHEQUEO_CONOCIDAS: string[] = [
   "app/settings/actions.ts#getOrganizationSettingsAction",
   "app/sops/video-actions.ts#getSopVideoJobAction",
   "app/vturb/actions.ts#getVTurbStatusAction",
-  "app/vturb/actions.ts#listVTurbPlayerOptionsAction",
   "app/webinarjam/actions.ts#getWebinarJamStatusAction",
 ];
 

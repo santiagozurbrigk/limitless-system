@@ -16,7 +16,9 @@ import {
   getInstrumentationTool,
 } from "@/lib/funnels";
 import { paths } from "@/routes/paths";
-import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
+import { esRechazoPorModulo, exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Detalle de un embudo.
@@ -60,6 +62,14 @@ export default async function FunnelDetailPage({
     getFunnelAction(funnelId, presetId),
     listFunnelInstancesAction(),
   ]);
+  // Sin Embudos la lectura vuelve rechazada: pasa si los permisos cambian
+  // entre el guardia y la lectura, que los vuelve a mirar (SCRUM-541).
+  if (esRechazoPorModulo(data)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(data.moduleId)} />;
+  }
+  if (esRechazoPorModulo(instances)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(instances.moduleId)} />;
+  }
   if (!data) notFound();
 
   const { instance, template, computed, provenance, period } = data;

@@ -3,6 +3,10 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -36,7 +40,9 @@ export type GHLStageOption = {
  * Sale del catálogo guardado, no de la API: la UI no debería depender de una
  * llamada externa para pintar un selector. Si está vacío, falta sincronizar.
  */
-export async function listGHLStageOptionsAction(): Promise<GHLStageOption[]> {
+export async function listGHLStageOptionsAction(): Promise<GHLStageOption[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("funnels");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 

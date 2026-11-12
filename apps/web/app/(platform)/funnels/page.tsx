@@ -10,7 +10,9 @@ import {
 } from "@/app/funnels/actions";
 import { blockingTools } from "@/lib/funnels";
 import { paths } from "@/routes/paths";
-import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
+import { esRechazoPorModulo, exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Índice de embudos.
@@ -31,6 +33,14 @@ export default async function FunnelsPage() {
     listFunnelIndexAction(),
     listFunnelTemplatesAction(),
   ]);
+  // Sin Embudos la lectura vuelve rechazada: pasa si los permisos cambian
+  // entre el guardia y la lectura, que los vuelve a mirar (SCRUM-541).
+  if (esRechazoPorModulo(funnels)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(funnels.moduleId)} />;
+  }
+  if (esRechazoPorModulo(templates)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(templates.moduleId)} />;
+  }
 
   const pending = blockingTools();
 
