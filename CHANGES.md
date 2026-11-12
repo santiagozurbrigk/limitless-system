@@ -28,6 +28,29 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-12 — Las lecturas de Operaciones chequean el módulo (SCRUM-541, corte B)
+
+**Rama:** `fix/SCRUM-541-corte-b` (base `e33f61e0`, corte A)
+**Commit(s):** `3afe946a` — fix(permisos): las lecturas de Operaciones chequean el módulo (SCRUM-541); docs: este
+**Módulo(s) afectado(s):** Operaciones, Reportes ejecutivos, Producto (frameworks de ventas), SOPs, permisos.
+- Actions: `app/operations/actions.ts` (`getCurrentWeekStartAction`, `getWeeklyInputsAction`, `getWeeklyInputsForWeekAction`, `getWeeklyInputsHistoryAction`, `getWeeklyReportAction`, `getWeeklyCompletionStatus`), `app/executive-reports/actions.ts` (`listExecutiveReportsAction`, `getExecutiveReportByIdAction`), `app/product/actions.ts` (`getSalesFrameworksAction`) y `app/sops/video-actions.ts` (`getSopVideoJobAction`).
+- Páginas: `/operations/inputs`, `/operations/overview`, `/executive-reports/history` y `/executive-reports/[id]`.
+- Componentes de cliente: `WeeklyInputsPageContent`, `WeeklyInputsHistory`, `SalesFrameworksSection` y `SopVideoCreator`.
+- Tests: `app/operations/__tests__/lecturas-de-operaciones-por-modulo.test.ts`, `app/(platform)/operations/__tests__/pantallas-de-operaciones.test.ts` y `components/operations/__tests__/lecturas-rechazadas-en-el-cliente.test.ts` (nuevos); la lista `LECTURAS_SIN_CHEQUEO_CONOCIDAS` pierde las 10.
+
+**Qué se hizo:** las 10 Server Actions de lectura de `operations` arrancan con `rechazoPorModulo("operations")` como primeras 2 sentencias (antes de `isSupabaseConfigured`, de leer la org y, en `getExecutiveReportByIdAction`, de validar el id) y devuelven `T | RechazoPorModulo`. El cuerpo de `getWeeklyInputsAction` pasó sin cambios a una función interna no exportada (`leerInputsDeLaSemana`), que usan `getWeeklyInputsAction`, `getWeeklyInputsForWeekAction`, `getWeeklyCompletionStatus` y `countWeeklyInputsForWeek`. Las 4 páginas distinguen el rechazo con `esRechazoPorModulo` y dibujan `SinAcceso` («No tenés acceso a Operaciones») antes de usar el dato o de `notFound()`; en `/operations/inputs`, con la semana rechazada no se piden los inputs ni el estado. Los 4 componentes de cliente guardan el rechazo en un estado propio y dibujan `SinAcceso` en lugar de su contenido; `SopVideoCreator` además deja el trabajo en `null`, lo que cierra el canal en vivo y el intervalo de 10 s. La lista de deuda del test pasa de 65 a 55, y el inventario regenerado da 68 que chequean y 55 de deuda.
+
+**Por qué / finalidad:** una Server Action exportada se puede invocar a mano aunque la pantalla muestre «No tenés acceso». Sin el chequeo, un miembro sin Operaciones leía por esas actions los inputs semanales, el historial de semanas, el reporte semanal, los reportes ejecutivos, los frameworks de ventas y el estado de un trabajo de SOP desde video.
+
+**Decisiones de diseño relevantes:**
+- El retorno es la unión `T | RechazoPorModulo` también hacia el cliente (DT-2): el rechazo es un objeto plano y `esRechazoPorModulo` lo reconoce por forma. Los componentes de cliente importan la guarda y el tipo de `@/lib/auth/regla-de-modulo`, nunca de `acceso-a-modulo`, que arrastra código de servidor.
+- `countWeeklyInputsForWeek` (sin llamador) y `getWeeklyCompletionStatus` leen con la función interna (DT-7): la primera sigue sin chequeo y sigue contando igual para quien no tiene Operaciones; la segunda lee los permisos una sola vez, no dos.
+- El chequeo va antes de todo en las 10 (DT-9), también antes de `uuidSchema.safeParse`: una sola regla, y el rechazo sale para cualquier invocación.
+- Las páginas dibujan lo mismo que su guardia (DT-10). Desde la interfaz sólo se ve si los permisos cambian entre el guardia y la lectura del mismo render.
+- Los componentes de cliente dibujan `SinAcceso` en lugar de su contenido (DT-11, decisión de Fernando DV-1 = A): no muestran los datos que tenían ni lanzan; en `SalesFrameworksSection` el aviso de éxito de guardar o archivar sigue saliendo, porque la escritura sí se hizo.
+
+**Riesgos / deuda técnica pendiente:** `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` sigue abierto (SCRUM-541) con 55 lecturas de un módulo, las 6 + 5 de más de un módulo y las 66 sin llamador (entre ellas `countWeeklyInputsForWeek` y `listSopVideoJobsAction`). Las escrituras de esos 4 archivos siguen sin chequeo de módulo. Esto cierra la vía de las Server Actions, no la de la base: `weekly_inputs`, `weekly_reports`, `executive_reports`, `sales_frameworks` y `sop_generation_jobs` siguen legibles por PostgREST (y la última por Realtime) para cualquier miembro de la org, porque sus policies sólo comparan la organización (`[PERMISOS-SERVER-ACTIONS]`; riesgo aceptado por Fernando, DV-3). Cada render suma lecturas de permisos (3 en `/operations/inputs`, 1 en las otras tres) y el sondeo del video de SOP suma una cada 10 s, porque `getCurrentUserPermissions` no tiene caché por request. El comportamiento de los componentes de cliente está probado con un arnés de hooks sin DOM, no en un navegador.
+
 ### 2026-11-04 — Las lecturas de Embudos chequean el módulo (SCRUM-541, primer corte)
 
 **Rama:** `fix/SCRUM-541-actions-lectura-por-modulo` (base `a9637de6`, SCRUM-540)
