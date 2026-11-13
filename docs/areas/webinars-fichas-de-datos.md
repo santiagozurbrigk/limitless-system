@@ -149,8 +149,9 @@ Cruce de Leads y la Ficha del lead (SCRUM-549) con la migración de SCRUM-526 (c
 6. **Estado de venta sin tabla.** Etapa, responsable y último contacto (Leads y Ficha) no tienen tabla: la migración
    deja `lead_sales_state` para la Fase 3 (dice que el estado actual de venta va a ser "una proyección aparte").
    `filas.ts` ya la espera como `FilaEstadoDeVenta` (`launch_id`, `lead_id`, `stage`, `owner_user_id`,
-   `last_contact_at`). Sin esa fila, `calcular.ts` deriva la etapa del último evento del lead en el lanzamiento y el
-   último contacto del último `contacted`; el responsable queda vacío. La fila "Lo que el equipo mueve hoy" de Inicio
+   `last_contact_at`). Sin esa fila, `calcular.ts` deriva la etapa del último evento del lead en el lanzamiento cuyo
+   tipo está en `ETAPAS_DEL_LEAD` (si no hay ninguno, `registered`) y el último contacto del último `contacted`; el
+   responsable queda vacío. La fila "Lo que el equipo mueve hoy" de Inicio
    cita `lead_sales_state.stage`, pero `calcular.ts` la cuenta con los filtros de Leads, que salen de `lead_events`.
    Hay que decidir antes de B4 si se crea la proyección o si etapa y último contacto se derivan de `lead_events` y
    sólo el responsable necesita una columna nueva.
@@ -231,7 +232,7 @@ Cambiar de filtro, de búsqueda o de lanzamiento vuelve a la primera página.
 | Avisos de fuentes | Las fuentes externas que no están al día: la línea de tiempo puede no tener sus eventos | cada integración | ver huecos (hueco 3) | según fuente | se muestra o no (D, SF, FC, E) | Setter; Dueño, Análisis y Closer: a confirmar en la sesión del día 6 |
 | Registros | Un registro por lanzamiento, del más nuevo al más viejo: lanzamiento, fecha, origen (`utm_source`) y calificación (la respuesta de la landing, si la hay) | landing | `launch_registrations`: `registered_at`, `utm_source`, `qualification`; `webinar_launches.name` | al instante | M | Setter; Dueño, Análisis y Closer: a confirmar en la sesión del día 6 |
 | Lanzamiento del estado de venta | Nombre del lanzamiento en el título del panel (el de `?lanzamiento=`; si no, el del registro más nuevo) | configuracion | `webinar_launches.name` | al guardar | M | Setter; Dueño, Análisis y Closer: a confirmar en la sesión del día 6 |
-| Etapa | Etapa del lead en ese lanzamiento; botón "Marcar como..." cuando la etapa tiene paso siguiente | manual | **falta en el modelo** (hueco 6); sin esa fila, calc. como en Leads | al guardar | M; editable (de ejemplo, no se guarda: hueco 10) | Setter; Dueño, Análisis y Closer: a confirmar en la sesión del día 6 |
+| Etapa | Etapa del lead en ese lanzamiento; botón "Marcar como..." cuando la etapa tiene paso siguiente | manual | **falta en el modelo** (hueco 6); sin esa fila, calc. como en Leads | al guardar / según fuente | M; editable (de ejemplo, no se guarda: hueco 10) | Setter; Dueño, Análisis y Closer: a confirmar en la sesión del día 6 |
 | Último contacto | Fecha y hora, o "Sin contactar" | manual | **falta en el modelo** (hueco 6); sin esa fila, calc. como en Leads | al guardar | M | Setter; Dueño, Análisis y Closer: a confirmar en la sesión del día 6 |
 | Responsable | Quién lo trabaja; lista del equipo para asignarlo | manual | **falta en el modelo** (huecos 6 y 9) | al guardar | M; editable (de ejemplo, hueco 10) | Setter; Dueño, Análisis y Closer: a confirmar en la sesión del día 6 |
 | Notas | Texto, autor y fecha, de la más nueva a la más vieja; formulario para agregar una | manual | **falta en el modelo** (huecos 7 y 9) | al guardar | M; editable (de ejemplo, hueco 10) | Setter; Dueño, Análisis y Closer: a confirmar en la sesión del día 6 |
