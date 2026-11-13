@@ -28,6 +28,23 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-13 — Fichas de datos de Leads y Ficha del lead (SCRUM-549)
+
+**Rama:** `feat/SCRUM-549-webinars-fichas-leads`
+**Commit(s):** este
+**Módulo(s) afectado(s):** docs: `docs/areas/webinars-fichas-de-datos.md` (sección 6, huecos 6 a 10, Quién lo ve, introducción), `PENDIENTES.md`, `docs/backlog/jira-import.csv` (regenerado por `pendientes_a_jira.py`)
+
+**Qué se hizo:** la sección 6 de las fichas: una tabla para Leads y otra para la Ficha del lead, con las mismas columnas que SCRUM-548 (Elemento, Qué muestra, Fuente, Se ata a, Frescura, Estados posibles, Quién lo ve), más volumen esperado y filtros. Cada "Se ata a" se cruzó con la migración de SCRUM-526 (commit `48f7fd79`, todavía fuera de esta rama); lo que el modelo no tiene dice "falta en el modelo" y quedó como hueco 6 a 10 en la sección 5 y en `[WEBINAR-FICHAS-HUECOS-DEL-MODELO]`.
+
+**Por qué / finalidad:** llevar a la sesión del día 6 (SCRUM-547) el borrador de Leads y la Ficha del lead, y saber qué le falta al modelo antes de migrar (B4, SCRUM-550).
+
+**Decisiones de diseño relevantes:**
+- Como en SCRUM-548, las fichas salen del contrato, de `calcular.ts` y de lo que dibujan las pantallas, no del diseño a mano.
+- Quién lo ve (Fernando, 2026-11-13): el Setter, persona de SCRUM-545; Dueño, Análisis y Closer quedan "a confirmar en la sesión del día 6". El bloqueo de hoy es el módulo `sales` y la experiencia de la organización.
+- Un solo pendiente: se amplía `[WEBINAR-FICHAS-HUECOS-DEL-MODELO]` en vez de abrir otro.
+
+**Riesgos / deuda técnica pendiente:** es un borrador: la tarea se acepta con las fichas confirmadas en la sesión del día 6, que todavía no ocurrió. Huecos nuevos: estado de venta y notas sin tabla (Fase 3), `note` en el `check` de `lead_events.kind` y no en `TIPOS_DE_EVENTO`, el equipo sin fuente en el modelo y los miembros sin permiso de escritura para las acciones de la ficha. La fila "Lo que el equipo mueve hoy" de Inicio (sección 1, de SCRUM-548) cita `lead_sales_state.stage`, que no existe en el modelo; no se tocó y queda anotado en el hueco 6.
+
 ### 2026-11-12 — Fichas de datos de Inicio, Lanzamientos, Detalle y Configuración (SCRUM-548)
 
 **Rama:** `claude/brave-wright-s2bfcg`
