@@ -251,7 +251,7 @@ describe("⭐ organización limitless", () => {
     sim.organizacionActiva = "org-limitless";
   });
 
-  it("todo segmento fuera de Clientes, Tablero, Ventas, los extra de limitless y los libres redirige a Clientes, sin SinAcceso", async () => {
+  it("todo segmento fuera de Clientes, Tablero, Ventas, Equipo, los extra de limitless y los libres redirige a Clientes, sin SinAcceso", async () => {
     const resultado: Record<string, string> = {};
     for (const segmento of SEGMENTOS) resultado[segmento] = await entrar(segmento);
     const esperado = Object.fromEntries(
@@ -261,6 +261,7 @@ describe("⭐ organización limitless", () => {
           "clients",
           "workboard",
           "sales",
+          "team",
           "integrations",
           "sops",
           "business-context",
@@ -285,9 +286,8 @@ describe("⭐ organización limitless", () => {
     }
   });
 
-  it("/dashboard, /team y /lanzamientos llevan a Clientes (no al Panel: no hay bucle)", async () => {
+  it("/dashboard y /lanzamientos llevan a Clientes (no al Panel: no hay bucle)", async () => {
     expect(await entrar("dashboard")).toBe("redirect /clients");
-    expect(await entrar("team")).toBe("redirect /clients");
     expect(await entrar("lanzamientos")).toBe("redirect /clients");
   });
 
@@ -328,7 +328,8 @@ describe("⭐ la experiencia es la de la organización activa", () => {
   it("⭐ un holding (full) que cambia entre un negocio limitless y uno webinar ve el bloqueo de cada uno", async () => {
     sim.organizacionActiva = "org-limitless";
     expect(await entrar("clients")).toBe("pasa");
-    expect(await entrar("team")).toBe("redirect /clients");
+    expect(await entrar("team")).toBe("pasa");
+    expect(await entrar("finance")).toBe("redirect /clients");
     sim.organizacionActiva = "org-webinar";
     expect(await entrar("clients")).toBe("redirect /team");
     expect(await entrar("team")).toBe("pasa");

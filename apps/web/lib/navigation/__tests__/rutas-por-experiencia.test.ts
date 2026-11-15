@@ -85,17 +85,19 @@ describe("⭐ la config de los menús", () => {
     expect(WEBINAR.map((e) => e.label)).toEqual(["Inicio", "Lanzamientos", "Leads", "Equipo"]);
   });
 
-  it("limitless: Clientes, Tablero de trabajo, Ventas y Administración, en ese orden (PO, 28-oct)", () => {
+  it("limitless: Clientes, Tablero de trabajo, Ventas, Equipo (provisoria hasta SCRUM-551) y Administración, en ese orden (PO, 28-oct)", () => {
     expect(LIMITLESS.map((e) => e.label)).toEqual([
       "Clientes",
       "Tablero de trabajo",
       "Ventas",
+      "Equipo",
       "Administración",
     ]);
     expect(LIMITLESS.map((e) => segmentoDe(e.href))).toEqual([
       "/clients",
       "/workboard",
       "/sales",
+      "/team",
       "/administracion",
     ]);
   });
@@ -104,8 +106,17 @@ describe("⭐ la config de los menús", () => {
     expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["equipo"]);
   });
 
-  it("limitless hoy: Clientes, Tablero y Ventas listas; Administración (SCRUM-551) oculta", () => {
-    expect(entradasListas(LIMITLESS).map((e) => e.id)).toEqual(["clientes", "tablero", "ventas"]);
+  it("limitless hoy: Clientes, Tablero, Ventas y Equipo listas; Administración (SCRUM-551) oculta", () => {
+    expect(entradasListas(LIMITLESS).map((e) => e.id)).toEqual(["clientes", "tablero", "ventas", "equipo"]);
+  });
+
+  it("⭐ no regresión: webinar y full no cambian con Equipo en limitless", () => {
+    expect(WEBINAR.map((e) => e.label)).toEqual(["Inicio", "Lanzamientos", "Leads", "Equipo"]);
+    expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["equipo"]);
+    expect(RUTAS_EXTRA_POR_EXPERIENCIA.webinar).toEqual([]);
+    for (const ruta of ["/team", "/team/roles", "/dashboard", "/finance", "/administracion", "/lanzamientos", "/holding"]) {
+      expect(rutaPermitidaParaLaExperiencia("full", ruta), ruta).toBe(true);
+    }
   });
 
   it("⭐ limitless usa las pantallas del menú completo con el mismo nombre, ícono y permiso", () => {
@@ -301,7 +312,7 @@ describe("⭐ rutas por experiencia", () => {
     expect(abiertas).toEqual(["/team", "/team/roles", "/settings", "/holding", "/onboarding/holding"]);
   });
 
-  it("⭐ limitless: Clientes, Tablero y todo Ventas (con sus subrutas), Integraciones y las libres; ni Equipo ni Administración", () => {
+  it("⭐ limitless: Clientes, Tablero y todo Ventas (con sus subrutas), Integraciones, Equipo (con sus subrutas) y las libres; Administración no", () => {
     const abiertas = plataforma.filter((ruta) => rutaPermitidaParaLaExperiencia("limitless", ruta));
     expect(abiertas).toEqual([
       "/sales/inbox",
@@ -310,6 +321,8 @@ describe("⭐ rutas por experiencia", () => {
       "/clients/abc",
       "/workboard",
       "/integrations",
+      "/team",
+      "/team/roles",
       "/settings",
       "/holding",
       "/onboarding/holding",
@@ -326,10 +339,17 @@ describe("⭐ rutas por experiencia", () => {
   // `/administracion`, `/inicio` y `/leads` todavía no tienen carpeta y dan 404
   // (ver "entradas no listas" más abajo).
   it("⭐ limitless: el resto va a Clientes (para Administración, en cuanto su carpeta exista)", () => {
-    for (const ruta of ["/dashboard", "/finance", "/marketing", "/team", "/administracion", "/inicio", "/lanzamientos"]) {
+    for (const ruta of ["/dashboard", "/finance", "/marketing", "/administracion", "/inicio", "/lanzamientos"]) {
       expect(redireccionPorExperiencia("limitless", ruta, FOUNDER)).toBe("/clients");
     }
     expect(redireccionPorExperiencia("limitless", "/dashboard", SOLO_VENTAS)).toBe("/sales/inbox");
+  });
+
+  it("⭐ limitless: /team y sus subrutas se abren (provisorio hasta SCRUM-551); el inicio sigue en Clientes", () => {
+    expect(redireccionPorExperiencia("limitless", "/team", FOUNDER)).toBeNull();
+    expect(redireccionPorExperiencia("limitless", "/team/roles", FOUNDER)).toBeNull();
+    expect(pantallaDeInicio("limitless", FOUNDER)).toBe("/clients");
+    expect(pantallaDeInicio("limitless", CON_EQUIPO)).toBe("/team");
   });
 
   it("⭐ limitless abre las pantallas fuera del menú adonde enlazan la Bandeja y el Tablero; webinar las manda a Equipo", () => {

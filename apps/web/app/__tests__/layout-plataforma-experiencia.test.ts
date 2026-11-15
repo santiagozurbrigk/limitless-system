@@ -251,7 +251,7 @@ describe("⭐ el layout calcula la pantalla de inicio con los permisos de quien 
     expect(sim.inicios).toEqual(["/dashboard", "/team", "/settings"]);
   });
 
-  it("limitless: /clients con Clientes; /sales/inbox con sólo Ventas; /settings con sólo Equipo", async () => {
+  it("limitless: /clients con Clientes; /sales/inbox con sólo Ventas; /team con sólo Equipo (provisorio hasta SCRUM-551)", async () => {
     sim.experiencia = "limitless";
     sim.pathname = "/settings";
     await render();
@@ -261,7 +261,7 @@ describe("⭐ el layout calcula la pantalla de inicio con los permisos de quien 
     sim.permisos = { ...PERMISOS, modules: { ...emptyPermissions(), sales: "view" } };
     sim.pathname = "/sales/inbox";
     await render();
-    expect(sim.inicios).toEqual(["/settings", "/clients", "/sales/inbox"]);
+    expect(sim.inicios).toEqual(["/team", "/clients", "/sales/inbox"]);
   });
 
   it("webinar sin Equipo que tipea /finance: el layout deja pasar (el segmento lo manda a Ajustes)", async () => {

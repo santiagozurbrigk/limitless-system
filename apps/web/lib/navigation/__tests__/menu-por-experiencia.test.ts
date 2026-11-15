@@ -126,8 +126,8 @@ describe("⭐ barra de una organización limitless", () => {
   const limitless = buildPlatformSidebarNav(["operaciones", "producto"], "limitless");
   const SOLO_VENTAS: Permisos = { isFounder: false, modules: { ...emptyPermissions(), sales: "view" } };
 
-  it("Clientes, Tablero de trabajo y el grupo Ventas, en ese orden, aunque tenga add-ons; Administración no", () => {
-    expect(limitless.rootItems.map(describir)).toEqual(["/clients", "/workboard", "[ventas]"]);
+  it("Clientes, Tablero de trabajo, el grupo Ventas y Equipo, en ese orden, aunque tenga add-ons; Administración no", () => {
+    expect(limitless.rootItems.map(describir)).toEqual(["/clients", "/workboard", "[ventas]", "/team"]);
   });
 
   it("⭐ los mismos items que el menú completo: links con su módulo y el grupo Ventas con sus hijos", () => {
@@ -150,9 +150,9 @@ describe("⭐ barra de una organización limitless", () => {
   });
 
   it("además, filtrada por los permisos de siempre", () => {
-    expect(visibles(limitless, FOUNDER)).toEqual(["Clientes", "Tablero de trabajo", "Ventas"]);
+    expect(visibles(limitless, FOUNDER)).toEqual(["Clientes", "Tablero de trabajo", "Ventas", "Equipo"]);
     expect(visibles(limitless, SOLO_VENTAS)).toEqual(["Ventas"]);
-    expect(visibles(limitless, MIEMBRO_CON_EQUIPO)).toEqual([]);
+    expect(visibles(limitless, MIEMBRO_CON_EQUIPO)).toEqual(["Equipo"]);
   });
 });
 
@@ -178,7 +178,7 @@ describe("⭐ paleta de comandos", () => {
     expect(itemsDeLaPaleta("webinar", MIEMBRO_SIN_EQUIPO)).toEqual([]);
   });
 
-  it("⭐ limitless: Clientes, Tablero y los hijos de Ventas, filtrados por permiso, sin acciones rápidas", () => {
+  it("⭐ limitless: Clientes, Tablero, los hijos de Ventas y Equipo, filtrados por permiso, sin acciones rápidas", () => {
     expect(itemsDeLaPaleta("limitless", FOUNDER).map((i) => `${i.group}: ${i.label} ${i.href}`)).toEqual([
       "Plataforma: Clientes /clients",
       "Plataforma: Tablero de trabajo /workboard",
@@ -187,6 +187,7 @@ describe("⭐ paleta de comandos", () => {
       "Ventas: Closing /sales/closing",
       "Ventas: Cobros /sales/cobros",
       "Ventas: Llamadas /sales/llamadas",
+      "Plataforma: Equipo /team",
     ]);
     expect(itemsDeLaPaleta("limitless", MIEMBRO_SIN_EQUIPO).map((i) => i.href)).toEqual([
       "/sales/inbox",
@@ -195,6 +196,8 @@ describe("⭐ paleta de comandos", () => {
       "/sales/cobros",
       "/sales/llamadas",
     ]);
-    expect(itemsDeLaPaleta("limitless", MIEMBRO_CON_EQUIPO)).toEqual([]);
+    expect(itemsDeLaPaleta("limitless", MIEMBRO_CON_EQUIPO)).toEqual([
+      { label: "Equipo", href: "/team", group: "Plataforma", keywords: "Equipo" },
+    ]);
   });
 });
