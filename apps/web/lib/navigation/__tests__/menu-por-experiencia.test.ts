@@ -134,7 +134,7 @@ describe("⭐ barra de una organización limitless", () => {
     const completo = buildPlatformSidebarNav([], "full");
     const linkDe = (config: SidebarNavConfig, href: string) =>
       config.rootItems.find((i) => i.type === "link" && i.module.href === href);
-    for (const href of ["/clients", "/workboard"]) {
+    for (const href of ["/clients", "/workboard", "/team"]) {
       expect(linkDe(limitless, href)).toEqual(linkDe(completo, href));
     }
     expect(limitless.modulesWithChildren).toEqual({ ventas: completo.modulesWithChildren.ventas });

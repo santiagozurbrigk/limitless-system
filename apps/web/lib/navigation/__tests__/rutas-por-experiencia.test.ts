@@ -120,7 +120,7 @@ describe("⭐ la config de los menús", () => {
   });
 
   it("⭐ limitless usa las pantallas del menú completo con el mismo nombre, ícono y permiso", () => {
-    for (const id of ["clientes", "tablero"]) {
+    for (const id of ["clientes", "tablero", "equipo"]) {
       const entrada = LIMITLESS.find((e) => e.id === id)!;
       const delMenuCompleto = directModules.find((m) => m.href === entrada.href);
       expect(delMenuCompleto, id).toBeDefined();

@@ -90,9 +90,11 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
     `team`). Llamadas salió del menú el 28-oct. Hoy sólo Equipo está lista.
   - `limitless` (28-oct-2026): Clientes (`/clients`, `clients`), Tablero de trabajo (`/workboard`,
     `workboard`), Ventas (el grupo `ventas` del menú completo, con sus hijos, `sales`; lleva a
-    `/sales/inbox`) y Administración (`/administracion`, SCRUM-551; el módulo `finance` es provisorio
-    hasta que esa tarea lo decida). Hoy están listas las tres primeras; Administración queda definida y
-    no se muestra. Clientes, Tablero y Ventas tienen el mismo nombre, ícono y módulo que en el menú completo
+    `/sales/inbox`), Equipo (`/team`, `team`) y Administración (`/administracion`, SCRUM-551; el módulo
+    `finance` es provisorio hasta que esa tarea lo decida). Equipo es provisoria hasta SCRUM-551 (sin
+    ella no se puede invitar staff nuevo; la pidió Santiago en la revisión del PR #148) y se revisa al
+    cerrarla. Hoy están listas las cuatro primeras; Administración queda definida y no se muestra.
+    Clientes, Tablero, Ventas y Equipo tienen el mismo nombre, ícono y módulo que en el menú completo
     (lo exige un test).
 
   Cada entrada tiene `lista`. Una entrada que no está lista no se muestra (sin "Próximamente") y su
