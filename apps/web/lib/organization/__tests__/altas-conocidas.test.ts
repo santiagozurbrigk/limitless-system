@@ -7,9 +7,9 @@ import { describe, expect, it } from "vitest";
  * SCRUM-523 · el inventario de las altas de organizaciones.
  *
  * El default de `organizations.experience` es `full` (AR pasada 1, MAYOR-2):
- * cada alta manda su experiencia explícita (`webinar`, o la del holding en un
- * negocio creado dentro de un holding). Un alta que nadie revisó nace `full`,
- * el lado seguro.
+ * cada alta manda su experiencia explícita (`webinar`, o en un negocio creado
+ * dentro de un holding la del holding, o `full` si el holding es `limitless`).
+ * Un alta que nadie revisó nace `full`, el lado seguro.
  *
  * Desde la AR pasada 2 el test lee el código con el AST de TypeScript, no con
  * expresiones regulares: los comentarios y el contenido de los strings no
@@ -88,9 +88,9 @@ const ALTAS_CONOCIDAS: Record<string, number> = {
   // createFounderAccountAction, createOrganizationFromHoldingAction y
   // createHoldingOrgAction: webinar (app/super-admin/__tests__).
   "apps/web/app/super-admin/actions.ts": 3,
-  // addBusinessToMyHoldingAction: hereda la del holding.
+  // addBusinessToMyHoldingAction: la del holding, o `full` si el holding es `limitless`.
   "apps/web/app/(platform)/holding/actions.ts": 1,
-  // completeHoldingOnboardingAction: hereda la del holding.
+  // completeHoldingOnboardingAction: la del holding, o `full` si el holding es `limitless`.
   "apps/web/app/(platform)/onboarding/holding/actions.ts": 1,
   // ensureUserBootstrap: webinar.
   "apps/web/lib/auth/bootstrap.ts": 1,
