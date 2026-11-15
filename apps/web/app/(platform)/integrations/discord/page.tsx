@@ -5,13 +5,20 @@ import { Button } from "@ai-coo/ui";
 import { getDiscordSettingsAction } from "@/app/discord/actions";
 import { DiscordSettings } from "@/components/integrations/discord-settings";
 import { paths } from "@/routes";
-import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
+import { esRechazoPorModulo, exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function DiscordIntegrationPage() {
   const sinAcceso = await exigirModuloDeLaPagina("integrations");
   if (sinAcceso) return sinAcceso;
 
   const data = await getDiscordSettingsAction();
+  // Sin Integraciones la lectura vuelve rechazada: pasa si los permisos cambian
+  // entre el guardia y la lectura, que los vuelve a mirar (SCRUM-541).
+  if (esRechazoPorModulo(data)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(data.moduleId)} />;
+  }
 
   if (!data.integration || data.integration.status !== "connected") {
     redirect(paths.platform.integrations);

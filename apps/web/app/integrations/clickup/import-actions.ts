@@ -1,6 +1,10 @@
 "use server";
 
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
@@ -34,7 +38,9 @@ export type FetchListsResult =
   | { success: true; lists: ClickUpList[] }
   | { success: false; error: string };
 
-export async function fetchClickUpListsAction(apiKey: string, workspaceId: string): Promise<FetchListsResult> {
+export async function fetchClickUpListsAction(apiKey: string, workspaceId: string): Promise<FetchListsResult | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   await requireOrganizationId();
   try {
     const lists = await fetchClickUpLists(apiKey, workspaceId);
@@ -59,7 +65,9 @@ export type FetchPreviewResult =
 export async function fetchClickUpPreviewAction(
   apiKey: string,
   listId: string
-): Promise<FetchPreviewResult> {
+): Promise<FetchPreviewResult | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   await requireOrganizationId();
   try {
     const tasks = await fetchAllClickUpTasks(apiKey, listId);

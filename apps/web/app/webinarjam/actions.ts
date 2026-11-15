@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
@@ -77,7 +81,9 @@ export async function listWebinarJamWebinarOptionsAction(): Promise<
   }));
 }
 
-export async function getWebinarJamStatusAction(): Promise<WebinarJamStatus> {
+export async function getWebinarJamStatusAction(): Promise<WebinarJamStatus | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 

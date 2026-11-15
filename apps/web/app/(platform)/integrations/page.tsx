@@ -25,7 +25,9 @@ import { ManyChatSettings } from "@/components/integrations/settings/manychat-se
 import { PageHeader } from "@/components/shared/page-header";
 import type { IntegrationProvider } from "@/constants/integrations";
 import { paths } from "@/routes";
-import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
+import { esRechazoPorModulo, exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Integraciones.
@@ -62,6 +64,35 @@ export default async function IntegrationsPage() {
     getCurrentUserIdAction(),
     getManyChatIntegrationStatusAction(),
   ]);
+  // Sin Integraciones una lectura vuelve rechazada: pasa si los permisos cambian
+  // entre el guardia y las lecturas, que los vuelven a mirar (SCRUM-541).
+  if (esRechazoPorModulo(overview)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(overview.moduleId)} />;
+  }
+  if (esRechazoPorModulo(paymentIntegrations)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(paymentIntegrations.moduleId)} />;
+  }
+  if (esRechazoPorModulo(ghlOpportunities)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(ghlOpportunities.moduleId)} />;
+  }
+  if (esRechazoPorModulo(vturb)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(vturb.moduleId)} />;
+  }
+  if (esRechazoPorModulo(webinarJam)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(webinarJam.moduleId)} />;
+  }
+  if (esRechazoPorModulo(hyros)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(hyros.moduleId)} />;
+  }
+  if (esRechazoPorModulo(unlinkedRecordings)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(unlinkedRecordings.moduleId)} />;
+  }
+  if (esRechazoPorModulo(currentUserId)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(currentUserId.moduleId)} />;
+  }
+  if (esRechazoPorModulo(manychat)) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(manychat.moduleId)} />;
+  }
 
   const stateOf = (provider: IntegrationProvider) =>
     overview.healths.find((health) => health.provider === provider)?.state ??

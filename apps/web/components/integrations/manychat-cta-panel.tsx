@@ -9,6 +9,9 @@ import {
 } from "@/app/manychat/cta-actions";
 import { Button, Input, Label } from "@ai-coo/ui";
 import { useToast } from "@/providers/toast-provider";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
 
 export function ManyChatCtaPanel({ initialTags = "" }: { initialTags?: string }) {
   const { push } = useToast();
@@ -16,11 +19,16 @@ export function ManyChatCtaPanel({ initialTags = "" }: { initialTags?: string })
   const [stats, setStats] = useState<ManyChatCTAStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
+  const [rechazo, setRechazo] = useState<RechazoPorModulo | null>(null);
 
   const refreshStats = async () => {
     setLoading(true);
     try {
       const data = await getManyChatCTAStatsAction();
+      if (esRechazoPorModulo(data)) {
+        setRechazo(data);
+        return;
+      }
       setStats(data);
     } catch {
       setStats({ cta_responses: 0, flows_triggered: 0, top_flows: [] });
@@ -71,6 +79,12 @@ export function ManyChatCtaPanel({ initialTags = "" }: { initialTags?: string })
       setPending(false);
     }
   };
+
+  // Sin Integraciones la recarga vuelve rechazada: pasa si los permisos cambian
+  // con la pantalla abierta (SCRUM-541).
+  if (rechazo) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(rechazo.moduleId)} />;
+  }
 
   return (
     <div className="space-y-4 rounded-lg border bg-muted/20 p-3">

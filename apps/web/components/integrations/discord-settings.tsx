@@ -23,6 +23,9 @@ import { SwitchRow } from "@/components/shared/switch-row";
 import { sugerirWins } from "@/lib/discord/channels";
 import { DiscordChannelCard } from "./discord-channel-card";
 import { useToast } from "@/providers/toast-provider";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
 import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
 import type {
   DiscordClientLink,
@@ -195,12 +198,17 @@ export function DiscordSettings({
   const [picker, setPicker] = useState<DiscordChannelOption[] | null>(null);
   const [pickerError, setPickerError] = useState<string | null>(null);
   const [loadingPicker, setLoadingPicker] = useState(false);
+  const [rechazo, setRechazo] = useState<RechazoPorModulo | null>(null);
 
   const openPicker = async () => {
     setLoadingPicker(true);
     setPickerError(null);
     try {
       const res = await listDiscordGuildChannelsAction();
+      if (esRechazoPorModulo(res)) {
+        setRechazo(res);
+        return;
+      }
       if (!res.ok) {
         setPickerError(res.error);
         setPicker([]);
@@ -340,6 +348,12 @@ export function DiscordSettings({
     );
     push({ title: "Canal removido", variant: "success" });
   };
+
+  // Sin Integraciones la recarga vuelve rechazada: pasa si los permisos cambian
+  // con la pantalla abierta (SCRUM-541).
+  if (rechazo) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(rechazo.moduleId)} />;
+  }
 
   return (
     <div className="space-y-8 max-w-2xl">

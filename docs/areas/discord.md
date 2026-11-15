@@ -27,6 +27,8 @@ preguntas ni modera: su única escritura en el servidor es el saludo de canal nu
 | `POST /api/discord/pending-link` | `app/api/discord/pending-link/route.ts` | El bot manda un `!vincular` sin match → `discord_pending_links` |
 | `POST /api/discord/message` | `app/api/discord/message/route.ts` | **Stub**: autentica y devuelve `ok`. El bot no lo llama |
 
+- `/integrations/discord`: las Server Actions `getDiscordSettingsAction` y `listDiscordGuildChannelsAction` chequean `integrations` (SCRUM-541, corte C) y devuelven el rechazo como valor; la página y `DiscordSettings` dibujan `SinAcceso`. Las tablas de Discord siguen editables por cualquier miembro de la org (`[DISCORD-PERMISOS]`).
+
 ## Arquitectura
 
 ```
