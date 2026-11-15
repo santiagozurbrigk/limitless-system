@@ -101,6 +101,7 @@ vi.mock("@/app/payments/actions", () => ({
   getPaymentIntegrationsStatusAction: lectura("getPaymentIntegrationsStatusAction"),
 }));
 
+import { esRechazoPorModulo } from "@/lib/auth/regla-de-modulo";
 import { getIntegrationsOverviewAction } from "../actions";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -337,13 +338,15 @@ const TARJETAS_DEL_CORTE = {
   fanbasis: { state: "not_connected", lastSyncAt: null, records: null, issues: [] },
 };
 
-type Panorama = {
-  healths: Array<{ provider: string; state: string; issues: unknown[] }>;
-  summary: unknown;
-};
+function angostar(resultado: Awaited<ReturnType<typeof getIntegrationsOverviewAction>>) {
+  if (esRechazoPorModulo(resultado)) throw new Error("el panorama vino rechazado");
+  return resultado;
+}
+
+type Panorama = ReturnType<typeof angostar>;
 
 async function panorama(): Promise<Panorama> {
-  return (await getIntegrationsOverviewAction()) as unknown as Panorama;
+  return angostar(await getIntegrationsOverviewAction());
 }
 
 function tarjeta(resultado: Panorama, provider: string) {
@@ -407,9 +410,7 @@ describe("el panorama de Integraciones", () => {
       const resultado = await getIntegrationsOverviewAction();
       expect(resultado).not.toMatchObject({ motivo: "sin-acceso" });
       for (const [provider, esperada] of Object.entries(tarjetas)) {
-        expect(tarjeta(resultado as unknown as Panorama, provider), provider).toMatchObject(
-          esperada
-        );
+        expect(tarjeta(angostar(resultado), provider), provider).toMatchObject(esperada);
       }
     }
   );

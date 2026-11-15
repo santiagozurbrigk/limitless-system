@@ -377,7 +377,7 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
   (mínimo privilegio, AR 1).
 - `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (nuevo, SCRUM-541) 39 Server Actions de lectura de un solo módulo no
   chequean el módulo; se alcanzan llamándolas a mano. El corte B (2026-11-12) sacó de la deuda las 10 de
-  Operaciones y el corte C (2026-11-13) las 16 de Integraciones.
+  Operaciones y el corte C (2026-11-15) las 16 de Integraciones.
 - `[PERMISOS-FOUNDER-AREA]` resuelto el 2026-10-05 (SCRUM-18): `/founder` vive en `app/(platform)/founder` y
   pasa por el mismo bloqueo que el resto; la action que lee su resumen exige Operaciones.
 - `[PERMISOS-SIN-ROL-NAV]` (nuevo) Un member sin rol pasa el gate de pantallas, pero la notch nav le
