@@ -201,7 +201,8 @@ provocar a mano sin tocar la base es un `notFound()`.
 
 Lo que cubren los tests (Supabase simulado y la base del CI): `app/auth/__tests__/login-del-staff.test.ts`,
 `lib/supabase/__tests__/middleware-login-del-staff.test.ts`, `app/super-admin/__tests__/guard-de-staff-por-accion.test.ts`
-y `supabase/ci/tests/98_staff_en_org_de_limitless.sql`. Queda verlo en producción, después de la ventana de
+`supabase/ci/tests/98_staff_en_org_de_limitless.sql` y `supabase/ci/tests/99_baja_de_staff.sql` (este último no se
+corrió en la HU: se verifica en la ventana). Queda verlo en producción, después de la ventana de
 SCRUM-532 ([`staff-en-org-de-limitless.md`](staff-en-org-de-limitless.md), paso 8).
 
 **Prerrequisitos:** 523 y 552 aplicadas; la org de Limitless marcada (`experience = 'limitless'`); una cuenta
@@ -215,6 +216,9 @@ del staff (en `super_admin_users`) y una cuenta de la org de Limitless que **no*
 4. 🔒 Con la cuenta del staff, si la org de Limitless no completó el onboarding y no tiene `skip_onboarding`,
    abrir `/super-admin/organizations`. Resultado esperado: el gate de onboarding redirige a `/onboarding`
    (esperado, ver el paso 3b de la guía); anotarlo si pasa sin haberse decidido el paso 3b.
+5. 🔒⭐ Con una cuenta de staff de prueba, después de la ventana (paso 5b de la guía), correr en el SQL Editor
+   `select public.dar_de_baja_staff('<email de la cuenta de prueba>');`. Resultado: `perfil_desactivado`; esa
+   cuenta ya no entra a `/super-admin/organizations` ni ve datos de la org de Limitless.
 
 ---
 

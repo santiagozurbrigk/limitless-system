@@ -1585,7 +1585,7 @@ Fuente: PENDIENTES.md [LAYOUT-CAJONES] · Doc del área: docs/areas/plataforma.m
 
 *Severidad:* Media
 
-*Estado verificado:* desde SCRUM-523 ({{20261019120000_organizations_experience.sql}}) toda organización nueva nace con {{organizations.experience = 'webinar'}} porque las altas lo mandan explícito (el default de la columna es {{full}}), salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin ({{createFounderAccountAction}}, {{createOrganizationFromHoldingAction}}, {{createHoldingOrgAction}} en {{app/super-admin/actions.ts}}) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para {{authenticated}}) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL). {{limitless}} (Limitless de gestión, decisión del PO del 28-oct-2026) no la manda ninguna alta: se asigna sólo así, con el SQL y el precheck de la guía de SCRUM-532.
+*Estado verificado:* desde SCRUM-523 ({{20261019120000_organizations_experience.sql}}) toda organización nueva nace con {{organizations.experience = 'webinar'}} porque las altas lo mandan explícito (el default de la columna es {{full}}), salvo el negocio creado dentro de un holding, que toma la del holding (o {{full}} si el holding es {{limitless}}). Las altas del super admin ({{createFounderAccountAction}}, {{createOrganizationFromHoldingAction}}, {{createHoldingOrgAction}} en {{app/super-admin/actions.ts}}) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para {{authenticated}}) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL). {{limitless}} (Limitless de gestión, decisión del PO del 28-oct-2026) no la manda ninguna alta: se asigna sólo así, con el SQL y el precheck de la guía de SCRUM-532.
 
 *Riesgo:* cuando SCRUM-524 esconda el menú según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan {{webinar}}) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
 
@@ -1607,15 +1607,6 @@ Fuente: PENDIENTES.md [ORG-EXPERIENCIA-CAMBIO] · Doc del área: docs/areas/plat
 *Dónde:* {{apps/web/app/team/actions.ts}}, {{apps/web/lib/team/invitacion.ts}}.
 
 Fuente: PENDIENTES.md [STAFF-INVITAR-DESDE-OTRA-ORG] · Doc del área: docs/areas/plataforma.md",STAFF-INVITAR-DESDE-OTRA-ORG,Plataforma,P2,,deuda técnica
-"[STAFF-BAJA-EN-DOS-PASOS] La baja de alguien del staff son dos pasos a mano (nuevo, SCRUM-552)",Task,Medium,plataforma,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
-
-*Estado verificado:* desde SCRUM-552 el staff es founder de la org de Limitless. Sacar el email de {{super_admin_users}} le quita el panel interno, pero la persona sigue siendo founder de esa org con sus datos; la baja completa exige además desactivar el perfil o sacarlo de la org ({{docs/operacion/alta-super-admin.md}}, ""Dar de baja a un super admin""). No hay acción que haga las dos cosas (riesgo R10 del SDD).
-
-*Qué hay que hacer:* una acción de baja del staff (o un procedimiento SQL en una transacción) que saque el email de la lista y desactive el perfil a la vez, con su test.
-
-*Dónde:* {{docs/operacion/alta-super-admin.md}}, {{apps/web/app/super-admin/}}.
-
-Fuente: PENDIENTES.md [STAFF-BAJA-EN-DOS-PASOS] · Doc del área: docs/areas/plataforma.md",STAFF-BAJA-EN-DOS-PASOS,Plataforma,P2,,deuda técnica
 "[STAFF-BORRAR-ORG-DE-LIMITLESS] Nada impide dar de baja la org de Limitless desde el panel (nuevo, SCRUM-552)",Task,Medium,plataforma,p2,deuda-tecnica,,,,"*Tipo:* deuda técnica
 
 *Estado verificado:* {{deleteOrganizationAction}} ({{apps/web/app/super-admin/delete-actions.ts}}) y {{advertenciasDeOrganizacion}} ({{apps/web/lib/super-admin/deletion-plan.ts}}) no miran {{organizations.experience}}: un staff puede dar de baja la org de Limitless, donde está todo el staff como founder, con la confirmación por nombre de siempre. Preexistente (riesgo R11 del SDD); SCRUM-552 sólo hace que esa org tenga al staff adentro.

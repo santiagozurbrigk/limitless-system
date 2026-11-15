@@ -131,6 +131,15 @@ real acá.
    `perfil_sin_org_a_migrar` es la cantidad de perfiles que va a asociar la migración.
 5. **Aplicar `20261101120000_staff_en_org_de_limitless.sql`.** Si aborta, leer el mensaje (ver "Si la
    migración aborta"), corregir y reintentar: no deja cambios a medias.
+
+   **5b.** Aplicar `20261115120000_baja_de_staff.sql` (después de `20261101120000_staff_en_org_de_limitless.sql`).
+   Crea la función de la baja del staff (ver "Baja de alguien del staff"). Verificación:
+
+   ```sql
+   select count(*) from pg_proc where proname = 'dar_de_baja_staff';
+   ```
+
+   **Esperado:** 1.
 6. **P5** (repetir P2). **Esperado:** `perfil_sin_org_a_migrar = 0`, `ya_en_limitless` igual a la suma de
    `perfil_sin_org_a_migrar + ya_en_limitless` del paso 4, `en_otra_org_revisar` sin cambios. Si alguien se
    agregó a la lista tarde o quedó pendiente, se re-ejecuta la asociación (sólo el rol de migraciones; ningún
@@ -166,4 +175,16 @@ La migración corre en una transacción: un aborto no deja nada aplicado. Los tr
 ## Baja de alguien del staff
 
 Desde esta migración, sacar el email de la lista ya no alcanza: la persona sigue siendo founder de la
-organización de Limitless. Ver [alta-super-admin.md](alta-super-admin.md), "Dar de baja a un super admin".
+organización de Limitless. El camino, desde que se aplica `20261115120000_baja_de_staff.sql` (paso 5b, después
+de `20261101120000_staff_en_org_de_limitless.sql`), es una sola llamada que saca el email de la lista y
+desactiva el perfil, todo o nada. Se corre en el SQL Editor (rol de migraciones; ningún rol de la API tiene
+EXECUTE):
+
+```sql
+select public.dar_de_baja_staff('nombre@ejemplo.com');
+```
+
+Devuelve una fila con `perfil_desactivado`, `sin_perfil` o `sin_perfil_revisar`. Qué hacer con cada resultado y
+con cada mensaje si aborta, y la verificación de después (incluida la lista de perfiles activos de la
+organización de Limitless fuera de la lista de staff), están en [alta-super-admin.md](alta-super-admin.md),
+"Dar de baja a un super admin". Antes de la ventana, la misma sección tiene los pasos manuales.
