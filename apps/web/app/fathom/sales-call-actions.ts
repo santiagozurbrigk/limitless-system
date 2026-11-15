@@ -1,6 +1,10 @@
 "use server";
 
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { createClient } from "@/lib/supabase/server";
 import type { MatchConfidence } from "@/lib/fathom/match-appointment";
 
@@ -37,7 +41,9 @@ export type LinkableAppointment = {
 /** Grabaciones procesadas que no quedaron asociadas a un turno. */
 export async function listUnlinkedRecordingsAction(
   limit = 30
-): Promise<UnlinkedRecording[]> {
+): Promise<UnlinkedRecording[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 
@@ -82,7 +88,9 @@ export async function listUnlinkedRecordingsAction(
  */
 export async function listLinkableAppointmentsAction(
   recordingId: string
-): Promise<LinkableAppointment[]> {
+): Promise<LinkableAppointment[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 

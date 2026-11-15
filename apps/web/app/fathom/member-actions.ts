@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAuthContext } from "@/lib/auth/require-auth";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { validateFathomApiKey } from "@/lib/fathom/api";
 import { sincronizarMiembroFathom } from "@/lib/fathom/member-sync";
 import {
@@ -23,7 +27,9 @@ export type FathomMemberStatus = {
   lastSyncAt?: string | null;
 };
 
-export async function listFathomMemberStatusesAction(): Promise<FathomMemberStatus[]> {
+export async function listFathomMemberStatusesAction(): Promise<FathomMemberStatus[] | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   const { orgId: organizationId } = await requireAuthContext();
   const supabase = await createClient();
 

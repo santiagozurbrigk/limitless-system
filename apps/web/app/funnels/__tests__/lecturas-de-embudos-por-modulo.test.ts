@@ -9,7 +9,7 @@
  * consultas: el Supabase falso anota cada llamada con sus argumentos, así que un
  * filtro perdido o una columna cambiada al mover un cuerpo no pasan.
  *
- * `getVTurbStatusAction` (deuda de Integraciones) lee los players sin pasar por
+ * `getVTurbStatusAction` (chequea Integraciones desde el corte C) lee los players sin pasar por
  * la action que ahora chequea Embudos: quien tiene Integraciones y no Embudos
  * sigue viendo el estado de VTurb igual.
  */
@@ -491,7 +491,7 @@ describe("getVTurbStatusAction, para quien tiene Integraciones y no Embudos", ()
     sim.permisos = member({ integrations: "full" });
   });
 
-  it("⭐ con VTurb conectado devuelve el estado con los players, sin leer permisos", async () => {
+  it("⭐ con VTurb conectado devuelve el estado con los players, leyendo los permisos una sola vez (el chequeo de Integraciones, no el de Embudos)", async () => {
     sim.integracionVTurb = INTEGRACION_VTURB;
     expect(await getVTurbStatusAction()).toEqual({
       connected: true,
@@ -500,7 +500,7 @@ describe("getVTurbStatusAction, para quien tiene Integraciones y no Embudos", ()
       playersWithoutPitchTime: 2,
       lastError: "token vencido",
     });
-    expect(sim.llamadasAPermisos).toBe(0);
+    expect(sim.llamadasAPermisos).toBe(1);
     expect(sim.consultas).toEqual([CONSULTA_VTURB_PLAYERS]);
     expect(sim.lecturas).toContain("getVTurbIntegrationForOrg:org-1");
   });
@@ -514,7 +514,7 @@ describe("getVTurbStatusAction, para quien tiene Integraciones y no Embudos", ()
       playersWithoutPitchTime: 0,
       lastError: null,
     });
-    expect(sim.llamadasAPermisos).toBe(0);
+    expect(sim.llamadasAPermisos).toBe(1);
     expect(sim.consultas).toEqual([]);
   });
 

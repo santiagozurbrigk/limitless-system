@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt } from "@/lib/security/encryption";
 import { isPaymentProvider, type PaymentProvider } from "@/lib/payments/types";
@@ -29,8 +33,10 @@ function appUrl(): string {
 
 /** Estado de Whop y Fanbasis para la org actual. */
 export async function getPaymentIntegrationsStatusAction(): Promise<
-  PaymentIntegrationStatus[]
+  PaymentIntegrationStatus[] | RechazoPorModulo
 > {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const admin = createAdminClient();
 

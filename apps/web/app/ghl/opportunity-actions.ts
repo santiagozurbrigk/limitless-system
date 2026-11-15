@@ -110,7 +110,9 @@ export type GHLOpportunitiesStatus = {
   hasWebhookSecret: boolean;
 };
 
-export async function getGHLOpportunitiesStatusAction(): Promise<GHLOpportunitiesStatus> {
+export async function getGHLOpportunitiesStatusAction(): Promise<GHLOpportunitiesStatus | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 

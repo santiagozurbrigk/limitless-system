@@ -49,7 +49,9 @@ export type VTurbStatus = {
   lastError: string | null;
 };
 
-export async function getVTurbStatusAction(): Promise<VTurbStatus> {
+export async function getVTurbStatusAction(): Promise<VTurbStatus | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
 
   const empty: VTurbStatus = {

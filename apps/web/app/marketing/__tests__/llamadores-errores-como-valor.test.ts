@@ -21,6 +21,21 @@ vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
   exigirModuloDeLaPagina: async () => null,
 }));
+// SCRUM-541 (corte C): el panorama chequea Integraciones; acá lo abre un founder.
+vi.mock("@/lib/auth/get-current-permissions", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/auth/get-current-permissions")>();
+  const { emptyPermissions } = await import("@/constants/permission-modules");
+  return {
+    ...original,
+    getCurrentUserPermissions: async () => ({
+      role: "founder",
+      isFounder: true,
+      modules: emptyPermissions(),
+      hasRoleConfigured: true,
+      enabledAddOns: [],
+    }),
+  };
+});
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/release/escondido", () => ({ ESCONDIDO: { marketingOverview: false } }));
 vi.mock("@/app/marketing/actions", () => ({
@@ -103,6 +118,7 @@ import MarketingUTMsPage from "@/app/(platform)/marketing/utms/page";
 import { EstadoDeSincronizacion } from "@/components/marketing/estado-de-sincronizacion";
 import { EmptyState } from "@/components/shared/empty-state";
 import { getIntegrationsOverviewAction } from "@/app/integrations/actions";
+import { esRechazoPorModulo } from "@/lib/auth/regla-de-modulo";
 import { leerInstagramConectado } from "@/providers/marketing-data-provider";
 import { estadoDeLaCarpeta } from "@/components/marketing/drive-admin-view";
 import { leerUltimoReporte } from "@/components/marketing/marketing-sales-connection";
@@ -224,8 +240,15 @@ describe("/marketing/content: estado de la sincronización", () => {
 });
 
 describe("Integraciones: YouTube", () => {
+  /** El panorama de quien tiene Integraciones; si viniera rechazado, el caso no sirve. */
+  async function leerPanorama() {
+    const r = await getIntegrationsOverviewAction();
+    if (esRechazoPorModulo(r)) throw new Error("el panorama vino rechazado");
+    return r;
+  }
+
   it("conectado, la tarjeta de siempre", async () => {
-    const { healths } = await getIntegrationsOverviewAction();
+    const { healths } = await leerPanorama();
     expect(healths.find((h) => h.provider === "youtube")).toMatchObject({
       accountLabel: "Mi canal",
       state: "connected",
@@ -234,7 +257,7 @@ describe("Integraciones: YouTube", () => {
 
   it("⭐ si el estado no se pudo leer, la tarjeta no dice «Sin conectar»", async () => {
     sim.youtube = { success: false, error: ERROR_INESPERADO };
-    const { healths } = await getIntegrationsOverviewAction();
+    const { healths } = await leerPanorama();
     const youtube = healths.find((h) => h.provider === "youtube");
     expect(youtube).toEqual(
       estadoSinLeer({ provider: "youtube", recordsLabel: "videos", motivo: ERROR_INESPERADO })
@@ -244,9 +267,9 @@ describe("Integraciones: YouTube", () => {
   });
 
   it("⭐ YouTube sin leer no suma como conectada ni como sin conectar, y requiere atención", async () => {
-    const conectada = await getIntegrationsOverviewAction();
+    const conectada = await leerPanorama();
     sim.youtube = { success: false, error: ERROR_INESPERADO };
-    const sinLeer = await getIntegrationsOverviewAction();
+    const sinLeer = await leerPanorama();
     expect(sinLeer.summary.connected).toBe(conectada.summary.connected - 1);
     expect(sinLeer.summary.notConnected).toBe(conectada.summary.notConnected);
     expect(sinLeer.summary.needAttention).toBe(conectada.summary.needAttention + 1);

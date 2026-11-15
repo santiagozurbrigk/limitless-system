@@ -11,6 +11,9 @@ import {
   type UnlinkedRecording,
 } from "@/app/fathom/sales-call-actions";
 import { useToast } from "@/providers/toast-provider";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
 
 /**
  * Grabaciones que no quedaron asociadas a ningún turno de venta.
@@ -43,7 +46,13 @@ function formatDateTime(iso: string | null): string {
   });
 }
 
-function RecordingRow({ recording }: { recording: UnlinkedRecording }) {
+function RecordingRow({
+  recording,
+  onRechazo,
+}: {
+  recording: UnlinkedRecording;
+  onRechazo: (rechazo: RechazoPorModulo) => void;
+}) {
   const router = useRouter();
   const { push } = useToast();
   const [isPending, startTransition] = useTransition();
@@ -52,7 +61,12 @@ function RecordingRow({ recording }: { recording: UnlinkedRecording }) {
 
   function handleOpen() {
     startTransition(async () => {
-      setOptions(await listLinkableAppointmentsAction(recording.id));
+      const r = await listLinkableAppointmentsAction(recording.id);
+      if (esRechazoPorModulo(r)) {
+        onRechazo(r);
+        return;
+      }
+      setOptions(r);
     });
   }
 
@@ -161,6 +175,15 @@ export function UnlinkedRecordingsPanel({
 }: {
   recordings: UnlinkedRecording[];
 }) {
+  const [rechazo, setRechazo] = useState<RechazoPorModulo | null>(null);
+
+  // Sin Integraciones la lectura de turnos de una fila vuelve rechazada: pasa si
+  // los permisos cambian con la pantalla abierta (SCRUM-541). Corta el panel
+  // entero: las otras filas también muestran datos.
+  if (rechazo) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(rechazo.moduleId)} />;
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
@@ -185,7 +208,11 @@ export function UnlinkedRecordingsPanel({
       ) : (
         <div className="flex flex-col divide-y divide-border/60 overflow-hidden rounded-lg border border-border/60">
           {recordings.map((recording) => (
-            <RecordingRow key={recording.id} recording={recording} />
+            <RecordingRow
+              key={recording.id}
+              recording={recording}
+              onRechazo={setRechazo}
+            />
           ))}
         </div>
       )}

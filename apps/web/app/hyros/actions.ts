@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -49,7 +53,9 @@ export type HyrosStatus = {
   lastError: string | null;
 };
 
-export async function getHyrosStatusAction(): Promise<HyrosStatus> {
+export async function getHyrosStatusAction(): Promise<HyrosStatus | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
 

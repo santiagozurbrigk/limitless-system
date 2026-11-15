@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
+import {
   actionErrorMessage,
   runMutation,
   type MutationResult,
@@ -179,7 +183,9 @@ export async function getDiscordSettingsAction(): Promise<{
   channelPeople: Record<string, DiscordChannelPerson[]>;
   /** El equipo del negocio, para marcar equivalencias. */
   team: DiscordTeamOption[];
-}> {
+} | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   if (!isSupabaseConfigured()) {
     return {
       integration: null,
@@ -1062,8 +1068,10 @@ export type DiscordChannelOption = DiscordGuildChannel & {
  * servidor cambia todo el tiempo, y una copia vieja ofrecería canales borrados.
  */
 export async function listDiscordGuildChannelsAction(): Promise<
-  { ok: true; channels: DiscordChannelOption[] } | { ok: false; error: string }
+  { ok: true; channels: DiscordChannelOption[] } | { ok: false; error: string } | RechazoPorModulo
 > {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   try {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

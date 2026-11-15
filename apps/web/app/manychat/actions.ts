@@ -7,6 +7,10 @@ import {
 } from "@/lib/auth/bootstrap";
 import { requireAuthContext } from "@/lib/auth/require-auth";
 import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
+import {
 } from "@/lib/rate-limit";
 import { apiKeySchema, firstZodError } from "@/lib/validations";
 import {
@@ -61,7 +65,9 @@ export async function getManyChatIntegrationStatusAction(): Promise<{
   pageName?: string;
   lastSyncAt?: string;
   webhookUrl?: string;
-}> {
+} | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   if (!isSupabaseConfigured()) {
     return { connected: false };
   }

@@ -13,6 +13,11 @@ import { getZernioIntegrationStatusAction } from "@/app/integrations/zernio/acti
 import { getDiscordIntegrationStatusAction } from "@/app/discord/actions";
 import { getGHLIntegrationStatusAction } from "@/app/ghl/actions";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  esRechazoPorModulo,
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { runMutation, type MutationResult } from "@/lib/server/action-result";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -340,7 +345,9 @@ export type IntegrationsOverview = {
  * `last_sync_at`: varios syncs sólo lo escriben cuando ingestaron algo, así que
  * una fecha vieja puede ser una semana tranquila y no una falla.
  */
-export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverview> {
+export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverview | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   const [
     calendlyStatus,
     ghlStatus,
@@ -374,6 +381,13 @@ export async function getIntegrationsOverviewAction(): Promise<IntegrationsOverv
     getHyrosStatusAction().catch(() => null),
     getPaymentIntegrationsStatusAction().catch(() => []),
   ]);
+  if (esRechazoPorModulo(ghlOpportunities)) return ghlOpportunities;
+  if (esRechazoPorModulo(manychatStatus)) return manychatStatus;
+  if (esRechazoPorModulo(unlinkedRecordings)) return unlinkedRecordings;
+  if (esRechazoPorModulo(vturbStatus)) return vturbStatus;
+  if (esRechazoPorModulo(webinarJamStatus)) return webinarJamStatus;
+  if (esRechazoPorModulo(hyrosStatus)) return hyrosStatus;
+  if (esRechazoPorModulo(paymentStatuses)) return paymentStatuses;
 
   const [
     calendlyRecords,

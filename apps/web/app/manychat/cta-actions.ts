@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
+import {
+  rechazoPorModulo,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { fetchManyChatSubscriberTags } from "@/lib/manychat/client";
 import { getManyChatIntegrationForOrganization } from "@/lib/manychat/integration";
 import { fechaDeInstanteEnZona, inicioDelDiaEnZona } from "@/lib/fechas/calendario";
@@ -153,7 +157,9 @@ export async function syncManyChatCtaEventsAction(): Promise<{ synced: number }>
 export async function getManyChatCTAStatsAction(params?: {
   from?: string;
   to?: string;
-}): Promise<ManyChatCTAStats> {
+}): Promise<ManyChatCTAStats | RechazoPorModulo> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();
   const { from, to } = periodBounds(params?.from, params?.to);

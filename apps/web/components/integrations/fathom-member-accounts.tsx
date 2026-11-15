@@ -10,6 +10,9 @@ import {
 } from "@/app/fathom/member-actions";
 import { Button, Input, Label } from "@ai-coo/ui";
 import { useToast } from "@/providers/toast-provider";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+import { SinAcceso } from "@/components/platform/sin-acceso";
+import { getPermissionModuleLabel } from "@/constants/permission-modules";
 
 export function FathomMemberAccountsSection({
   currentUserId,
@@ -21,11 +24,16 @@ export function FathomMemberAccountsSection({
   const [apiKey, setApiKey] = useState("");
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
+  const [rechazo, setRechazo] = useState<RechazoPorModulo | null>(null);
 
   const refresh = async () => {
     setLoading(true);
     try {
       const rows = await listFathomMemberStatusesAction();
+      if (esRechazoPorModulo(rows)) {
+        setRechazo(rows);
+        return;
+      }
       setMembers(rows);
     } catch (error) {
       push({
@@ -122,6 +130,12 @@ export function FathomMemberAccountsSection({
       setPending(false);
     }
   };
+
+  // Sin Integraciones la recarga vuelve rechazada: pasa si los permisos cambian
+  // con la pantalla abierta (SCRUM-541).
+  if (rechazo) {
+    return <SinAcceso moduleLabel={getPermissionModuleLabel(rechazo.moduleId)} />;
+  }
 
   return (
     <div className="mt-4 space-y-3 rounded-lg border bg-muted/20 p-3">
