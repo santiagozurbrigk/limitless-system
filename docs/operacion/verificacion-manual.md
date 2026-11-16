@@ -869,14 +869,6 @@ con una sesión real.
 5. 🔒 Con la cuenta de Limitless que no está en la lista: no ve «Administración» ni en la barra ni en ⌘K; tipear `/administracion/organizaciones` la manda a Clientes.
 
 
-### V16. Panel viejo cerrado (SCRUM-553) ⭐ — después de V15 en producción
-**Prerrequisitos:** V15 pasado en producción (la tarea va recién con la consola verificada).
-1. ⭐ Como staff, iniciar sesión en `/login`. Resultado: llega a `/administracion/organizaciones`.
-2. Abrir links viejos: `/super-admin`, `/super-admin/organizations/<id>`, `/super-admin/users`, `/super-admin/costs`, `/super-admin/onboarding`. Resultado: cada uno abre su pantalla de la consola.
-3. Abrir `/super-admin/ai-brain`, `/super-admin/waitlist`, `/super-admin/trials`, `/super-admin/client-health`. Resultado: Organizaciones de la consola.
-4. `/superadmin/login`. Resultado: `/login`.
-
-
 ### V17. Crear y configurar un lanzamiento (SCRUM-529) ⭐ — `[WEBINAR-ORG-DE-DEMO]`
 **Prerrequisitos:** los de V12.
 1. ⭐ En Lanzamientos, «Crear un lanzamiento». Cargar nombre, variante, precio, fechas y dos sesiones (una con minuto de la oferta). «Crear lanzamiento». Resultado: «Cambio de ejemplo: no se guardó y se pierde al recargar.»

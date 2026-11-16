@@ -16,11 +16,10 @@ import { paths } from "@/routes";
  */
 
 /**
- * Adónde va el staff al iniciar sesión: la consola de Administración dentro de
- * la org de Limitless (SCRUM-553, con el panel viejo cerrado). Supone el staff
- * ya asociado a esa org (migración de SCRUM-552, ventana de SCRUM-532).
+ * Adónde va el staff al iniciar sesión. Lo cambia C1 (SCRUM-551) cuando exista
+ * la ruta de Administración.
  */
-export const DESTINO_DEL_STAFF = paths.platform.consola.organizaciones;
+export const DESTINO_DEL_STAFF = paths.superAdmin.organizations;
 
 export async function isStaffEmail(email: string): Promise<boolean> {
   if (!email.trim() || !isSupabaseConfigured()) return false;
