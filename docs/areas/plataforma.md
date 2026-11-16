@@ -90,7 +90,7 @@ redirige a `/super-admin/organizations`. El panel es `app/(super-admin)/super-ad
   bajo `/administracion`; sin `base`, el panel viejo. `revalidateSuperAdmin` revalida también `/administracion`.
 - **Experiencia** (`setOrganizationExperienceAction`, `lib/administracion/experiencia.ts`): sólo `webinar` y `full`;
   nadie pasa a `limitless` y la org de Limitless no cambia desde acá. Un negocio nuevo de un holding nunca hereda
-  `limitless`: nace `full` (`experienciaDeUnNegocioNuevo`).
+  `limitless`: nace `full` (`experienciaDelNegocioDeUnHolding`, SCRUM-552).
 - **Qué no se mudó:** Cerebro de IA general, lista de espera, pruebas gratis y salud de clientes quedan escondidos
   desde SCRUM-553 (sus rutas llevan a Organizaciones; el código sigue). El staff entra por `/login` a la consola
   (`DESTINO_DEL_STAFF`).

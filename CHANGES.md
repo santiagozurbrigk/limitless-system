@@ -28,6 +28,18 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-16 — Rama de 553/551 al día con los últimos cambios de 524 y 552
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** merges `8cfda417` (524) y `e552b984` (552), y este
+**Módulo(s) afectado(s):** navegación (tests de rutas y bloqueo), holding (`app/(platform)/{holding,onboarding/holding}/actions.ts`), `lib/administracion/experiencia.ts`, docs
+
+**Qué se hizo:** se integraron los commits nuevos de Fer: Equipo visible en el menú `limitless` (524) y la baja de staff en un paso, `dar_de_baja_staff` (552). Fer también hizo en 552 el arreglo de que un negocio de un holding `limitless` nace `full`, que 551 había hecho en paralelo: queda su versión (`experienciaDelNegocioDeUnHolding` en `lib/organization/experience.ts`) y se borra la duplicada `experienciaDeUnNegocioNuevo`. Los tests de navegación ahora esperan en `limitless` Clientes, Tablero, Ventas, Equipo y Administración (sólo staff).
+
+**Por qué / finalidad:** que al mergear 524 y 552 a `main` el PR de 551/553 no traiga conflictos ni dos implementaciones de la misma regla.
+
+**Riesgos / deuda técnica pendiente:** suite completa 5296 en verde.
+
 ### 2026-11-12 — Fichas de datos de Inicio, Lanzamientos, Detalle y Configuración (SCRUM-548)
 
 **Rama:** `claude/brave-wright-s2bfcg`
