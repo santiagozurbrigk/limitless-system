@@ -86,17 +86,19 @@ describe("⭐ la config de los menús", () => {
     expect(WEBINAR.map((e) => e.label)).toEqual(["Inicio", "Lanzamientos", "Leads", "Equipo"]);
   });
 
-  it("limitless: Clientes, Tablero de trabajo, Ventas y Administración, en ese orden (PO, 28-oct)", () => {
+  it("limitless: Clientes, Tablero de trabajo, Ventas, Equipo (provisoria hasta SCRUM-551) y Administración, en ese orden (PO, 28-oct)", () => {
     expect(LIMITLESS.map((e) => e.label)).toEqual([
       "Clientes",
       "Tablero de trabajo",
       "Ventas",
+      "Equipo",
       "Administración",
     ]);
     expect(LIMITLESS.map((e) => segmentoDe(e.href))).toEqual([
       "/clients",
       "/workboard",
       "/sales",
+      "/team",
       "/administracion",
     ]);
   });
@@ -105,8 +107,8 @@ describe("⭐ la config de los menús", () => {
     expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["inicio", "lanzamientos", "leads", "equipo"]);
   });
 
-  it("limitless hoy: Clientes, Tablero, Ventas y Administración (SCRUM-551) listas", () => {
-    expect(entradasListas(LIMITLESS).map((e) => e.id)).toEqual(["clientes", "tablero", "ventas", "administracion"]);
+  it("limitless hoy: Clientes, Tablero, Ventas, Equipo y Administración (SCRUM-551) listas", () => {
+    expect(entradasListas(LIMITLESS).map((e) => e.id)).toEqual(["clientes", "tablero", "ventas", "equipo", "administracion"]);
   });
 
   it("⭐ SCRUM-551: Administración es la única entrada sólo para staff", () => {
@@ -115,7 +117,7 @@ describe("⭐ la config de los menús", () => {
   });
 
   it("⭐ limitless usa las pantallas del menú completo con el mismo nombre, ícono y permiso", () => {
-    for (const id of ["clientes", "tablero"]) {
+    for (const id of ["clientes", "tablero", "equipo"]) {
       const entrada = LIMITLESS.find((e) => e.id === id)!;
       const delMenuCompleto = directModules.find((m) => m.href === entrada.href);
       expect(delMenuCompleto, id).toBeDefined();
@@ -347,7 +349,7 @@ describe("⭐ rutas por experiencia", () => {
     }
   });
 
-  it("⭐ limitless: Clientes, Tablero, todo Ventas y Administración (con sus subrutas), Integraciones y las libres; ni Equipo", () => {
+  it("⭐ limitless: Clientes, Tablero, todo Ventas, Equipo y Administración (con sus subrutas), Integraciones y las libres", () => {
     const abiertas = plataforma.filter((ruta) => rutaPermitidaParaLaExperiencia("limitless", ruta));
     expect(abiertas).toEqual([
       "/sales/inbox",
@@ -357,6 +359,8 @@ describe("⭐ rutas por experiencia", () => {
       "/workboard",
       "/integrations",
       "/administracion",
+      "/team",
+      "/team/roles",
       "/settings",
       "/holding",
       "/onboarding/holding",
@@ -373,10 +377,17 @@ describe("⭐ rutas por experiencia", () => {
   // `/administracion` todavía no tiene carpeta y da 404
   // (ver "entradas no listas" más abajo).
   it("⭐ limitless: el resto va a Clientes (para Administración, en cuanto su carpeta exista)", () => {
-    for (const ruta of ["/dashboard", "/finance", "/marketing", "/team", "/inicio", "/lanzamientos"]) {
+    for (const ruta of ["/dashboard", "/finance", "/marketing", "/inicio", "/lanzamientos"]) {
       expect(redireccionPorExperiencia("limitless", ruta, FOUNDER)).toBe("/clients");
     }
     expect(redireccionPorExperiencia("limitless", "/dashboard", SOLO_VENTAS)).toBe("/sales/inbox");
+  });
+
+  it("⭐ limitless: /team y sus subrutas se abren (provisorio hasta SCRUM-551); el inicio sigue en Clientes", () => {
+    expect(redireccionPorExperiencia("limitless", "/team", FOUNDER)).toBeNull();
+    expect(redireccionPorExperiencia("limitless", "/team/roles", FOUNDER)).toBeNull();
+    expect(pantallaDeInicio("limitless", FOUNDER)).toBe("/clients");
+    expect(pantallaDeInicio("limitless", CON_EQUIPO)).toBe("/team");
   });
 
   it("⭐ limitless abre las pantallas fuera del menú adonde enlazan la Bandeja y el Tablero; webinar las manda a su inicio (Inicio, founder)", () => {

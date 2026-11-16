@@ -188,8 +188,8 @@ describe("⭐ barra de una organización limitless", () => {
     expect(barra.logoCelular).toEqual(["/clients"]);
   });
 
-  it("Clientes, Tablero de trabajo y Ventas; Administración no (SCRUM-551)", () => {
-    expect(barra.items).toEqual(["Clientes", "Tablero de trabajo", "Ventas"]);
+  it("Clientes, Tablero de trabajo, Ventas y Equipo; Administración no (SCRUM-551)", () => {
+    expect(barra.items).toEqual(["Clientes", "Tablero de trabajo", "Ventas", "Equipo"]);
   });
 
   it("⭐ la isla sin reportes ejecutivos, sin configuración pendiente y sin Integraciones: sólo Ajustes", () => {

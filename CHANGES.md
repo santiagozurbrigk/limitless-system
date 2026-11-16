@@ -221,6 +221,23 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Riesgos / deuda técnica pendiente:** `[WEBINAR-LEADS-PERSISTIR]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]` (AC-6 parcial hasta SCRUM-544), `[WEBINAR-LEADS-SIN-ORGANIZACION]` (una cuenta sin organización que abre `/leads` cae en la pantalla de error de la plataforma y deja dos eventos en Sentry), `[WEBINAR-NUMEROS-DE-TICKET]`. Volver de la ficha a la lista pierde el filtro (no se arregla en esta HU). Cruce con SCRUM-537, 543 y 544 en `menu-por-experiencia.ts`, `paths.ts` y `module-for-path.ts` al mergear.
 
+### 2026-11-15 — Equipo visible en `limitless` hasta SCRUM-551 (ajuste del PR #148, SCRUM-524)
+
+**Rama:** `feat/SCRUM-524-webinars-menu`
+**Commit(s):** `8110f106` — fix(webinars): Equipo visible y /team permitido en limitless hasta SCRUM-551 (SCRUM-524); este (docs y test del ícono)
+**Módulo(s) afectado(s):** Plataforma (navegación): `lib/navigation/menu-por-experiencia.ts` y sus tests (`lib/navigation/__tests__`, `components/navigation`, `components/layout`, `app/__tests__/bloqueo-por-experiencia.test.ts`, `app/__tests__/layout-plataforma-experiencia.test.ts`); docs `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md` y `FUNCIONAL.md` (F-PLA-08)
+
+**Qué se hizo:**
+- `MENU_POR_EXPERIENCIA.limitless` suma la entrada `equipo` (Equipo, `/team`, ícono `users`, módulo `team`, `lista: true`) entre Ventas y Administración, con el comentario "provisoria hasta SCRUM-551". La barra, el menú del celular y la paleta de `limitless` muestran Clientes, Tablero de trabajo, Ventas y Equipo, y `/team` (con sus subrutas) se abre en vez de redirigir a Clientes. Administración sigue definida y sin mostrarse. Un miembro de `limitless` que sólo ve Equipo tiene `/team` como pantalla de inicio (antes, Ajustes).
+- Los tests de `limitless` que contaban entradas o esperaban que `/team` redirigiera se actualizaron, y el test de holding ahora prueba el bloqueo con `/finance`.
+- Revisión del ajuste (CR MNR-1, AR MNR-1): los dos tests que exigen que las entradas de `limitless` tengan el mismo nombre, ícono y módulo que el menú completo (`rutas-por-experiencia.test.ts` y `menu-por-experiencia.test.ts`) incluyen ahora Equipo. Un ícono distinto en la entrada de `limitless` los hace fallar a los dos (comprobado con el cambio a `user-round`).
+
+**Por qué / finalidad:** sin Equipo, una organización de `limitless` no puede invitar staff nuevo hasta que salga SCRUM-551 (SCRUM-552 lo suma por invitación). Lo pidió Santiago en la revisión del PR #148.
+
+**Decisiones de diseño relevantes:** Equipo va antes de Administración para que, cuando salga SCRUM-551, ésta quede al final, como en el ticket. No cambia permisos: `/team` sigue pasando por el permiso del módulo `team`; sólo se destraba el bloqueo por experiencia. `webinar` y `full` no cambian.
+
+**Riesgos / deuda técnica pendiente:** la entrada es provisoria y se revisa al cerrar SCRUM-551. `lib/organization/experience.ts` y el criterio de la historia en `docs/backlog/historias.md` siguen describiendo `limitless` sin Equipo (es la decisión del PO); si se cambian lo decide la persona o el PO.
+
 ### 2026-11-01 — Fix-pack 2 de A1: «Generar SOP» escondido en `limitless` y textos corregidos (SCRUM-524)
 
 **Rama:** `feat/SCRUM-524-webinars-menu`

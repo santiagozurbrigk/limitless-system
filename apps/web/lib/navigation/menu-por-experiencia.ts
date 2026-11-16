@@ -18,10 +18,12 @@ import type { SidebarParentKey } from "./sidebar-modules";
  *       - Leads: SCRUM-545 (`/leads` y la ficha `/leads/[id]`).
  *       - Equipo: ya existe (`/team`).
  *   - `limitless` (Limitless de gestión; PO, 28-oct-2026): Clientes, Tablero
- *     de trabajo, Ventas y Administración, en ese orden. Las tres primeras son
- *     las pantallas de siempre, con el mismo nombre, ícono y módulo de permisos
- *     que en el menú completo; Ventas es el mismo grupo, con sus hijos.
- *     Administración es de SCRUM-551.
+ *     de trabajo, Ventas, Equipo y Administración, en ese orden. Las cuatro
+ *     primeras son las pantallas de siempre, con el mismo nombre, ícono y
+ *     módulo de permisos que en el menú completo; Ventas es el mismo grupo,
+ *     con sus hijos. Equipo es provisoria hasta SCRUM-551 (sin ella no se
+ *     puede invitar staff nuevo) y se revisa al cerrarla. Administración es
+ *     de SCRUM-551.
  *
  * Una entrada con `lista: false` no se muestra (nada de "Próximamente") y su
  * ruta no se abre. Lo que ve quien la tipea depende de si su pantalla existe:
@@ -119,6 +121,16 @@ export const MENU_POR_EXPERIENCIA: Record<ExperienciaConMenuPropio, readonly Ent
       icon: "message-square",
       permissionId: "sales",
       grupo: "ventas",
+      lista: true,
+    },
+    {
+      // Provisoria hasta SCRUM-551, se revisa al cerrarla: sin Equipo no se
+      // puede invitar staff nuevo (SCRUM-552 lo suma por invitación).
+      id: "equipo",
+      label: "Equipo",
+      href: paths.platform.team.root,
+      icon: "users",
+      permissionId: "team",
       lista: true,
     },
     {

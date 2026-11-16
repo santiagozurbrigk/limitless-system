@@ -100,10 +100,10 @@ describe("⭐ paleta de una organización webinar", () => {
 });
 
 describe("⭐ paleta de una organización limitless", () => {
-  it("el pie lleva a la pantalla de inicio; lista Clientes, Tablero y los hijos de Ventas", () => {
+  it("el pie lleva a la pantalla de inicio; lista Clientes, Tablero y Equipo (grupo Plataforma) y los hijos de Ventas", () => {
     const p = paleta("limitless", "/clients", FOUNDER);
     expect(p.pie).toEqual(["Ir al inicio /clients"]);
-    expect(p.items).toEqual(["Clientes", "Tablero de trabajo", "Bandeja", "Métricas", "Closing", "Cobros", "Llamadas"]);
+    expect(p.items).toEqual(["Clientes", "Tablero de trabajo", "Equipo", "Bandeja", "Métricas", "Closing", "Cobros", "Llamadas"]);
   });
 
   it("un miembro con sólo Ventas: sólo los hijos de Ventas", () => {

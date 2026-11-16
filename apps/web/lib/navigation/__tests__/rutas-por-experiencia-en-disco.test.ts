@@ -73,7 +73,7 @@ describe("⭐ bloqueo por experiencia en app/(platform)", () => {
     expect([...abiertas].sort()).toEqual(["/holding", "/inicio", "/lanzamientos", "/leads", "/onboarding", "/settings", "/team"]);
   });
 
-  it("⭐ limitless: toda pantalla fuera de Clientes, Tablero, Ventas, Administración, Integraciones, SOP, contexto del negocio y las libres redirige a Clientes", () => {
+  it("⭐ limitless: toda pantalla fuera de Clientes, Tablero, Ventas, Equipo, Administración, Integraciones, SOP, contexto del negocio y las libres redirige a Clientes", () => {
     const abiertas = new Set<string>();
     for (const p of dePlataforma) {
       const destino = redireccionPorExperiencia("limitless", p.ruta, FOUNDER);
@@ -90,6 +90,7 @@ describe("⭐ bloqueo por experiencia en app/(platform)", () => {
       "/sales",
       "/settings",
       "/sops",
+      "/team",
       "/workboard",
     ]);
   });
