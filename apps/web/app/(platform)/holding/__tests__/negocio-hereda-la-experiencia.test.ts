@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * SCRUM-523 · un negocio que se crea dentro de un holding hereda la experiencia
- * de la organización del holding, en las dos altas que lo vinculan en el mismo
- * flujo: "Agregar negocio" (`addBusinessToMyHoldingAction`) y el onboarding
- * del holding (`completeHoldingOnboardingAction`). Así un founder con Limitless
- * completo que suma un negocio no pierde el menú completo.
+ * SCRUM-523 y SCRUM-552 · un negocio que se crea dentro de un holding toma la
+ * experiencia de la organización del holding, salvo `limitless`, que da `full`
+ * (`experienciaDelNegocioDeUnHolding`). Vale en las dos altas que lo vinculan
+ * en el mismo flujo: "Agregar negocio" (`addBusinessToMyHoldingAction`) y el
+ * onboarding del holding (`completeHoldingOnboardingAction`). Así un founder
+ * con Limitless completo que suma un negocio no pierde el menú completo, y
+ * ningún negocio nace en Limitless de gestión. La entrada no elige la
+ * experiencia: la decide el servidor.
  *
  * Si la experiencia del holding no se puede leer, no se crea ningún negocio:
  * el default de la base (`full`) decidiría por el holding.
@@ -93,12 +96,34 @@ describe("Agregar negocio desde el holding", () => {
     expect(experienciaGuardada(sim.estado, "Negocio W")).toBe("webinar");
   });
 
-  it("⭐ SCRUM-551: holding en Limitless de gestión: el negocio nuevo nace en full, nunca en limitless", async () => {
+  it("⭐ holding en Limitless de gestión: el negocio nuevo queda en full", async () => {
     holdingCon("limitless");
-    const r = await addBusinessToMyHoldingAction({ businessName: "Negocio L", revenueSharePct: 10 });
+    const r = await addBusinessToMyHoldingAction({
+      businessName: "Negocio L",
+      revenueSharePct: 10,
+      founderEmail: "founder-l@test.com",
+    });
     expect(r.success).toBe(true);
     expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ experience: "full" });
     expect(experienciaGuardada(sim.estado, "Negocio L")).toBe("full");
+    expect(sim.estado.tablas.holding_businesses).toHaveLength(1);
+    if (r.success) expect(r.data.tempCredentials).toBeDefined();
+    for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila.experience).not.toBe("limitless");
+  });
+
+  it("⭐ la entrada no elige la experiencia", async () => {
+    holdingCon("webinar");
+    await addBusinessToMyHoldingAction({ businessName: "Pide L", revenueSharePct: 10, experience: "limitless" });
+    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ experience: "webinar" });
+
+    holdingCon("webinar");
+    await addBusinessToMyHoldingAction({ businessName: "Pide F", revenueSharePct: 10, experience: "full" });
+    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ experience: "webinar" });
+
+    holdingCon("limitless");
+    await addBusinessToMyHoldingAction({ businessName: "Pide L en L", revenueSharePct: 10, experience: "limitless" });
+    expect(sim.estado.insertsDeOrganizaciones[0]).toMatchObject({ experience: "full" });
+    for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila.experience).not.toBe("limitless");
   });
 
   it("⭐ si no se puede leer la experiencia del holding, no se crea el negocio", async () => {
@@ -135,12 +160,39 @@ describe("Onboarding del holding", () => {
     for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila).toMatchObject({ experience: "webinar" });
   });
 
-  it("⭐ SCRUM-551: holding en Limitless de gestión: los negocios nacen en full, nunca en limitless", async () => {
+  it("⭐ holding en Limitless de gestión: los negocios quedan en full", async () => {
     holdingCon("limitless");
-    await completeHoldingOnboardingAction(NEGOCIOS);
+    await expect(completeHoldingOnboardingAction(NEGOCIOS)).resolves.not.toThrow();
+    expect(sim.estado.insertsDeOrganizaciones).toHaveLength(2);
     expect(experienciaGuardada(sim.estado, "Uno")).toBe("full");
     expect(experienciaGuardada(sim.estado, "Dos")).toBe("full");
-    for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila).toMatchObject({ experience: "full" });
+    for (const fila of sim.estado.insertsDeOrganizaciones) {
+      expect(fila).toMatchObject({ experience: "full" });
+      expect(fila.experience).not.toBe("limitless");
+    }
+    expect(sim.estado.tablas.onboarding_responses.length).toBeGreaterThanOrEqual(1);
+    expect(sim.estado.tablas.holding_businesses).toHaveLength(2);
+  });
+
+  it("⭐ la entrada no elige la experiencia", async () => {
+    holdingCon("webinar");
+    await completeHoldingOnboardingAction({
+      businesses: [{ name: "Pide L", revenueSharePct: 10, experience: "limitless" }],
+      experience: "limitless",
+    });
+    expect(sim.estado.insertsDeOrganizaciones).toHaveLength(1);
+    for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila).toMatchObject({ experience: "webinar" });
+
+    holdingCon("webinar");
+    await completeHoldingOnboardingAction({
+      businesses: [
+        { name: "Pide F1", revenueSharePct: 10, experience: "full" },
+        { name: "Pide F2", revenueSharePct: 20, experience: "full" },
+      ],
+      experience: "full",
+    });
+    expect(sim.estado.insertsDeOrganizaciones).toHaveLength(2);
+    for (const fila of sim.estado.insertsDeOrganizaciones) expect(fila).toMatchObject({ experience: "webinar" });
   });
 
   it("⭐ si no se puede leer la experiencia del holding, no se crea ningún negocio", async () => {

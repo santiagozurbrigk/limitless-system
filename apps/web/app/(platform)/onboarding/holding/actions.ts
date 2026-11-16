@@ -10,8 +10,10 @@ import {
   type HoldingBillingModel,
   type HoldingOnboardingData,
 } from "@/lib/holding/billing";
-import { leerExperienciaDeLaOrganizacion } from "@/lib/organization/experience";
-import { experienciaDeUnNegocioNuevo } from "@/lib/administracion/experiencia";
+import {
+  experienciaDelNegocioDeUnHolding,
+  leerExperienciaDeLaOrganizacion,
+} from "@/lib/organization/experience";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { actionErrorMessage } from "@/lib/server/action-result";
@@ -172,11 +174,10 @@ export async function completeHoldingOnboardingAction(data: unknown) {
   // Validación cruzada según modelo ya guardado (no cabe en el schema estático).
   validateBusinessesForBillingModel(businesses, billingModel);
 
-  // Los negocios heredan la experiencia del holding (SCRUM-523). Se lee antes
-  // de crear ninguno: si falla, no queda nada a medias.
-  // Nunca `limitless` (SCRUM-551): es una sola org; un negocio de un holding
-  // marcado así nace `full`.
-  const experience = experienciaDeUnNegocioNuevo(
+  // Los negocios toman la experiencia del holding, salvo `limitless`, que da
+  // `full` (SCRUM-523 y SCRUM-552). Se lee antes de crear ninguno: si la
+  // lectura falla, no se crea nada y no queda nada a medias.
+  const experience = experienciaDelNegocioDeUnHolding(
     await leerExperienciaDeLaOrganizacion(admin, holdingOrgId)
   );
 

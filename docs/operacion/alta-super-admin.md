@@ -182,17 +182,127 @@ un perfil que ya existe. Testigo: `supabase/ci/tests/98_staff_en_org_de_limitles
 Desde SCRUM-552 el staff es founder de la organización de Limitless, así que **sacar el email de la lista ya no
 alcanza**: le quita el panel interno en el próximo request, pero la persona sigue siendo founder de la
 organización de Limitless y conserva sus datos (Clientes, Ventas, Administración). La baja tiene dos partes, las
-dos obligatorias:
+dos obligatorias: sacar el email de la lista y **desactivar su perfil** (`profiles.is_active = false`). Con el
+perfil desactivado el guard del panel también la rechaza (`lib/auth/__tests__/require-staff.test.ts`, "un staff
+con el perfil desactivado no entra"). Si la persona deja el equipo, borra también la cuenta (al final de esta
+sección).
 
-1. sacar el email de la lista (abajo);
-2. **desactivar su perfil** (`profiles.is_active = false`) o sacarlo de la organización de Limitless. Con el
-   perfil desactivado el guard del panel también la rechaza (`lib/auth/__tests__/require-staff.test.ts`, "un staff
-   con el perfil desactivado no entra"). Si la persona deja el equipo, borrar también la cuenta (al final de esta
-   sección).
+### El camino: la función `dar_de_baja_staff`
 
-No hay automatización de las dos partes juntas (queda en `PENDIENTES.md`).
+Desde que se aplica `20261115120000_baja_de_staff.sql` en la ventana de SCRUM-532
+(después de `20261101120000_staff_en_org_de_limitless.sql`, paso 5b de
+[staff-en-org-de-limitless.md](staff-en-org-de-limitless.md)), la baja es una sola llamada que hace las dos partes
+juntas: si algo falla, no se cambia nada. Si la función todavía no existe, sigue los pasos de "Si la función
+todavía no existe (antes de la ventana)", al final de esta sección.
 
-Sacar el email de la lista le quita el acceso al panel interno en el próximo request:
+**Antes de la llamada**, mira el perfil de la persona y su organización (solo lectura):
+
+```sql
+select p.id, p.organization_id, o.name as organizacion, o.experience, p.role, p.is_active
+from public.profiles p
+join auth.users u on u.id = p.id
+left join public.organizations o on o.id = p.organization_id
+where lower(btrim(u.email)) = lower(btrim('nombre@ejemplo.com'));
+```
+
+Para saber si esa organización es la de Limitless:
+
+```sql
+select id, name from public.organizations where experience = 'limitless';
+```
+
+La función desactiva el perfil cuyo usuario de Auth tiene ese email, **sin mirar la organización**: si la persona
+además es founder de **otra** organización (el caso de la sección anterior), queda inactiva también ahí. Si eso no
+es lo que quieres, no sigas y avisa en el canal del equipo.
+
+**La llamada.** Córrela en el **SQL Editor** de Supabase, que usa el rol de migraciones (ningún rol de la API
+puede ejecutarla):
+
+```sql
+select public.dar_de_baja_staff('nombre@ejemplo.com');
+```
+
+**Resultado esperado:** una fila con uno de estos tres valores:
+
+- `perfil_desactivado`: el email salió de la lista y el perfil cuyo email de Auth es ese quedó desactivado.
+- `sin_perfil`: el email salió de la lista y ningún perfil tiene hoy ese email de Auth. No quiere decir que la
+  persona "nunca entró": puede haber cambiado su email desde la app. En la organización de Limitless no quedó
+  ningún perfil activo fuera de la lista.
+- `sin_perfil_revisar`: el email salió de la lista y ningún perfil tiene hoy ese email de Auth (otra vez: puede
+  haber cambiado su email desde la app), pero en la organización de Limitless queda al menos un perfil activo
+  cuyo email de Auth no está en la lista. Puede ser la misma persona con otro email, o un miembro legítimo que no
+  es del staff. La función no desactiva a ninguno. **No des la baja por terminada**: sigue con la segunda
+  consulta de verificación (abajo) y desactiva a mano el perfil que corresponda.
+
+**Si la llamada aborta**, no se cambió nada. Según el mensaje:
+
+- `Ese email no está en la lista de staff (super_admin_users) como lo compara la app…`: busca cómo está guardado
+  con `select email from public.super_admin_users;`. Si la fila está mal cargada (con mayúsculas o espacios),
+  bórrala por su valor exacto con el `delete` de "Si la función todavía no existe" (el de
+  `'valor tal cual sale en la consulta'`). Esa fila nunca dio acceso, pero el perfil sigue activo: desactívalo
+  como en el paso 2 de esa misma sección.
+
+  Si el email ya no está en la lista en ninguna forma (por ejemplo, una baja manual a medias de antes de la
+  ventana: se sacó de la lista y no se desactivó el perfil), la función no puede terminarla. Corre la primera
+  consulta de "Verificación después de la baja": si `perfiles_activos` no es `0`, el perfil sigue activo.
+  Desactívalo por su `id` como en el paso 2 de "Si la función todavía no existe" (cuenta primero los perfiles
+  con ese email de Auth y desactiva solo si hay exactamente uno), y termina con las dos consultas de
+  "Verificación después de la baja".
+- `Ese email es dueño de un holding (holdings.owner_email)…`: pasa el holding a otro super admin (el email nuevo
+  tiene que estar ya en `super_admin_users`) y repite la llamada:
+
+  ```sql
+  update public.holdings set owner_email = lower(trim('otro.super.admin@ejemplo.com'))
+  where owner_email = lower(trim('nombre@ejemplo.com'));
+  ```
+
+- `Hay N perfiles cuyo email de Auth coincide con ese email…`: más de un usuario de Auth tiene ese email (con
+  mayúsculas o espacios distintos). Revísalos a mano con la consulta de "Antes de la llamada" y decide cuál
+  desactivar antes de repetir.
+
+### Verificación después de la baja
+
+Dos consultas de solo lectura. La primera:
+
+```sql
+select
+  (select count(*) from public.super_admin_users where email = lower(btrim('nombre@ejemplo.com'))) as sigue_en_lista,
+  (select count(*) from public.profiles p
+     join auth.users u on u.id = p.id
+     where p.is_active and lower(btrim(u.email)) = lower(btrim('nombre@ejemplo.com'))) as perfiles_activos;
+```
+
+**Resultado esperado:** `0` y `0`.
+
+La segunda lista los perfiles activos de la organización de Limitless cuyo email de Auth no está en la lista de
+staff:
+
+```sql
+select p.id, u.email as email_de_auth, p.email, p.role
+from public.profiles p
+join public.organizations o on o.id = p.organization_id and o.experience = 'limitless'
+join auth.users u on u.id = p.id
+where p.is_active
+  and not exists (
+    select 1 from public.super_admin_users s
+    where s.email = lower(btrim(u.email))
+  );
+```
+
+**Resultado esperado:** solo miembros conocidos que no son del staff, y no la persona dada de baja. `p.email` se
+muestra solo como pista: lo edita el usuario y no sirve para decidir. Si aparece la persona dada de baja (por
+ejemplo, con otro email de Auth), desactívala a mano por su `id`:
+
+```sql
+update public.profiles set is_active = false where id = '<id>' returning id;
+```
+
+### Si la función todavía no existe (antes de la ventana)
+
+Mientras `20261115120000_baja_de_staff.sql` no esté aplicada, la baja son dos pasos manuales, los dos
+obligatorios.
+
+**1. Sacar el email de la lista.** Le quita el acceso al panel interno en el próximo request:
 
 ```sql
 delete from public.super_admin_users
@@ -238,5 +348,31 @@ select
 ```
 
 **Resultado esperado:** `0` y `0`.
+
+**2. Desactivar el perfil.** Se identifica por el email de Auth, no por `profiles.email` (lo edita el usuario).
+Primero lista los perfiles que coinciden (solo lectura, no cambia nada):
+
+```sql
+select p.id, u.email as email_de_auth, p.organization_id, p.role, p.is_active
+from public.profiles p
+join auth.users u on u.id = p.id
+where lower(btrim(u.email)) = lower(btrim('nombre@ejemplo.com'));
+```
+
+- **Exactamente 1 fila:** desactiva ese perfil por su `id`:
+
+  ```sql
+  update public.profiles set is_active = false where id = '<id>' returning id;
+  ```
+
+  **Resultado esperado:** 1 fila con el `id`.
+- **Ninguna fila:** ningún perfil tiene hoy ese email de Auth (la persona puede haber cambiado su email desde la
+  app). No desactives nada todavía: la segunda consulta de "Verificación después de la baja" muestra si queda
+  alguien activo en la organización de Limitless fuera de la lista.
+- **Más de una fila:** no desactives nada. Más de un usuario de Auth tiene ese email (con mayúsculas o espacios
+  distintos): revísalos a mano y decide cuál es antes de desactivar uno por su `id`, igual que cuando la función
+  aborta con `Hay N perfiles…`.
+
+Termina con las dos consultas de "Verificación después de la baja", igual que con la función.
 
 La cuenta de Supabase queda. Si la persona deja el equipo, bórrala también desde **Authentication → Users**.

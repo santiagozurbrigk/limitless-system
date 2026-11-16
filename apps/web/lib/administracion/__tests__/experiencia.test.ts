@@ -8,7 +8,6 @@ import {
   EXPERIENCIAS_GUARDADAS,
   MOTIVO_NO_ELEGIBLE,
   MOTIVO_ORG_DE_LIMITLESS,
-  experienciaDeUnNegocioNuevo,
   motivoParaNoCambiarLaExperiencia,
 } from "../experiencia";
 
@@ -30,12 +29,6 @@ describe("SCRUM-551 · experiencia desde Administración", () => {
 
   it("⭐ la org de Limitless no cambia desde la consola", () => {
     expect(motivoParaNoCambiarLaExperiencia("limitless", "full")).toBe(MOTIVO_ORG_DE_LIMITLESS);
-  });
-
-  it("⭐ un negocio nuevo de un holding nunca hereda limitless: nace full", () => {
-    expect(experienciaDeUnNegocioNuevo("limitless")).toBe("full");
-    expect(experienciaDeUnNegocioNuevo("webinar")).toBe("webinar");
-    expect(experienciaDeUnNegocioNuevo("full")).toBe("full");
   });
 
   it("los valores guardados son los de lib/organization/experience", () => {

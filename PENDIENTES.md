@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 38 | 20 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 37 | 20 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
@@ -453,12 +453,6 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Estado verificado:** `inviteTeamMemberAction` (`apps/web/app/team/actions.ts:328`) no mira `super_admin_users`: crea la invitación aunque el email sea del staff. La aceptación la rechaza con `cuenta_de_staff` si la org no es la de Limitless (`aceptar_invitacion_de_equipo`, `supabase/migrations/20261101120000_staff_en_org_de_limitless.sql`; `supabase/ci/tests/98_staff_en_org_de_limitless.sql`, caso 8), así que la invitación queda pendiente sin efecto. Viene de antes de SCRUM-552 (riesgo R5 del SDD), que no lo empeora.
 - **Qué hay que hacer:** rechazar en `inviteTeamMemberAction` un email de la lista cuando la org que invita no es la de Limitless, con el mismo mensaje de `MENSAJE_INVITACION.cuenta_de_staff`.
 - **Dónde:** `apps/web/app/team/actions.ts`, `apps/web/lib/team/invitacion.ts`.
-
-#### [STAFF-BAJA-EN-DOS-PASOS] La baja de alguien del staff son dos pasos a mano (nuevo, SCRUM-552)
-- **Tipo:** deuda técnica
-- **Estado verificado:** desde SCRUM-552 el staff es founder de la org de Limitless. Sacar el email de `super_admin_users` le quita el panel interno, pero la persona sigue siendo founder de esa org con sus datos; la baja completa exige además desactivar el perfil o sacarlo de la org (`docs/operacion/alta-super-admin.md`, "Dar de baja a un super admin"). No hay acción que haga las dos cosas (riesgo R10 del SDD).
-- **Qué hay que hacer:** una acción de baja del staff (o un procedimiento SQL en una transacción) que saque el email de la lista y desactive el perfil a la vez, con su test.
-- **Dónde:** `docs/operacion/alta-super-admin.md`, `apps/web/app/super-admin/`.
 
 #### [STAFF-BORRAR-ORG-DE-LIMITLESS] Nada impide dar de baja la org de Limitless desde el panel (nuevo, SCRUM-552)
 - **Tipo:** deuda técnica

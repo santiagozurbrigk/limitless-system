@@ -10,7 +10,7 @@ import type { OrganizationExperience } from "@/lib/organization/experience";
  *   - la org de Limitless no cambia de experiencia desde la consola (se asigna
  *     por SQL con la guía de SCRUM-532);
  *   - un negocio nuevo de un holding nunca hereda `limitless`: nace `full`
- *     (si heredara, el alta chocaría con el índice único).
+ *     (`experienciaDelNegocioDeUnHolding` de `lib/organization/experience`, SCRUM-552).
  * Lógica pura, sin `server-only`: la usan las acciones y la ficha.
  */
 /**
@@ -52,7 +52,3 @@ export function motivoParaNoCambiarLaExperiencia(
   return null;
 }
 
-/** La experiencia con la que nace un negocio nuevo de un holding. */
-export function experienciaDeUnNegocioNuevo(delHolding: OrganizationExperience): OrganizationExperience {
-  return delHolding === "limitless" ? "full" : delHolding;
-}
