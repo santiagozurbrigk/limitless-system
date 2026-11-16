@@ -27,6 +27,9 @@ import {
   useEnabledAddOns,
   usePermissions,
 } from "@/providers/permissions-provider";
+import { useExperiencia, usePantallaDeInicio } from "@/providers/experiencia-provider";
+import { ACCESOS_DE_LA_ISLA } from "@/lib/navigation/menu-por-experiencia";
+import { hijosVisiblesDelGrupo } from "@/lib/navigation/rutas-por-experiencia";
 import { NotchNav, type NotchNavItem } from "./notch-nav";
 
 /**
@@ -47,6 +50,9 @@ import { NotchNav, type NotchNavItem } from "./notch-nav";
 export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) {
   const pathname = usePathname();
   const enabledAddOns = useEnabledAddOns();
+  const experiencia = useExperiencia();
+  const inicio = usePantallaDeInicio();
+  const accesos = ACCESOS_DE_LA_ISLA[experiencia];
   const { isFounder, modules } = usePermissions();
   const { isHolding } = useHoldingSession();
   const { clients } = usePlatformData();
@@ -55,8 +61,8 @@ export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) 
     isFounder || (modules[moduleId] ?? "none") !== "none";
 
   const config = useMemo(
-    () => buildPlatformSidebarNav(enabledAddOns),
-    [enabledAddOns]
+    () => buildPlatformSidebarNav(enabledAddOns, experiencia),
+    [enabledAddOns, experiencia]
   );
   const activeParent = config.getParentFromPath(pathname);
 
@@ -101,9 +107,7 @@ export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) 
 
       const parent = config.modulesWithChildren[item.key];
       if (!parent) continue;
-      const children = parent.children.filter(
-        (c) => !c.hidden && canSeeNavItem(c.permissionId, checkAccess, isFounder)
-      );
+      const children = hijosVisiblesDelGrupo({ isFounder, modules }, parent);
       if (children.length === 0) continue;
 
       result.push({
@@ -140,7 +144,7 @@ export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) 
 
   const rightContent = (
     <>
-      <NotchSetupIndicator />
+      {accesos.configuracionPendiente && <NotchSetupIndicator />}
       <HoldingBusinessSwitcher />
       {showIntegrations && (
         <Button
@@ -164,7 +168,7 @@ export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) 
         </Button>
       )}
       {/* Los reportes se leen y se cierran: panel, no una entrada del navbar. */}
-      <ReportsPanel />
+      {accesos.reportes && <ReportsPanel />}
       <ThemeToggle />
       <NotchProfileMenu />
     </>
@@ -173,12 +177,12 @@ export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) 
   return (
     <NotchNav
       items={items}
-      logo={<AppLogo display="compact" height={16} />}
+      logo={<AppLogo href={inicio} display="compact" height={16} />}
       rightContent={rightContent}
       mobileContent={
         <>
           <MobileNav />
-          <AppLogo display="compact" height={14} />
+          <AppLogo href={inicio} display="compact" height={14} />
           <ThemeToggle />
         </>
       }
