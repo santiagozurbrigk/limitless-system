@@ -241,6 +241,13 @@ select public.dar_de_baja_staff('nombre@ejemplo.com');
   bórrala por su valor exacto con el `delete` de "Si la función todavía no existe" (el de
   `'valor tal cual sale en la consulta'`). Esa fila nunca dio acceso, pero el perfil sigue activo: desactívalo
   como en el paso 2 de esa misma sección.
+
+  Si el email ya no está en la lista en ninguna forma (por ejemplo, una baja manual a medias de antes de la
+  ventana: se sacó de la lista y no se desactivó el perfil), la función no puede terminarla. Corre la primera
+  consulta de "Verificación después de la baja": si `perfiles_activos` no es `0`, el perfil sigue activo.
+  Desactívalo por su `id` como en el paso 2 de "Si la función todavía no existe" (cuenta primero los perfiles
+  con ese email de Auth y desactiva solo si hay exactamente uno), y termina con las dos consultas de
+  "Verificación después de la baja".
 - `Ese email es dueño de un holding (holdings.owner_email)…`: pasa el holding a otro super admin (el email nuevo
   tiene que estar ya en `super_admin_users`) y repite la llamada:
 
@@ -342,19 +349,29 @@ select
 
 **Resultado esperado:** `0` y `0`.
 
-**2. Desactivar el perfil.** Se identifica por el email de Auth, no por `profiles.email` (lo edita el usuario):
+**2. Desactivar el perfil.** Se identifica por el email de Auth, no por `profiles.email` (lo edita el usuario).
+Primero lista los perfiles que coinciden (solo lectura, no cambia nada):
 
 ```sql
-update public.profiles p
-set is_active = false
-from auth.users u
-where u.id = p.id
-  and lower(btrim(u.email)) = lower(btrim('nombre@ejemplo.com'))
-returning p.id;
+select p.id, u.email as email_de_auth, p.organization_id, p.role, p.is_active
+from public.profiles p
+join auth.users u on u.id = p.id
+where lower(btrim(u.email)) = lower(btrim('nombre@ejemplo.com'));
 ```
 
-**Resultado esperado:** 1 fila. Si no devuelve ninguna, ningún perfil tiene hoy ese email de Auth (la persona
-puede haber cambiado su email desde la app). Si devuelve más de una, revisa los perfiles antes de seguir.
+- **Exactamente 1 fila:** desactiva ese perfil por su `id`:
+
+  ```sql
+  update public.profiles set is_active = false where id = '<id>' returning id;
+  ```
+
+  **Resultado esperado:** 1 fila con el `id`.
+- **Ninguna fila:** ningún perfil tiene hoy ese email de Auth (la persona puede haber cambiado su email desde la
+  app). No desactives nada todavía: la segunda consulta de "Verificación después de la baja" muestra si queda
+  alguien activo en la organización de Limitless fuera de la lista.
+- **Más de una fila:** no desactives nada. Más de un usuario de Auth tiene ese email (con mayúsculas o espacios
+  distintos): revísalos a mano y decide cuál es antes de desactivar uno por su `id`, igual que cuando la función
+  aborta con `Hay N perfiles…`.
 
 Termina con las dos consultas de "Verificación después de la baja", igual que con la función.
 

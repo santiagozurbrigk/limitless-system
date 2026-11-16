@@ -169,9 +169,10 @@ begin
   raise exception 'FALLA: la segunda baja de b1 no abortó';
 end $$;
 select ci.espera(
-  (select count(*) from public.profiles where id = '99000000-0000-0000-0000-000000000001' and not is_active)
-  + (select count(*) from public.super_admin_users where email = 'b1@test'),
-  1, 'después de la segunda baja, b1 sigue fuera de la lista e inactivo');
+  (select count(*) from public.profiles where id = '99000000-0000-0000-0000-000000000001' and not is_active),
+  1, 'después de la segunda baja, el perfil de b1 sigue inactivo');
+select ci.espera((select count(*) from public.super_admin_users where email = 'b1@test'),
+  0, 'después de la segunda baja, b1 sigue fuera de la lista');
 
 -- ─── S3. La entrada y el email de Auth se normalizan ─────────────────────────
 insert into r values ('S3', public.dar_de_baja_staff('  B3@TEST '));
