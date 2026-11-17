@@ -329,9 +329,16 @@ export function instanteAHoraLocalEnZona(
 
 /**
  * Lo inverso: un reloj de pared `YYYY-MM-DDTHH:mm` de una zona, como instante
- * ISO. Dos pasadas de desfase, como `fechaAInstanteEnZona`: alcanza salvo en la
- * hora que no existe el día que se adelanta el reloj, que cae en la de
- * después. `null` si el texto no es una hora local válida.
+ * ISO. Dos pasadas de desfase, como `fechaAInstanteEnZona`.
+ *
+ * `null` si el texto no es una hora local válida **o si esa hora no existe en
+ * la zona** (el día que se adelanta el reloj se saltea una hora; en Santiago
+ * de Chile, la medianoche): no se elige por la persona una hora de antes o de
+ * después, y quien llama avisa. Se comprueba volviendo el instante a la zona.
+ *
+ * La hora que se repite el día que se atrasa el reloj existe dos veces y el
+ * texto no dice cuál: se devuelve una de las dos. Para no mover una sesión que
+ * ya existía, el formulario manda su instante original si el texto no cambió.
  */
 export function horaLocalEnZonaAInstante(
   local: string,
@@ -345,5 +352,6 @@ export function horaLocalEnZonaAInstante(
   const relojComoUtc = Date.UTC(y, mes - 1, d, h, min, 0, 0);
   let instante = relojComoUtc - desfaseDeZona(new Date(relojComoUtc), zonaReal);
   instante = relojComoUtc - desfaseDeZona(new Date(instante), zonaReal);
-  return new Date(instante).toISOString();
+  const iso = new Date(instante).toISOString();
+  return instanteAHoraLocalEnZona(iso, zonaReal) === local.trim() ? iso : null;
 }

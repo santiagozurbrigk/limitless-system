@@ -54,7 +54,7 @@ y los filtros. Sale de los contratos de vista (`apps/web/lib/webinar/vistas/cont
 | Inversión, costo por registro, ROAS | Sólo variantes pagas | meta_ads + calc. | `launch_ad_campaigns` + `ad_metrics_daily` (ver huecos) | diaria | M, D, SF, FC (sin campañas), E | todos |
 | Lo que el equipo mueve hoy | Levantaron la mano sin contactar; agendados sin cerrar | calc. (manual, calendly, whop/commas) | `lead_events`: `raised_hand` sin `contacted`; `call_booked` sin `purchased` (mismos conteos que los filtros de Leads) | al guardar / webhook | hereda el peor de sus dos números: M, D, SF, FC, E | todos (enlazan a Leads) |
 | Embudo | Etapas de la variante (`PASOS_POR_VARIANTE`) | por etapa | ver Detalle | — | por etapa | todos |
-| Sesiones | Asistieron y se quedaron a la oferta por sesión | zoom | `lead_events` `attended` / `stayed_to_offer` con `data.session_id`; `webinar_sessions.offer_offset_seconds` | post-sesión | M, FC (sin minuto de la oferta), E (reporte falló) | todos |
+| Sesiones | Asistieron y se quedaron a la oferta por sesión | zoom | `lead_events` `attended` / `stayed_to_offer` con `data.session_id`; `webinar_sessions.offer_offset_seconds` | post-sesión | M, D, SF (Zoom sin conectar o reporte pendiente), FC (sin minuto de la oferta), E (reporte falló) | todos |
 | Estado de las fuentes | Cada fuente, su estado y última lectura | cada integración | ver huecos | según fuente | M, D, SF, E | todos |
 | Aviso de registros que no llegan | Landing caída, o cero registros medidos en 24 h captando | landing | `landing_events.received_at` / `status` | al instante | se muestra o no | todos |
 
@@ -104,17 +104,17 @@ el equipo mueve hoy ni Ventas VIP como número (el VIP es una etapa del embudo e
 | Confirmaron el email | Personas | ghl | `lead_events.kind = 'email_confirmed'` | webhook | M, SF (GHL sin conectar), E | Dueño, Análisis |
 | Compraron el asiento VIP (Pago +++) | Personas | whop/commas | `lead_events.kind = 'vip_purchased'` | al instante | M, D, SF, FC (sin producto VIP), E | Dueño, Análisis |
 | Asistieron | Personas | zoom | `lead_events.kind = 'attended'` | post-sesión | M, D, SF, FC, E | Dueño, Análisis |
-| Se quedaron a la oferta | Personas | zoom | `lead_events.kind = 'stayed_to_offer'` | post-sesión | M, FC (falta el minuto de la oferta), E | Dueño, Análisis |
+| Se quedaron a la oferta | Personas | zoom | `lead_events.kind = 'stayed_to_offer'` | post-sesión | M, D, SF (Zoom sin conectar o reporte pendiente), FC (falta el minuto de la oferta), E | Dueño, Análisis |
 | Levantaron la mano | Personas | manual (o landing post-webinar) | `lead_events.kind = 'raised_hand'` | al guardar | M | Dueño, Análisis |
 | Contactados / Calificados | Personas | manual | `lead_events.kind = 'contacted'` / `'qualified'` | al guardar | M | Dueño, Análisis |
 | Agendaron / Asistieron a la llamada | Personas | calendly | `lead_events.kind = 'call_booked'` / `'call_attended'` | webhook/cron | M, SF, E | Dueño, Análisis |
-| Compraron | Personas | whop/commas | `lead_events.kind = 'purchased'` | al instante | M, SF, FC, E | Dueño, Análisis |
+| Compraron | Personas | whop/commas | `lead_events.kind = 'purchased'` | al instante | M, D, SF, FC, E | Dueño, Análisis |
 | Paso entre etapas | % desde la etapa base (`PASO_SE_MIDE_CONTRA`) | calc. | — | — | hereda | Dueño, Análisis |
 | Registros por origen | Por `utm_source` | landing | `launch_registrations.utm_source` | al instante | M, D, SF, E | Dueño, Análisis |
 | Registros por anuncio | Por `utm_content` | landing | `launch_registrations.utm_content` | al instante | M, D, SF, E | Dueño, Análisis |
 | Registros por día | Serie diaria en la zona de la org | landing | `launch_registrations.registered_at` | al instante | M, D, SF, E | Dueño, Análisis |
 | Inversión por día | Serie diaria (pagas) | meta_ads | `ad_metrics_daily` por campaña (ver huecos) | diaria | con la inversión medida, el motivo "se lee como total" sin acción (no hay serie todavía); sin valor, el estado de la inversión total (FC sin campañas) | Dueño, Análisis |
-| Sesiones | Asistieron y se quedaron a la oferta por sesión | zoom | igual que en Inicio | post-sesión | M, FC, E | Dueño, Análisis |
+| Sesiones | Asistieron y se quedaron a la oferta por sesión | zoom | igual que en Inicio | post-sesión | M, D, SF, FC, E | Dueño, Análisis |
 | Estado de las fuentes | Igual que en Inicio | cada integración | ver huecos | según fuente | M, D, SF, E | Dueño, Análisis |
 
 **Volumen esperado:** hasta ~20.000 registros; unas decenas de orígenes y anuncios; hasta 120 días en la serie
@@ -148,6 +148,7 @@ Cruce con la sección 4 del documento técnico y la migración de SCRUM-526:
 2. **Inversión por campaña y por día.** `ad_metrics_daily` guarda `campaign_name` y no el id de campaña (documento
    técnico, sección 4): sin `campaign_external_id` no se puede atar la inversión a `launch_ad_campaigns`. Hasta
    entonces, la inversión diaria muestra que se lee como total (sin acción) y la total depende de esa columna.
+   La inversión por lanzamiento es de SCRUM-535.
 3. **Estado de cada fuente.** `EstadoDeFuente` (estado y última lectura) no tiene tabla en el modelo. Hay que
    definir de dónde sale cada uno:
    - landing: `landing_events.received_at` y `status`;

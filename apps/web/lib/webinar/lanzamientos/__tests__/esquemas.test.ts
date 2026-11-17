@@ -90,3 +90,26 @@ describe("⭐ lanzamientos en paralelo", () => {
     expect(motivoDeSuperposicion(dos, { captaDesde: "2026-11-15", cierraEl: "2026-11-20" }, 2)).toMatch(/hasta 2/);
   });
 });
+
+
+describe("mensajes y fechas (2.ª revisión de #153)", () => {
+  const BASE = {
+    nombre: "W", variante: "paid" as const, moneda: "USD", precioDeLaOferta: null,
+    captaDesde: null, cierraEl: null, sesiones: [],
+  };
+
+  it("una fecha que no existe se rechaza", () => {
+    const r = datosDelLanzamientoSchema.safeParse({ ...BASE, captaDesde: "2026-02-30" });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.message).toBe("Esa fecha no existe");
+  });
+
+  it("un minuto de la oferta ilegible avisa en castellano", () => {
+    const r = datosDelLanzamientoSchema.safeParse({
+      ...BASE,
+      sesiones: [{ empiezaAt: "2026-12-02T23:00:00.000Z", zoomWebinarId: null, segundoDeLaOferta: Number.NaN }],
+    });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.message).toMatch(/^Escribí el minuto de la oferta como número/);
+  });
+});

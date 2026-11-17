@@ -23,7 +23,7 @@ const fechaCalendario = z
   .nullable();
 
 export const sesionSchema = z.object({
-  empiezaAt: z.string().datetime({ offset: true, message: "Cargá la fecha y hora de la sesión" }),
+  empiezaAt: z.string().datetime({ offset: true, message: "Cargá una fecha y hora de la sesión que exista en la zona de la organización" }),
   zoomWebinarId: z.string().trim().max(64, "Máximo 64 caracteres").nullable(),
   segundoDeLaOferta: z
     .number("Escribí el minuto de la oferta como número, por ejemplo 45 o 45,5")

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { conZona, restaurarZona } from "@/lib/fechas/__tests__/zona";
 import { datosDelLanzamientoSchema } from "../esquemas";
 import { CAMPOS_VACIOS, camposDesdeLaVista, datosDesdeElFormulario, numeroEscrito } from "../formulario";
 
@@ -49,7 +50,7 @@ describe("SCRUM-529 · formulario del lanzamiento", () => {
       [{ id: "s1", empiezaAt: "2026-11-03T23:00:00.000Z", zoomWebinarId: "987", segundoDeLaOferta: 3030 }],
       BA
     );
-    expect(campos.precioDeLaOferta).toBe("2,125");
+    expect(campos.precioDeLaOferta).toBe("2,1250");
     expect(campos.sesiones[0]).toMatchObject({ empiezaAt: "2026-11-03T20:00", minutoDeLaOferta: "50,5" });
     const datos = datosDesdeElFormulario(campos, BA);
     expect(datos).toMatchObject({ variante: "paid_plus", precioDeLaOferta: 2.125, cierraEl: "2026-11-08" });
@@ -60,7 +61,11 @@ describe("SCRUM-529 · formulario del lanzamiento", () => {
     });
   });
 
+  afterEach(() => restaurarZona());
+
   it("⭐ revisión de #153: la hora no depende de la zona del proceso ni del navegador", () => {
+    // El proceso en UTC (como en CI): con el código viejo, esto fallaba.
+    conZona("UTC");
     // Una sesión a las 20:00 de Buenos Aires se edita como 20:00, y guardarla
     // sin tocar nada devuelve el mismo instante (antes: 23:00 y 02:00Z).
     const sesion = { id: "s1", empiezaAt: "2026-11-03T23:00:00.000Z", zoomWebinarId: null, segundoDeLaOferta: null };
@@ -76,6 +81,36 @@ describe("SCRUM-529 · formulario del lanzamiento", () => {
   });
 });
 
+describe("⭐ la hora de una sesión los días que cambia el horario (2.ª revisión de #153)", () => {
+  const lanzamiento = {
+    id: "l1", nombre: "W", variante: "paid" as const, estado: "active" as const, moneda: "USD",
+    precioDeLaOferta: null, captaDesde: null, cierraEl: null, cerradoAt: null,
+  };
+
+  it.each([
+    ["Europe/Madrid", "2026-10-25T00:30:00.000Z"],
+    ["America/New_York", "2026-11-01T06:30:00.000Z"],
+    ["America/Santiago", "2026-04-05T03:30:00.000Z"],
+  ])("%s: la hora que se repite no se mueve al guardar sin tocar", (zona, iso) => {
+    const campos = camposDesdeLaVista(lanzamiento, [{ id: "s1", empiezaAt: iso, zoomWebinarId: null, segundoDeLaOferta: null }], zona);
+    expect(datosDesdeElFormulario(campos, zona).sesiones[0]?.empiezaAt).toBe(iso);
+  });
+
+  it.each([
+    ["America/Santiago", "2026-09-06T00:30"],
+    ["America/New_York", "2026-03-08T02:30"],
+    ["Europe/Madrid", "2026-03-29T02:30"],
+  ])("%s: una hora que no existe (%s) se rechaza, no se corre", (zona, local) => {
+    const datos = datosDesdeElFormulario(
+      { ...CAMPOS_VACIOS, nombre: "W", sesiones: [{ empiezaAt: local, zoomWebinarId: "", minutoDeLaOferta: "" }] },
+      zona
+    );
+    const r = datosDelLanzamientoSchema.safeParse(datos);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.message).toMatch(/que exista/);
+  });
+});
+
 describe("⭐ numeroEscrito (revisión de #153: precio como en Argentina)", () => {
   it.each([
     ["1.000", 1000],
@@ -88,6 +123,13 @@ describe("⭐ numeroEscrito (revisión de #153: precio como en Argentina)", () =
     ["2.75", 2.75],
     ["45", 45],
     [" 1 500 ", 1500],
+    ["0,500", 0.5],
+    ["0.500", 0.5],
+    ["0.050", 0.05],
+    ["00.500", 0.5],
+    ["1,50", 1.5],
+    ["1250,500", 1250.5],
+    ["2,1250", 2.125],
   ])("«%s» es %s", (texto, esperado) => {
     expect(numeroEscrito(texto)).toBe(esperado);
   });
@@ -96,7 +138,7 @@ describe("⭐ numeroEscrito (revisión de #153: precio como en Argentina)", () =
     expect(numeroEscrito("  ")).toBeNull();
   });
 
-  it.each(["1,500,00", "1.5.0", "10.00,5", "mil", "1,", "12,5a"])("«%s» no se adivina: NaN", (texto) => {
+  it.each(["1,500", "1,000", "2,500", "999,999", "1,500,00", "1.5.0", "10.00,5", "0.500,00", "mil", "1,", "12,5a"])("«%s» no se adivina: NaN", (texto) => {
     expect(numeroEscrito(texto)).toBeNaN();
   });
 });

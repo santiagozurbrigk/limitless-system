@@ -365,6 +365,14 @@ describe("instanteAHoraLocalEnZona / horaLocalEnZonaAInstante (revisión de #153
     expect(instanteAHoraLocalEnZona("2026-07-15T18:00:00.000Z", "Europe/Madrid")).toBe("2026-07-15T20:00");
   });
 
+  it("⭐ una hora que no existe en la zona es null, no la de antes ni la de después", async () => {
+    const { horaLocalEnZonaAInstante } = await import("../calendario");
+    expect(horaLocalEnZonaAInstante("2026-09-06T00:30", "America/Santiago")).toBeNull();
+    expect(horaLocalEnZonaAInstante("2026-03-08T02:30", "America/New_York")).toBeNull();
+    expect(horaLocalEnZonaAInstante("2026-03-29T02:30", "Europe/Madrid")).toBeNull();
+    expect(horaLocalEnZonaAInstante("2026-03-29T03:30", "Europe/Madrid")).toBe("2026-03-29T01:30:00.000Z");
+  });
+
   it("lo que no es una hora local válida es null o vacío", async () => {
     const { instanteAHoraLocalEnZona, horaLocalEnZonaAInstante } = await import("../calendario");
     expect(horaLocalEnZonaAInstante("2026-02-30T20:00", null)).toBeNull();

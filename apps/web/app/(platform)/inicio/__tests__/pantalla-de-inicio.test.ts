@@ -13,7 +13,11 @@ const REAL = "99999999-8888-4777-8666-555555555555";
 
 const sim = vi.hoisted(() => ({
   organizacionActiva: null as string | null,
-  permisos: { isFounder: true, hasRoleConfigured: true, modules: {} as Record<string, string> },
+  permisos: { isFounder: true, hasRoleConfigured: true, modules: {} as Record<string, string> } as {
+    isFounder: boolean;
+    hasRoleConfigured: boolean;
+    modules: Record<string, string>;
+  } | null,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -29,7 +33,12 @@ vi.mock("@/lib/auth/bootstrap", async () => {
     },
   };
 });
-vi.mock("@/lib/auth/get-current-permissions", () => ({ getCurrentUserPermissions: async () => sim.permisos }));
+vi.mock("@/lib/auth/get-current-permissions", () => ({
+  getCurrentUserPermissions: async () => {
+    if (sim.permisos === null) throw new Error("Auth caído");
+    return sim.permisos;
+  },
+}));
 vi.mock("@/lib/fechas/organizacion-activa", () => ({ zonaDeLaOrganizacionActiva: async () => null }));
 vi.mock("@/lib/observability/reportar-falla", () => ({ reportarFalla: vi.fn() }));
 
@@ -81,6 +90,13 @@ describe("⭐ organización de demo: el escenario de ejemplo", () => {
     const html = await inicio();
     expect(html).not.toContain('href="/leads?');
     expect(html).toContain('data-pendiente="levanto_la_mano_sin_contactar"');
+  });
+
+  it("si los permisos no se pueden leer, Inicio se ve igual, sin el enlace a Leads", async () => {
+    sim.permisos = null;
+    const html = await inicio();
+    expect(html).toContain('data-cuenta-regresiva="true"');
+    expect(html).not.toContain('href="/leads?');
   });
 });
 

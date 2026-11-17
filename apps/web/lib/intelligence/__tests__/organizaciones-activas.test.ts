@@ -49,9 +49,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 import {
   filtrarOrganizacionesConProcesosDeFondo,
-  filtroDeOrganizacionesExcluidas,
   listActiveOrganizationIds,
-  organizacionesSinProcesosDeFondo,
   organizacionSigueActiva,
 } from "../organizaciones-activas";
 import * as generateSnapshot from "../generate-snapshot";
@@ -124,31 +122,3 @@ describe("filtrarOrganizacionesConProcesosDeFondo (SCRUM-525)", () => {
   });
 });
 
-describe("organizacionesSinProcesosDeFondo (SCRUM-525, cola de Fathom)", () => {
-  it("⭐ devuelve sólo las cuentas webinar, sin mirar su estado", async () => {
-    sim.filas.push({ id: "webinar-pausada", account_type: "founder", status: "paused", experience: "webinar" });
-    await expect(organizacionesSinProcesosDeFondo()).resolves.toEqual(["webinar", "webinar-pausada"]);
-  });
-
-  it("si la base falla, lanza: no se analiza a ciegas", async () => {
-    sim.error = { message: "boom" };
-    await expect(organizacionesSinProcesosDeFondo()).rejects.toThrow("boom");
-  });
-});
-
-describe("filtroDeOrganizacionesExcluidas", () => {
-  const A = "11111111-1111-4111-8111-111111111111";
-  const B = "22222222-2222-4222-8222-222222222222";
-
-  it("arma la lista de PostgREST sin repetidos", () => {
-    expect(filtroDeOrganizacionesExcluidas([A, B, A])).toBe(`(${A},${B})`);
-  });
-
-  it("sin orgs, no hay filtro (PostgREST rechaza una lista vacía)", () => {
-    expect(filtroDeOrganizacionesExcluidas([])).toBeNull();
-  });
-
-  it("descarta lo que no es un UUID: no se puede colar nada en la consulta", () => {
-    expect(filtroDeOrganizacionesExcluidas(["a,b)", A])).toBe(`(${A})`);
-  });
-});

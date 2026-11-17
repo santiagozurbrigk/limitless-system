@@ -3411,6 +3411,17 @@ Fuente: PENDIENTES.md [WEBINAR-LANZAMIENTOS-PERSISTIR] · Doc del área: docs/ar
 *Dónde:* {{apps/web/lib/webinar/lanzamientos/esquemas.ts}}.
 
 Fuente: PENDIENTES.md [WEBINAR-LANZAMIENTOS-EN-PARALELO] · Doc del área: docs/areas/embudos.md",WEBINAR-LANZAMIENTOS-EN-PARALELO,Embudos y Lanzamientos,P3,,decisión de negocio
+[WEBINAR-FATHOM-VIAS-MANUALES] Las vías manuales de Fathom analizan con IA aunque la cuenta sea webinar,Task,Low,embudos,p3,sev-baja,decision-de-negocio,,,"*Tipo:* decisión de negocio
+
+*Severidad:* Baja
+
+*Estado verificado:* desde la revisión de #153 la cola automática ({{processPendingFathomCalls}}, {{apps/web/lib/fathom/process-call.ts}}) deja afuera las cuentas webinar (SCRUM-525). Las vías manuales no miran la experiencia: {{associateFathomCallAction}} ({{apps/web/app/fathom/actions.ts}}) y {{uploadOneOnOneFromShareLinkAction}} ({{apps/web/app/fathom/manual-upload-actions.ts}}) llegan a {{finalizeAssociatedCall}}, que analiza con Sonnet y encola el análisis profundo; {{/api/integrations/fathom/reanalyze}} tampoco. Una cuenta webinar no tiene Fathom en el menú: sólo se llega llamando la acción directo. Además, las llamadas de una cuenta webinar quedan {{pending}} y {{fathom/sync}} las sigue bajando: si la org vuelve a {{full}}, todo lo acumulado se analiza, de la más vieja a la más nueva. Lo señaló Fer en la segunda revisión de #153.
+
+*Qué hay que hacer:* que el PO decida si ""no gastar IA en cuentas webinar"" vale también por esas vías (si sí, un {{correProcesosDeFondo}} en cada una) y si lo acumulado mientras la cuenta fue webinar tiene que tener un tope o vencer.
+
+*Dónde:* {{apps/web/lib/fathom/process-call.ts}} ({{finalizeAssociatedCall}}), {{apps/web/app/fathom/actions.ts}}, {{apps/web/app/fathom/manual-upload-actions.ts}}, {{apps/web/app/api/integrations/fathom/reanalyze/route.ts}}.
+
+Fuente: PENDIENTES.md [WEBINAR-FATHOM-VIAS-MANUALES] · Doc del área: docs/areas/embudos.md",WEBINAR-FATHOM-VIAS-MANUALES,Embudos y Lanzamientos,P3,Baja,decisión de negocio
 [WEBINAR-LISTA-INVERSION-Y-FILTROS] La lista de lanzamientos no muestra la inversión ni filtra por estado,Story,Low,embudos,p3,feature,,,,"*Tipo:* feature
 
 *Estado verificado:* la lista ({{apps/web/components/webinar/pantalla-de-lanzamientos.tsx}}, SCRUM-544) muestra por lanzamiento registrados, asistieron, ventas e ingresos, sin inversión, y no tiene filtros; A4 del plan pedía las dos cosas. Lo encontró la revisión de #153.

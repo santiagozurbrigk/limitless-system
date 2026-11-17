@@ -89,7 +89,8 @@ Los tipos están en `contratos.ts`. Lo principal:
   asistieron, ventas e ingresos.
 - **Detalle**: lo mismo que Inicio para cualquier lanzamiento, más registros por origen (`utm_source`), por anuncio
   (`registrosPorAnuncio`, `utm_content`) y la evolución diaria (`evolucionDiaria`: registros por día y, en las
-  variantes pagas, inversión por día). Ampliado en SCRUM-544, ver abajo.
+  variantes pagas, inversión por día o, si sólo hay total, `inversionSoloTotal` con el motivo). Ampliado en
+  SCRUM-544, ver abajo.
 - **Embudo** (Inicio y Detalle, SCRUM-544): las etapas de la variante (`PASOS_POR_VARIANTE`: el VIP sólo en Pago +++,
   Calificados en todas; diseño del producto, sección 6) y, en cada una, `pasoDesde`: la etapa contra la que se mide
   (`PASO_SE_MIDE_CONTRA`) y la tasa (`tasa`, hereda el peor estado).
@@ -134,8 +135,9 @@ en el menú webinar.
   fuentes. Si no se pudo leer, el motivo; si no existe, el 404 de la app.
 - **Evolución diaria** (`calcular.ts`): días calendario en la zona de la organización, desde el primer día de
   captación (o el primer registro) hasta hoy, o hasta el cierre si está cerrado; los días sin registros en cero
-  medido; como mucho los últimos 120. La inversión por día **no se inventa**: con el total medido es `sin_fuente`
-  ("por ahora la inversión se lee como total del lanzamiento"); sin valor, hereda el estado del total.
+  medido; como mucho los últimos 120. La inversión por día **no se inventa**: con el total medido, `inversion` es `null`
+  e `inversionSoloTotal` trae el motivo ("por ahora la inversión se lee como total del lanzamiento"), que la pantalla
+  muestra sin acción (no es una fuente sin conectar); sin valor, `inversion` hereda el estado del total.
 - **Acción de cada estado** (`lib/webinar/acciones-del-estado.ts`, diseño del producto, sección 11): sin fuente
   "Conectá X", desactualizado "Ver X", error "Reconectá X" (a Integraciones); falta configurar, o una fuente que
   no se conecta (equipo, calculado, configuración), "Completá la configuración del lanzamiento". Mientras el destino

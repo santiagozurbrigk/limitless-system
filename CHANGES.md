@@ -28,6 +28,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-17 — Segunda revisión de Fer sobre #153: números ambiguos, hora en los cambios de horario y Fathom en la base
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Webinars (`lib/webinar/lanzamientos/{formulario,esquemas}.ts`, `lib/webinar/destino-del-error.ts`, `app/(platform)/leads/error.tsx`, `app/(platform)/inicio/page.tsx`); fechas (`lib/fechas/calendario.ts`: `horaLocalEnZonaAInstante`); Fathom (`lib/fathom/process-call.ts`: `FILTRO_SIN_PROCESOS_DE_FONDO`; salen `organizacionesSinProcesosDeFondo` y `filtroDeOrganizacionesExcluidas` de `lib/intelligence/organizaciones-activas.ts`); tests nuevos `lib/fathom/__tests__/cola-sin-webinar.test.ts`, `lib/webinar/__tests__/destino-del-error.test.ts`; docs `areas/webinars-contratos-de-vista.md`, `areas/webinars-fichas-de-datos.md`, `arquitectura/jobs-webhooks-y-colas.md`, `PENDIENTES.md`
+
+**Qué se hizo:**
+- **"1,500" es ambiguo y se rechaza** (antes se tomaba como 1,5 aunque el doc y V17.7 decían que se rechazaba). Una coma con exactamente tres cifras, sin puntos y con parte entera de 1 a 3 cifras distinta de cero: "1,500", "1,000", "2,500", "999,999". "0,500", "1,50" y "1250,500" se leen. Para que la ida y vuelta no choque, un número guardado con tres decimales se escribe con un cero más ("2,1250").
+- **"0.500" es cero coma cinco**, no 500: el primer grupo de miles no puede empezar con cero (`MILES`).
+- **La hora repetida** del día que se atrasa el reloj ya no se corre al guardar sin tocar: cada sesión existente viaja con su texto y su instante original, y si el texto no cambió se manda el instante.
+- **La hora que no existe** (el día que se adelanta el reloj; en Santiago, la medianoche) se rechaza con "Cargá una fecha y hora de la sesión que exista…": `horaLocalEnZonaAInstante` devuelve `null` si el instante no vuelve al mismo texto. Antes caía una hora antes (y en Santiago, el día anterior) sin aviso.
+- **Fathom:** el filtro va del lado de la base, con `organizations!inner(experience)` y `.not("organizations.experience", "in", "(webinar)")`, en vez de mandar la lista de orgs en la URL (crecía unos 39 bytes por cuenta webinar). Si la consulta falla, lanza: el cron ya no dice `ok` con 0 procesadas. Test de comportamiento con el admin simulado; el de texto dice ahora lo que hace.
+- **Menores:** el test de la hora fija el proceso en UTC; el error de Leads sale a Ajustes si la pantalla de inicio de quien mira es Leads; Inicio se muestra sin el enlace a Leads si los permisos no se pueden leer (`lecturaDegradable`); tests de la fecha que no existe y del mensaje del minuto; doc de contratos con `inversionSoloTotal`; estados de Sesiones, Se quedaron y Compraron en la ficha; el hueco 2 remite a SCRUM-535; `[WEBINAR-FATHOM-VIAS-MANUALES]` nuevo (vías manuales de Fathom y lo acumulado).
+
+**Por qué / finalidad:** segunda revisión de Fer (17-nov) sobre `cf7e7745`. Con SCRUM-550 esos valores se guardarían distintos y sin aviso.
+
+**Decisiones de diseño relevantes:**
+- "1,500" se rechaza en vez de adivinar (regla de CLAUDE.md: no inventar un valor). Si producto prefiere leerlo como 1,5, es cambiar una línea y su test.
+- Inicio sigue leyendo los permisos por su cuenta (el layout ya los leyó): `getCurrentUserPermissions` no tiene `cache()`, y ponérselo toca a toda la app; queda para otro cambio.
+
+**Riesgos / deuda técnica pendiente:** el join de Fathom depende de la FK `fathom_calls.organization_id → organizations` (existe desde `20260522000000_phase11_integrations.sql`); no se probó contra la base real. Nada se miró en navegador.
+
 ### 2026-11-17 — Revisión de Fer sobre #153: Fathom sin IA en webinar, horas y precios del formulario, inversión por día y fichas
 
 **Rama:** `claude/brave-wright-s2bfcg`

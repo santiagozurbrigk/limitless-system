@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 14 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 15 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
@@ -1531,6 +1531,13 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Estado verificado:** `LANZAMIENTOS_EN_PARALELO` (`apps/web/lib/webinar/lanzamientos/esquemas.ts`) está en `null`: sin límite. La regla ya está escrita y probada (`motivoDeSuperposicion`) para 1 o más.
 - **Qué hay que hacer:** que SCRUM-522 lo decida (pregunta 6 del diseño) y poner el número en la constante; también afecta a Inicio (cuál es "el" lanzamiento activo).
 - **Dónde:** `apps/web/lib/webinar/lanzamientos/esquemas.ts`.
+
+#### [WEBINAR-FATHOM-VIAS-MANUALES] Las vías manuales de Fathom analizan con IA aunque la cuenta sea webinar
+- **Tipo:** decisión de negocio
+- **Severidad:** Baja
+- **Estado verificado:** desde la revisión de #153 la cola automática (`processPendingFathomCalls`, `apps/web/lib/fathom/process-call.ts`) deja afuera las cuentas webinar (SCRUM-525). Las vías manuales no miran la experiencia: `associateFathomCallAction` (`apps/web/app/fathom/actions.ts`) y `uploadOneOnOneFromShareLinkAction` (`apps/web/app/fathom/manual-upload-actions.ts`) llegan a `finalizeAssociatedCall`, que analiza con Sonnet y encola el análisis profundo; `/api/integrations/fathom/reanalyze` tampoco. Una cuenta webinar no tiene Fathom en el menú: sólo se llega llamando la acción directo. Además, las llamadas de una cuenta webinar quedan `pending` y `fathom/sync` las sigue bajando: si la org vuelve a `full`, todo lo acumulado se analiza, de la más vieja a la más nueva. Lo señaló Fer en la segunda revisión de #153.
+- **Qué hay que hacer:** que el PO decida si "no gastar IA en cuentas webinar" vale también por esas vías (si sí, un `correProcesosDeFondo` en cada una) y si lo acumulado mientras la cuenta fue webinar tiene que tener un tope o vencer.
+- **Dónde:** `apps/web/lib/fathom/process-call.ts` (`finalizeAssociatedCall`), `apps/web/app/fathom/actions.ts`, `apps/web/app/fathom/manual-upload-actions.ts`, `apps/web/app/api/integrations/fathom/reanalyze/route.ts`.
 
 #### [WEBINAR-LISTA-INVERSION-Y-FILTROS] La lista de lanzamientos no muestra la inversión ni filtra por estado
 - **Tipo:** feature
