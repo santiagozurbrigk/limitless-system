@@ -153,6 +153,8 @@ Cruce de Leads y la Ficha del lead (SCRUM-549) con la migración de SCRUM-526 (c
    tipo está en `ETAPAS_DEL_LEAD` (si no hay ninguno, `registered`) y el último contacto del último `contacted`; el
    responsable queda vacío. La fila "Lo que el equipo mueve hoy" de Inicio
    cita `lead_sales_state.stage`, pero `calcular.ts` la cuenta con los filtros de Leads, que salen de `lead_events`.
+   Además, a sus Estados posibles (M, SF, E) les faltan FC, sin producto principal (agendados sin cerrar usa las
+   ventas), y D, calendly desactualizado.
    Hay que decidir antes de B4 si se crea la proyección o si etapa y último contacto se derivan de `lead_events` y
    sólo el responsable necesita una columna nueva.
 7. **Notas sin tabla.** `NotaDelLead` (texto, autor, fecha) no tiene tabla: `lead_notes` es de la Fase 3. El
