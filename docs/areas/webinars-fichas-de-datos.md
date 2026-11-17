@@ -47,8 +47,8 @@ y los filtros. Sale de los contratos de vista (`apps/web/lib/webinar/vistas/cont
 | Registrados | Personas registradas | landing | `launch_registrations` (lead distinto) / `lead_events.kind = 'registered'` | al instante | M, D, SF, E | todos |
 | Últimas 24 h | Registros de las últimas 24 h | landing | `launch_registrations.registered_at` | al instante | M, D, SF, E | todos |
 | Asistencia | Asistieron / registrados | calc. (zoom + landing) | `lead_events.kind = 'attended'` (`data.session_id`) | post-sesión | M, D, SF, FC, E | todos |
-| Ventas | Personas que compraron la oferta principal | whop/commas | `lead_events.kind = 'purchased'` del producto `launch_products.role = 'main'` | al instante | M, SF, FC (sin producto), E | todos |
-| Ingresos | Cobrado neto de reembolsos | whop/commas | `lead_events.data.amount` de `purchased` − `refunded` | al instante | M, SF, FC, E (monto sin leer, reembolso sin compra) | todos |
+| Ventas | Personas que compraron la oferta principal | whop/commas | `lead_events.kind = 'purchased'` del producto `launch_products.role = 'main'` | al instante | M, D, SF, FC (sin producto), E | todos |
+| Ingresos | Cobrado neto de reembolsos | whop/commas | `lead_events.data.amount` de `purchased` − `refunded` | al instante | M, D, SF, FC, E (monto sin leer, reembolso sin compra) | todos |
 | Conversión de asistentes | Compraron / asistieron | calc. | — | — | hereda | todos |
 | Ventas VIP | Compraron el asiento VIP (sólo con producto VIP; sin producto VIP no se muestra) | whop/commas | `lead_events.kind = 'vip_purchased'`, `launch_products.role = 'vip'` | al instante | M, D, SF (proveedor sin integración o sin conectar), E | todos |
 | Inversión, costo por registro, ROAS | Sólo variantes pagas | meta_ads + calc. | `launch_ad_campaigns` + `ad_metrics_daily` (ver huecos) | diaria | M, D, SF, FC (sin campañas), E | todos |
@@ -70,8 +70,8 @@ hasta ~20.000 registros por lanzamiento (meta de rendimiento del documento técn
 | Identificador para la landing | `public_id` | configuracion | `webinar_launches.public_id` | al crear | M — **falta en el contrato** (huecos) | Dueño, Análisis |
 | Registrados | Personas | landing | `launch_registrations` | al instante | M, D, SF, E | Dueño, Análisis |
 | Asistieron | Personas en alguna sesión ocurrida | zoom | `lead_events.kind = 'attended'` | post-sesión | M, D, SF, FC, E | Dueño, Análisis |
-| Ventas | Personas (oferta principal) | whop/commas | `lead_events.kind = 'purchased'` | al instante | M, SF, FC, E | Dueño, Análisis |
-| Ingresos | Neto de reembolsos | whop/commas | `lead_events.data.amount` | al instante | M, SF, FC, E | Dueño, Análisis |
+| Ventas | Personas (oferta principal) | whop/commas | `lead_events.kind = 'purchased'` | al instante | M, D, SF, FC, E | Dueño, Análisis |
+| Ingresos | Neto de reembolsos | whop/commas | `lead_events.data.amount` | al instante | M, D, SF, FC, E | Dueño, Análisis |
 
 **Volumen esperado:** decenas de lanzamientos por cuenta a lo largo del tiempo; los cerrados leen la foto fija
 (`launch_funnel_snapshots`, documento técnico sección 6).

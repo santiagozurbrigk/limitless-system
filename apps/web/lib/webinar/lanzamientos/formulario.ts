@@ -20,7 +20,9 @@ import type { DatosDelLanzamientoInput } from "./esquemas";
  * lo rechaza con un motivo. Es ambiguo "1,500" (en Argentina, uno coma cinco;
  * en inglés, mil quinientos): una coma con exactamente tres cifras después,
  * sin puntos y con parte entera de 1 a 3 cifras que no es cero. "0,500" y
- * "1,50" no lo son. También "1.5.0" y "1,500,00".
+ * "1,50" no lo son. También "1.5.0", "1,500,00" y un cero adelante de un
+ * número con punto de miles ("015.000", "01.000": ¿miles con un cero de más o
+ * decimal?). "0.500" es cero coma cinco.
  *
  * La hora de una sesión que ya existía viaja con su instante original: si el
  * texto no cambió, se manda ese instante y no el que sale de convertir el
@@ -57,13 +59,13 @@ export const CAMPOS_VACIOS: CamposDelLanzamiento = {
 
 export const SESION_VACIA: CamposDeSesion = { empiezaAt: "", zoomWebinarId: "", minutoDeLaOferta: "" };
 
+/** Puntos de miles bien puestos: el primer grupo de 1 a 3 cifras sin empezar con cero. */
+const MILES = /^-?[1-9]\d{0,2}(\.\d{3})+$/;
+
 /**
  * Un número escrito a mano; vacío es `null`; lo que no se puede leer sin
  * adivinar, `NaN` (lo rechaza el esquema con su motivo).
  */
-/** Puntos de miles bien puestos: el primer grupo de 1 a 3 cifras sin empezar con cero. */
-const MILES = /^-?[1-9]\d{0,2}(\.\d{3})+$/;
-
 export function numeroEscrito(texto: string): number | null {
   const limpio = texto.trim().replace(/\s/g, "");
   if (limpio === "") return null;
@@ -85,6 +87,10 @@ export function numeroEscrito(texto: string): number | null {
   // ("1500.5", "2.75"). Un número que empieza con "0." nunca lleva punto de
   // miles: "0.500" es cero coma cinco.
   if (MILES.test(limpio)) return Number(limpio.replace(/\./g, ""));
+  // Un cero adelante y tres cifras después del punto ("015.000", "01.000") es
+  // ambiguo: miles con un cero de más (un precio en 0 al que se le escribió
+  // atrás) o un decimal. No se adivina. "0.500" (sólo un cero) es decimal.
+  if (/^-?0\d+\.\d{3}$/.test(limpio)) return Number.NaN;
   if (puntos === 1) return Number(limpio);
   return Number.NaN;
 }
@@ -103,6 +109,16 @@ function comoSeEscribe(n: number): string {
 /** Hora de la organización a ISO UTC; vacía o inválida queda como vino para que la rechace el esquema. */
 function instanteISO(local: string, zona: string | null): string {
   return horaLocalEnZonaAInstante(local, zona) ?? local;
+}
+
+/**
+ * El instante en ISO con "T" y "Z", como lo pide el esquema, aunque la base lo
+ * devuelva como texto de Postgres ("2026-10-25 00:30:00+00"). Si no se entiende,
+ * queda como vino (y el esquema lo rechaza).
+ */
+function comoISO(valor: string): string {
+  const d = new Date(valor.includes("T") ? valor : valor.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00"));
+  return Number.isNaN(d.getTime()) ? valor : d.toISOString();
 }
 
 /** ISO UTC a `datetime-local` en la hora de la organización. */
@@ -146,7 +162,7 @@ export function camposDesdeLaVista(
     cierraEl: lanzamiento.cierraEl ?? "",
     sesiones: sesiones.map((s) => ({
       empiezaAt: aDatetimeLocal(s.empiezaAt, zona),
-      original: { empiezaAt: aDatetimeLocal(s.empiezaAt, zona), iso: s.empiezaAt },
+      original: { empiezaAt: aDatetimeLocal(s.empiezaAt, zona), iso: comoISO(s.empiezaAt) },
       zoomWebinarId: s.zoomWebinarId ?? "",
       minutoDeLaOferta: s.segundoDeLaOferta === null ? "" : comoSeEscribe(Math.round((s.segundoDeLaOferta / 60) * 100) / 100),
     })),

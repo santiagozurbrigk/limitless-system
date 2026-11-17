@@ -107,7 +107,43 @@ describe("⭐ la hora de una sesión los días que cambia el horario (2.ª revis
     );
     const r = datosDelLanzamientoSchema.safeParse(datos);
     expect(r.success).toBe(false);
-    expect(r.error?.issues[0]?.message).toMatch(/que exista/);
+    expect(r.error?.issues[0]?.message).toBe("Esa hora no existe ese día en la zona de la organización (cambio de horario)");
+  });
+});
+
+describe("editar la hora de una sesión que ya existía (3.ª revisión de #153)", () => {
+  const lanzamiento = {
+    id: "l1", nombre: "W", variante: "paid" as const, estado: "active" as const, moneda: "USD",
+    precioDeLaOferta: null, captaDesde: null, cierraEl: null, cerradoAt: null,
+  };
+
+  it("si se cambió el texto, se manda el instante del texto nuevo, no el original", () => {
+    const campos = camposDesdeLaVista(
+      lanzamiento,
+      [{ id: "s1", empiezaAt: "2026-11-03T23:00:00.000Z", zoomWebinarId: null, segundoDeLaOferta: null }],
+      BA
+    );
+    const editados = { ...campos, sesiones: [{ ...campos.sesiones[0]!, empiezaAt: "2026-11-04T21:15" }] };
+    expect(datosDesdeElFormulario(editados, BA).sesiones[0]?.empiezaAt).toBe("2026-11-05T00:15:00.000Z");
+  });
+
+  it("un instante que llega como texto de Postgres se normaliza a ISO", () => {
+    const campos = camposDesdeLaVista(
+      lanzamiento,
+      [{ id: "s1", empiezaAt: "2026-10-25 00:30:00+00", zoomWebinarId: null, segundoDeLaOferta: null }],
+      "Europe/Madrid"
+    );
+    const datos = datosDesdeElFormulario(campos, "Europe/Madrid");
+    expect(datos.sesiones[0]?.empiezaAt).toBe("2026-10-25T00:30:00.000Z");
+    expect(datosDelLanzamientoSchema.safeParse({ ...datos, nombre: "W" }).success).toBe(true);
+  });
+
+  it("vacía: pide cargarla (no habla de la zona)", () => {
+    const datos = datosDesdeElFormulario(
+      { ...CAMPOS_VACIOS, nombre: "W", sesiones: [{ empiezaAt: "", zoomWebinarId: "", minutoDeLaOferta: "" }] },
+      BA
+    );
+    expect(datosDelLanzamientoSchema.safeParse(datos).error?.issues[0]?.message).toBe("Cargá la fecha y hora de la sesión");
   });
 });
 
@@ -126,10 +162,13 @@ describe("⭐ numeroEscrito (revisión de #153: precio como en Argentina)", () =
     ["0,500", 0.5],
     ["0.500", 0.5],
     ["0.050", 0.05],
-    ["00.500", 0.5],
     ["1,50", 1.5],
     ["1250,500", 1250.5],
     ["2,1250", 2.125],
+    ["10.000", 10000],
+    ["100.000", 100000],
+    ["100.000,50", 100000.5],
+    ["0", 0],
   ])("«%s» es %s", (texto, esperado) => {
     expect(numeroEscrito(texto)).toBe(esperado);
   });
@@ -138,7 +177,7 @@ describe("⭐ numeroEscrito (revisión de #153: precio como en Argentina)", () =
     expect(numeroEscrito("  ")).toBeNull();
   });
 
-  it.each(["1,500", "1,000", "2,500", "999,999", "1,500,00", "1.5.0", "10.00,5", "0.500,00", "mil", "1,", "12,5a"])("«%s» no se adivina: NaN", (texto) => {
+  it.each(["1,500", "1,000", "2,500", "999,999", "1,500,00", "1.5.0", "10.00,5", "0.500,00", "015.000", "01.000", "00.500", "010.000", "01.500", "mil", "1,", "12,5a"])("«%s» no se adivina: NaN", (texto) => {
     expect(numeroEscrito(texto)).toBeNaN();
   });
 });

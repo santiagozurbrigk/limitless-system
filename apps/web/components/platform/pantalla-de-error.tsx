@@ -71,8 +71,8 @@ export function PantallaDeError({
   /** Nombre corto para el tag de Sentry: `plataforma`, `marketing`... */
   boundary: string;
   titulo?: string;
-  /** A dónde lleva el link de salida. */
-  inicio: { href: string; texto: string };
+  /** A dónde lleva el link de salida; `null` = sólo «Reintentar». */
+  inicio: { href: string; texto: string } | null;
 }) {
   const reintentar = useBoundaryDeError(error, reset, boundary);
 
@@ -100,9 +100,11 @@ export function PantallaDeError({
       ) : null}
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Button onClick={reintentar}>Reintentar</Button>
-        <Button variant="outline" asChild>
-          <Link href={inicio.href}>{inicio.texto}</Link>
-        </Button>
+        {inicio ? (
+          <Button variant="outline" asChild>
+            <Link href={inicio.href}>{inicio.texto}</Link>
+          </Button>
+        ) : null}
       </div>
     </div>
   );

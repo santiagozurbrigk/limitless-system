@@ -23,7 +23,13 @@ const fechaCalendario = z
   .nullable();
 
 export const sesionSchema = z.object({
-  empiezaAt: z.string().datetime({ offset: true, message: "Cargá una fecha y hora de la sesión que exista en la zona de la organización" }),
+  // Vacío: falta cargarla. Con texto que no es un instante: la hora no existe
+  // ese día en la zona de la organización (cambio de horario; ver
+  // `horaLocalEnZonaAInstante`), porque el formulario sólo manda texto así.
+  empiezaAt: z
+    .string()
+    .min(1, "Cargá la fecha y hora de la sesión")
+    .datetime({ offset: true, message: "Esa hora no existe ese día en la zona de la organización (cambio de horario)" }),
   zoomWebinarId: z.string().trim().max(64, "Máximo 64 caracteres").nullable(),
   segundoDeLaOferta: z
     .number("Escribí el minuto de la oferta como número, por ejemplo 45 o 45,5")

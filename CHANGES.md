@@ -28,6 +28,25 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-17 — Tercera revisión de Fer sobre #153: cero adelante de un número con miles, mensaje de la hora y error de Leads con permisos
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Webinars (`lib/webinar/lanzamientos/{formulario,esquemas}.ts`, `lib/webinar/destino-del-error.ts`, `app/(platform)/leads/error.tsx`); plataforma (`components/platform/pantalla-de-error.tsx`: `inicio` puede ser `null`); docs `areas/webinars-fichas-de-datos.md`
+
+**Qué se hizo:**
+- **"015.000", "01.000", "00.500" se rechazan** por ambiguos: un cero adelante y tres cifras después del punto puede ser miles con un cero de más (un precio en 0 al que se le escribió atrás) o un decimal. En la vuelta anterior quedaban como 15, 1 y 0,5 sin aviso. "0.500" sigue siendo 0,5. Tests con primer grupo de 2 y 3 cifras ("10.000", "100.000,50").
+- **Mensaje de la hora:** vacía dice "Cargá la fecha y hora de la sesión"; la hora que no existe, "Esa hora no existe ese día en la zona de la organización (cambio de horario)".
+- **Instante original normalizado:** si la base lo devuelve como texto de Postgres ("2026-10-25 00:30:00+00"), se pasa a ISO para que "Guardar" sin tocar no lo rechace.
+- **Error de Leads:** si la pantalla de inicio de quien mira es Leads, sale a Ajustes sólo si la puede abrir (`puedeAbrirModulo`, la misma regla que el layout, con test que las compara); si no, la pantalla muestra sólo «Reintentar». Test que exige que `error.tsx` use la función.
+- **Menores:** `MILES` sube arriba del docblock de `numeroEscrito`; test de editar la hora de una sesión existente; D en Ventas e Ingresos de Inicio y de la lista en la ficha.
+
+**Por qué / finalidad:** tercera revisión de Fer (17-nov) sobre `866e5510`.
+
+**Decisiones de diseño relevantes:** se rechaza lo ambiguo en vez de adivinar, como "1,500".
+
+**Riesgos / deuda técnica pendiente:** nada se miró en navegador.
+
 ### 2026-11-17 — Segunda revisión de Fer sobre #153: números ambiguos, hora en los cambios de horario y Fathom en la base
 
 **Rama:** `claude/brave-wright-s2bfcg`
