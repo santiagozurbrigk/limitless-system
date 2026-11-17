@@ -1,6 +1,9 @@
 import type { OrganizationStatus } from "@ai-coo/types";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { correProcesosDeFondo } from "@/lib/organization/procesos-de-fondo";
+import {
+  EXPERIENCIAS_SIN_PROCESOS_DE_FONDO,
+  correProcesosDeFondo,
+} from "@/lib/organization/procesos-de-fondo";
 
 /** El único estado en el que corren los procesos de IA (ver el check de la base). */
 const ACTIVA: OrganizationStatus = "active";
@@ -58,6 +61,37 @@ export async function filtrarOrganizacionesConProcesosDeFondo(
       .map((row) => String(row.id))
   );
   return unicas.filter((id) => corren.has(id));
+}
+
+/**
+ * Las organizaciones cuya experiencia **no** corre procesos de fondo
+ * (SCRUM-525), sin mirar su estado. La usa la cola de Fathom
+ * (`processPendingFathomCalls`), que no arma una lista de orgs sino que toma
+ * llamadas pendientes: las de estas orgs se dejan afuera de la consulta y
+ * quedan `pending` (si la org vuelve a `full`, se analizan entonces).
+ * Si la base falla, lanza: el cron responde 500 y no analiza a ciegas.
+ */
+export async function organizacionesSinProcesosDeFondo(): Promise<string[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("organizations")
+    .select("id")
+    .in("experience", [...EXPERIENCIAS_SIN_PROCESOS_DE_FONDO]);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row) => String(row.id));
+}
+
+/**
+ * El valor de `.not("organization_id", "in", …)` para dejar afuera esas orgs,
+ * o `null` si no hay ninguna (PostgREST rechaza una lista vacía).
+ */
+export function filtroDeOrganizacionesExcluidas(ids: readonly string[]): string | null {
+  const unicos = [...new Set(ids)].filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  return unicos.length ? `(${unicos.join(",")})` : null;
 }
 
 /**

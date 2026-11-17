@@ -3,7 +3,7 @@
  * escenario de la organización de demo: página, `leer`, escenario y markup,
  * sin base. El escenario llega sólo a través de `leer` (regla de SCRUM-542).
  *
- * Mocks: `server-only`, la organización activa, la zona y Sentry.
+ * Mocks: `server-only`, la organización activa, la zona, los permisos y Sentry.
  */
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const DEMO = "11111111-2222-4333-8444-555555555555";
 const REAL = "99999999-8888-4777-8666-555555555555";
 
-const sim = vi.hoisted(() => ({ organizacionActiva: null as string | null }));
+const sim = vi.hoisted(() => ({
+  organizacionActiva: null as string | null,
+  permisos: { isFounder: true, hasRoleConfigured: true, modules: {} as Record<string, string> },
+}));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/bootstrap", async () => {
@@ -26,6 +29,7 @@ vi.mock("@/lib/auth/bootstrap", async () => {
     },
   };
 });
+vi.mock("@/lib/auth/get-current-permissions", () => ({ getCurrentUserPermissions: async () => sim.permisos }));
 vi.mock("@/lib/fechas/organizacion-activa", () => ({ zonaDeLaOrganizacionActiva: async () => null }));
 vi.mock("@/lib/observability/reportar-falla", () => ({ reportarFalla: vi.fn() }));
 
@@ -40,6 +44,7 @@ async function inicio(): Promise<string> {
 beforeEach(() => {
   vi.stubEnv("WEBINAR_DEMO_ORGANIZATION_ID", DEMO);
   sim.organizacionActiva = DEMO;
+  sim.permisos = { isFounder: true, hasRoleConfigured: true, modules: {} };
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -69,6 +74,13 @@ describe("⭐ organización de demo: el escenario de ejemplo", () => {
   it("los pendientes del equipo enlazan a Leads con su filtro", async () => {
     const html = await inicio();
     expect(html).toMatch(/href="\/leads\?filtro=levanto_la_mano_sin_contactar&amp;lanzamiento=[^"]+"/);
+  });
+
+  it("⭐ revisión de #153: con un rol sin Ventas, los pendientes van sin enlace a Leads", async () => {
+    sim.permisos = { isFounder: false, hasRoleConfigured: true, modules: { sales: "none", dashboard: "read" } };
+    const html = await inicio();
+    expect(html).not.toContain('href="/leads?');
+    expect(html).toContain('data-pendiente="levanto_la_mano_sin_contactar"');
   });
 });
 

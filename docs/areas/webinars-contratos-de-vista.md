@@ -186,12 +186,13 @@ después del login.
   nueva de Webinars se suma a su lista.
 - **Error:** `inicio/error.tsx` y `leads/error.tsx` (la ficha cae en el de Leads), con `PantallaDeError`
   (Sentry, código de referencia, sin el mensaje interno) y la navegación visible; Inicio sale a Leads y Leads a
-  Inicio. Están en los obligatorios de `app/__tests__/boundaries.test.ts`. Arriba quedan `(platform)/error.tsx`
+  la pantalla de inicio de quien mira (`usePantallaDeInicio`: `/inicio` en webinar, el Panel en `full`). Están en los obligatorios de `app/__tests__/boundaries.test.ts`. Arriba quedan `(platform)/error.tsx`
   y `global-error.tsx`.
 - **Una sección que falla no tira la página:** la falla de una fuente o de una consulta viaja como el estado del
   `Dato` de esa sección (`error`, `sin_fuente`...), y la pantalla dibuja el resto. Sólo una falla de la lectura
   entera (o de render) cae en el `error.tsx` de la ruta, dentro de la cáscara. No se usan boundaries por
-  sección: los errores de un Server Component pasan en el servidor y un boundary de cliente no los ve.
+  sección: el `error.tsx` de la ruta ya atrapa las fallas de render de sus Server Components (llegan al
+  cliente como error del árbol), y lo que falla al leer una sección no lanza: viaja en su `Dato`.
 - **Vacío:** Leads sin lanzamientos y Inicio sin lanzamiento activo muestran su estado vacío; el botón «Crear
   un lanzamiento» lleva a `/lanzamientos/nuevo` (SCRUM-529).
 

@@ -855,7 +855,7 @@ con una sesión real.
 **Prerrequisitos:** los de V12. Los tests renderizan el HTML pero no miran la pantalla en el navegador.
 1. ⭐ Como founder de la org de demo, abrir «Lanzamientos» en el menú. Resultado: dos lanzamientos, el activo primero, con sus cuatro números.
 2. ⭐ Clic en el activo. Resultado: el detalle con el embudo (cada etapa con su número, «X % de «Etapa»» y «Fuente: …»), registros por origen y por anuncio con barras, «Registros por día» con una barra por día e «Inversión por día» con su motivo.
-3. ⭐ Resultado esperado: los números sin medir dicen su estado y su acción («Conectá GoHighLevel», «Ver Meta Ads», «Completá la configuración del lanzamiento»), sin enlace.
+3. ⭐ Resultado esperado: los números sin medir dicen su estado y su acción («Conectá GoHighLevel», «Ver Meta Ads», «Completá la configuración del lanzamiento»). Las de Integraciones van sin enlace; «Completá la configuración del lanzamiento» lleva a la Configuración (SCRUM-529). «Inversión por día» dice que se lee como total, sin «Conectá Meta Ads».
 4. Abrir el detalle en el celular y en modo oscuro. Resultado: se lee todo; el gráfico diario se desplaza de costado dentro de su caja, sin scroll horizontal de la página.
 5. Con la org `full`: tipear `/lanzamientos`. Resultado: la lista con «Sin fuente» (ya no lleva al Panel); el ítem del menú completo sigue deshabilitado.
 
@@ -876,6 +876,8 @@ con una sesión real.
 3. ⭐ En el Detalle del lanzamiento activo, tocar «Completá la configuración del lanzamiento» de un número. Resultado: la Configuración, con «Falta cargar» arriba (el minuto de la oferta de la sesión 2).
 4. En la Configuración, cambiar el nombre y «Guardar cambios». Resultado: el aviso de ejemplo; al recargar vuelve el nombre de antes.
 5. Mirar el formulario en el celular. Resultado: los campos se apilan y se leen.
+6. ⭐ Con la computadora en otra zona horaria (por ejemplo, Madrid), abrir la Configuración. Resultado: las sesiones muestran la hora de la organización (la misma que el Detalle), y «Guardar cambios» sin tocar nada no las corre.
+7. Escribir el precio como «1.500,50» y como «1.500». Resultado: se aceptan como mil quinientos con cincuenta y mil quinientos; «1,500» muestra «Escribí el precio como número…».
 
 ---
 

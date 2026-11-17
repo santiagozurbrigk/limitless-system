@@ -38,8 +38,11 @@ import { SeccionDeFuentes, SeccionDeSesiones, SeccionDelEmbudo } from "./seccion
 export function PantallaDeInicio({
   vista,
   hrefCrearLanzamiento = RUTA_PARA_CREAR_LANZAMIENTO,
+  puedeVerLeads = true,
 }: {
   vista: VistaInicio;
+  /** Si quien mira puede abrir Leads; sin acceso, el número va sin enlace. */
+  puedeVerLeads?: boolean;
   /** Adónde lleva el estado vacío; sin ruta no hay enlace (hoy, hasta SCRUM-529). */
   hrefCrearLanzamiento?: string | null;
 }) {
@@ -83,7 +86,7 @@ export function PantallaDeInicio({
       <Encabezado inicio={inicio} />
       <AvisoDeRegistrosQueNoLlegan inicio={inicio} />
       <NumerosPrincipales inicio={inicio} />
-      <ActividadDeHoy inicio={inicio} />
+      <ActividadDeHoy inicio={inicio} puedeVerLeads={puedeVerLeads} />
       <SeccionDelEmbudo embudo={inicio.embudo} />
       <SeccionDeSesiones sesiones={inicio.sesiones} />
       <SeccionDeFuentes fuentes={inicio.fuentes} />
@@ -186,7 +189,7 @@ function NumerosPrincipales({ inicio }: { inicio: InicioDelLanzamientoActivo }) 
   );
 }
 
-function ActividadDeHoy({ inicio }: { inicio: InicioDelLanzamientoActivo }) {
+function ActividadDeHoy({ inicio, puedeVerLeads }: { inicio: InicioDelLanzamientoActivo; puedeVerLeads: boolean }) {
   const launchId = inicio.lanzamiento.id;
   const pendientes: { etiqueta: string; dato: Dato<number>; filtro: FiltroDeLeads }[] = [
     {
@@ -214,7 +217,9 @@ function ActividadDeHoy({ inicio }: { inicio: InicioDelLanzamientoActivo }) {
             className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
           >
             <span>{p.etiqueta}</span>
-            {tieneValor(p.dato) ? (
+            {tieneValor(p.dato) && !puedeVerLeads ? (
+              <span className="font-semibold tabular-nums">{formatearCantidad(p.dato.value)}</span>
+            ) : tieneValor(p.dato) ? (
               <Link
                 href={urlDeLeads({ filtro: p.filtro, launchId })}
                 className="font-semibold tabular-nums text-primary hover:underline"

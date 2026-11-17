@@ -106,7 +106,10 @@ describe("⭐ detalle de la organización de demo", () => {
     expect(html).toContain("Ver Meta Ads");
     expect(html).toContain("Reconectá Commas");
     expect(html).toContain("Completá la configuración del lanzamiento");
-    expect(html).toMatch(/data-serie="Inversión por día" data-estado="sin_fuente"/);
+    // Revisión de #153: la inversión por día (sólo hay total) muestra su motivo
+    // y no pide conectar Meta Ads, que está conectado.
+    expect(html).toMatch(/data-serie="Inversión por día" data-estado="solo_total"/);
+    expect(html).not.toContain("Conectá Meta Ads");
   });
 
   it.each(["organic", "paid", "paid_plus"] as const)("⭐ variante %s: sus etapas, en orden", async (variante) => {

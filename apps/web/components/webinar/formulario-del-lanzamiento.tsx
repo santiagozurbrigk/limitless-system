@@ -8,12 +8,16 @@ import { correrMutacion } from "@/lib/client/correr-accion";
 import { ETIQUETA_DE_VARIANTE } from "@/lib/webinar/inicio/presentacion";
 import { MAXIMO_DE_SESIONES, VARIANTES } from "@/lib/webinar/lanzamientos/esquemas";
 import {
+  CAMPOS_VACIOS,
   SESION_VACIA,
+  camposDesdeLaVista,
   datosDesdeElFormulario,
   type CamposDeSesion,
   type CamposDelLanzamiento,
 } from "@/lib/webinar/lanzamientos/formulario";
+import type { LanzamientoResumen, SesionConfigurada } from "@/lib/webinar/vistas/contratos";
 import { useToast } from "@/providers/toast-provider";
+import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
 
 /**
  * ⭐ Crear o editar un lanzamiento de Limitless Webinars (SCRUM-529): nombre,
@@ -21,18 +25,26 @@ import { useToast } from "@/providers/toast-provider";
  * webinar de Zoom y el minuto de la oferta). Llama a las acciones **simuladas**:
  * con éxito avisa que el cambio es de ejemplo y no se guardó, como la ficha del
  * lead (SCRUM-545); con error, `correrMutacion` avisa con el motivo.
+ *
+ * Las horas de las sesiones se escriben y se muestran en la zona de la
+ * organización (la del provider), no en la del navegador ni la del servidor:
+ * por eso el lanzamiento a editar llega como vista y se pasa a campos acá.
  */
 export function FormularioDelLanzamiento({
   modo,
   launchId,
-  inicial,
+  existente,
 }: {
   modo: "crear" | "editar";
   /** Sólo para editar. */
   launchId?: string;
-  inicial: CamposDelLanzamiento;
+  /** Sólo para editar: el lanzamiento y sus sesiones como los devuelve la vista. */
+  existente?: { lanzamiento: LanzamientoResumen; sesiones: readonly SesionConfigurada[] };
 }) {
-  const [campos, setCampos] = useState<CamposDelLanzamiento>(inicial);
+  const zona = useZonaDeLaOrganizacion();
+  const [campos, setCampos] = useState<CamposDelLanzamiento>(() =>
+    existente ? camposDesdeLaVista(existente.lanzamiento, existente.sesiones, zona) : CAMPOS_VACIOS
+  );
   const [guardadoDeEjemplo, setGuardadoDeEjemplo] = useState(false);
   const [ocupado, startTransition] = useTransition();
   const { push } = useToast();
@@ -51,7 +63,7 @@ export function FormularioDelLanzamiento({
 
   function enviar(evento: React.FormEvent) {
     evento.preventDefault();
-    const datos = datosDesdeElFormulario(campos);
+    const datos = datosDesdeElFormulario(campos, zona);
     startTransition(() =>
       correrMutacion({
         accion: () =>
@@ -98,9 +110,14 @@ export function FormularioDelLanzamiento({
             <Input
               id="precio"
               inputMode="decimal"
+              placeholder="1.500,00"
+              aria-describedby="precio-ayuda"
               value={campos.precioDeLaOferta}
               onChange={(e) => cambiar("precioDeLaOferta", e.target.value)}
             />
+            <p id="precio-ayuda" className="text-xs text-muted-foreground">
+              Con coma para los decimales. Ej.: 1.500,00
+            </p>
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -121,7 +138,7 @@ export function FormularioDelLanzamiento({
         {campos.sesiones.map((sesion, i) => (
           <div key={i} data-sesion-formulario={i} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_1fr_8rem_auto]">
             <div className="flex flex-col gap-1">
-              <Label htmlFor={`sesion-${i}-inicio`}>Fecha y hora</Label>
+              <Label htmlFor={`sesion-${i}-inicio`}>Fecha y hora (de la organización)</Label>
               <Input
                 id={`sesion-${i}-inicio`}
                 type="datetime-local"
@@ -138,6 +155,7 @@ export function FormularioDelLanzamiento({
               <Input
                 id={`sesion-${i}-oferta`}
                 inputMode="decimal"
+                placeholder="45"
                 value={sesion.minutoDeLaOferta}
                 onChange={(e) => cambiarSesion(i, "minutoDeLaOferta", e.target.value)}
               />

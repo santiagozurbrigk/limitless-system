@@ -17,6 +17,10 @@ import {
 } from "@/lib/queue/qstash-client";
 import type { CalendlyFormAnswer } from "@/types/closing";
 import { assertClienteDeLaOrg } from "@/lib/fathom/cliente-de-la-org";
+import {
+  filtroDeOrganizacionesExcluidas,
+  organizacionesSinProcesosDeFondo,
+} from "@/lib/intelligence/organizaciones-activas";
 
 function formAnswersToRecord(
   answers: CalendlyFormAnswer[] | null | undefined
@@ -95,11 +99,20 @@ export async function processPendingFathomCalls(
   const now = new Date().toISOString();
   const startedAt = Date.now();
 
-  const { data: pending, error } = await admin
+  // SCRUM-525: las llamadas de una cuenta webinar no se analizan con IA. Se
+  // excluyen en la consulta (no después) para que no ocupen el lote y frenen
+  // las de las demás orgs; quedan `pending`.
+  const excluidas = await organizacionesSinProcesosDeFondo();
+
+  let consulta = admin
     .from("fathom_calls")
     .select("*")
     .eq("status", "pending")
-    .lte("processed_after", now)
+    .lte("processed_after", now);
+  const filtro = filtroDeOrganizacionesExcluidas(excluidas);
+  if (filtro) consulta = consulta.not("organization_id", "in", filtro);
+
+  const { data: pending, error } = await consulta
     .order("processed_after", { ascending: true })
     .limit(limit);
 

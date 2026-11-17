@@ -110,6 +110,19 @@ describe("⭐ con lanzamiento activo", () => {
     expect(html).not.toContain("filtro=agendado_sin_cerrar");
   });
 
+  it("⭐ revisión de #153: sin acceso a Leads, el número va sin enlace", () => {
+    const sinLeads = renderToStaticMarkup(
+      createElement(PantallaDeInicio, {
+        vista: { esEjemplo: true, activo: medido(activo(), "landing", AHORA) },
+        hrefCrearLanzamiento: null,
+        puedeVerLeads: false,
+      })
+    );
+    expect(sinLeads).not.toContain("/leads?");
+    expect(sinLeads).not.toContain("Ver leads");
+    expect(sinLeads).toMatch(/data-pendiente="levanto_la_mano_sin_contactar"[^]*?>5</);
+  });
+
   it("embudo: los pasos sin medir dicen su estado, nunca un cero", () => {
     expect(html).toMatch(/data-paso="confirmaron_el_email" data-estado="sin_fuente"[^]*?Sin fuente/);
     expect(html).toMatch(/data-paso="se_quedaron_a_la_oferta" data-estado="falta_configurar"[^]*?Falta configurar/);

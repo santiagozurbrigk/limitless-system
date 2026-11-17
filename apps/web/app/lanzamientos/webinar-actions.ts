@@ -37,6 +37,10 @@ function validar<T>(
 async function rechazarSiSePisa(datos: DatosDelLanzamiento, launchId?: string): Promise<void> {
   if (LANZAMIENTOS_EN_PARALELO === null) return;
   const lista = await leerListaDeLanzamientos();
+  // Sin fuente = la cuenta todavía no lee lanzamientos de ningún lado (hoy,
+  // toda org que no es la de demo, hasta SCRUM-550): no hay ninguno guardado
+  // con el que pisarse, así que no se bloquea el alta (revisión de #153).
+  if (lista.lanzamientos.state === "sin_fuente") return;
   if (!tieneValor(lista.lanzamientos)) {
     throw new ErrorEsperable("No pudimos leer los otros lanzamientos para revisar las fechas. Intentá de nuevo.");
   }

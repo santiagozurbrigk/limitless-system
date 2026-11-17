@@ -306,3 +306,44 @@ export function fechaDeInstanteEnZona(
 function fechaUtc(instante: Date): string {
   return `${instante.getUTCFullYear()}-${dosDigitos(instante.getUTCMonth() + 1)}-${dosDigitos(instante.getUTCDate())}`;
 }
+
+const HORA_LOCAL = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+
+/**
+ * Un instante como reloj de pared de una zona, en el formato de un
+ * `<input type="datetime-local">` (`YYYY-MM-DDTHH:mm`). Así una sesión de las
+ * 20:00 de Buenos Aires se edita como 20:00 la mire quien la mire y la arme el
+ * servidor o el navegador (revisión de #153). `""` si no se entiende.
+ */
+export function instanteAHoraLocalEnZona(
+  iso: string | null | undefined,
+  zona: string | null | undefined
+): string {
+  if (!iso) return "";
+  const instante = new Date(iso);
+  if (Number.isNaN(instante.getTime())) return "";
+  const zonaReal = resolverZonaHoraria(zona);
+  const reloj = new Date(instante.getTime() + desfaseDeZona(instante, zonaReal));
+  return `${reloj.getUTCFullYear()}-${dosDigitos(reloj.getUTCMonth() + 1)}-${dosDigitos(reloj.getUTCDate())}T${dosDigitos(reloj.getUTCHours())}:${dosDigitos(reloj.getUTCMinutes())}`;
+}
+
+/**
+ * Lo inverso: un reloj de pared `YYYY-MM-DDTHH:mm` de una zona, como instante
+ * ISO. Dos pasadas de desfase, como `fechaAInstanteEnZona`: alcanza salvo en la
+ * hora que no existe el día que se adelanta el reloj, que cae en la de
+ * después. `null` si el texto no es una hora local válida.
+ */
+export function horaLocalEnZonaAInstante(
+  local: string,
+  zona: string | null | undefined
+): string | null {
+  const m = HORA_LOCAL.exec(local.trim());
+  if (!m) return null;
+  const [y, mes, d, h, min] = m.slice(1).map(Number) as [number, number, number, number, number];
+  if (!esFechaCalendario(`${m[1]}-${m[2]}-${m[3]}`) || h > 23 || min > 59) return null;
+  const zonaReal = resolverZonaHoraria(zona);
+  const relojComoUtc = Date.UTC(y, mes - 1, d, h, min, 0, 0);
+  let instante = relojComoUtc - desfaseDeZona(new Date(relojComoUtc), zonaReal);
+  instante = relojComoUtc - desfaseDeZona(new Date(instante), zonaReal);
+  return new Date(instante).toISOString();
+}

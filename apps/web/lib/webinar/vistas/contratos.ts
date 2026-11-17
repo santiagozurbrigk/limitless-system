@@ -316,11 +316,15 @@ export type VistaDetalleDelLanzamiento = {
   /**
    * Evolución diaria en la zona de la organización, desde el primer día de
    * captación (o el primer registro) hasta hoy o el cierre, con los días sin
-   * registros en cero medido (SCRUM-544). `inversion` es `null` en orgánico.
+   * registros en cero medido (SCRUM-544). `inversion` es `null` en orgánico
+   * y también cuando la inversión está medida pero sólo como total: entonces
+   * `inversionSoloTotal` trae el motivo, que se muestra sin acción (no es una
+   * fuente sin conectar). Sin valor, `inversion` hereda el estado del total.
    */
   evolucionDiaria: {
     registros: Dato<PuntoDiario[]>;
     inversion: Dato<PuntoDiario[]> | null;
+    inversionSoloTotal: string | null;
   };
   fuentes: EstadoDeFuente[];
 };

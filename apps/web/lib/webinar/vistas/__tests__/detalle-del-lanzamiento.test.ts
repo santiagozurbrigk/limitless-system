@@ -49,6 +49,7 @@ describe("⭐ las tres variantes muestran sus etapas", () => {
     expect(detalle(conVariante("paid")).embudo.map((p) => p.paso)).not.toContain("compraron_el_vip");
     expect(detalle(conVariante("organic")).anuncios).toBeNull();
     expect(detalle(conVariante("organic")).evolucionDiaria.inversion).toBeNull();
+    expect(detalle(conVariante("organic")).evolucionDiaria.inversionSoloTotal).toBeNull();
     expect(detalle(conVariante("paid")).anuncios).not.toBeNull();
   });
 
@@ -134,6 +135,23 @@ describe("⭐ evolución diaria", () => {
     expect(puntos.reduce((a, p) => a + p.valor, 0)).toBe(total);
   });
 
+  it("⭐ revisión de #153: un cerrado sin fecha de cierre termina el día que se cerró, no hoy", () => {
+    const base = conVariante("paid");
+    const id = base.lanzamientos[0].id;
+    const cerrado = {
+      ...base,
+      lanzamientos: base.lanzamientos.map((l) =>
+        l.id === id
+          ? { ...l, status: "closed" as const, closes_on: null, capture_starts_on: "2026-10-20", closed_at: "2026-10-25T15:00:00Z" }
+          : l
+      ),
+      registros: [{ ...base.registros.find((r) => r.launch_id === id)!, registered_at: "2026-10-21T15:00:00Z" }],
+    };
+    const serie = detalle(cerrado, ZONA).evolucionDiaria.registros.value!;
+    expect(serie[0]?.dia).toBe("2026-10-20");
+    expect(serie[serie.length - 1]?.dia).toBe("2026-10-25");
+  });
+
   it("los días se cuentan en la zona de la organización", () => {
     const base = conVariante("paid");
     const id = base.lanzamientos[0].id;
@@ -149,11 +167,10 @@ describe("⭐ evolución diaria", () => {
     expect(enUTC.find((p) => p.dia === "2026-10-31")?.valor).toBe(1);
   });
 
-  it("la inversión diaria no se inventa: sin serie por día, sin fuente con su motivo", () => {
-    const inversion = d.evolucionDiaria.inversion!;
-    expect(inversion.state).toBe("sin_fuente");
-    expect(inversion.value).toBeNull();
-    expect(inversion.reason).toMatch(/total del lanzamiento/);
+  it("⭐ la inversión diaria no se inventa: sin serie por día, el motivo sin pedir conectar Meta Ads", () => {
+    expect(d.anuncios!.inversion.value).not.toBeNull();
+    expect(d.evolucionDiaria.inversion).toBeNull();
+    expect(d.evolucionDiaria.inversionSoloTotal).toMatch(/total del lanzamiento/);
   });
 
   it("si la inversión total no tiene valor, la diaria hereda su estado y motivo", () => {
@@ -162,5 +179,6 @@ describe("⭐ evolución diaria", () => {
     expect(d2.anuncios!.inversion.state).toBe("falta_configurar");
     expect(d2.evolucionDiaria.inversion!.state).toBe("falta_configurar");
     expect(d2.evolucionDiaria.inversion!.reason).toBe(d2.anuncios!.inversion.reason);
+    expect(d2.evolucionDiaria.inversionSoloTotal).toBeNull();
   });
 });

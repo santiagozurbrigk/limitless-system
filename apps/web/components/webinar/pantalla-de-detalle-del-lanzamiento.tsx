@@ -126,6 +126,11 @@ export function PantallaDeDetalleDelLanzamiento({ vista }: { vista: VistaDetalle
         <SerieDiaria titulo="Registros por día" dato={vista.evolucionDiaria.registros} launchId={l.id} formatear={formatearCantidad} />
         {vista.evolucionDiaria.inversion ? (
           <SerieDiaria titulo="Inversión por día" dato={vista.evolucionDiaria.inversion} launchId={l.id} formatear={monto} />
+        ) : vista.evolucionDiaria.inversionSoloTotal ? (
+          <div data-serie="Inversión por día" data-estado="solo_total" className="flex flex-col gap-1">
+            <p className="text-xs text-muted-foreground">Inversión por día</p>
+            <p className="text-sm text-muted-foreground">{vista.evolucionDiaria.inversionSoloTotal}</p>
+          </div>
         ) : null}
       </section>
 

@@ -28,6 +28,28 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-17 — Revisión de Fer sobre #153: Fathom sin IA en webinar, horas y precios del formulario, inversión por día y fichas
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Procesos de fondo (`lib/intelligence/organizaciones-activas.ts`: `organizacionesSinProcesosDeFondo`, `filtroDeOrganizacionesExcluidas`; `lib/fathom/process-call.ts`); fechas (`lib/fechas/calendario.ts`: `instanteAHoraLocalEnZona`, `horaLocalEnZonaAInstante`); Webinars (`lib/webinar/lanzamientos/{formulario,esquemas}.ts`, `components/webinar/{formulario-del-lanzamiento,pantalla-de-configuracion,pantalla-de-detalle-del-lanzamiento,pantalla-de-inicio}.tsx`, `lib/webinar/vistas/{calcular,contratos}.ts`, `app/(platform)/inicio/page.tsx`, `app/(platform)/leads/error.tsx`, `app/(platform)/lanzamientos/nuevo/page.tsx`, `app/lanzamientos/webinar-actions.ts`); plataforma (`lib/auth/permisos-con-staff.ts`, `app/(platform)/layout.tsx`); docs `areas/webinars-fichas-de-datos.md`, `areas/webinars-contratos-de-vista.md`, `arquitectura/jobs-webhooks-y-colas.md`, `operacion/verificacion-manual.md` (V14.3, V17.6–7), `FUNCIONAL.md`, `backlog/historias.md`, `PENDIENTES.md`
+
+**Qué se hizo:**
+- **Fathom (525):** `fathom/process` deja afuera de la cola las llamadas de las cuentas webinar en la consulta misma (para que no ocupen el lote); quedan `pending` y se analizan si la org vuelve a `full`. El doc decía que Fathom no se filtraba porque "el webhook no es un cron", pero `fathom/process` corre cada 10 min y analiza con Sonnet. Test nuevo que exige el filtro en los cuatro llamadores.
+- **Hora de las sesiones (529):** el formulario escribe y muestra las horas en la zona de la organización (provider), no en la del proceso ni la del navegador. Antes, con el servidor en UTC, una sesión de las 20:00 de Buenos Aires se veía a las 23:00 y Guardar la corría a las 02:00Z.
+- **Precio y minuto (529):** `numeroEscrito` lee "1.500", "1.500,50", "1500,50" y "1500.50"; lo ambiguo ("1,500", "1.5.0") queda `NaN` y el esquema lo rechaza en castellano. El campo muestra el formato. El formulario vuelve a escribir los números con coma decimal para que la ida y vuelta no los multiplique por mil.
+- **Inversión por día (544):** con la inversión medida pero sólo como total, el contrato trae `inversionSoloTotal` (el motivo) en vez de un `sin_fuente`, y la pantalla lo muestra sin "Conectá Meta Ads". El test mira la acción.
+- **Ficha del Detalle (548):** lista los números reales del Detalle; corregidos "lo que el equipo mueve hoy", los estados de Ventas VIP y del VIP del embudo, el orden de la lista, el texto de "Falta cargar" y dónde está la migración citada.
+- **Menores:** Inicio enlaza "Ver leads" sólo si quien mira puede abrir Leads; el error de Leads sale a la pantalla de inicio de quien mira (`usePantallaDeInicio`); la serie diaria de un cerrado sin fecha de cierre termina el día que se cerró; `fechaCalendario` rechaza fechas que no existen; con la regla de paralelos activada, una org sin fuente de lanzamientos puede crear; `esStaff` sale a `permisosConStaff` con test; V14.3 y el doc de estados de UI corregidos; `PENDIENTES` recupera la aclaración del holding `limitless` y suma `[WEBINAR-LISTA-INVERSION-Y-FILTROS]`.
+
+**Por qué / finalidad:** revisión de Fer del 17-nov sobre #153 (cinco puntos para antes de mergear y menores).
+
+**Decisiones de diseño relevantes:**
+- "1.500" sin coma es mil quinientos (uso de es-AR); "2.75" (un punto y no tres cifras) es decimal.
+- Las llamadas de Fathom de una cuenta webinar no se marcan con otro estado: quedan `pending` sin tocar el esquema.
+
+**Riesgos / deuda técnica pendiente:** el doc de SCRUM-546 en esta misma lista decía que un boundary de cliente no ve errores de Server Component; quedó corregido en el doc del área. Lista de lanzamientos sin inversión ni filtros: `[WEBINAR-LISTA-INVERSION-Y-FILTROS]`. Nada se miró en navegador (V13 a V15 y V17).
+
 ### 2026-11-16 — La 553 sale de este PR: el panel viejo sigue abierto hasta verificar la consola en producción
 
 **Rama:** `claude/brave-wright-s2bfcg`
@@ -197,7 +219,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 - Ante un valor desconocido corre (status quo, default de la columna `full`); ante una falla de la base lanza, como ya hacía el listado (el cron responde 500 y no procesa a ciegas).
 - El mensaje que ve quien pide un reporte a mano no cambia (`AVISO_ORG_NO_ACTIVA`): una webinar no llega a esas pantallas (rutas bloqueadas por 524).
 
-**Riesgos / deuda técnica pendiente:** las consultas leen `organizations.experience`: si el código se desplegara antes de la migración de 523, estos crons fallarían con 500 (no procesarían nada de más). El orden 523 → código ya está en la guía de SCRUM-532. Tests: 52 de los archivos tocados (12 nuevos); suite completa 4280 en verde.
+**Riesgos / deuda técnica pendiente:** las consultas leen `organizations.experience`: si el código se desplegara antes de la migración de 523, estos crons fallarían con 500 (no procesarían nada de más). El orden 523 → código ya está en la guía de SCRUM-532. Tests: los de `organizaciones-activas` y `procesos-de-fondo` (la cifra de archivos que decía acá no se pudo reproducir: corregido el 17-nov); suite completa 4280 en verde.
 
 ### 2026-11-02 — Leads y ficha del lead de Limitless Webinars (SCRUM-545, A7)
 

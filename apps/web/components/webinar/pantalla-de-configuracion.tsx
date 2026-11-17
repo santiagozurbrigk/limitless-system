@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { CartelDatosDeEjemplo } from "@/components/webinar/cartel-datos-de-ejemplo";
-import { camposDesdeLaVista } from "@/lib/webinar/lanzamientos/formulario";
 import type { VistaConfiguracionDelLanzamiento } from "@/lib/webinar/vistas/contratos";
 import { ETIQUETA_DE_FUENTE } from "@/lib/webinar/vistas/dato";
 import { paths } from "@/routes/paths";
@@ -47,7 +46,7 @@ export function PantallaDeConfiguracion({ vista }: { vista: VistaConfiguracionDe
 
       <section aria-label="Datos del lanzamiento" className="flex flex-col gap-3">
         <h3 className="text-sm font-medium">Datos y sesiones</h3>
-        <FormularioDelLanzamiento modo="editar" launchId={l.id} inicial={camposDesdeLaVista(l, vista.sesiones)} />
+        <FormularioDelLanzamiento modo="editar" launchId={l.id} existente={{ lanzamiento: l, sesiones: vista.sesiones }} />
       </section>
 
       <div className="grid gap-6 md:grid-cols-2">

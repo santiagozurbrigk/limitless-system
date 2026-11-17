@@ -802,7 +802,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
 - **Historia:** Como dueño de una cuenta de Limitless Webinars, quiero abrir la plataforma y ver de un vistazo cómo va el lanzamiento activo y qué tiene que mover hoy el equipo, para reaccionar a tiempo si algo se frena.
 - **Criterios de aceptación:**
   - Dado un lanzamiento activo, cuando entro, entonces llego a Inicio y veo cuántos días faltan para el cierre, la próxima sesión, registrados, asistencia, ventas e ingresos.
-  - Dado que hay leads que levantaron la mano sin que nadie los contacte, cuando toco ese pendiente, entonces llego a Leads con ese filtro aplicado.
+  - Dado que hay leads que levantaron la mano sin que nadie los contacte, cuando toco ese pendiente, entonces llego a Leads con ese filtro aplicado; si no puedo abrir Leads, veo el número sin enlace.
   - Dado que la landing deja de enviar registros, cuando entro a Inicio, entonces veo un aviso con el motivo.
   - Dada una fuente que no está conectada o falló, entonces Inicio la muestra con su motivo y nunca muestra un cero inventado en los números que dependen de ella.
   - Dada una cuenta sin lanzamiento activo, entonces veo que no hay uno y cómo crearlo.
@@ -817,7 +817,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un número que no se pudo medir, entonces veo por qué y qué hacer (conectar, revisar, reconectar o completar la configuración), y nunca un cero inventado.
   - Cuando abro el detalle, entonces veo los registros por origen y por anuncio y su evolución día por día.
   - Cuando abro Lanzamientos, entonces veo cada lanzamiento con su variante, estado, fechas, registrados, asistentes, ventas e ingresos, y llego a su detalle en un clic.
-- **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-ACCIONES-SIN-DESTINO]`
+- **Tareas técnicas:** `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-ACCIONES-SIN-DESTINO]`, `[WEBINAR-LISTA-INVERSION-Y-FILTROS]`
 
 
 ### [H-EMB-28] Crear y configurar un lanzamiento (Limitless Webinars)
@@ -828,6 +828,8 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un lanzamiento con datos que faltan (minuto de la oferta, ID de Zoom, producto, campañas), cuando abro su configuración, entonces veo qué falta y lo puedo completar.
   - Dado que una cuenta tiene un límite de lanzamientos en paralelo, cuando creo uno que se pisa en fechas con otros, entonces se rechaza con el motivo.
   - Desde el número de un lanzamiento que dice «Falta configurar», llego a su configuración en un clic.
+  - Dada una sesión a las 20:00 de la zona de la organización, cuando abro la configuración desde cualquier zona, entonces la veo a las 20:00, y guardar sin cambios no la mueve.
+  - Cuando escribo el precio como «1.500,50», entonces se toma como mil quinientos con cincuenta; un formato que no se puede leer sin adivinar se rechaza con el motivo.
 - **Tareas técnicas:** `[WEBINAR-LANZAMIENTOS-PERSISTIR]`, `[WEBINAR-LANZAMIENTOS-EN-PARALELO]`, `[WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS]`, `[WEBINAR-ORG-DE-DEMO]`
 - **Para confirmar:** cuántos lanzamientos en paralelo (SCRUM-522).
 

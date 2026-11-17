@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { esFechaCalendario } from "@/lib/fechas/calendario";
 import { uuidSchema } from "@/lib/validations";
 import type { EstadoDelLanzamiento } from "@/lib/webinar/vistas/contratos";
 
 /**
  * ⭐ Crear y editar un lanzamiento (SCRUM-529): la entrada de las acciones y la
  * regla de lanzamientos en paralelo. Viven acá y no en
- * `app/lanzamientos/actions.ts` porque un archivo `"use server"` sólo exporta
+ * `app/lanzamientos/webinar-actions.ts` porque un archivo `"use server"` sólo exporta
  * funciones async. Los nombres de los campos siguen el contrato de vista
  * (SCRUM-542); los valores de `variante`, los del modelo (SCRUM-526).
  */
@@ -18,13 +19,14 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const fechaCalendario = z
   .string()
   .regex(FECHA, "Usá el formato AAAA-MM-DD")
+  .refine(esFechaCalendario, "Esa fecha no existe")
   .nullable();
 
 export const sesionSchema = z.object({
   empiezaAt: z.string().datetime({ offset: true, message: "Cargá la fecha y hora de la sesión" }),
   zoomWebinarId: z.string().trim().max(64, "Máximo 64 caracteres").nullable(),
   segundoDeLaOferta: z
-    .number()
+    .number("Escribí el minuto de la oferta como número, por ejemplo 45 o 45,5")
     .int("El segundo de la oferta es un número entero")
     .min(0, "El segundo de la oferta no puede ser negativo")
     .max(6 * 60 * 60, "El segundo de la oferta es de una sesión de hasta 6 horas")
@@ -40,7 +42,7 @@ export const datosDelLanzamientoSchema = z
       .trim()
       .toUpperCase()
       .regex(/^[A-Z]{3}$/, "La moneda es un código de 3 letras (USD, ARS...)"),
-    precioDeLaOferta: z.number().min(0, "El precio no puede ser negativo").nullable(),
+    precioDeLaOferta: z.number("Escribí el precio como número, por ejemplo 1.500,00").min(0, "El precio no puede ser negativo").nullable(),
     captaDesde: fechaCalendario,
     cierraEl: fechaCalendario,
     sesiones: z.array(sesionSchema).max(MAXIMO_DE_SESIONES, `Hasta ${MAXIMO_DE_SESIONES} sesiones`),

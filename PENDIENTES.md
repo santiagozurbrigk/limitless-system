@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 13 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 14 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
 | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
 | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
@@ -441,7 +441,7 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 #### [ORG-EXPERIENCIA-CAMBIO] Cómo pasa a `full` o a `limitless` una organización que lo necesite
 - **Tipo:** decisión de negocio
 - **Severidad:** Media
-- **Estado verificado:** desde SCRUM-523 (`20261019120000_organizations_experience.sql`) toda organización nueva nace con `organizations.experience = 'webinar'` porque las altas lo mandan explícito (el default de la columna es `full`), salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin (`createFounderAccountAction`, `createOrganizationFromHoldingAction`, `createHoldingOrgAction` en `app/super-admin/actions.ts`) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para `authenticated`) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL). `limitless` (Limitless de gestión, decisión del PO del 28-oct-2026) no la manda ninguna alta: se asigna sólo así, con el SQL y el precheck de la guía de SCRUM-532.
+- **Estado verificado:** desde SCRUM-523 (`20261019120000_organizations_experience.sql`) toda organización nueva nace con `organizations.experience = 'webinar'` porque las altas lo mandan explícito (el default de la columna es `full`), salvo el negocio creado dentro de un holding, que toma la del holding (o `full` si el holding es `limitless`, `experienciaDelNegocioDeUnHolding`, SCRUM-552). Las altas del super admin (`createFounderAccountAction`, `createOrganizationFromHoldingAction`, `createHoldingOrgAction` en `app/super-admin/actions.ts`) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para `authenticated`). Desde SCRUM-551 el staff la cambia entre `webinar` y `full` en la ficha de la organización de la consola (`setOrganizationExperienceAction`, cuando se mergee #153); a `limitless` sólo con el service role (SQL). `limitless` (Limitless de gestión, decisión del PO del 28-oct-2026) no la manda ninguna alta: se asigna sólo así, con el SQL y el precheck de la guía de SCRUM-532.
 - **Riesgo:** desde SCRUM-524, que esconde el menú y redirige las rutas según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan `webinar`) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
 - **Impacto:** clientes nuevos de Limitless completo dados de alta por el super admin después del deploy de SCRUM-523.
 - **Qué hay que hacer:** que el PO decida quién y desde dónde pasa una organización a `full` o a `limitless` (por ejemplo, un selector en el detalle de la organización del super admin, con `createAdminClient` y `requireSuperAdmin`, como `updateOrgAddOnsAction`), y si el cambio de un holding se propaga a sus negocios.
@@ -1531,6 +1531,12 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
 - **Estado verificado:** `LANZAMIENTOS_EN_PARALELO` (`apps/web/lib/webinar/lanzamientos/esquemas.ts`) está en `null`: sin límite. La regla ya está escrita y probada (`motivoDeSuperposicion`) para 1 o más.
 - **Qué hay que hacer:** que SCRUM-522 lo decida (pregunta 6 del diseño) y poner el número en la constante; también afecta a Inicio (cuál es "el" lanzamiento activo).
 - **Dónde:** `apps/web/lib/webinar/lanzamientos/esquemas.ts`.
+
+#### [WEBINAR-LISTA-INVERSION-Y-FILTROS] La lista de lanzamientos no muestra la inversión ni filtra por estado
+- **Tipo:** feature
+- **Estado verificado:** la lista (`apps/web/components/webinar/pantalla-de-lanzamientos.tsx`, SCRUM-544) muestra por lanzamiento registrados, asistieron, ventas e ingresos, sin inversión, y no tiene filtros; A4 del plan pedía las dos cosas. Lo encontró la revisión de #153.
+- **Qué hay que hacer:** sumar `inversion` (pagas) a la fila del contrato de la lista y a la pantalla, y un filtro por estado (activo, borrador, cerrado), después de confirmarlo en la sesión del día 6 (SCRUM-547: "candidato para la sesión", ficha de datos § 2).
+- **Dónde:** `apps/web/lib/webinar/vistas/contratos.ts`, `apps/web/lib/webinar/vistas/calcular.ts`, `apps/web/components/webinar/pantalla-de-lanzamientos.tsx`.
 
 #### [WEBINAR-CONFIG-CAMPANAS-Y-PRODUCTOS] Elegir campañas y productos de un lanzamiento
 - **Tipo:** feature

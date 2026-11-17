@@ -1,6 +1,6 @@
 import "server-only";
 
-import { diasEntre, esFechaCalendario, fechaEnZona, sumarDias } from "@/lib/fechas/calendario";
+import { diasEntre, esFechaCalendario, fechaDeInstanteEnZona, fechaEnZona, sumarDias } from "@/lib/fechas/calendario";
 import {
   conError,
   derivar,
@@ -656,6 +656,10 @@ export function calcularListaDeLanzamientos(
 /** Hasta cuántos días muestra la evolución diaria (los más recientes). */
 const DIAS_MAXIMOS_DE_LA_EVOLUCION = 120;
 
+/** Por qué no hay serie de inversión por día aunque la inversión esté medida. */
+export const MOTIVO_INVERSION_SOLO_TOTAL =
+  "Por ahora la inversión se lee como total del lanzamiento: todavía no tenemos el gasto de cada día.";
+
 /**
  * Registros por día en la zona de la organización, desde el primer día de
  * captación (o el primer registro, si es anterior) hasta hoy, o hasta el
@@ -679,7 +683,11 @@ function registrosPorDia(
   if (!desde) return [];
   const hoy = fechaEnZona(ahora, zona);
   const cierre = l.closes_on && esFechaCalendario(l.closes_on) ? l.closes_on : null;
-  let hasta = l.status === "closed" && cierre ? cierre : hoy;
+  // Cerrado: hasta su fecha de cierre; sin ella, hasta el día en que se cerró
+  // (`closed_at` en la zona de la org). Nunca hasta hoy: la serie de un
+  // lanzamiento cerrado no crece con días en cero (revisión de #153).
+  const cerradoEl = l.closed_at ? fechaDeInstanteEnZona(l.closed_at, zona) || null : null;
+  let hasta = l.status === "closed" ? (cierre ?? cerradoEl ?? hoy) : hoy;
   const ultimoRegistro = dias[dias.length - 1];
   if (ultimoRegistro && ultimoRegistro > hasta) hasta = ultimoRegistro;
   if (desde > hasta) return [];
@@ -721,17 +729,13 @@ export function calcularDetalleDelLanzamiento(
     .sort((a, b) => b.registros - a.registros || (a.anuncio ?? "~").localeCompare(b.anuncio ?? "~"));
   // La inversión se lee como total del lanzamiento: no hay serie por día. Sin
   // valor, hereda el estado y el motivo del total; con valor, no se inventa
-  // un reparto por día.
+  // un reparto por día ni se marca "sin fuente" (eso pediría conectar Meta
+  // Ads, que ya está conectado: revisión de #153). Va el motivo, sin acción.
   const inversionTotal = n.anuncios?.inversion ?? null;
+  const inversionConValor = inversionTotal !== null && tieneValor(inversionTotal);
   const inversionDiaria: Dato<PuntoDiario[]> | null =
-    inversionTotal === null
-      ? null
-      : tieneValor(inversionTotal)
-        ? sinFuente(
-            "meta_ads",
-            "Por ahora la inversión se lee como total del lanzamiento: todavía no tenemos el gasto de cada día."
-          )
-        : inversionTotal;
+    inversionTotal === null || inversionConValor ? null : inversionTotal;
+  const inversionSoloTotal = inversionConValor ? MOTIVO_INVERSION_SOLO_TOTAL : null;
   return {
     esEjemplo,
     lanzamiento: resumen(l),
@@ -745,6 +749,7 @@ export function calcularDetalleDelLanzamiento(
     evolucionDiaria: {
       registros: datoDeFuente(ctx, "landing", registrosPorDia(l, registrosDelLanzamiento, ahora, zona)),
       inversion: inversionDiaria,
+      inversionSoloTotal,
     },
     fuentes: filas.fuentes,
   };

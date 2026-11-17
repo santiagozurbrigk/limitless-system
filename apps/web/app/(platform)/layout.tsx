@@ -8,6 +8,7 @@ import {
 import { PlatformLayout } from "@/layouts";
 import { getCurrentUserPermissions } from "@/lib/auth/get-current-permissions";
 import { isStaffUser } from "@/lib/auth/require-staff";
+import { permisosConStaff } from "@/lib/auth/permisos-con-staff";
 import { PermissionsProvider } from "@/providers/permissions-provider";
 import { OnboardingProvider } from "@/providers/onboarding-provider";
 import { TourRunner } from "@/components/onboarding/tour-runner";
@@ -107,15 +108,8 @@ export default async function PlatformRouteLayout({
       getOrganizationExperience(),
     ]);
 
-  /**
-   * Administración (SCRUM-551) es del menú `limitless` y sólo la ve el staff de
-   * la lista: para esa experiencia se suma `esStaff` a los permisos que usan la
-   * barra, la paleta y la pantalla de inicio. Si la lista no se puede leer,
-   * `isStaffUser` da `false` y la entrada no se muestra. El acceso real lo
-   * decide el layout de `/administracion` y cada acción (`requireStaff`).
-   */
-  const permissions =
-    experiencia === "limitless" ? { ...permisosDelRol, esStaff: await isStaffUser() } : permisosDelRol;
+  // Administración (SCRUM-551): `esStaff` sólo en limitless (ver `permisosConStaff`).
+  const permissions = await permisosConStaff(experiencia, permisosDelRol, isStaffUser);
 
   /**
    * ⭐ El permiso se aplica acá, en el servidor, no sólo escondiendo links.
