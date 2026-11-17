@@ -20,9 +20,10 @@ import type { DatosDelLanzamientoInput } from "./esquemas";
  * lo rechaza con un motivo. Es ambiguo "1,500" (en Argentina, uno coma cinco;
  * en inglés, mil quinientos): una coma con exactamente tres cifras después,
  * sin puntos y con parte entera de 1 a 3 cifras que no es cero. "0,500" y
- * "1,50" no lo son. También "1.5.0", "1,500,00" y un cero adelante de un
- * número con punto de miles ("015.000", "01.000": ¿miles con un cero de más o
- * decimal?). "0.500" es cero coma cinco.
+ * "1,50" no lo son. También "1.5.0", "1,500,00" y una parte entera de más de
+ * una cifra que empieza con cero ("015.000", "015,000", "01,500", "015"). "0",
+ * "0,5" y "0.500" sí se leen. Los casos están en una sola tabla en
+ * `__tests__/formulario.test.ts` (`CASOS_DE_NUMEROS`).
  *
  * La hora de una sesión que ya existía viaja con su instante original: si el
  * texto no cambió, se manda ese instante y no el que sale de convertir el
@@ -69,30 +70,34 @@ const MILES = /^-?[1-9]\d{0,2}(\.\d{3})+$/;
 export function numeroEscrito(texto: string): number | null {
   const limpio = texto.trim().replace(/\s/g, "");
   if (limpio === "") return null;
-  const comas = (limpio.match(/,/g) ?? []).length;
-  const puntos = (limpio.match(/\./g) ?? []).length;
-  if (!/^-?[\d.,]+$/.test(limpio) || comas > 1) return Number.NaN;
-  if (comas === 1) {
-    // Ambiguo: "1,500" puede ser uno coma cinco o mil quinientos.
-    if (puntos === 0 && /^-?[1-9]\d{0,2},\d{3}$/.test(limpio)) return Number.NaN;
-    // La coma es el decimal; los puntos, separadores de miles bien puestos.
-    const [entero, decimal] = limpio.split(",") as [string, string];
-    if (puntos > 0 && !MILES.test(entero)) return Number.NaN;
+  if (!/^-?[\d.,]+$/.test(limpio)) return Number.NaN;
+  const [entero = "", decimal, ...sobra] = limpio.split(",");
+  if (sobra.length > 0) return Number.NaN; // más de una coma
+  // Una parte entera de más de una cifra no empieza con cero ("015.000",
+  // "015,000", "01,500", "00.500"): ¿un cero de más (un precio en 0 al que se
+  // le escribió atrás) o un decimal? No se adivina. "0", "0,5" y "0.500" sí.
+  if (/^-?0\d/.test(entero)) return Number.NaN;
+
+  if (decimal !== undefined) {
+    // Con coma: la coma es el decimal y los puntos, separadores de miles.
     if (!/^\d+$/.test(decimal)) return Number.NaN;
-    return Number(`${entero.replace(/\./g, "")}.${decimal}`);
+    if (entero.includes(".")) {
+      if (!MILES.test(entero)) return Number.NaN;
+    } else if (decimal.length === 3 && /^-?[1-9]\d{0,2}$/.test(entero)) {
+      // "1,500": uno coma cinco (Argentina) o mil quinientos (inglés).
+      return Number.NaN;
+    }
+    const numero = Number(`${entero.replace(/\./g, "")}.${decimal}`);
+    return entero === "" || entero === "-" ? Number.NaN : numero;
   }
-  if (puntos === 0) return Number(limpio);
+
   // Sin coma: punto de miles si cada grupo después del punto tiene tres cifras
-  // ("1.500", "1.000.000"); con un solo punto y otra cantidad de cifras, decimal
-  // ("1500.5", "2.75"). Un número que empieza con "0." nunca lleva punto de
-  // miles: "0.500" es cero coma cinco.
-  if (MILES.test(limpio)) return Number(limpio.replace(/\./g, ""));
-  // Un cero adelante y tres cifras después del punto ("015.000", "01.000") es
-  // ambiguo: miles con un cero de más (un precio en 0 al que se le escribió
-  // atrás) o un decimal. No se adivina. "0.500" (sólo un cero) es decimal.
-  if (/^-?0\d+\.\d{3}$/.test(limpio)) return Number.NaN;
-  if (puntos === 1) return Number(limpio);
-  return Number.NaN;
+  // ("1.500", "1.000.000"); con un solo punto y otra cantidad de cifras, o con
+  // parte entera de más de tres cifras, decimal ("2.75", "1500.5").
+  if (MILES.test(entero)) return Number(entero.replace(/\./g, ""));
+  const puntos = (entero.match(/\./g) ?? []).length;
+  if (puntos > 1 || entero.startsWith(".") || entero.endsWith(".")) return Number.NaN;
+  return Number(entero);
 }
 
 /**

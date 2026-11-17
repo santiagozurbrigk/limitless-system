@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  MOTIVO_HORA_INVALIDA,
+  MOTIVO_HORA_QUE_NO_EXISTE,
+  motivoDeHoraInvalida,
   LANZAMIENTOS_EN_PARALELO,
   datosDelLanzamientoSchema,
   motivoDeSuperposicion,
@@ -111,5 +114,19 @@ describe("mensajes y fechas (2.ª revisión de #153)", () => {
     });
     expect(r.success).toBe(false);
     expect(r.error?.issues[0]?.message).toMatch(/^Escribí el minuto de la oferta como número/);
+  });
+});
+
+
+describe("el motivo de una hora inválida (4.ª revisión de #153)", () => {
+  it.each([
+    ["2026-09-06T00:30", MOTIVO_HORA_QUE_NO_EXISTE],
+    ["0026-11-04T21:15", MOTIVO_HORA_INVALIDA],
+    ["20266-11-04T21:15", MOTIVO_HORA_INVALIDA],
+    ["2026-02-30T10:00", MOTIVO_HORA_INVALIDA],
+    ["2026-11-04T25:00", MOTIVO_HORA_INVALIDA],
+    ["mañana", MOTIVO_HORA_INVALIDA],
+  ])("«%s»", (valor, motivo) => {
+    expect(motivoDeHoraInvalida(valor)).toBe(motivo);
   });
 });

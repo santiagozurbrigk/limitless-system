@@ -147,37 +147,88 @@ describe("editar la hora de una sesión que ya existía (3.ª revisión de #153)
   });
 });
 
-describe("⭐ numeroEscrito (revisión de #153: precio como en Argentina)", () => {
-  it.each([
-    ["1.000", 1000],
-    ["2.500", 2500],
-    ["1.000,50", 1000.5],
-    ["1.000.000", 1000000],
-    ["1000,50", 1000.5],
-    ["1000.50", 1000.5],
-    ["997,5", 997.5],
-    ["2.75", 2.75],
-    ["45", 45],
-    [" 1 500 ", 1500],
-    ["0,500", 0.5],
-    ["0.500", 0.5],
-    ["0.050", 0.05],
-    ["1,50", 1.5],
-    ["1250,500", 1250.5],
-    ["2,1250", 2.125],
-    ["10.000", 10000],
-    ["100.000", 100000],
-    ["100.000,50", 100000.5],
-    ["0", 0],
-  ])("«%s» es %s", (texto, esperado) => {
-    expect(numeroEscrito(texto)).toBe(esperado);
+/**
+ * ⭐ La tabla de lo que alguien puede escribir en el precio o en el minuto de
+ * la oferta y lo que tiene que dar (revisiones de #153, uso de es-AR):
+ * un número, `null` (vacío) o `"rechazo"` (no se adivina; el esquema avisa).
+ */
+const CASOS_DE_NUMEROS: Array<[texto: string, esperado: number | null | "rechazo", por: string]> = [
+  // Vacío
+  ["", null, "vacío"],
+  ["   ", null, "sólo espacios"],
+  // Enteros
+  ["0", 0, "cero"],
+  ["45", 45, "entero"],
+  ["1500", 1500, "entero sin separadores"],
+  [" 1 500 ", 1500, "espacios"],
+  ["-5", -5, "negativo (lo rechaza el esquema por el mínimo)"],
+  // Punto de miles
+  ["1.000", 1000, "miles"],
+  ["2.500", 2500, "miles"],
+  ["10.000", 10000, "miles, primer grupo de 2"],
+  ["100.000", 100000, "miles, primer grupo de 3"],
+  ["1.500.000", 1500000, "millones"],
+  // Coma decimal (Argentina)
+  ["997,5", 997.5, "coma decimal"],
+  ["1,50", 1.5, "coma con dos decimales"],
+  ["0,5", 0.5, "cero coma"],
+  ["0,500", 0.5, "cero coma tres cifras"],
+  ["1000,50", 1000.5, "sin punto de miles"],
+  ["1250,500", 1250.5, "parte entera de 4 cifras: no es miles en inglés"],
+  ["2,1250", 2.125, "lo que escribe el formulario con tres decimales"],
+  ["1.000,50", 1000.5, "miles y coma"],
+  ["100.000,50", 100000.5, "miles y coma"],
+  // Punto decimal (inglés)
+  ["2.75", 2.75, "punto decimal"],
+  ["1000.50", 1000.5, "punto decimal"],
+  ["1500.5", 1500.5, "punto decimal"],
+  ["0.500", 0.5, "cero punto tres cifras"],
+  ["0.050", 0.05, "cero punto"],
+  // Ambiguos: no se adivinan
+  ["1,500", "rechazo", "uno coma cinco o mil quinientos"],
+  ["1,000", "rechazo", "ídem"],
+  ["2,500", "rechazo", "ídem"],
+  ["999,999", "rechazo", "ídem"],
+  // Cero adelante de más cifras
+  ["015.000", "rechazo", "¿cero de más o decimal?"],
+  ["01.000", "rechazo", "ídem"],
+  ["010.000", "rechazo", "ídem"],
+  ["01.500", "rechazo", "ídem"],
+  ["00.500", "rechazo", "ídem"],
+  ["-01.500", "rechazo", "ídem, negativo"],
+  ["015,000", "rechazo", "ídem, con coma"],
+  ["01,500", "rechazo", "ídem, con coma"],
+  ["0015,000", "rechazo", "ídem, dos ceros"],
+  ["0150,000", "rechazo", "ídem"],
+  ["015", "rechazo", "ídem, sin separadores"],
+  ["0.500,00", "rechazo", "cero con punto de miles y coma"],
+  // Mal escritos
+  ["1,500,00", "rechazo", "dos comas"],
+  ["1.5.0", "rechazo", "puntos mal puestos"],
+  ["10.00,5", "rechazo", "punto de miles mal puesto"],
+  ["1,", "rechazo", "coma sin decimales"],
+  [",5", "rechazo", "coma sin parte entera"],
+  ["1.", "rechazo", "punto al final"],
+  [".5", "rechazo", "punto al principio"],
+  ["12,5a", "rechazo", "letras"],
+  ["mil", "rechazo", "palabra"],
+];
+
+describe("⭐ numeroEscrito: la tabla de casos", () => {
+  it.each(CASOS_DE_NUMEROS)("«%s» → %s (%s)", (texto, esperado) => {
+    const valor = numeroEscrito(texto);
+    if (esperado === "rechazo") expect(valor).toBeNaN();
+    else expect(valor).toBe(esperado);
   });
 
-  it("vacío es null", () => {
-    expect(numeroEscrito("  ")).toBeNull();
-  });
-
-  it.each(["1,500", "1,000", "2,500", "999,999", "1,500,00", "1.5.0", "10.00,5", "0.500,00", "015.000", "01.000", "00.500", "010.000", "01.500", "mil", "1,", "12,5a"])("«%s» no se adivina: NaN", (texto) => {
-    expect(numeroEscrito(texto)).toBeNaN();
+  it("todo lo que el formulario escribe al editar se vuelve a leer igual", () => {
+    for (const n of [0, 0.5, 1.5, 2.125, 45, 997.5, 1000.5, 1500, 100000.5]) {
+      const campos = camposDesdeLaVista(
+        { id: "l1", nombre: "W", variante: "paid", estado: "active", moneda: "USD", precioDeLaOferta: n, captaDesde: null, cierraEl: null, cerradoAt: null },
+        [],
+        BA
+      );
+      expect(numeroEscrito(campos.precioDeLaOferta), String(n)).toBe(n);
+    }
   });
 });

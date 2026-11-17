@@ -22,14 +22,33 @@ const fechaCalendario = z
   .refine(esFechaCalendario, "Esa fecha no existe")
   .nullable();
 
+const INSTANTE = z.string().datetime({ offset: true });
+const HORA_LOCAL = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d$/;
+
+export const MOTIVO_HORA_QUE_NO_EXISTE =
+  "Esa hora no existe ese día en la zona de la organización (cambio de horario)";
+export const MOTIVO_HORA_INVALIDA = "Revisá la fecha y hora de la sesión: no es válida";
+
+/** Por qué un texto que no es un instante no sirve como hora de una sesión. */
+export function motivoDeHoraInvalida(valor: string): string {
+  const m = HORA_LOCAL.exec(valor);
+  const anio = m ? Number(m[1]) : 0;
+  const pareceHoraLocal = m !== null && anio >= 1900 && anio <= 2999 && esFechaCalendario(`${m[1]}-${m[2]}-${m[3]}`);
+  return pareceHoraLocal ? MOTIVO_HORA_QUE_NO_EXISTE : MOTIVO_HORA_INVALIDA;
+}
+
 export const sesionSchema = z.object({
-  // Vacío: falta cargarla. Con texto que no es un instante: la hora no existe
-  // ese día en la zona de la organización (cambio de horario; ver
-  // `horaLocalEnZonaAInstante`), porque el formulario sólo manda texto así.
+  // Vacía: falta cargarla. Un instante ISO: vale. Una hora local bien escrita
+  // (`YYYY-MM-DDTHH:mm`, año 1900–2999 y fecha que existe) que no llegó
+  // convertida: no existe ese día en la zona (cambio de horario; ver
+  // `horaLocalEnZonaAInstante`). Cualquier otra cosa: fecha y hora inválida.
   empiezaAt: z
     .string()
     .min(1, "Cargá la fecha y hora de la sesión")
-    .datetime({ offset: true, message: "Esa hora no existe ese día en la zona de la organización (cambio de horario)" }),
+    .superRefine((valor, ctx) => {
+      if (INSTANTE.safeParse(valor).success) return;
+      ctx.addIssue({ code: "custom", message: motivoDeHoraInvalida(valor) });
+    }),
   zoomWebinarId: z.string().trim().max(64, "Máximo 64 caracteres").nullable(),
   segundoDeLaOferta: z
     .number("Escribí el minuto de la oferta como número, por ejemplo 45 o 45,5")

@@ -28,6 +28,23 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-17 — Cuarta revisión de Fer sobre #153: el lector de números con una sola regla y una tabla de casos
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Webinars (`lib/webinar/lanzamientos/{formulario,esquemas}.ts` y sus tests)
+
+**Qué se hizo:**
+- **`numeroEscrito` reescrito con reglas parejas para punto y coma.** Una parte entera de más de una cifra que empieza con cero se rechaza siempre ("015,000", "01,500", "0015,000", "015.000", "015"); en la vuelta anterior "015,000" se leía 15. "0", "0,5" y "0.500" se leen.
+- **Una sola tabla de casos** (`CASOS_DE_NUMEROS`, 51 filas: vacío, enteros, miles, coma y punto decimal, ambiguos, ceros adelante, mal escritos, negativos) y un test de que todo lo que el formulario escribe al editar se vuelve a leer igual. Propuesta de Fer para cerrar el formulario.
+- **Motivo de la hora:** "no existe ese día en la zona" sólo sale para una hora local bien escrita (año 1900–2999 y fecha que existe) que no se pudo convertir; lo demás ("0026-11-04T21:15", "2026-02-30T10:00") dice "Revisá la fecha y hora de la sesión: no es válida" (`motivoDeHoraInvalida`, con test).
+
+**Por qué / finalidad:** cuarta revisión de Fer (17-nov) sobre `ecceaf76`.
+
+**Decisiones de diseño relevantes:** "015" sin separadores también se rechaza: la regla es una sola ("no empieza con cero") en vez de un caso por separador.
+
+**Riesgos / deuda técnica pendiente:** nada se miró en navegador.
+
 ### 2026-11-17 — Tercera revisión de Fer sobre #153: cero adelante de un número con miles, mensaje de la hora y error de Leads con permisos
 
 **Rama:** `claude/brave-wright-s2bfcg`
