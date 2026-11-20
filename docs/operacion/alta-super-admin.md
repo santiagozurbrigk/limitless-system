@@ -236,24 +236,39 @@ select public.dar_de_baja_staff('nombre@ejemplo.com');
 
 **Si la llamada aborta**, no se cambió nada. Según el mensaje:
 
-- `Ese email no está en la lista de staff (super_admin_users) como lo compara la app…`: busca cómo está guardado
-  con `select email from public.super_admin_users;`. Si la fila está mal cargada (con mayúsculas o espacios),
-  bórrala por su valor exacto con el `delete` de "Si la función todavía no existe" (el de
-  `'valor tal cual sale en la consulta'`). Esa fila nunca dio acceso, pero el perfil sigue activo: desactívalo
-  como en el paso 2 de esa misma sección.
-
-  Si el email ya no está en la lista en ninguna forma (por ejemplo, una baja manual a medias de antes de la
-  ventana: se sacó de la lista y no se desactivó el perfil), la función no puede terminarla. Corre la primera
+- `Ese email no está en la lista de staff (super_admin_users): ninguna fila, pasada a minúsculas y sin espacios,
+  es igual a ese email en minúsculas y sin espacios…`: la función compara normalizando los dos lados, así que una
+  fila mal cargada (con mayúsculas o espacios) no da este mensaje: la encuentra y la saca. Si aparece, el email
+  ya no está en la lista en ninguna forma (por ejemplo, una baja manual a medias de antes de la ventana: se sacó
+  de la lista y no se desactivó el perfil), y la función no puede terminarla. Corre la primera
   consulta de "Verificación después de la baja": si `perfiles_activos` no es `0`, el perfil sigue activo.
   Desactívalo por su `id` como en el paso 2 de "Si la función todavía no existe" (cuenta primero los perfiles
   con ese email de Auth y desactiva solo si hay exactamente uno), y termina con las dos consultas de
   "Verificación después de la baja".
-- `Ese email es dueño de un holding (holdings.owner_email)…`: pasa el holding a otro super admin (el email nuevo
-  tiene que estar ya en `super_admin_users`) y repite la llamada:
+- `Hay N filas en la lista de staff (super_admin_users) que quedan iguales a ese email en minúsculas y sin
+  espacios…`: dos o más filas de la lista son el mismo email con mayúsculas o espacios distintos. Míralas con:
+
+  ```sql
+  select email from public.super_admin_users
+  where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'));
+  ```
+
+  Decide a mano con el equipo cuál dejar, borra las otras por su valor exacto con el `delete` de "Si la función
+  todavía no existe" (el de `'valor tal cual sale en la consulta'`) y repite la llamada.
+- `Ese email es dueño de un holding (holdings.owner_email)…`: la función lo busca normalizando los dos lados, así
+  que el `owner_email` puede estar guardado con mayúsculas o espacios. Pasa el holding a otro super admin (el
+  email nuevo tiene que estar ya en `super_admin_users`, tal cual):
 
   ```sql
   update public.holdings set owner_email = lower(trim('otro.super.admin@ejemplo.com'))
-  where owner_email = lower(trim('nombre@ejemplo.com'));
+  where lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'));
+  ```
+
+  Verifica que no quedó ninguno a su nombre (**esperado:** ninguna fila) y repite la llamada:
+
+  ```sql
+  select id, name, owner_email from public.holdings
+  where lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'));
   ```
 
 - `Hay N perfiles cuyo email de Auth coincide con ese email…`: más de un usuario de Auth tiene ese email (con
@@ -266,7 +281,8 @@ Dos consultas de solo lectura. La primera:
 
 ```sql
 select
-  (select count(*) from public.super_admin_users where email = lower(btrim('nombre@ejemplo.com'))) as sigue_en_lista,
+  (select count(*) from public.super_admin_users
+     where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'))) as sigue_en_lista,
   (select count(*) from public.profiles p
      join auth.users u on u.id = p.id
      where p.is_active and lower(btrim(u.email)) = lower(btrim('nombre@ejemplo.com'))) as perfiles_activos;
@@ -285,9 +301,12 @@ join auth.users u on u.id = p.id
 where p.is_active
   and not exists (
     select 1 from public.super_admin_users s
-    where s.email = lower(btrim(u.email))
+    where lower(btrim(s.email)) = lower(btrim(u.email))
   );
 ```
+
+Compara normalizando los dos lados, como la función: un perfil cuyo email de Auth solo coincide con una fila mal
+cargada de la lista no aparece, igual que no lo contó la función.
 
 **Resultado esperado:** solo miembros conocidos que no son del staff, y no la persona dada de baja. `p.email` se
 muestra solo como pista: lo edita el usuario y no sirve para decidir. Si aparece la persona dada de baja (por
