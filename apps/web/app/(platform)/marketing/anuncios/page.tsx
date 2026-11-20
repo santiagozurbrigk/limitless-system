@@ -1,5 +1,6 @@
 import { AdsDashboard } from "@/components/marketing/ads-dashboard";
 import { getMarketingAdsAction } from "@/app/marketing/content/ad-actions";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 function resolveDefaultDateRange(days = 30) {
   const to = new Date();
@@ -13,6 +14,9 @@ function resolveDefaultDateRange(days = 30) {
 }
 
 export default async function MarketingAnunciosPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("marketing");
+  if (sinAcceso) return sinAcceso;
+
   const range = resolveDefaultDateRange(30);
   // La lectura devuelve su error como valor (SCRUM-502): el tablero muestra
   // el motivo (antes, el texto crudo de Zernio).

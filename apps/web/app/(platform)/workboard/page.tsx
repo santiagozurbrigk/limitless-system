@@ -3,8 +3,12 @@ import { listLaunchPickerOptionsAction } from "@/app/lanzamientos/actions";
 import { loadWorkboardPageDataAction } from "@/app/workboard/actions";
 import { EmptyState } from "@/components/shared/empty-state";
 import { WorkboardProvider } from "@/providers/workboard-provider";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function WorkboardPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("workboard");
+  if (sinAcceso) return sinAcceso;
+
   const [resultado, launches] = await Promise.all([
     loadWorkboardPageDataAction(),
     listLaunchPickerOptionsAction(),

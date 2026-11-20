@@ -41,6 +41,7 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import type { CustomFieldValues } from "@/types/custom-fields";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 const ADD_ON = "growth_partners" as const;
 
@@ -67,6 +68,9 @@ async function leerUmbral(organizationId: string): Promise<number> {
 }
 
 export async function getClientSignalsAction(): Promise<MutationResult<ClientSignals>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getClientSignals]", async () => {
     const organizationId = await requireOrganizationId();
     const vacio: ClientSignals = {
@@ -143,6 +147,9 @@ export async function getClientSignalsAction(): Promise<MutationResult<ClientSig
 
 /** A partir de cuántos días sin novedades se marca un cliente. */
 export async function getClientSilenceDaysAction(): Promise<MutationResult<number>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getClientSilenceDays]", async () => {
     const organizationId = await requireOrganizationId();
     return leerUmbral(organizationId);

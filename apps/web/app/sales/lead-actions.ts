@@ -33,6 +33,7 @@ import {
 import { leerZonaHorariaDeLaOrganizacion } from "@/lib/fechas/organizacion";
 import type { ClosingCallStatus } from "@/types/closing";
 import { paths } from "@/routes";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Seguimiento de leads: el hilo de intentos y lo que hay que hacer con cada uno.
@@ -188,6 +189,9 @@ function time(iso: string | null): number {
 export async function listLeadsTableAction(
   params: LeadTableParams = {}
 ): Promise<MutationResult<LeadTableResult>> {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listLeadsTable]", () => leerTablaDeLeads(params));
 }
 

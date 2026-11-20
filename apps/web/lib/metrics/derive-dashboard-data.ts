@@ -101,13 +101,17 @@ export function deriveDashboardData(
    *  tiene facturación > 0, se usa directamente en lugar de recalcular desde live data. */
   precomputedFinance?: FinanceSummary
 ): DashboardData {
+  // "Este mes" es el de la organización: el Panel se calcula en el servidor
+  // (SCRUM-540) y su reloj no es el de nadie. `hoy` ya viene en la zona de la org.
+  const ahora = diaLocal(hoy);
   const liveFiance = deriveFinanceSummary(
     clients,
     closingCalls,
     expenses,
     paymentPlatforms,
     undefined,
-    payments
+    payments,
+    ahora
   );
   // Usar el pre-computed (con baseline) si el live no tiene datos todavía
   const finance =
@@ -125,9 +129,7 @@ export function deriveDashboardData(
     // Comparar YYYY-MM como string evita el bug UTC-midnight de new Date("YYYY-MM-DD")
     // que en zonas UTC-N reporta el mes anterior para fechas al inicio del mes.
     const joinYearMonth = c.joinDate.slice(0, 7);
-    const now = new Date();
-    const nowYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    return joinYearMonth === nowYearMonth;
+    return joinYearMonth === hoy.slice(0, 7);
   }).length;
 
   const revenueMetrics: DashboardMetric[] = [

@@ -17,8 +17,17 @@ const sim = vi.hoisted(() => ({
   errores: {} as Record<string, { message: string } | null>,
   filtrosOrg: {} as Record<string, unknown[]>,
   updates: [] as string[],
+  conGastos: true,
 }));
 
+// SCRUM-540: las lecturas del marco chequean el módulo; acá quien llama lo tiene.
+// SCRUM-540: el resumen de Ventas lee la zona de la org, que importa `server-only`.
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  rechazoDeLecturaDelMarco: async () => null,
+  puedeLeerDelMarcoEnElServidor: async () => sim.conGastos,
+}));
 vi.mock("@/lib/observability/reportar-falla", () => ({
   reportarFalla: (error: unknown, contexto: unknown) => sim.reportes.push({ error, contexto }),
 }));
@@ -77,6 +86,13 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 import { loadFinanceConfigAction, updatePaymentPlatformAction } from "../actions";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+
+/** El dato de una lectura del marco; un rechazo acá es un error del test (SCRUM-540). */
+function dato<T>(valor: T | RechazoPorModulo): T {
+  if (esRechazoPorModulo(valor)) throw new Error(`rechazo inesperado: ${valor.error}`);
+  return valor;
+}
 
 let consola: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -84,6 +100,7 @@ beforeEach(() => {
   sim.errores = {};
   sim.filtrosOrg = {};
   sim.updates = [];
+  sim.conGastos = true;
   sim.tablas = {
     fixed_expenses: [{ id: "g1", organization_id: "org-1", name: "Oficina", category: "x", amount: 10, currency: "USD", frequency: "monthly", status: "active" }],
     subscriptions: [{ id: "s1", organization_id: "org-1", name: "Herramienta", status: "active", amount: 5, currency: "USD" }],
@@ -100,7 +117,7 @@ afterEach(() => consola.mockRestore());
 
 describe("loadFinanceConfigAction", () => {
   it("con todo bien trae la configuración y los totales por plataforma", async () => {
-    const r = await loadFinanceConfigAction();
+    const r = dato(await loadFinanceConfigAction());
     expect(r.pagosSinLeer).toBe(false);
     expect(r.fixedExpenses.map((g) => g.id)).toEqual(["g1"]);
     expect(r.paymentPlatforms.map((p) => [p.id, p.totalReceived])).toEqual([["p1", 100]]);
@@ -110,7 +127,7 @@ describe("loadFinanceConfigAction", () => {
 
   it("⭐ con client_payments caído, el resto llega igual, la falla se reporta una vez y se avisa", async () => {
     sim.errores.client_payments = { message: "TypeError: fetch failed" };
-    const r = await loadFinanceConfigAction();
+    const r = dato(await loadFinanceConfigAction());
     expect(r.fixedExpenses.map((g) => g.id)).toEqual(["g1"]);
     expect(r.subscriptions.map((s) => s.id)).toEqual(["s1"]);
     expect(r.teamCompensation.map((t) => t.id)).toEqual(["t1"]);
@@ -146,5 +163,34 @@ describe("updatePaymentPlatformAction (AR pasada 3, MENOR-2)", () => {
   it("con los pagos bien, devuelve el total recibido", async () => {
     const r = await updatePaymentPlatformAction("p1", { name: "Stripe US" });
     expect(r.success && r.data.totalReceived).toBe(100);
+  });
+
+});
+
+describe("loadFinanceConfigAction por partes según el rol (SCRUM-540)", () => {
+  it("⭐ sin Finanzas (Ajustes o Ventas): sólo las plataformas, sin lo cobrado ni la fecha del último cobro; no se leen gastos, suscripciones, sueldos ni cobros", async () => {
+    sim.conGastos = false;
+    const r = dato(await loadFinanceConfigAction());
+    expect(r.paymentPlatforms).toEqual([
+      expect.objectContaining({ id: "p1", name: "Stripe", currency: "USD", totalReceived: 0, lastTransactionAt: "" }),
+    ]);
+    expect(r.fixedExpenses).toEqual([]);
+    expect(r.subscriptions).toEqual([]);
+    expect(r.teamCompensation).toEqual([]);
+    expect(r.pagosSinLeer).toBe(false);
+    expect(sim.filtrosOrg.payment_platforms).toEqual(["org-1"]);
+    for (const tabla of ["fixed_expenses", "subscriptions", "team_compensation", "client_payments"]) {
+      expect(sim.filtrosOrg[tabla], tabla).toBeUndefined();
+    }
+    // Ni el monto ni la fecha del cobro aparecen en la respuesta.
+    expect(JSON.stringify(r)).not.toContain("100");
+    expect(JSON.stringify(r)).not.toContain("2026-10-01");
+  });
+
+  it("con Finanzas, lo cobrado por plataforma y su fecha, como siempre", async () => {
+    const r = dato(await loadFinanceConfigAction());
+    expect(r.paymentPlatforms.map((p) => [p.id, p.totalReceived, p.lastTransactionAt])).toEqual([
+      ["p1", 100, "2026-10-01"],
+    ]);
   });
 });

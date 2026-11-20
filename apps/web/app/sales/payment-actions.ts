@@ -29,6 +29,10 @@ import { paths } from "@/routes";
 import type { Client, ClientInstallment } from "@/types/clients";
 import type { ClientPayment } from "@/types/clients";
 import { assertOrgStoragePath, isOrgStoragePath } from "@/lib/storage/org-path";
+import {
+  rechazoPorModulo,
+  rechazoDeLecturaDelMarco,
+} from "@/lib/auth/acceso-a-modulo";
 
 /*
  * SCRUM-504: las acciones de Cobros devuelven sus errores como valor
@@ -319,6 +323,9 @@ export async function recordClientPaymentAction(
 export async function listOrganizationPaymentsAction(): Promise<
   MutationResult<ClientPayment[]>
 > {
+  const rechazo = await rechazoDeLecturaDelMarco("cobros");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listOrganizationPayments]", async () => {
     const organizationId = await requireOrganizationId();
     return leerPagosDeLaOrganizacion(await createClient(), organizationId);
@@ -328,6 +335,9 @@ export async function listOrganizationPaymentsAction(): Promise<
 export async function listClientPaymentsAction(
   clientId: string
 ): Promise<MutationResult<ClientPayment[]>> {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   const idParsed = uuidSchema.safeParse(clientId);
   if (!idParsed.success) return { success: false, error: "Identificador inválido" };
 
@@ -340,6 +350,9 @@ export async function listClientPaymentsAction(
 export async function getClientPaymentReceiptUrlAction(
   paymentId: unknown
 ): Promise<MutationResult<{ url: string; mimeType: string | null }>> {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   const parsed = uuidSchema.safeParse(paymentId);
   if (!parsed.success) {
     return { success: false, error: "Identificador inválido" };

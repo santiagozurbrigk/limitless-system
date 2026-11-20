@@ -23,6 +23,7 @@ import type {
   ContentCtaType,
   ContentPiece,
 } from "@/types/content";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 // ─── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -292,6 +293,9 @@ async function generarReporte(
 export async function getLatestContentPatternReportAction(): Promise<
   MutationResult<ContentPatternReport | null>
 > {
+  const rechazo = await rechazoPorModulo("marketing");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getLatestContentPatternReport]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

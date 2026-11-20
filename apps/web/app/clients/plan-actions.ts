@@ -11,6 +11,7 @@ import {
 } from "@/lib/server/action-result";
 import { uuidSchema } from "@/lib/validations";
 import type { InstallmentSystem, Plan } from "@/types/plans";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 // ── Tipos internos ──────────────────────────────────────────────────────────
 
@@ -64,6 +65,9 @@ function errorDePlan(error: { message: string; code?: string | null }): Error {
 // ── Listar planes ───────────────────────────────────────────────────────────
 
 export async function listPlansAction(): Promise<MutationResult<Plan[]>> {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listPlans]", async () => {
     if (!isSupabaseConfigured()) return [];
     const supabase = await createClient();

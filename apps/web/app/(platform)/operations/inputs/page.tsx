@@ -14,8 +14,12 @@ import { mapWeeklyInputRowsToTeamInputs } from "@/lib/operations/weekly-input-ma
 import { formatWeekRange } from "@/lib/operations/weekly-utils";
 import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function InputsPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("operations");
+  if (sinAcceso) return sinAcceso;
+
   // La semana de la organización, no la del reloj del servidor (UTC).
   const weekStart = await getCurrentWeekStartAction();
 

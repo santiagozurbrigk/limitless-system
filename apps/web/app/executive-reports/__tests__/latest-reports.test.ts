@@ -10,6 +10,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 type Fila = Record<string, unknown>;
 const estado = vi.hoisted(() => ({ filas: [] as Fila[], fallaEn: null as string | null }));
 
+// SCRUM-540: las lecturas del marco chequean el módulo; acá quien llama lo tiene.
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  rechazoDeLecturaDelMarco: async () => null,
+  puedeLeerDelMarcoEnElServidor: async () => true,
+}));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
 vi.mock("@/lib/auth/bootstrap", () => ({ requireOrganizationId: async () => "org-a" }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -43,6 +49,13 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 import { getLatestReportsByCadenceAction } from "../actions";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+
+/** El dato de una lectura del marco; un rechazo acá es un error del test (SCRUM-540). */
+function dato<T>(valor: T | RechazoPorModulo): T {
+  if (esRechazoPorModulo(valor)) throw new Error(`rechazo inesperado: ${valor.error}`);
+  return valor;
+}
 
 function reporte(period: string, periodStart: string): Fila {
   return {
@@ -76,7 +89,7 @@ describe("getLatestReportsByCadenceAction", () => {
     for (const lunes of ["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28", "2026-10-05", "2026-10-12", "2026-10-19"]) {
       estado.filas.push(reporte("weekly", lunes));
     }
-    const r = await getLatestReportsByCadenceAction();
+    const r = dato(await getLatestReportsByCadenceAction());
     expect(r.monthly?.id).toBe("monthly-2026-09-01");
     expect(r.daily?.id).toBe("daily-2026-10-25");
     expect(r.weekly?.id).toBe("weekly-2026-10-19");
@@ -84,7 +97,7 @@ describe("getLatestReportsByCadenceAction", () => {
 
   it("una cadencia sin reportes queda en null", async () => {
     estado.filas.push(reporte("daily", "2026-10-25"));
-    const r = await getLatestReportsByCadenceAction();
+    const r = dato(await getLatestReportsByCadenceAction());
     expect(r.daily).not.toBeNull();
     expect(r.weekly).toBeNull();
     expect(r.monthly).toBeNull();
@@ -92,7 +105,7 @@ describe("getLatestReportsByCadenceAction", () => {
 
   it("no mezcla reportes de otra organización", async () => {
     estado.filas.push({ ...reporte("monthly", "2026-09-01"), organization_id: "org-b" });
-    const r = await getLatestReportsByCadenceAction();
+    const r = dato(await getLatestReportsByCadenceAction());
     expect(r.monthly).toBeNull();
   });
 

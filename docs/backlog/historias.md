@@ -31,7 +31,7 @@ Armado el 2026-09-23 para Martín (backlog en Jira) y Agustín (qué entra en oc
 ## Para Jira
 
 ```bash
-python3 docs/backlog/historias_a_jira.py --check   # valida
+python3 docs/backlog/historias_a_jira.py --check   # valida; también falla si historias-jira.csv está viejo o FUNCIONAL.md cita una tarea cerrada
 python3 docs/backlog/historias_a_jira.py           # escribe historias-jira.csv
 ```
 
@@ -79,7 +79,7 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
   - Dado un miembro sin acceso a Operaciones, cuando abre el Área del fundador, entonces ve "No tenés acceso"; el founder la sigue viendo.
   - Dado un miembro invitado sin rol asignado, cuando entra, entonces el menú y el bloqueo de pantallas se comportan con una misma regla (no puede abrir por dirección lo que el menú no le muestra, ni al revés).
   - Se probó con una segunda cuenta con rol limitado y el resultado de cada paso quedó anotado.
-- **Tareas técnicas:** `[PERMISOS-LAYOUT-NAV-SUAVE]`, `[NAV-PALETA-PERMISOS]`, PERMISOS-FOUNDER-AREA (resuelta en SCRUM-18), `[PERMISOS-SIN-ROL-NAV]`, `[PERMISOS-VERIFICAR-SESION]`
+- **Tareas técnicas:** PERMISOS-LAYOUT-NAV-SUAVE y PERMISOS-PROVIDERS-GLOBALES (resueltas en SCRUM-540), `[PERMISOS-ACTIONS-LECTURA-SIN-MODULO]` (SCRUM-541), `[NAV-PALETA-PERMISOS]`, PERMISOS-FOUNDER-AREA (resuelta en SCRUM-18), `[PERMISOS-SIN-ROL-NAV]`, `[PERMISOS-VERIFICAR-SESION]`
 - **Para confirmar:** Agustín: un miembro sin rol asignado, ¿ve todo en modo lectura o se obliga a elegir un rol al sumarlo?
 
 ### [H-PLA-08] Navegar con un menú que muestre sólo lo que tengo

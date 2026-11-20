@@ -28,6 +28,11 @@ const sim = vi.hoisted(() => ({
   operaciones: [] as Operacion[],
 }));
 
+// SCRUM-540: las lecturas arrancan con el permiso del módulo; acá quien llama lo tiene.
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  rechazoPorModulo: async () => null,
+}));
 vi.mock("@/lib/observability/reportar-falla", () => ({
   reportarFalla: (error: unknown, contexto: unknown) => sim.reportes.push({ error, contexto }),
 }));

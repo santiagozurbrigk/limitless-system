@@ -12,12 +12,16 @@ import { listVTurbPlayerOptionsAction } from "@/app/vturb/actions";
 import { listWebinarJamWebinarOptionsAction } from "@/app/webinarjam/actions";
 import { blockingTools } from "@/lib/funnels";
 import { paths } from "@/routes/paths";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function FunnelConfigurePage({
   params,
 }: {
   params: Promise<{ funnelId: string }>;
 }) {
+  const sinAcceso = await exigirModuloDeLaPagina("funnels");
+  if (sinAcceso) return sinAcceso;
+
   const { funnelId } = await params;
   const data = await getFunnelBindingsAction(funnelId);
   if (!data) notFound();

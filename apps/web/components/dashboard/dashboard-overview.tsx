@@ -8,6 +8,7 @@ import { DashboardEmptyState } from "./dashboard-empty-state";
 import { ZernioAnalyticsSection } from "./zernio-analytics-section";
 import { TopKpiRow } from "./top-kpi-row";
 import { SalesFunnelStrip } from "./sales-funnel-strip";
+import type { SalesFunnel } from "@/lib/metrics/build-sales-funnel-stages";
 import type { ZernioAnalyticsSummary } from "@/app/integrations/zernio/actions";
 import { SalesTeamPerformanceSection } from "@/components/sales/sales-team-performance-section";
 
@@ -18,9 +19,11 @@ const fade = {
 
 export function DashboardOverview({
   data,
+  embudo,
   zernioAnalytics,
 }: {
   data: DashboardData;
+  embudo: SalesFunnel;
   zernioAnalytics?: ZernioAnalyticsSummary;
 }) {
   if (data.isEmpty) {
@@ -46,7 +49,7 @@ export function DashboardOverview({
 
       {/* 2 — Embudo de conversión DMs → clientes */}
       <motion.div variants={fade}>
-        <SalesFunnelStrip />
+        <SalesFunnelStrip embudo={embudo} />
       </motion.div>
 
       {/* 3 — Métricas de ingresos con sparklines */}

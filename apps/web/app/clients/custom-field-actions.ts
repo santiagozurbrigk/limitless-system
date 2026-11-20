@@ -49,6 +49,7 @@ import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import { ONBOARDING_QUESTIONS } from "@/lib/client-onboarding/questions";
 import { esTablaAusente } from "@/lib/server/tabla-ausente";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Tablas donde puede estar cargado el valor de un campo.
@@ -178,6 +179,9 @@ export type CustomFieldsPageData = {
 export async function getCustomFieldsPageDataAction(): Promise<
   MutationResult<CustomFieldsPageData>
 > {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getCustomFieldsPageData]", async () => {
     const organizationId = await requireOrganizationId();
     const [fields, profile] = await Promise.all([

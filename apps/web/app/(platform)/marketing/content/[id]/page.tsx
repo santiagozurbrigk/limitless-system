@@ -9,6 +9,7 @@ import { MarketingContentDetailPageClient } from "@/components/marketing/marketi
 import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { ContentMetrics, ContentPiece } from "@/types/content";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 function computeOrgAvgMetrics(pieces: ContentPiece[]): ContentMetrics | null {
   const withMetrics = pieces.filter((p) => p.metrics);
@@ -44,6 +45,9 @@ export default async function MarketingContentDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const sinAcceso = await exigirModuloDeLaPagina("marketing");
+  if (sinAcceso) return sinAcceso;
+
   const { id } = await params;
 
   // Las lecturas devuelven su error como valor (SCRUM-502). Antes cualquier

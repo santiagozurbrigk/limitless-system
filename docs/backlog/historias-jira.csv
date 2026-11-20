@@ -976,7 +976,7 @@ Funcionalidad: F-PLA-01 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 * Se probó con una segunda cuenta con rol limitado y el resultado de cada paso quedó anotado.
 
 *Tareas técnicas (PENDIENTES.md):*
-* [PERMISOS-LAYOUT-NAV-SUAVE] El bloqueo por módulo vive en un layout que no se re-renderiza al navegar (nuevo) (P1)
+* [PERMISOS-ACTIONS-LECTURA-SIN-MODULO] 73 Server Actions de lectura de un módulo no chequean el módulo (nuevo, SCRUM-541) (P2)
 * [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo) (P2)
 * [PERMISOS-SIN-ROL-NAV] Un member sin rol pasa el gate pero no ve ningún ítem (nuevo) (P2)
 * [PERMISOS-VERIFICAR-SESION] Probar el bloqueo con un rol limitado (ex bloque de PLAN_VERIFICACION) (P1)
@@ -984,7 +984,7 @@ Funcionalidad: F-PLA-01 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backl
 *Para confirmar:*
 * Agustín: un miembro sin rol asignado, ¿ve todo en modo lectura o se obliga a elegir un rol al sumarlo?
 
-Funcionalidad: F-PLA-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-07]",H-PLA-07,Plataforma,P1,Alta,PERMISOS-LAYOUT-NAV-SUAVE NAV-PALETA-PERMISOS PERMISOS-SIN-ROL-NAV PERMISOS-VERIFICAR-SESION,
+Funcionalidad: F-PLA-07 · Con fallas · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-PLA-07]",H-PLA-07,Plataforma,P1,Alta,PERMISOS-ACTIONS-LECTURA-SIN-MODULO NAV-PALETA-PERMISOS PERMISOS-SIN-ROL-NAV PERMISOS-VERIFICAR-SESION,
 [H-PLA-09] Ver el portfolio del holding sólo si lo administro,Story,High,historia,plataforma,p1,sev-critica,,,"*Historia:* Como admin del holding, quiero ver el portfolio de mis negocios con sus números y que las personas del holding que no lo administran no puedan verlo, para proteger los datos de clientes de cada negocio.
 
 *Criterios de aceptación:*

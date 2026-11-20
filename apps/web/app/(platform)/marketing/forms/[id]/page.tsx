@@ -4,12 +4,16 @@ import { Badge, Button, GlassPanel } from "@ai-coo/ui";
 import { getFormDetailAction } from "@/app/forms/actions";
 import { paths } from "@/routes";
 import { FormsDetailActions } from "@/components/marketing/forms-detail-actions";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function MarketingFormDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const sinAcceso = await exigirModuloDeLaPagina("marketing");
+  if (sinAcceso) return sinAcceso;
+
   const { id } = await params;
   const detail = await getFormDetailAction(id);
   if (!detail) notFound();

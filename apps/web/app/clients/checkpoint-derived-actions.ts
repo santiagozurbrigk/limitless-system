@@ -40,6 +40,7 @@ import {
 import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 // ─── El resumen para la lista de clientes ───────────────────────────────────
 
@@ -64,6 +65,9 @@ export async function getClientsJourneyStatusAction(): Promise<
 export async function listCheckpointProposalsAction(
   clientId?: string
 ): Promise<MutationResult<CheckpointProposal[]>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listCheckpointProposals]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

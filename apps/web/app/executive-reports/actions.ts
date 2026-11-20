@@ -2,6 +2,10 @@
 
 import { requireOrganizationId } from "@/lib/auth/bootstrap";
 import { createClient } from "@/lib/supabase/server";
+import {
+  rechazoDeLecturaDelMarco,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { uuidSchema } from "@/lib/validations";
 import type {
@@ -61,7 +65,7 @@ function mapRow(row: Record<string, unknown>): ExecutiveReport {
  * no se generó" — distinto de un reporte vacío.
  */
 export async function getLatestReportsByCadenceAction(): Promise<
-  Record<ReportPeriod, ExecutiveReport | null>
+  Record<ReportPeriod, ExecutiveReport | null> | RechazoPorModulo
 > {
   const empty: Record<ReportPeriod, ExecutiveReport | null> = {
     daily: null,
@@ -70,6 +74,9 @@ export async function getLatestReportsByCadenceAction(): Promise<
   };
 
   if (!isSupabaseConfigured()) return empty;
+
+  const rechazo = await rechazoDeLecturaDelMarco("reportesEjecutivos");
+  if (rechazo) return rechazo;
 
   const organizationId = await requireOrganizationId();
   const supabase = await createClient();

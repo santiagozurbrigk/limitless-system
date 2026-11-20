@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 31 | 18 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 10 | 33 | 18 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
@@ -132,16 +132,6 @@ Prioridad sugerida P1: el super admin con contraseña sola es la llave de todas 
 - **Dónde:** `apps/web/lib/auth/require-super-admin.ts`, `apps/web/app/team/actions.ts`, `apps/web/app/(platform)/holding/actions.ts`, `apps/web/app/super-admin/actions.ts`, `super_admin_users` (migración).
 
 Prioridad sugerida P1: la severidad es Crítica, pero la toma del super admin exige una condición que hoy no se da; la suplantación entre equipos sí se puede hoy.
-
-#### [PERMISOS-LAYOUT-NAV-SUAVE] El bloqueo por módulo vive en un layout que no se re-renderiza al navegar (nuevo)
-- **Tipo:** seguridad / verificación manual
-- **Severidad:** Alta
-- **Estado verificado:** el chequeo `sinAcceso` está en `app/(platform)/layout.tsx` leyendo `x-pathname`. En App Router los layouts compartidos no se re-renderizan en navegaciones cliente; la paleta ⌘K (`routes/navigation.ts` → `buildPlatformNavigation()`) lista todos los módulos sin filtrar permisos ni add-ons. Muy probable que `Cmd+K → Finanzas` muestre la pantalla a un rol sin acceso.
-- **Riesgo:** Si un member sin acceso a un módulo usa ⌘K o un link interno, entonces muy probablemente ve la pantalla completa (por ejemplo Finanzas) sin ningún conocimiento técnico. Es el camino más fácil de todos los de permisos.
-- **Impacto:** Todas las orgs que usan roles con módulos en «sin acceso»: la restricción se saltea desde la propia interfaz; no cruza organizaciones.
-- **Qué hay que hacer:** verificar en navegador; si se confirma, mover el chequeo a cada `page.tsx` (o a un layout por módulo) y filtrar la paleta con `canSeeNavItem`.
-- **Criterio de aceptación:** Se ejecutó el paso 5 del bloque «Permisos por módulo» de verificacion-manual.md con un member sin acceso a Finanzas y el resultado quedó anotado; si falló, abrir Finanzas desde ⌘K o desde un link interno estando en /dashboard muestra «No tenés acceso» igual que tipeando la URL; la paleta ⌘K de ese member no lista Finanzas
-- **Dónde:** `apps/web/app/(platform)/layout.tsx`, `apps/web/components/navigation/command-palette.tsx`, `apps/web/routes/navigation.ts`.
 
 #### [HOLDING-PORTFOLIO-ROL] El portfolio del holding no mira el rol
 - **Tipo:** seguridad
@@ -224,7 +214,7 @@ Y no hace falta la cookie: `lib/supabase/middleware.ts:61-65` sólo sobrescribe 
 - **Tipo:** verificación manual
 - **Severidad:** Alta
 - **Estado verificado:** nunca se probó con una segunda cuenta.
-- **Riesgo:** Si el bloqueo por módulo no funciona como se espera (hay indicios fuertes en PERMISOS-LAYOUT-NAV-SUAVE), entonces un member ve módulos que su rol tiene en «sin acceso» sin que el equipo lo sepa.
+- **Riesgo:** Si el bloqueo por módulo no funciona como se espera con cuentas reales (SCRUM-540 lo midió en un entorno local, al cargar y al navegar, pero no en producción), entonces un member ve módulos que su rol tiene en «sin acceso» sin que el equipo lo sepa.
 - **Impacto:** Todas las orgs que confían en roles limitados; lo que protege es la única barrera real entre roles hoy, porque RLS no mira el rol.
 - **Qué hay que hacer:** bloque "Permisos por módulo" de `docs/operacion/verificacion-manual.md` § Plataforma.
 - **Criterio de aceptación:** Se ejecutó el bloque «Permisos por módulo con un rol limitado» de verificacion-manual.md con una segunda cuenta member y el resultado de cada paso quedó anotado; si algo falló, se abrió un ítem nuevo
@@ -341,9 +331,31 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 - **Qué hay que hacer:** reemplazar por íconos Lucide; agregar regla de lint.
 - **Dónde:** `apps/web/components/**`.
 
+#### [PERMISOS-ACTIONS-LECTURA-SIN-MODULO] 73 Server Actions de lectura de un módulo no chequean el módulo (nuevo, SCRUM-541)
+- **Tipo:** seguridad / deuda técnica
+- **Severidad:** Media
+- **Estado verificado:** ticket SCRUM-541. SCRUM-540 (2026-10-19) puso `rechazoPorModulo` en las 49 lecturas de un solo módulo que devolvían `MutationResult`. Las otras 73 devuelven el dato directo (un arreglo, un objeto o `null`), y sumarles el rechazo cambia la forma que esperan sus pantallas. Están en `LECTURAS_SIN_CHEQUEO_CONOCIDAS` de `apps/web/lib/navigation/__tests__/lecturas-por-modulo.test.ts`, que falla si aparece una nueva sin chequeo o si una de la lista ya chequea. Sus pantallas no se dibujan sin el módulo (guardia de la página), así que sólo se alcanzan invocándolas a mano con el ID de la action, que está en el JavaScript del cliente. Ejemplos: `getSopVideoJobAction`, `listExecutiveReportsAction`, `getWinsPageDataAction`, `listFormsAction`. Fuera de la lista del test quedan 11 lecturas más sin chequeo, que no son de un solo módulo: 6 las usan pantallas de dos o tres módulos (por ejemplo `getTeamMembersAction`, Finanzas y Ventas, o `getTeamRankingAction`) y 5 también una ruta libre o una API; necesitan la regla de "alguno de estos módulos" de las lecturas del marco. Además hay 66 lecturas sin chequeo que hoy no importa ninguna pantalla (las llama otro código de servidor, o nadie; por ejemplo las de Stripe y Mercado Pago, o `getSOPsAction`): están en `LECTURAS_SIN_LLAMADOR_CONOCIDAS` del mismo test, que falla si aparece una nueva sin chequeo aunque nadie la importe todavía (QA de SCRUM-540). Sin una pantalla que las importe no reciben ID en el build, pero en cuanto una lo haga se pueden invocar a mano. Inventario por ruta en la evidencia de SCRUM-540 (`inventario.md`).
+- **Qué hay que hacer:** pasar cada una a `MutationResult` (o a un tipo con el rechazo) y que su pantalla lo trate, módulo por módulo, sacándola de la lista. Las sin llamador: sumarles el chequeo, o sacarlas de los archivos `"use server"` si sólo las usa otro código de servidor.
+- **Dónde:** las dos listas del test; `apps/web/app/<dominio>/*actions.ts`.
+
+#### [PANEL-EN-VIVO-SOLO-PANEL] El Panel no se actualiza en vivo para quien tiene sólo el Panel (nuevo)
+- **Tipo:** mejora / decisión de producto
+- **Estado verificado:**
+  - Desde SCRUM-540 el Panel se calcula en el servidor. Se actualiza en vivo (`lib/dashboard/panel-en-vivo.ts`) sólo para quien puede leer conversaciones: founder, sin rol o con Ventas. El canal manda la fila de `conversations` al navegador, y quien tiene sólo el Panel no debe recibirla.
+  - Para esa persona el Panel se actualiza al recargar o navegar. En `main` sí se actualizaba, porque le llegaban todas las conversaciones.
+  - Hoy no se nota: `conversations` (el inbox viejo) está vacía en producción desde que el inbox pasó a Zernio (ver `[MKT-SALES-CONN-VACIA]`), y no hay una bandera en `lib/release/escondido.ts` que lo vuelva a encender.
+- **Qué hay que hacer:** cuando `conversations` vuelva a recibir filas (el inbox de Ventas sobre esa tabla, Unipile o ManyChat), darle al Panel un aviso sin datos. La AR 3 de SCRUM-540 propone dos formas:
+  1. Un trigger en `conversations` que publique por Realtime Broadcast un aviso vacío en un tema `panel:<org>`, con una política de Realtime que deje escucharlo a quien tenga el Panel.
+  2. Refrescar el Panel cada N minutos mientras la pestaña está visible (`document.visibilityState`).
+- **Criterio de aceptación:**
+  - Con una conversación nueva, un miembro con sólo el Panel ve el Panel actualizado sin recargar, en el tiempo que se decida.
+  - Su navegador no recibe ninguna fila de `conversations` (medido mirando el websocket de Realtime y las respuestas).
+  - Una ráfaga de cambios produce como mucho un `router.refresh()` por intervalo, como hoy.
+- **Dónde:** `apps/web/lib/dashboard/panel-en-vivo.ts`, `apps/web/components/dashboard/dashboard-page-content.tsx`, migración (trigger y política de Realtime) si se elige Broadcast.
+
 #### [NAV-PALETA-PERMISOS] La paleta ⌘K no filtra por permisos ni add-ons (nuevo)
 - **Tipo:** bug
-- **Estado verificado:** `components/navigation/command-palette.tsx` usa `platformNavigation` estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos `hidden` del menú (`lib/navigation/build-platform-navigation.ts`); permisos y add-ons siguen sin filtrarse.
+- **Estado verificado:** `components/navigation/command-palette.tsx` usa `platformNavigation` estático. Desde SCRUM-490 (2026-10-02) al menos no lista los hijos `hidden` del menú (`lib/navigation/build-platform-navigation.ts`); permisos y add-ons siguen sin filtrarse. Desde SCRUM-540 (2026-10-19) elegir un módulo bloqueado desde la paleta muestra «No tenés acceso» y no trae los datos de la pantalla: lo que queda es que la paleta ofrece entradas que no se pueden abrir. SCRUM-524 (sin mergear) la filtra por permisos sólo en la experiencia `webinar`; para `full` no se tocó en SCRUM-540 porque ese cambio reescribe el mismo archivo.
 - **Qué hay que hacer:** construirla con `buildPlatformSidebarNav(enabledAddOns)` + `canSeeNavItem`.
 - **Dónde:** `apps/web/components/navigation/command-palette.tsx`, `apps/web/routes/navigation.ts`.
 

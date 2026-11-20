@@ -18,6 +18,7 @@ import {
   mutacionConErroresEsperables,
   type MutationResult,
 } from "@/lib/server/action-result";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -162,6 +163,9 @@ async function leerClosersConCalendly(): Promise<CloserProfile[]> {
 export async function getCloserMetricsAction(
   since?: string // ISO date string; default últimos 90 días
 ): Promise<MutationResult<CloserMetrics[]>> {
+  const rechazo = await rechazoPorModulo("sales");
+  if (rechazo) return rechazo;
+
   if (!isSupabaseConfigured()) return { success: true, data: [] };
   return mutacionConErroresEsperables("[getCloserMetrics]", () => leerMetricasDeClosers(since));
 }
@@ -441,6 +445,9 @@ export async function syncCloserCalendlyAction(
 export async function getMyCalendlyIntegrationAction(): Promise<
   MutationResult<{ connected: boolean; calendlyUserUri?: string; lastSyncAt?: string }>
 > {
+  const rechazo = await rechazoPorModulo("settings");
+  if (rechazo) return rechazo;
+
   if (!isSupabaseConfigured()) return { success: true, data: { connected: false } };
 
   return mutacionConErroresEsperables("[getMyCalendlyIntegration]", async () => {

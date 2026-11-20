@@ -7,6 +7,7 @@ import {
   getCurrentProfile,
 } from "@/lib/auth/bootstrap";
 import {
+  mutacionConErroresEsperables,
   registrarFallaDeAccion,
   runMutation,
   type MutationResult,
@@ -22,7 +23,26 @@ import {
   type TeamCompensationRow,
 } from "@/lib/expenses/mapper";
 import { createClient } from "@/lib/supabase/server";
+import {
+  puedeLeerDelMarcoEnElServidor,
+  rechazoDeLecturaDelMarco,
+  type RechazoPorModulo,
+} from "@/lib/auth/acceso-a-modulo";
 import { fechaDeHoyDeLaOrganizacion } from "@/lib/fechas/organizacion";
+import { diaLocal, fechaDeHoyEnZona } from "@/lib/fechas/calendario";
+import { zonaDeLaOrganizacionActiva } from "@/lib/fechas/organizacion-activa";
+import {
+  EMPTY_FINANCE_CONFIG,
+  leerConfiguracionDeFinanzas,
+  leerEntradasDelResumen,
+  paymentPlatformTotals,
+  type FinanceConfigPayload,
+} from "@/lib/finance/leer-configuracion";
+import {
+  calcularResumenFinanciero,
+  resumenParaVentas,
+  type ResumenFinanciero,
+} from "@/lib/finance/resumen-financiero";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { leerPagosDeLaOrganizacion } from "@/lib/sales/pagos";
 import type { ClientPayment } from "@/types/clients";
@@ -34,19 +54,9 @@ import type {
 } from "@/types/expenses";
 import type { PaymentPlatformConfig } from "@/types/finance";
 
-export type FinanceConfigPayload = {
-  fixedExpenses: FixedExpense[];
-  subscriptions: Subscription[];
-  teamCompensation: TeamCompensation[];
-  paymentPlatforms: PaymentPlatformConfig[];
-  /**
-   * Los pagos no se pudieron leer: los totales recibidos por plataforma no
-   * están al día (SCRUM-504). El resto de la configuración llega igual.
-   */
-  pagosSinLeer: boolean;
-};
-
 export type { MutationResult };
+export type { FinanceConfigPayload } from "@/lib/finance/leer-configuracion";
+export type { ResumenFinanciero } from "@/lib/finance/resumen-financiero";
 
 function mapFinanceError(msg: string): string {
   if (isMissingTableError(msg)) {
@@ -62,133 +72,85 @@ async function requireFounderRole(): Promise<void> {
   }
 }
 
-/**
- * Lo recibido por cada plataforma y su última transacción. Sin transacciones,
- * la última es `hoy`, el de la organización.
- */
-function paymentPlatformTotals(
-  platforms: PaymentPlatformRow[],
-  payments: ClientPayment[],
-  hoy: string
-): PaymentPlatformConfig[] {
-  const byPlatform = new Map<string, { total: number; lastAt: string }>();
 
-  for (const payment of payments) {
-    const platformId = payment.paymentDestinationPlatformId;
-    if (!platformId) continue;
-    const at = payment.paymentDate.slice(0, 10);
-    const prev = byPlatform.get(platformId) ?? { total: 0, lastAt: "" };
-    byPlatform.set(platformId, {
-      total: prev.total + payment.amount,
-      lastAt: at > prev.lastAt ? at : prev.lastAt || at,
-    });
-  }
-
-  return platforms.map((row) => {
-    const totals = byPlatform.get(row.id);
-    return rowToPaymentPlatform(row, {
-      totalReceived: totals?.total ?? 0,
-      lastTransactionAt: totals?.lastAt || hoy,
-    });
-  });
+async function configDeDemostracion(): Promise<FinanceConfigPayload> {
+  const { mockFixedExpenses, mockSubscriptions, mockTeamCompensation } =
+    await import("@/mocks/expenses");
+  const { mockPaymentPlatforms } = await import("@/mocks/finance");
+  return {
+    fixedExpenses: mockFixedExpenses.map((e) => ({ ...e })),
+    subscriptions: mockSubscriptions.map((s) => ({ ...s })),
+    teamCompensation: mockTeamCompensation.map((t) => ({ ...t })),
+    paymentPlatforms: mockPaymentPlatforms.map((p) => ({ ...p })),
+    pagosSinLeer: false,
+  };
 }
 
-const EMPTY_FINANCE_CONFIG: FinanceConfigPayload = {
-  fixedExpenses: [],
-  subscriptions: [],
-  teamCompensation: [],
-  paymentPlatforms: [],
-  pagosSinLeer: false,
-};
+/**
+ * La configuración de Finanzas que pide el provider del marco en toda pantalla.
+ *
+ * ⭐ Por partes según el rol (SCRUM-540, mínimo privilegio):
+ *   - con Finanzas (`detalleDeFinanzas`): gastos fijos, suscripciones, sueldos
+ *     y comisiones por persona, y las plataformas con lo cobrado y la fecha del
+ *     último cobro, como siempre;
+ *   - con Ventas o Ajustes y sin Finanzas (`plataformasDePago`): sólo las
+ *     plataformas, con nombre, clave, moneda y etiqueta; lo cobrado va en 0 y
+ *     la fecha vacía, y no se leen gastos, suscripciones, sueldos ni cobros.
+ *     Los totales que muestra Ventas llegan por `getResumenFinancieroAction`;
+ *   - sin ninguno, el rechazo.
+ */
+export async function loadFinanceConfigAction(): Promise<
+  FinanceConfigPayload | RechazoPorModulo
+> {
+  if (!isSupabaseConfigured()) return configDeDemostracion();
 
-export async function loadFinanceConfigAction(): Promise<FinanceConfigPayload> {
-  if (!isSupabaseConfigured()) {
-    const { mockFixedExpenses, mockSubscriptions, mockTeamCompensation } =
-      await import("@/mocks/expenses");
-    const { mockPaymentPlatforms } = await import("@/mocks/finance");
-    return {
-      fixedExpenses: mockFixedExpenses.map((e) => ({ ...e })),
-      subscriptions: mockSubscriptions.map((s) => ({ ...s })),
-      teamCompensation: mockTeamCompensation.map((t) => ({ ...t })),
-      paymentPlatforms: mockPaymentPlatforms.map((p) => ({ ...p })),
-      pagosSinLeer: false,
-    };
-  }
+  const rechazo = await rechazoDeLecturaDelMarco("plataformasDePago");
+  if (rechazo) return rechazo;
+
+  const conDetalle = await puedeLeerDelMarcoEnElServidor("detalleDeFinanzas");
 
   try {
     const organizationId = await tryRequireOrganizationId();
     if (!organizationId) return EMPTY_FINANCE_CONFIG;
-
-    const supabase = await createClient();
-
-    // Si los pagos no se pueden leer, lanza `FallaDeLaBase` (SCRUM-504): antes
-    // los totales por plataforma quedaban en cero sin aviso.
-    // Los pagos se leen aparte (AR de SCRUM-504, pasada 2): si fallan, se
-    // registra la falla y los totales por plataforma quedan en cero con el
-    // aviso, pero gastos, suscripciones, equipo y plataformas llegan igual.
-    let payments: ClientPayment[] = [];
-    let pagosSinLeer = false;
-    try {
-      payments = await leerPagosDeLaOrganizacion(supabase, organizationId);
-    } catch (e) {
-      registrarFallaDeAccion("[loadFinanceConfig] pagos", e);
-      pagosSinLeer = true;
-    }
-
-  const [fixedRes, subsRes, teamRes, platRes, hoy] = await Promise.all([
-    supabase
-      .from("fixed_expenses")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("name"),
-    supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .eq("status", "active")
-      .order("name"),
-    supabase
-      .from("team_compensation")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("member_name"),
-    supabase
-      .from("payment_platforms")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("name"),
-    fechaDeHoyDeLaOrganizacion(supabase, organizationId),
-  ]);
-
-  const err =
-    fixedRes.error?.message ??
-    subsRes.error?.message ??
-    teamRes.error?.message ??
-    platRes.error?.message;
-
-    if (err) {
-      console.error("[loadFinanceConfig]", err);
-      return EMPTY_FINANCE_CONFIG;
-    }
-
-    return {
-      fixedExpenses: ((fixedRes.data ?? []) as FixedExpenseRow[]).map(rowToFixedExpense),
-      subscriptions: ((subsRes.data ?? []) as SubscriptionRow[]).map(rowToSubscription),
-      teamCompensation: ((teamRes.data ?? []) as TeamCompensationRow[]).map(
-        rowToTeamCompensation
-      ),
-      paymentPlatforms: paymentPlatformTotals(
-        (platRes.data ?? []) as PaymentPlatformRow[],
-        payments,
-        hoy
-      ),
-      pagosSinLeer,
-    };
+    return await leerConfiguracionDeFinanzas(await createClient(), organizationId, conDetalle);
   } catch (e) {
     // Se registra y va a Sentry (SCRUM-504: incluye la falla al leer los pagos).
     registrarFallaDeAccion("[loadFinanceConfig]", e);
     return EMPTY_FINANCE_CONFIG;
   }
+}
+
+/**
+ * ⭐ Los totales de Finanzas que muestra Ventas, calculados en el servidor
+ * (SCRUM-540): facturación, cobrado, gastos y margen del período, el total de
+ * gastos del mes y, por mes, facturación y cobrado (`resumenParaVentas`). Sin
+ * las filas de gastos, sueldos ni cobros, y sin lo que sólo muestra Finanzas
+ * (desglose de gastos, lo cobrado por plataforma, lo pendiente por mes, el
+ * desglose por closer). Quien tiene Finanzas recibe las filas y hace la misma cuenta en el
+ * navegador (`lib/finance/resumen-financiero.ts`).
+ */
+export async function getResumenFinancieroAction(): Promise<
+  MutationResult<ResumenFinanciero & { pagosSinLeer: boolean }>
+> {
+  const rechazo = await rechazoDeLecturaDelMarco("resumenFinanciero");
+  if (rechazo) return rechazo;
+
+  return mutacionConErroresEsperables("[getResumenFinanciero]", async () => {
+    const organizationId = await requireOrganizationId();
+    const supabase = await createClient();
+    const [{ entradas, pagosSinLeer }, zona] = await Promise.all([
+      leerEntradasDelResumen(supabase, organizationId),
+      // Si la zona no se puede leer, la de por defecto, como el layout (SCRUM-108).
+      zonaDeLaOrganizacionActiva().catch((e: unknown) => {
+        registrarFallaDeAccion("[getResumenFinanciero] zona", e);
+        return null;
+      }),
+    ]);
+    // "Este mes" es el de la organización, no el del reloj del servidor (AR 2,
+    // regla de SCRUM-493). Sin cobros, los totales sin ellos y el aviso.
+    const ahora = diaLocal(fechaDeHoyEnZona(zona));
+    return { ...resumenParaVentas(calcularResumenFinanciero(entradas, ahora)), pagosSinLeer };
+  });
 }
 
 export async function createFixedExpenseAction(

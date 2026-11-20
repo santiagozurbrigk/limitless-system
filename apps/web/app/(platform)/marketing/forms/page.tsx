@@ -4,8 +4,12 @@ import { listFormsAction } from "@/app/forms/actions";
 import { FormSyncButton } from "@/components/marketing/form-sync-button";
 import { FormDisconnectButton } from "@/components/marketing/form-disconnect-button";
 import { paths } from "@/routes";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function MarketingFormsPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("marketing");
+  if (sinAcceso) return sinAcceso;
+
   const forms = await listFormsAction();
 
   return (

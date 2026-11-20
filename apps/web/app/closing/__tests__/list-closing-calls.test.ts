@@ -10,6 +10,12 @@ const sim = vi.hoisted(() => ({
   filtrosOrg: [] as unknown[],
 }));
 
+// SCRUM-540: las lecturas del marco chequean el módulo; acá quien llama lo tiene.
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  rechazoDeLecturaDelMarco: async () => null,
+  puedeLeerDelMarcoEnElServidor: async () => true,
+}));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
 vi.mock("@/lib/auth/bootstrap", () => ({
   tryRequireOrganizationId: async () => "org-1",
@@ -55,6 +61,13 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 import { listClosingCallsAction } from "@/app/closing/actions";
+import { esRechazoPorModulo, type RechazoPorModulo } from "@/lib/auth/regla-de-modulo";
+
+/** El dato de una lectura del marco; un rechazo acá es un error del test (SCRUM-540). */
+function dato<T>(valor: T | RechazoPorModulo): T {
+  if (esRechazoPorModulo(valor)) throw new Error(`rechazo inesperado: ${valor.error}`);
+  return valor;
+}
 
 beforeEach(() => {
   sim.filtrosOrg = [];
@@ -72,13 +85,13 @@ beforeEach(() => {
 
 describe("listClosingCallsAction", () => {
   it("trae los 1.455 turnos, incluidos los más nuevos que antes quedaban afuera", async () => {
-    const calls = await listClosingCallsAction();
+    const calls = dato(await listClosingCallsAction());
     expect(calls).toHaveLength(1455);
     expect(calls.at(-1)?.id).toBe("org1-1454");
   });
 
   it("filtra por la organización activa: un turno de otra org no aparece", async () => {
-    const calls = await listClosingCallsAction();
+    const calls = dato(await listClosingCallsAction());
     expect(calls.map((c) => c.id)).not.toContain("otra-org");
     expect(new Set(sim.filtrosOrg)).toEqual(new Set(["org-1"]));
   });

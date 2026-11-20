@@ -5,6 +5,7 @@ import { PageLoading } from "@/components/shared/page-loading";
 import { getGHLIntegrationStatusAction } from "@/app/ghl/actions";
 import { listLeadsTableAction } from "@/app/sales/lead-actions";
 import { getTeamMembersAction } from "@/app/team/actions";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 async function ClosingPageContent() {
   const [ghlStatus, leadsTable, teamMembers] = await Promise.all([
@@ -32,7 +33,10 @@ async function ClosingPageContent() {
   );
 }
 
-export default function ClosingPage() {
+export default async function ClosingPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("sales");
+  if (sinAcceso) return sinAcceso;
+
   return (
     <Suspense fallback={<PageLoading label="Cargando closing…" />}>
       <ClosingPageContent />

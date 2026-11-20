@@ -3,8 +3,12 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { SalesCallsList } from "@/components/sales/sales-calls-list";
 import { getSalesCallsAction } from "@/app/fathom/actions";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function LlamadasVentaPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("sales");
+  if (sinAcceso) return sinAcceso;
+
   const result = await getSalesCallsAction();
 
   return (

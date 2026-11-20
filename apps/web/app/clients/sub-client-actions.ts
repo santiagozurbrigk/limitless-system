@@ -42,6 +42,7 @@ import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import type { CustomFieldValues } from "@/types/custom-fields";
 import { esTablaAusente } from "@/lib/server/tabla-ausente";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 const ADD_ON = "growth_partners" as const;
 
@@ -118,6 +119,9 @@ async function sectionFields(
 export async function listSubClientsAction(
   clientId: string
 ): Promise<MutationResult<SubClient[]>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listSubClients]", async () => {
     if (!uuidSchema.safeParse(clientId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();

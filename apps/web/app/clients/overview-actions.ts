@@ -28,6 +28,7 @@ import {
   type MutationResult,
 } from "@/lib/server/action-result";
 import { lecturaDegradable } from "@/lib/server/lectura-degradable";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 export type ClientOverview = {
   /** `null` si no se pudieron leer (la falla queda registrada). */
@@ -67,6 +68,9 @@ export type ClientOverview = {
 export async function getClientOverviewAction(
   clientId: string
 ): Promise<MutationResult<ClientOverview>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getClientOverview]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

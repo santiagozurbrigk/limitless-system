@@ -1,27 +1,30 @@
 "use client";
 
-import { useMemo } from "react";
-import { deriveDashboardData } from "@/lib/metrics/derive-dashboard-data";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { useFinanceData } from "@/providers/finance-data-provider";
-import { usePlatformData } from "@/providers/platform-data-provider";
-import { fechaDeHoyEnZona } from "@/lib/fechas/calendario";
-import {
-  useHoyDeLaOrganizacion,
-  useZonaDeLaOrganizacion,
-} from "@/providers/zona-de-la-organizacion-provider";
 import type { ZernioAnalyticsSummary } from "@/app/integrations/zernio/actions";
-import type { FrequentObjectionsResult } from "@/types/sales";
 import type { ComputedCustomMetric } from "@/lib/metrics/custom-metrics";
-import { PageLoading } from "@/components/shared/page-loading";
+import type { DatosDelPanel } from "@/lib/dashboard/datos-del-panel";
 import { SetupChecklist } from "@/components/onboarding/setup-checklist";
 import { DashboardOverview } from "./dashboard-overview";
 import { AvisoDeLecturaFallida } from "@/components/shared/aviso-de-lectura-fallida";
+import { ERROR_INESPERADO } from "@/lib/client/correr-accion";
+import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { usePermisosDeModulo } from "@/providers/permissions-provider";
+import { suscribirPanelEnVivo } from "@/lib/dashboard/panel-en-vivo";
+import { puedeLeerDelMarco } from "@/lib/auth/lecturas-del-marco";
+import { createClient } from "@/lib/supabase/client";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 
-const useSupabase = isSupabaseConfigured();
-
+/**
+ * El Panel con sus totales ya calculados en el servidor (SCRUM-540): la página
+ * lee y calcula (`leerDatosDelPanel`) y acá sólo se dibuja. Antes este
+ * componente pedía al marco cada cliente, conversación, llamada, gasto, sueldo
+ * y cobro y calculaba en el navegador.
+ */
 export function DashboardPageContent({
-  frequentObjections = null,
+  datos,
+  organizationId = null,
+  pagosSinLeer = false,
   zernioAnalytics = {
     totalImpressions: 0,
     totalLikes: 0,
@@ -29,86 +32,38 @@ export function DashboardPageContent({
     hasData: false,
   },
 }: {
-  frequentObjections?: FrequentObjectionsResult | null;
+  datos: DatosDelPanel;
+  organizationId?: string | null;
+  pagosSinLeer?: boolean;
   zernioAnalytics?: ZernioAnalyticsSummary;
   customMetrics?: ComputedCustomMetric[];
 }) {
-  const {
-    clients,
-    conversations,
-    closingCalls,
-    salesMetrics,
-    clientsLoading,
-    conversationsLoading,
-    closingCallsLoading,
-  } = usePlatformData();
-
-  const { expensesSummary, paymentPlatforms, financeConfigLoading, clientPayments, clientPaymentsError, financeSummary, salesBaselineMetrics } =
-    useFinanceData();
-
-  const loading =
-    useSupabase &&
-    (clientsLoading ||
-      conversationsLoading ||
-      closingCallsLoading ||
-      financeConfigLoading);
-
-  // Fallback baseline para métricas de ventas: si no hay datos live, usar snapshot
-  const effectiveSalesMetrics = useMemo(() => {
-    const hasLiveData = salesMetrics.totalConversations > 0 || salesMetrics.bookingRate > 0;
-    if (hasLiveData || !salesBaselineMetrics) return salesMetrics;
-    return {
-      ...salesMetrics,
-      bookingRate: (salesBaselineMetrics["tasa_agendamiento"] ?? 0) * 100,
-      ghostingRate: (salesBaselineMetrics["tasa_fantasma"] ?? 0) * 100,
-    };
-  }, [salesMetrics, salesBaselineMetrics]);
-
-  // Hoy en la zona de la org; en el render del servidor (null) se calcula con
-  // la misma zona, así que da el mismo día salvo justo a la medianoche.
-  const zonaDeLaOrganizacion = useZonaDeLaOrganizacion();
-  const hoyDeLaOrganizacion =
-    useHoyDeLaOrganizacion() ?? fechaDeHoyEnZona(zonaDeLaOrganizacion);
-
-  const data = useMemo(() => {
-    const derived = deriveDashboardData(
-      clients,
-      conversations,
-      closingCalls,
-      expensesSummary,
-      paymentPlatforms,
-      effectiveSalesMetrics,
-      hoyDeLaOrganizacion,
-      frequentObjections?.objections ?? [],
-      clientPayments,
-      financeSummary  // baseline-enriched desde el provider
-    );
-
-    const hasNoActivity =
-      clients.length === 0 &&
-      conversations.length === 0 &&
-      closingCalls.length === 0;
-
-    return {
-      ...derived,
-      isEmpty: !useSupabase || hasNoActivity,
-    };
-  }, [
-    clients,
-    conversations,
-    closingCalls,
-    expensesSummary,
-    paymentPlatforms,
-    effectiveSalesMetrics,
-    frequentObjections,
-    clientPayments,
-    financeSummary,
-    hoyDeLaOrganizacion,
-  ]);
-
-  if (loading) {
-    return <PageLoading label="Cargando panel general…" />;
-  }
+  // En vivo (SCRUM-540): con permiso para leer conversaciones, una conversación
+  // nueva o cambiada vuelve a pedir el Panel al servidor. Sin ese permiso no se
+  // abre el canal (`suscribirPanelEnVivo`).
+  const router = useRouter();
+  const permisos = usePermisosDeModulo();
+  // El efecto depende sólo de si puede ver conversaciones y de la org: si se
+  // volviera a montar por otra cosa (la identidad del router o de los
+  // permisos), cortar y volver a suscribirse en el mismo instante deja al canal
+  // nuevo sin eventos (medido con la sonda de la AR 2).
+  const routerRef = useRef(router);
+  const permisosRef = useRef(permisos);
+  useEffect(() => {
+    routerRef.current = router;
+    permisosRef.current = permisos;
+  });
+  const puedeVerConversaciones = puedeLeerDelMarco(permisos, "conversaciones");
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !puedeVerConversaciones) return;
+    const cortar = suscribirPanelEnVivo({
+      permisos: permisosRef.current,
+      organizationId,
+      cliente: createClient,
+      alCambiar: () => routerRef.current.refresh(),
+    });
+    return cortar ?? undefined;
+  }, [puedeVerConversaciones, organizationId]);
 
   /*
    * El checklist va acá y no dentro de `DashboardOverview` porque ese
@@ -119,13 +74,13 @@ export function DashboardPageContent({
   return (
     <div className="space-y-6">
       <SetupChecklist />
-      {clientPaymentsError ? (
+      {pagosSinLeer ? (
         <AvisoDeLecturaFallida
           titulo="No se pudieron cargar los pagos: lo cobrado no está al día."
-          motivo={clientPaymentsError}
+          motivo={ERROR_INESPERADO}
         />
       ) : null}
-      <DashboardOverview data={data} zernioAnalytics={zernioAnalytics} />
+      <DashboardOverview data={datos.data} embudo={datos.embudo} zernioAnalytics={zernioAnalytics} />
     </div>
   );
 }

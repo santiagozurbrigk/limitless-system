@@ -28,6 +28,7 @@ import { firstZodError, uuidSchema } from "@/lib/validations";
 import { paths } from "@/routes/paths";
 import type { WorkboardTask } from "@/types/workboard";
 import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 function revalidateWorkboard() {
   revalidatePath(paths.platform.workboard.root);
@@ -215,6 +216,9 @@ export async function deleteTaskAttachmentAction(
 export async function getTaskAttachmentUrlAction(
   attachmentId: unknown
 ): Promise<MutationResult<{ url: string; fileName: string; mimeType: string | null }>> {
+  const rechazo = await rechazoPorModulo("workboard");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getTaskAttachmentUrl]", async () => {
     const id = validar(uuidSchema.safeParse(attachmentId));
     const organizationId = await requireOrganizationId();
@@ -383,6 +387,9 @@ export async function listWorkboardLinkOptionsAction(): Promise<
     documents: WorkboardLinkPickerOption[];
   }>
 > {
+  const rechazo = await rechazoPorModulo("workboard");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listWorkboardLinkOptions]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
@@ -425,6 +432,9 @@ export async function listWorkboardLinkOptionsAction(): Promise<
 export async function getWorkboardTaskByIdAction(
   taskId: string
 ): Promise<MutationResult<WorkboardTask>> {
+  const rechazo = await rechazoPorModulo("workboard");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getWorkboardTaskById]", async () => {
     const id = validar(uuidSchema.safeParse(taskId));
     const organizationId = await requireOrganizationId();

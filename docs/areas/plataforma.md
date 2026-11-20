@@ -88,10 +88,19 @@ con execute sólo para `service_role` (`20260831140000`, `20260831150000`).
 
 ### Panel General
 
-`page.tsx` (server) trae objeciones frecuentes, analytics de Zernio y métricas custom; el resto sale de
-providers de cliente (`usePlatformData`, `useFinanceData`) y se deriva en
-`lib/metrics/derive-dashboard-data.ts`. Si no hay clientes, conversaciones ni llamadas, muestra
-`DashboardEmptyState`. El `SetupChecklist` va **arriba y por fuera** de `DashboardOverview` porque ese
+`page.tsx` (server) trae objeciones frecuentes, analytics de Zernio y métricas custom, y desde SCRUM-540
+calcula en el servidor todo el resto (`lib/dashboard/leer-datos-del-panel.ts` → `calcularDatosDelPanel`):
+lee clientes, conversaciones, llamadas de cierre, gastos, sueldos, cobros y métricas importadas, y deriva
+con `lib/metrics/derive-dashboard-data.ts` y el embudo con `buildSalesFunnel`. Al navegador van sólo
+`DashboardData` y las etapas del embudo, no las filas: quien sólo tiene el Panel no recibe clientes,
+conversaciones ni detalle de Finanzas (mínimo privilegio). Antes los providers del marco mandaban esas filas
+y el cálculo era en el navegador. "Este mes" (MRR, clientes nuevos, comisiones, serie mensual) sale del
+`hoy` de la organización (`diaLocal(hoy)` en su zona, regla de SCRUM-493), no del reloj del servidor. Sigue
+en vivo: si quien mira puede leer conversaciones (founder, sin rol o con Ventas), `DashboardPageContent` escucha
+el canal de `conversations` de la org y ante un cambio hace `router.refresh()`, sin usar la fila del evento
+(`lib/dashboard/panel-en-vivo.ts`), como mucho una vez cada 2,5 s (una ráfaga de cambios se junta en un aviso
+al principio y otro al final); con sólo el Panel no abre el canal y el Panel se actualiza al recargar o
+navegar (`[PANEL-EN-VIVO-SOLO-PANEL]`). Si no hay clientes, conversaciones ni llamadas, muestra `DashboardEmptyState`. El `SetupChecklist` va **arriba y por fuera** de `DashboardOverview` porque ese
 componente hace early return al empty state, que es justo donde está una cuenta nueva.
 
 ### Onboarding del founder

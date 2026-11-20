@@ -51,6 +51,7 @@ import { firstZodError } from "@/lib/validations";
 import { createClient } from "@/lib/supabase/server";
 import { paths } from "@/routes";
 import { esTablaAusente } from "@/lib/server/tabla-ausente";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 const stageSchema = z.object({
   name: z.string().trim().min(1, "La fase necesita un nombre.").max(120),
@@ -139,6 +140,9 @@ export type JourneyPageData = {
  * el motivo en vez de un recorrido vacío o la pantalla de error.
  */
 export async function getJourneyPageDataAction(): Promise<MutationResult<JourneyPageData>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getJourneyPageData]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

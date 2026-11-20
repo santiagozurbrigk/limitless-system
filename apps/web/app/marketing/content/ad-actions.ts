@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { uuidSchema } from "@/lib/validations";
 import type { ZernioLinkedAd } from "@/lib/zernio/client";
 import { getZernioClientForOrganization } from "@/lib/zernio/integration";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 /*
  * Errores como valor (SCRUM-502): sin sesión, ID inválido, Zernio sin conectar
@@ -39,6 +40,9 @@ export type MarketingAdsResult = {
 export async function getContentPieceAdsAction(
   contentPieceId: string
 ): Promise<MutationResult<{ ads: ZernioLinkedAd[] }>> {
+  const rechazo = await rechazoPorModulo("marketing");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getContentPieceAds]", async () => {
     if (!uuidSchema.safeParse(contentPieceId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
@@ -73,6 +77,9 @@ export async function getContentPieceAdsAction(
 export async function getMarketingAdsAction(
   filters?: MarketingAdsFilters
 ): Promise<MutationResult<MarketingAdsResult>> {
+  const rechazo = await rechazoPorModulo("marketing");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getMarketingAds]", async () => {
     const organizationId = await requireOrganizationId();
 

@@ -12,6 +12,11 @@ import { DynamicServerError } from "next/dist/client/components/hooks-server-con
  * «sin link» con el botón de generar otro, «Sin datos todavía»).
  */
 
+// SCRUM-540: las lecturas arrancan con el permiso del módulo; acá quien llama lo tiene.
+vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
+  rechazoPorModulo: async () => null,
+}));
 vi.mock("@/lib/observability/reportar-falla", async () => {
   const { base } = await import("./supabase-falso");
   return {

@@ -5,6 +5,7 @@ import { ContentDraftsLibrary } from "@/components/marketing/content-drafts-libr
 import { ContentTabSwitcher } from "@/components/marketing/content-tab-switcher";
 import { EstadoDeSincronizacion } from "@/components/marketing/estado-de-sincronizacion";
 import { EmptyState } from "@/components/shared/empty-state";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 function ContenidoNoDisponible({ motivo }: { motivo: string }) {
   return (
@@ -19,6 +20,9 @@ export default async function MarketingContentPage({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
+  const sinAcceso = await exigirModuloDeLaPagina("marketing");
+  if (sinAcceso) return sinAcceso;
+
   const { tab } = await searchParams;
   const activeTab = tab === "borradores" ? "borradores" : "biblioteca";
 

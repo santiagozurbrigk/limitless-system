@@ -1,10 +1,14 @@
 import { listAutomationFlowsAction } from "@/app/marketing/automations-actions";
 import { AutomationsDashboard } from "@/components/marketing/automations-dashboard";
 import { paths } from "@/routes";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export const metadata = { title: "Automatizaciones" };
 
 export default async function AutomatizacionesPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("marketing");
+  if (sinAcceso) return sinAcceso;
+
   const { flows, manychatConnected } = await listAutomationFlowsAction();
 
   return (

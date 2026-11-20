@@ -1,6 +1,7 @@
 import { SalesMetricsRedesign } from "@/components/sales/sales-metrics-redesign";
 import { getFrequentObjectionsAction } from "@/app/sales/actions";
 import { getSalesMetricsSnapshotsAction } from "@/app/sales/metrics-actions";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Las dos lecturas devuelven su error como valor (SCRUM-504): la pantalla se
@@ -9,6 +10,9 @@ import { getSalesMetricsSnapshotsAction } from "@/app/sales/metrics-actions";
  * acciones devuelven las objeciones de ejemplo y ninguna métrica importada.
  */
 export default async function SalesMetricsPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("sales");
+  if (sinAcceso) return sinAcceso;
+
   const [objeciones, snapshots] = await Promise.all([
     getFrequentObjectionsAction(),
     getSalesMetricsSnapshotsAction(),

@@ -46,6 +46,7 @@ import type {
   WorkboardSprint,
   WorkboardTask,
 } from "@/types/workboard";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 function revalidateWorkboard() {
   revalidatePath(paths.platform.workboard.root);
@@ -259,6 +260,9 @@ export async function loadWorkboardPageDataAction(): Promise<
     sprints: WorkboardSprint[];
   }>
 > {
+  const rechazo = await rechazoPorModulo("workboard");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[loadWorkboardPageData]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
@@ -591,6 +595,9 @@ export async function logTaskTimeAction(input: unknown): Promise<MutationResult<
 export async function getTimeByMemberAction(): Promise<
   MutationResult<MemberTimeReport[] | null>
 > {
+  const rechazo = await rechazoPorModulo("workboard");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getTimeByMember]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();
@@ -701,6 +708,9 @@ export async function getActiveSprintAction(): Promise<
 }
 
 export async function getSprintsAction(): Promise<MutationResult<WorkboardSprint[]>> {
+  const rechazo = await rechazoPorModulo("workboard");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getSprints]", async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

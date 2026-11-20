@@ -1,4 +1,5 @@
 import { CobrosPage } from "@/components/sales/cobros-page";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * `?cliente=<id>` abre la pantalla con el historial de pagos de ese cliente ya
@@ -10,6 +11,9 @@ export default async function CobrosRoute({
 }: {
   searchParams: Promise<{ cliente?: string }>;
 }) {
+  const sinAcceso = await exigirModuloDeLaPagina("sales");
+  if (sinAcceso) return sinAcceso;
+
   const { cliente } = await searchParams;
   return <CobrosPage initialClientId={cliente ?? null} />;
 }

@@ -1,16 +1,15 @@
 "use client";
 
 import { cn } from "@ai-coo/ui";
-import { usePlatformData } from "@/providers/platform-data-provider";
 import { FunnelChartPanel } from "@/components/charts/platform/funnel-chart-panel";
-import { buildSalesFunnel } from "@/lib/metrics/build-sales-funnel-stages";
+import type { SalesFunnel } from "@/lib/metrics/build-sales-funnel-stages";
 
-export function SalesFunnelStrip() {
-  const { conversations, closingCalls } = usePlatformData();
-  const { stages, subtitle, conversion } = buildSalesFunnel(
-    conversations,
-    closingCalls
-  );
+/**
+ * El embudo llega calculado del servidor (SCRUM-540): el Panel no recibe las
+ * conversaciones ni las llamadas, sólo las etapas.
+ */
+export function SalesFunnelStrip({ embudo }: { embudo: SalesFunnel }) {
+  const { stages, subtitle, conversion } = embudo;
 
   // Con una sola etapa no hay embudo que mostrar: sería una barra sola con un
   // 100% que no compara contra nada.

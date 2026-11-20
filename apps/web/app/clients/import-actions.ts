@@ -25,6 +25,7 @@ import {
   type SalesMetricsColumnMapping,
   type FinanceMetricsColumnMapping,
 } from "@/lib/metrics/excel-parser";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * SCRUM-516: las acciones de importación devuelven sus errores esperables como
@@ -98,6 +99,9 @@ export async function getExcelPreviewAction(
   fileBase64: string,
   sheetName?: string
 ): Promise<MutationResult<ExcelPreview>> {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getExcelPreview]", async () => {
     await requireOrganizationId();
     const buffer = Buffer.from(fileBase64, "base64");

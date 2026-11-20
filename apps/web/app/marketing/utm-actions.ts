@@ -21,6 +21,7 @@ import type {
   UTMFunnelData,
   UTMSaleAttributionRow,
 } from "@/types/utm";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 // ---------------------------------------------------------------------------
 // Helpers privados
@@ -182,6 +183,9 @@ export async function getUTMLeadsAction(
 export async function getUTMFunnelAction(
   utmLinkId: string
 ): Promise<MutationResult<UTMFunnelData>> {
+  const rechazo = await rechazoPorModulo("marketing");
+  if (rechazo) return rechazo;
+
   return runMutation(async () => {
     const organizationId = await requireOrganizationId();
     const supabase = await createClient();

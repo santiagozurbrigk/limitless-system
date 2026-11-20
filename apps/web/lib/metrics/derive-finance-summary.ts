@@ -110,9 +110,15 @@ export function deriveFinanceSummary(
   expenses: ExpensesSummary,
   paymentPlatforms: PaymentPlatformConfig[],
   revenueRange: RevenueDateRange = DEFAULT_REVENUE_RANGE,
-  payments?: ClientPayment[]
+  payments?: ClientPayment[],
+  /**
+   * El "hoy" que ancla el período por defecto, con sus componentes locales. En el
+   * navegador, el reloj de quien mira; en el servidor, el día de la
+   * organización (`diaLocal(hoy)`, SCRUM-540).
+   */
+  ahora: Date = new Date()
 ): FinanceSummary & { revenuePeriod: ResolvedRevenuePeriod } {
-  const revenuePeriod = resolveRevenueDateRange(revenueRange);
+  const revenuePeriod = resolveRevenueDateRange(revenueRange, ahora);
   const events = collectRevenueEvents(clients, payments);
   const periodEvents = filterRevenueEvents(events, revenuePeriod);
 

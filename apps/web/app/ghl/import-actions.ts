@@ -7,6 +7,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { listGHLContacts } from "@/lib/ghl/client";
 import { getGHLCredentialsForOrg } from "@/lib/ghl/integration";
 import { syncGHLContactsForOrganization, type GHLContactsSyncResult } from "@/lib/ghl/sync-contacts";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 // ─── Preview de contactos GHL ─────────────────────────────────────────────────
 
@@ -28,6 +29,9 @@ export type GHLPreviewResult = {
 export async function previewGHLContactsAction(): Promise<
   MutationResult<GHLPreviewResult>
 > {
+  const rechazo = await rechazoPorModulo("integrations");
+  if (rechazo) return rechazo;
+
   return runMutation(async () => {
     if (!isSupabaseConfigured()) throw new Error("Supabase no configurado.");
 

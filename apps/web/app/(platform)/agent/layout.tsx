@@ -1,37 +1,14 @@
-"use client";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
+import { AgentLayoutCliente } from "./agent-layout-cliente";
 
-import { usePathname } from "next/navigation";
-import { AgentDataProvider } from "@/providers/agent-data-provider";
+/**
+ * Permiso del módulo antes de montar el provider del Agente (SCRUM-540): el
+ * provider es de cliente y pide las conversaciones al montarse, aunque la
+ * página de abajo dibuje «No tenés acceso».
+ */
+export default async function Layout({ children }: { children: React.ReactNode }) {
+  const sinAcceso = await exigirModuloDeLaPagina("agent");
+  if (sinAcceso) return sinAcceso;
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function conversationIdFromPath(pathname: string): string | null {
-  const segments = pathname.split("/").filter(Boolean);
-  if (segments[0] !== "agent" || segments.length !== 2) return null;
-  const id = segments[1];
-  return UUID_RE.test(id) ? id : null;
-}
-
-function stageIdFromPath(pathname: string): string | null {
-  const segments = pathname.split("/").filter(Boolean);
-  if (segments[0] !== "agent" || segments[1] !== "stage" || !segments[2]) {
-    return null;
-  }
-  return segments[2];
-}
-
-export default function AgentLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const conversationId = conversationIdFromPath(pathname);
-  const filterStageId = stageIdFromPath(pathname);
-
-  return (
-    <AgentDataProvider
-      conversationId={conversationId}
-      filterStageId={filterStageId}
-    >
-      {children}
-    </AgentDataProvider>
-  );
+  return <AgentLayoutCliente>{children}</AgentLayoutCliente>;
 }

@@ -1,12 +1,16 @@
 import { notFound } from "next/navigation";
 import { AvatarDetail, ProductBackLink } from "@/components/product";
 import { getProductAvatarById, getProductPageData } from "@/lib/product/queries";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function ProductAvatarPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const sinAcceso = await exigirModuloDeLaPagina("operations");
+  if (sinAcceso) return sinAcceso;
+
   const { id } = await params;
   const [{ hasRealData }, avatar] = await Promise.all([
     getProductPageData(),

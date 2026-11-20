@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { clienteVisibleExiste } from "@/lib/clients/cliente-visible";
 import { FichaDelCliente } from "./ficha-del-cliente";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Ficha de un cliente. La existencia se resuelve acá, en el servidor
@@ -14,6 +15,9 @@ export default async function ClientDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const sinAcceso = await exigirModuloDeLaPagina("clients");
+  if (sinAcceso) return sinAcceso;
+
   const { id } = await params;
   if (!(await clienteVisibleExiste(id))) notFound();
   return <FichaDelCliente id={id} />;

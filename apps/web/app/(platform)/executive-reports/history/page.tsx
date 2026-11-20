@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { listExecutiveReportsAction } from "@/app/executive-reports/actions";
 import { REPORT_CADENCES } from "@/lib/executive-reports/cadences";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Historial de reportes.
@@ -13,6 +14,9 @@ import { REPORT_CADENCES } from "@/lib/executive-reports/cadences";
  * de entrada a la función.
  */
 export default async function ExecutiveReportsHistoryPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("operations");
+  if (sinAcceso) return sinAcceso;
+
   const reports = await listExecutiveReportsAction();
 
   return (

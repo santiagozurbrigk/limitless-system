@@ -46,7 +46,9 @@ resto después.
 
 [`historias.md`](./historias.md) tiene 122 historias (una por funcionalidad de `FUNCIONAL.md` que no está en
 "Funciona"), cada una con sus criterios de aceptación y los IDs de sus tareas técnicas. `historias_a_jira.py` las
-valida y genera `historias-jira.csv` (Issue Type `Story`); la prioridad se calcula a partir de las tareas. Importar
+valida y genera `historias-jira.csv` (Issue Type `Story`); la prioridad se calcula a partir de las tareas. Su `--check`
+falla si el CSV no es el que generaría (alguien cambió una tarea y no lo regeneró) o si `FUNCIONAL.md` cita una
+tarea que ya no está en `PENDIENTES.md`. Importar
 primero `jira-import.csv` y después las historias, y vincularlas por ID.
 
 ## Épicas

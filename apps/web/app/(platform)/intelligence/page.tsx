@@ -3,8 +3,12 @@ import { IntelligencePageContent } from "@/components/intelligence/intelligence-
 import { SinAcceso } from "@/components/platform/sin-acceso";
 import { getCurrentProfile } from "@/lib/auth/bootstrap";
 import { getPermissionModuleLabel } from "@/constants/permission-modules";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 export default async function IntelligencePage() {
+  const sinAcceso = await exigirModuloDeLaPagina("operations");
+  if (sinAcceso) return sinAcceso;
+
   const [resultado, profile] = await Promise.all([
     getIntelligenceSnapshotAction(),
     getCurrentProfile(),

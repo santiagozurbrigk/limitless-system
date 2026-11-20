@@ -32,6 +32,7 @@ import {
 } from "@/types/client-tasks";
 import { paths } from "@/routes";
 import { esTablaAusente } from "@/lib/server/tabla-ausente";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 const SELECT_COLUMNS =
   "id, client_id, title, description, owner, status, due_date, source, source_call_id, workboard_task_id, completed_at, created_at, fathom_calls(title, call_date)";
@@ -87,6 +88,9 @@ function errorDeTarea(error: { message: string; code?: string | null }): Error {
 export async function listClientTasksAction(
   clientId: string
 ): Promise<MutationResult<ClientTask[]>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listClientTasks]", async () => {
     if (!uuidSchema.safeParse(clientId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();

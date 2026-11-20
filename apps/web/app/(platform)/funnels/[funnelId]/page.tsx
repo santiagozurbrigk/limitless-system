@@ -16,6 +16,7 @@ import {
   getInstrumentationTool,
 } from "@/lib/funnels";
 import { paths } from "@/routes/paths";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Detalle de un embudo.
@@ -46,6 +47,9 @@ export default async function FunnelDetailPage({
   params: Promise<{ funnelId: string }>;
   searchParams: Promise<{ period?: string }>;
 }) {
+  const sinAcceso = await exigirModuloDeLaPagina("funnels");
+  if (sinAcceso) return sinAcceso;
+
   const { funnelId } = await params;
   const { period: periodParam } = await searchParams;
 

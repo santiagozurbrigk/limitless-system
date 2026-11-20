@@ -10,6 +10,7 @@ import {
 } from "@/app/funnels/actions";
 import { blockingTools } from "@/lib/funnels";
 import { paths } from "@/routes/paths";
+import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Índice de embudos.
@@ -23,6 +24,9 @@ import { paths } from "@/routes/paths";
  * embudo entero —con todas sus integraciones— sólo para pintar una grilla.
  */
 export default async function FunnelsPage() {
+  const sinAcceso = await exigirModuloDeLaPagina("funnels");
+  if (sinAcceso) return sinAcceso;
+
   const [funnels, templates] = await Promise.all([
     listFunnelIndexAction(),
     listFunnelTemplatesAction(),

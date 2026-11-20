@@ -32,6 +32,7 @@ import {
 } from "@/lib/validations";
 import { paths } from "@/routes/paths";
 import { assertOrgStoragePath, soloRutasDeLaOrg } from "@/lib/storage/org-path";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 function revalidateSops() {
   revalidatePath(paths.platform.operations.sops);
@@ -312,6 +313,9 @@ export type SopVersionView = {
 export async function getSOPVersionsAction(
   sopId: string
 ): Promise<MutationResult<SopVersionView[]>> {
+  const rechazo = await rechazoPorModulo("operations");
+  if (rechazo) return rechazo;
+
   const idParsed = uuidSchema.safeParse(sopId);
   if (!idParsed.success) {
     return { success: false, error: firstZodError(idParsed.error) };

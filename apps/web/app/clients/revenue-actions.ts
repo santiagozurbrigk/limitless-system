@@ -38,6 +38,7 @@ import {
 } from "@/lib/clients/revenue";
 import { paths } from "@/routes";
 import { esTablaAusente } from "@/lib/server/tabla-ausente";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 const ADD_ON = "growth_partners" as const;
 
@@ -77,6 +78,9 @@ const CLIENTE_AJENO = "No se encontró ese cliente en tu organización.";
 export async function listClientRevenueAction(
   clientId: string
 ): Promise<MutationResult<ClientRevenueEntry[]>> {
+  const rechazo = await rechazoPorModulo("clients");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[listClientRevenue]", async () => {
     if (!uuidSchema.safeParse(clientId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();

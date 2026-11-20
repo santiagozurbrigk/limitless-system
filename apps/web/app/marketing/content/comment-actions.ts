@@ -18,6 +18,7 @@ import {
   getZernioIntegrationForOrg,
 } from "@/lib/zernio/integration";
 import type { ZernioPostCommentsResponse } from "@/lib/zernio/client";
+import { rechazoPorModulo } from "@/lib/auth/acceso-a-modulo";
 
 /**
  * Comentarios en vivo de la pieza (SCRUM-502: errores como valor). Pieza sin
@@ -28,6 +29,9 @@ export async function getContentPieceCommentsAction(
   contentPieceId: string,
   cursor?: string
 ): Promise<MutationResult<ZernioPostCommentsResponse>> {
+  const rechazo = await rechazoPorModulo("marketing");
+  if (rechazo) return rechazo;
+
   return mutacionConErroresEsperables("[getContentPieceComments]", async () => {
     if (!uuidSchema.safeParse(contentPieceId).success) throw new ErrorEsperable("ID inválido");
     const organizationId = await requireOrganizationId();
