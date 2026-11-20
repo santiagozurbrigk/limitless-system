@@ -62,7 +62,8 @@ order by s.email;
 
 -- P1b. Staff que la migración va a asociar (en la lista como la compara la app, con perfil y sin organización),
 --      con su role. Corre antes y después de 523. La asociación NO cambia role:
---      no_es_founder = true => queda con su role actual (member) en la org de Limitless; decidir antes de la ventana.
+--      no_es_founder = true => queda en la org de Limitless con el role que muestra esta consulta (member, admin,
+--      viewer, etc.); decidir antes de la ventana.
 --      must_change_password = true => staff a mitad del alta: lo conserva después de la asociación.
 select s.email, u.id as user_id, p.role,
        (p.role is distinct from 'founder') as no_es_founder,
@@ -125,8 +126,8 @@ real acá.
      cargado (P4 lo confirma); no se asocia ni da panel. Corregir la fila de la lista (procedimiento de
      [alta-super-admin.md](alta-super-admin.md)) o dejarla documentada.
    - En P1b, revisar el `role` de cada staff que la migración va a asociar. **Esperado:** todos con
-     `no_es_founder = false`. La asociación no cambia `role`: un staff que no es `founder` queda `member` (su role
-     actual) en la organización de Limitless. Decidir con Martín, antes de la ventana, qué hacer con cada uno; la
+     `no_es_founder = false`. La asociación no cambia `role`: un staff que no es `founder` queda en la organización
+     de Limitless con el role que muestra P1b (`member`, `admin`, `viewer`, etc.). Decidir con Martín, antes de la ventana, qué hacer con cada uno; la
      migración no lo corrige. Los que tienen `must_change_password = true` están a mitad del alta y lo conservan.
    - Decidir qué pasa con quien aparezca en otra organización (`org` con valor y distinto de la de Limitless) y
      con una persona del staff que tenga **otra** cuenta en la organización de Limitless (aparece en P3 con
