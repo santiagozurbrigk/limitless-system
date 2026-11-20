@@ -1,3 +1,4 @@
+import { esExperienciaGuardada } from "@/lib/administracion/experiencia";
 import type { ClientRow } from "@/lib/clients/mapper";
 import {
   buildContentBreakdown,
@@ -8,7 +9,7 @@ import {
   rowToBrainDocument,
   type AiBrainDocumentRow,
 } from "@/lib/ai-brain/mapper";
-import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import { requireStaff } from "@/lib/auth/require-staff";
 import { estadoDeOrg, planPorMrr } from "@/lib/super-admin/estado-de-org";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -195,7 +196,7 @@ function splitModelCostUsd(model: string, totalCost: number) {
 }
 
 export async function loadAICostsSummary(): Promise<AICostsSummary> {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -301,7 +302,7 @@ export async function loadAICostsSummary(): Promise<AICostsSummary> {
 }
 
 export async function loadAiCostDashboard(): Promise<AdminAiCostDashboard> {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const [{ summary, orgRows }, aiCosts, orgs] = await Promise.all([
     loadProfitabilityData(),
@@ -421,7 +422,7 @@ async function fetchFounderLastLogins(
 export async function loadOrganizationsList(): Promise<
   AdminOrganizationListRow[]
 > {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const month = getCurrentMonthRange();
@@ -441,7 +442,11 @@ export async function loadOrganizationsList(): Promise<
         .from("profiles")
         .select("id, organization_id, email, full_name, role")
         .eq("role", "founder")
-        .not("organization_id", "is", null),
+        .not("organization_id", "is", null)
+        // Una org puede tener varios founders (la de Limitless: todo el staff,
+        // SCRUM-552). Se muestra el más antiguo, el mismo que en la ficha.
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true }),
       admin
         .from("profiles")
         .select("organization_id")
@@ -601,14 +606,14 @@ async function loadOrgIntegrations(
 export async function loadOrganizationDetail(
   orgId: string
 ): Promise<AdminOrganizationDetail | null> {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const month = getCurrentMonthRange();
 
   const { data: org, error } = await admin
     .from("organizations")
-    .select("id, name, status, created_at, mrr_usd, timezone, enabled_add_ons")
+    .select("id, name, status, created_at, mrr_usd, timezone, enabled_add_ons, experience")
     .eq("id", orgId)
     .maybeSingle();
 
@@ -631,6 +636,10 @@ export async function loadOrganizationDetail(
       .select("id, email, full_name")
       .eq("organization_id", orgId)
       .eq("role", "founder")
+      // Varios founders (la org de Limitless): el más antiguo, como en el listado.
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(1)
       .maybeSingle(),
     admin
       .from("profiles")
@@ -723,6 +732,7 @@ export async function loadOrganizationDetail(
   return {
     id: org.id,
     name: org.name,
+    experience: esExperienciaGuardada(org.experience) ? org.experience : null,
     status,
     plan: planPorMrr(mrrUsd),
     timezone: (org.timezone as string | null) ?? null,
@@ -754,7 +764,7 @@ export async function loadOrganizationDetail(
 }
 
 export async function loadAdminUsers(): Promise<AdminUserRow[]> {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const [{ data: profiles, error }, { data: orgs }] = await Promise.all([
@@ -805,7 +815,7 @@ export async function loadProfitabilityData(): Promise<{
   summary: AdminProfitabilitySummary;
   orgRows: AdminProfitabilityOrgRow[];
 }> {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const month = getCurrentMonthRange();
@@ -891,7 +901,7 @@ export async function loadTokenUsageBreakdown(
   period: SuperAdminPeriod,
   organizationId?: string
 ): Promise<TokenUsageBreakdown> {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const range = resolveSuperAdminPeriod(period);
@@ -961,7 +971,7 @@ export async function loadTokenUsageBreakdown(
 export async function loadTokenCostDailyByOrg(
   days = 30
 ): Promise<{ date: string; orgId: string; orgName: string; costUsd: number }[]> {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const range = getLastNDaysRange(days);
@@ -1010,7 +1020,7 @@ export async function loadTokenCostDailyByOrg(
 }
 
 export async function loadInfrastructureStats(): Promise<InfrastructureStats> {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const [
@@ -1059,7 +1069,7 @@ type FilaDeCorrida = {
  * `inicio` gana la que tiene `fin` (una cerrada antes que una en curso).
  */
 export async function loadUltimasCorridas(): Promise<CorridasDeProcesos> {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const rutas = rutasDeCrons();
@@ -1132,7 +1142,7 @@ export async function loadUltimasCorridas(): Promise<CorridasDeProcesos> {
 }
 
 export async function loadAiBrainDashboard() {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -1158,7 +1168,7 @@ export async function loadAiBrainDocuments(filters?: {
   status?: string;
   search?: string;
 }) {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   let query = admin.from("ai_brain_documents").select("*");
@@ -1193,7 +1203,7 @@ export async function loadAiBrainDocuments(filters?: {
 }
 
 export async function loadAiBrainDocument(id: string) {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -1213,7 +1223,7 @@ export async function getSignedFileUrl(
   storagePath: string,
   expiresIn = 3600
 ): Promise<string | null> {
-  await requireSuperAdmin();
+  await requireStaff();
 
   const admin = createAdminClient();
   const path = storagePath.replace(/^ai-brain-documents\//, "");

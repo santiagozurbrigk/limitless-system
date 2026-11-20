@@ -24,6 +24,12 @@ export type UserPermissions = {
   hasRoleConfigured: boolean;
   /** Módulos add-on activados para esta org */
   enabledAddOns: AddOnId[];
+  /**
+   * Si está en la lista de staff de Limitless (SCRUM-551). Lo completa el
+   * layout de la plataforma sólo para la experiencia `limitless` (la única
+   * con entradas `soloStaff`); en el resto queda sin definir, que vale `false`.
+   */
+  esStaff?: boolean;
 };
 
 /**

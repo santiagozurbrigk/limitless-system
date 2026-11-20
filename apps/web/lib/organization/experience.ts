@@ -7,7 +7,8 @@
  *     que no diga nada también (el lado seguro).
  *   - `webinar`: Limitless Webinars. Las altas lo mandan explícito: toda
  *     organización nueva nace así (decisión del PO), salvo el negocio que un
- *     holding crea dentro de su cuenta, que hereda la del holding.
+ *     holding crea dentro de su cuenta, que toma la experiencia del holding,
+ *     salvo `limitless`, que da `full` (`experienciaDelNegocioDeUnHolding`).
  *   - `limitless`: Limitless de gestión (Clientes, Tablero de trabajo, Ventas y
  *     Administración; decisión del PO, 28-oct-2026). Ninguna alta la manda: se
  *     asigna por SQL (guía de SCRUM-532).
@@ -43,10 +44,24 @@ export function esExperiencia(valor: unknown): valor is OrganizationExperience {
 }
 
 /**
+ * La experiencia con la que nace un negocio creado dentro de un holding: la
+ * del holding, salvo `limitless`, que da `full` (SCRUM-552, decisión del
+ * 2026-11-15). Un negocio nunca nace `limitless`: el tipo de retorno lo
+ * impide. No es `EXPERIENCIA_SI_FALLA`, aunque valga lo mismo: aquella es la
+ * de una falla de lectura, y esta es una regla de negocio.
+ */
+export function experienciaDelNegocioDeUnHolding(
+  experienciaDelHolding: OrganizationExperience
+): Exclude<OrganizationExperience, "limitless"> {
+  if (experienciaDelHolding === "limitless") return "full";
+  return experienciaDelHolding;
+}
+
+/**
  * La experiencia guardada de una organización. Lanza si no se puede leer, si
  * la fila no aparece o si el valor no es uno de los tres: no inventa un valor.
- * La usa el alta de un negocio dentro de un holding para heredar la del
- * holding (con el service role) y `getOrganizationExperience` (con la sesión).
+ * La usa el alta de un negocio dentro de un holding para calcular la del
+ * negocio (con el service role) y `getOrganizationExperience` (con la sesión).
  * El texto del error no lleva el valor leído.
  */
 export async function leerExperienciaDeLaOrganizacion(

@@ -53,7 +53,7 @@ export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) 
   const experiencia = useExperiencia();
   const inicio = usePantallaDeInicio();
   const accesos = ACCESOS_DE_LA_ISLA[experiencia];
-  const { isFounder, modules } = usePermissions();
+  const { isFounder, modules, esStaff } = usePermissions();
   const { isHolding } = useHoldingSession();
   const { clients } = usePlatformData();
 
@@ -61,8 +61,8 @@ export function PlatformNotchNav({ showItems = true }: { showItems?: boolean }) 
     isFounder || (modules[moduleId] ?? "none") !== "none";
 
   const config = useMemo(
-    () => buildPlatformSidebarNav(enabledAddOns, experiencia),
-    [enabledAddOns, experiencia]
+    () => buildPlatformSidebarNav(enabledAddOns, experiencia, esStaff),
+    [enabledAddOns, experiencia, esStaff]
   );
   const activeParent = config.getParentFromPath(pathname);
 

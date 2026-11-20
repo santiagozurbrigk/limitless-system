@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { AlertTriangle, Check, Circle, Minus } from "lucide-react";
 import { Badge, Button, GlassPanel, cn } from "@ai-coo/ui";
-import { paths } from "@/routes";
 import type { OrgOnboardingProgress } from "@/lib/super-admin/onboarding-progress";
+import { rutasDeAdministracion, type BaseDeAdministracion } from "@/lib/administracion/rutas";
 
 /**
  * A partir de cuántos días una organización trabada en el gate deja de ser
@@ -77,9 +77,12 @@ function ChecklistCell({ org }: { org: OrgOnboardingProgress }) {
 
 export function OnboardingProgressTable({
   orgs,
+  base,
 }: {
   orgs: OrgOnboardingProgress[];
+  base?: BaseDeAdministracion;
 }) {
+  const rutas = rutasDeAdministracion(base);
   if (orgs.length === 0) {
     return (
       <GlassPanel className="p-8 text-center text-sm text-muted-foreground">
@@ -117,7 +120,7 @@ export function OnboardingProgressTable({
                   histórico en un holding sería medir lo que no corresponde. */}
               {org.applies && <ChecklistCell org={org} />}
               <Button asChild size="sm" variant="outline">
-                <Link href={paths.superAdmin.organizationDetail(org.organizationId)}>
+                <Link href={rutas.organizacion(org.organizationId)}>
                   Ver
                 </Link>
               </Button>

@@ -1,4 +1,5 @@
 import { resolverZonaHoraria } from "@/lib/fechas/calendario";
+import { paths } from "@/routes/paths";
 import type {
   EtapaDelLead,
   FilaDeLead,
@@ -76,8 +77,8 @@ export function formatearInstante(iso: string, zona: string | null | undefined):
 }
 
 /**
- * Adónde lleva el estado vacío de Leads para crear un lanzamiento (AC-6). Hoy
- * no hay pantalla de creación (la pone SCRUM-544): sin ruta, el estado vacío no
- * dibuja el enlace (DT-22).
+ * Adónde lleva el estado vacío de Leads, Inicio y Lanzamientos para crear un
+ * lanzamiento (AC-6): la pantalla de creación de SCRUM-529. Sin ruta, el
+ * estado vacío no dibuja el enlace (DT-22).
  */
-export const RUTA_PARA_CREAR_LANZAMIENTO: string | null = null;
+export const RUTA_PARA_CREAR_LANZAMIENTO: string | null = paths.platform.lanzamientosNuevo;

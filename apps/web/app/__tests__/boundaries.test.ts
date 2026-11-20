@@ -34,6 +34,11 @@ const OBLIGATORIOS = [
   "(platform)/workboard/error.tsx",
   "(platform)/agent/error.tsx",
   "(platform)/sales/error.tsx",
+  // Limitless Webinars (SCRUM-546): cada pantalla nueva tiene el suyo.
+  "(platform)/inicio/error.tsx",
+  "(platform)/leads/error.tsx",
+  "(platform)/leads/[id]/error.tsx",
+  "(platform)/lanzamientos/error.tsx",
 ];
 
 function archivos(dir: string, nombres: string[]): string[] {

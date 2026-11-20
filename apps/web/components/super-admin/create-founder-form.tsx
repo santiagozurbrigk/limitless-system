@@ -3,12 +3,13 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Button, Input, Label } from "@ai-coo/ui";
-import { paths } from "@/routes";
 import { createFounderAccountAction } from "@/app/super-admin/actions";
 import { TempCredentialsDialog } from "@/components/shared/temp-credentials-dialog";
 import type { TempCredentials } from "@/lib/auth/temp-credentials";
+import { rutasDeAdministracion, type BaseDeAdministracion } from "@/lib/administracion/rutas";
 
-export function CreateFounderForm() {
+export function CreateFounderForm({ base }: { base?: BaseDeAdministracion } = {}) {
+  const rutas = rutasDeAdministracion(base);
   const [orgName, setOrgName] = useState("");
   const [founderName, setFounderName] = useState("");
   const [email, setEmail] = useState("");
@@ -97,11 +98,11 @@ export function CreateFounderForm() {
           {pending ? "Creando…" : "Crear cuenta"}
         </Button>
         <Button asChild variant="ghost" size="sm">
-          <Link href={paths.superAdmin.organizations}>Cancelar</Link>
+          <Link href={rutas.organizaciones}>Cancelar</Link>
         </Button>
         {createdOrgId && (
           <Button asChild variant="outline" size="sm">
-            <Link href={paths.superAdmin.organizationDetail(createdOrgId)}>
+            <Link href={rutas.organizacion(createdOrgId)}>
               Ver organización creada
             </Link>
           </Button>

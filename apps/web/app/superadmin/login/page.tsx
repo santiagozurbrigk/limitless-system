@@ -1,11 +1,7 @@
-import { LoginScreen } from "@/components/auth/login-screen";
-import { SuperAdminLoginForm } from "@/components/auth/super-admin-login-form";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { redirect } from "next/navigation";
+import { paths } from "@/routes";
 
+/** Login viejo del staff: desde SCRUM-552 el staff entra por /login. */
 export default function SuperAdminLoginPage() {
-  if (!isSupabaseConfigured()) {
-    return <LoginScreen variant="superAdmin" />;
-  }
-
-  return <SuperAdminLoginForm />;
+  redirect(paths.auth.login);
 }
