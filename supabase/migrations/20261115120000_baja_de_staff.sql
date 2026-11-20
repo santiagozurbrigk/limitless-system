@@ -73,7 +73,7 @@ begin
     for update
   ) f;
   if v_n = 0 then
-    raise exception 'Ese email no está en la lista de staff (super_admin_users) como lo compara la app, en minúsculas y sin espacios. No se cambió nada';
+    raise exception 'Ese email no está en la lista de staff (super_admin_users): ninguna fila, pasada a minúsculas y sin espacios, es igual a ese email en minúsculas y sin espacios. No se cambió nada';
   end if;
   if v_n > 1 then
     raise exception 'Hay % filas en la lista de staff (super_admin_users) que quedan iguales a ese email en minúsculas y sin espacios: revisá la lista a mano y dejá una sola antes de la baja. No se cambió nada', v_n;
