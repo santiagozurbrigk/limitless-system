@@ -145,6 +145,11 @@ update public.organizations set experience = 'limitless' where id = '98000000-00
 
 -- ─── 6a. Org marcada sin skip_onboarding ni gate completado: aborta sin cambios ─
 savepoint org_sin_gate;
+-- Otra org (Org A) sí saltea y completó el gate: el check tiene que mirar la org
+-- de Limitless, no cualquier org.
+update public.organizations set skip_onboarding = true where id = '98000000-0000-0000-0000-000000000a00';
+insert into public.onboarding_state (organization_id, gate_completed_at) values
+  ('98000000-0000-0000-0000-000000000a00', now());
 update public.organizations set skip_onboarding = false where id = '98000000-0000-0000-0000-000000000100';
 do $$
 begin
