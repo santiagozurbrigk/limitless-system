@@ -3,6 +3,7 @@ import {
   MOTIVO_HORA_INVALIDA,
   MOTIVO_HORA_QUE_NO_EXISTE,
   motivoDeHoraInvalida,
+  sesionSchema,
   LANZAMIENTOS_EN_PARALELO,
   datosDelLanzamientoSchema,
   motivoDeSuperposicion,
@@ -126,7 +127,17 @@ describe("el motivo de una hora inválida (4.ª revisión de #153)", () => {
     ["2026-02-30T10:00", MOTIVO_HORA_INVALIDA],
     ["2026-11-04T25:00", MOTIVO_HORA_INVALIDA],
     ["mañana", MOTIVO_HORA_INVALIDA],
+    ["1800-01-01T10:00", MOTIVO_HORA_INVALIDA],
+    ["3000-01-01T10:00", MOTIVO_HORA_INVALIDA],
+    ["1900-01-01T10:00", MOTIVO_HORA_QUE_NO_EXISTE],
+    ["2999-12-31T10:00", MOTIVO_HORA_QUE_NO_EXISTE],
   ])("«%s»", (valor, motivo) => {
     expect(motivoDeHoraInvalida(valor)).toBe(motivo);
   });
+});
+
+
+it("la hora vacía da un solo motivo (6.ª revisión de #153)", () => {
+  const r = sesionSchema.safeParse({ empiezaAt: "", zoomWebinarId: null, segundoDeLaOferta: null });
+  expect(r.error?.issues.map((i) => i.message)).toEqual(["Cargá la fecha y hora de la sesión"]);
 });

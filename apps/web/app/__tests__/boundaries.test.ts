@@ -37,6 +37,7 @@ const OBLIGATORIOS = [
   // Limitless Webinars (SCRUM-546): cada pantalla nueva tiene el suyo.
   "(platform)/inicio/error.tsx",
   "(platform)/leads/error.tsx",
+  "(platform)/leads/[id]/error.tsx",
   "(platform)/lanzamientos/error.tsx",
 ];
 

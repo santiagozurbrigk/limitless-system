@@ -28,6 +28,25 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-20 — Quinta revisión de Fer sobre #153: un mensaje por motivo, el punto sólo para los miles y error propio de la ficha del lead
+
+**Rama:** `claude/brave-wright-s2bfcg`
+**Commit(s):** este
+**Módulo(s) afectado(s):** Webinars (`lib/webinar/lanzamientos/{formulario,esquemas}.ts` y sus tests, `components/webinar/formulario-del-lanzamiento.tsx`, `app/(platform)/leads/[id]/error.tsx` nuevo, `app/(platform)/leads/error.tsx`, `app/__tests__/boundaries.test.ts`); docs `areas/webinars-contratos-de-vista.md`, `operacion/verificacion-manual.md` (V17.7, V17.8)
+
+**Qué se hizo:**
+- **El punto sólo separa miles** (decisión de producto con Fer): un punto que no forma grupos de tres se rechaza con su motivo. "2.12", "2.75", "1000.50", "1500.5", "0.500" y "0.050", que antes se leían como decimales a la inglesa, ahora piden coma. "1.500" y "1.500.000" siguen siendo miles.
+- **Un mensaje por motivo:** `leerNumeroEscrito` devuelve el valor o el motivo (`ambiguo`, `cero_adelante`, `punto_decimal`, `mal_escrito`) y `MENSAJE_DEL_MOTIVO` tiene un texto con ejemplo para cada uno ("¿1,5 o 1.500? Es ambiguo…"). El formulario avisa el primero que no se lee, con su campo, antes de llamar a la acción (`primerNumeroIlegible`); el esquema lo sigue rechazando como respaldo.
+- **Separador al borde declarado:** ".5", ",5", "1500.", "0." y "-.5" se rechazan como `mal_escrito` (también desde `a06df102`, sin decirlo).
+- **Sin notación científica:** el formulario escribe 1e-7 como "0,0000001" y 1e21 sin exponente, y se vuelven a leer igual (test).
+- **Hora vacía:** un solo motivo ("Cargá la fecha y hora de la sesión"). Los bordes del rango de años (1800, 1900, 2999, 3000) en la tabla del motivo.
+- **Error propio de la ficha del lead:** "No pudimos cargar la ficha del lead", con salida a Leads; Leads conserva el suyo.
+- `CASOS_DE_NUMEROS` pasa a 62 filas, con el motivo esperado en cada rechazo.
+
+**Por qué / finalidad:** quinta revisión de Fer (18-nov) y su comentario del 20-nov; son las dos condiciones de producto que puso para aprobar #153.
+
+**Riesgos / deuda técnica pendiente:** nada se miró en navegador (V17.7, V17.8). Escala o tope del precio para cuando la acción guarde de verdad: SCRUM-550.
+
 ### 2026-11-17 — Cuarta revisión de Fer sobre #153: el lector de números con una sola regla y una tabla de casos
 
 **Rama:** `claude/brave-wright-s2bfcg`

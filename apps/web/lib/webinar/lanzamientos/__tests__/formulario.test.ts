@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { conZona, restaurarZona } from "@/lib/fechas/__tests__/zona";
 import { datosDelLanzamientoSchema } from "../esquemas";
-import { CAMPOS_VACIOS, camposDesdeLaVista, datosDesdeElFormulario, numeroEscrito } from "../formulario";
+import {
+  CAMPOS_VACIOS,
+  MENSAJE_DEL_MOTIVO,
+  camposDesdeLaVista,
+  datosDesdeElFormulario,
+  leerNumeroEscrito,
+  numeroEscrito,
+  primerNumeroIlegible,
+  type MotivoDeNumero,
+} from "../formulario";
 
 const BA = "America/Argentina/Buenos_Aires";
 
@@ -149,10 +158,11 @@ describe("editar la hora de una sesión que ya existía (3.ª revisión de #153)
 
 /**
  * ⭐ La tabla de lo que alguien puede escribir en el precio o en el minuto de
- * la oferta y lo que tiene que dar (revisiones de #153, uso de es-AR):
- * un número, `null` (vacío) o `"rechazo"` (no se adivina; el esquema avisa).
+ * la oferta y lo que tiene que dar (revisiones de #153, uso de es-AR: punto
+ * sólo para los miles y coma para los decimales): un número, `null` (vacío) o
+ * el motivo por el que no se lee.
  */
-const CASOS_DE_NUMEROS: Array<[texto: string, esperado: number | null | "rechazo", por: string]> = [
+const CASOS_DE_NUMEROS: Array<[texto: string, esperado: number | null | MotivoDeNumero, por: string]> = [
   // Vacío
   ["", null, "vacío"],
   ["   ", null, "sólo espacios"],
@@ -168,61 +178,97 @@ const CASOS_DE_NUMEROS: Array<[texto: string, esperado: number | null | "rechazo
   ["10.000", 10000, "miles, primer grupo de 2"],
   ["100.000", 100000, "miles, primer grupo de 3"],
   ["1.500.000", 1500000, "millones"],
-  // Coma decimal (Argentina)
+  // Coma decimal
   ["997,5", 997.5, "coma decimal"],
   ["1,50", 1.5, "coma con dos decimales"],
   ["0,5", 0.5, "cero coma"],
   ["0,500", 0.5, "cero coma tres cifras"],
+  ["0,0000001", 0.0000001, "muchos decimales"],
   ["1000,50", 1000.5, "sin punto de miles"],
   ["1250,500", 1250.5, "parte entera de 4 cifras: no es miles en inglés"],
   ["2,1250", 2.125, "lo que escribe el formulario con tres decimales"],
   ["1.000,50", 1000.5, "miles y coma"],
   ["100.000,50", 100000.5, "miles y coma"],
-  // Punto decimal (inglés)
-  ["2.75", 2.75, "punto decimal"],
-  ["1000.50", 1000.5, "punto decimal"],
-  ["1500.5", 1500.5, "punto decimal"],
-  ["0.500", 0.5, "cero punto tres cifras"],
-  ["0.050", 0.05, "cero punto"],
-  // Ambiguos: no se adivinan
-  ["1,500", "rechazo", "uno coma cinco o mil quinientos"],
-  ["1,000", "rechazo", "ídem"],
-  ["2,500", "rechazo", "ídem"],
-  ["999,999", "rechazo", "ídem"],
+  // Punto que no forma grupos de tres: decimales a la inglesa
+  ["2.12", "punto_decimal", "punto con dos cifras"],
+  ["2.75", "punto_decimal", "ídem"],
+  ["1000.50", "punto_decimal", "ídem"],
+  ["1500.5", "punto_decimal", "ídem"],
+  ["0.500", "punto_decimal", "cero punto tres cifras"],
+  ["0.050", "punto_decimal", "ídem"],
+  // Ambiguos
+  ["1,500", "ambiguo", "uno coma cinco o mil quinientos"],
+  ["1,000", "ambiguo", "ídem"],
+  ["2,500", "ambiguo", "ídem"],
+  ["999,999", "ambiguo", "ídem"],
   // Cero adelante de más cifras
-  ["015.000", "rechazo", "¿cero de más o decimal?"],
-  ["01.000", "rechazo", "ídem"],
-  ["010.000", "rechazo", "ídem"],
-  ["01.500", "rechazo", "ídem"],
-  ["00.500", "rechazo", "ídem"],
-  ["-01.500", "rechazo", "ídem, negativo"],
-  ["015,000", "rechazo", "ídem, con coma"],
-  ["01,500", "rechazo", "ídem, con coma"],
-  ["0015,000", "rechazo", "ídem, dos ceros"],
-  ["0150,000", "rechazo", "ídem"],
-  ["015", "rechazo", "ídem, sin separadores"],
-  ["0.500,00", "rechazo", "cero con punto de miles y coma"],
+  ["015.000", "cero_adelante", "¿cero de más?"],
+  ["01.000", "cero_adelante", "ídem"],
+  ["010.000", "cero_adelante", "ídem"],
+  ["01.500", "cero_adelante", "ídem"],
+  ["00.500", "cero_adelante", "ídem"],
+  ["-01.500", "cero_adelante", "ídem, negativo"],
+  ["015,000", "cero_adelante", "ídem, con coma"],
+  ["01,500", "cero_adelante", "ídem, con coma"],
+  ["0015,000", "cero_adelante", "ídem, dos ceros"],
+  ["0150,000", "cero_adelante", "ídem"],
+  ["015", "cero_adelante", "ídem, sin separadores"],
   // Mal escritos
-  ["1,500,00", "rechazo", "dos comas"],
-  ["1.5.0", "rechazo", "puntos mal puestos"],
-  ["10.00,5", "rechazo", "punto de miles mal puesto"],
-  ["1,", "rechazo", "coma sin decimales"],
-  [",5", "rechazo", "coma sin parte entera"],
-  ["1.", "rechazo", "punto al final"],
-  [".5", "rechazo", "punto al principio"],
-  ["12,5a", "rechazo", "letras"],
-  ["mil", "rechazo", "palabra"],
+  ["0.500,00", "mal_escrito", "punto de miles mal puesto y coma"],
+  ["1,500,00", "mal_escrito", "dos comas"],
+  ["1.5.0", "mal_escrito", "puntos mal puestos"],
+  ["12.34.56", "mal_escrito", "ídem"],
+  ["10.00,5", "mal_escrito", "punto de miles mal puesto"],
+  ["1,", "mal_escrito", "coma sin decimales"],
+  [",5", "mal_escrito", "coma sin parte entera"],
+  ["1.", "mal_escrito", "punto al final"],
+  ["0.", "mal_escrito", "ídem"],
+  [".5", "mal_escrito", "punto al principio"],
+  ["-.5", "mal_escrito", "ídem, con signo"],
+  ["12,5a", "mal_escrito", "letras"],
+  ["mil", "mal_escrito", "palabra"],
+  ["+5", "mal_escrito", "signo más"],
+  ["1e3", "mal_escrito", "notación científica"],
 ];
 
 describe("⭐ numeroEscrito: la tabla de casos", () => {
   it.each(CASOS_DE_NUMEROS)("«%s» → %s (%s)", (texto, esperado) => {
-    const valor = numeroEscrito(texto);
-    if (esperado === "rechazo") expect(valor).toBeNaN();
-    else expect(valor).toBe(esperado);
+    const lectura = leerNumeroEscrito(texto);
+    if (typeof esperado === "string") {
+      expect(lectura).toEqual({ ok: false, motivo: esperado });
+      expect(numeroEscrito(texto)).toBeNaN();
+    } else {
+      expect(lectura).toEqual({ ok: true, valor: esperado });
+    }
+  });
+
+  it("⭐ cada motivo tiene su mensaje, con un ejemplo de cómo escribirlo", () => {
+    expect(MENSAJE_DEL_MOTIVO.ambiguo).toMatch(/1,5 o 1\.500/);
+    expect(MENSAJE_DEL_MOTIVO.cero_adelante).toMatch(/cero de adelante/);
+    expect(MENSAJE_DEL_MOTIVO.punto_decimal).toMatch(/coma para los decimales/);
+    expect(MENSAJE_DEL_MOTIVO.mal_escrito).toMatch(/1\.500,50/);
+  });
+
+  it("el formulario avisa el primer número ilegible, con su campo y su motivo", () => {
+    expect(primerNumeroIlegible({ ...CAMPOS_VACIOS, precioDeLaOferta: "1,500" })).toEqual({
+      campo: "Precio de la oferta",
+      mensaje: MENSAJE_DEL_MOTIVO.ambiguo,
+    });
+    expect(
+      primerNumeroIlegible({
+        ...CAMPOS_VACIOS,
+        precioDeLaOferta: "1.500",
+        sesiones: [
+          { empiezaAt: "", zoomWebinarId: "", minutoDeLaOferta: "45" },
+          { empiezaAt: "", zoomWebinarId: "", minutoDeLaOferta: "015" },
+        ],
+      })
+    ).toEqual({ campo: "Minuto de la oferta de la sesión 2", mensaje: MENSAJE_DEL_MOTIVO.cero_adelante });
+    expect(primerNumeroIlegible({ ...CAMPOS_VACIOS, precioDeLaOferta: "1.500,50" })).toBeNull();
   });
 
   it("todo lo que el formulario escribe al editar se vuelve a leer igual", () => {
-    for (const n of [0, 0.5, 1.5, 2.125, 45, 997.5, 1000.5, 1500, 100000.5]) {
+    for (const n of [0, 0.5, 1.5, 2.125, 45, 997.5, 1000.5, 1500, 100000.5, 1e-7, 1e21]) {
       const campos = camposDesdeLaVista(
         { id: "l1", nombre: "W", variante: "paid", estado: "active", moneda: "USD", precioDeLaOferta: n, captaDesde: null, cierraEl: null, cerradoAt: null },
         [],

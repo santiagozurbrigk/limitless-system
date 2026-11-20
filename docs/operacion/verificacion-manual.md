@@ -877,7 +877,8 @@ con una sesión real.
 4. En la Configuración, cambiar el nombre y «Guardar cambios». Resultado: el aviso de ejemplo; al recargar vuelve el nombre de antes.
 5. Mirar el formulario en el celular. Resultado: los campos se apilan y se leen.
 6. ⭐ Con la computadora en otra zona horaria (por ejemplo, Madrid), abrir la Configuración. Resultado: las sesiones muestran la hora de la organización (la misma que el Detalle), y «Guardar cambios» sin tocar nada no las corre.
-7. Escribir el precio como «1.500,50» y como «1.500». Resultado: se aceptan como mil quinientos con cincuenta y mil quinientos; «1,500» muestra «Escribí el precio como número…».
+7. Escribir el precio como «1.500,50» y como «1.500». Resultado: se aceptan como mil quinientos con cincuenta y mil quinientos. Con «1,500», «2.75» y «015.000», «Guardar» avisa el motivo con un ejemplo («¿1,5 o 1.500?…», «Usá coma para los decimales…», «Sacá el cero de adelante…») y no llama a la acción.
+8. Romper la ficha de un lead (por ejemplo, un id que la lectura no puede resolver). Resultado: «No pudimos cargar la ficha del lead» y «Volver a Leads».
 
 ---
 

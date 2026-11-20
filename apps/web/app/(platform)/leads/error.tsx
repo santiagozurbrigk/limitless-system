@@ -9,7 +9,8 @@ import { usePantallaDeInicio } from "@/providers/experiencia-provider";
 import { usePermissions } from "@/providers/permissions-provider";
 
 /**
- * Error de Leads o de la ficha del lead de Limitless Webinars (SCRUM-546): la
+ * Error de la lista de Leads de Limitless Webinars (SCRUM-546; la ficha tiene
+ * el suyo, `leads/[id]/error.tsx`): la
  * caída queda en la pantalla y la navegación sigue. Sale a la pantalla de
  * inicio de quien mira (`usePantallaDeInicio`, la misma del logo): `/inicio`
  * en webinar, el Panel en `full`, donde `/leads` también se abre. Si esa

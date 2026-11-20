@@ -186,7 +186,7 @@ después del login.
   (`components/webinar/esqueletos.tsx`: `EsqueletoDeInicio`, `EsqueletoDeLeads`, `EsqueletoDeFichaDelLead`),
   con la forma de la pantalla, `role="status"` y `aria-busy`. Lo exige `esqueletos.test.ts`: una pantalla
   nueva de Webinars se suma a su lista.
-- **Error:** `inicio/error.tsx` y `leads/error.tsx` (la ficha cae en el de Leads), con `PantallaDeError`
+- **Error:** `inicio/error.tsx`, `leads/error.tsx` y `leads/[id]/error.tsx` (la ficha tiene el suyo, que sale a Leads), con `PantallaDeError`
   (Sentry, código de referencia, sin el mensaje interno) y la navegación visible; Inicio sale a Leads y Leads a
   la pantalla de inicio de quien mira (`usePantallaDeInicio`: `/inicio` en webinar, el Panel en `full`). Están en los obligatorios de `app/__tests__/boundaries.test.ts`. Arriba quedan `(platform)/error.tsx`
   y `global-error.tsx`.

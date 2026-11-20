@@ -12,6 +12,7 @@ import {
   SESION_VACIA,
   camposDesdeLaVista,
   datosDesdeElFormulario,
+  primerNumeroIlegible,
   type CamposDeSesion,
   type CamposDelLanzamiento,
 } from "@/lib/webinar/lanzamientos/formulario";
@@ -63,6 +64,13 @@ export function FormularioDelLanzamiento({
 
   function enviar(evento: React.FormEvent) {
     evento.preventDefault();
+    // Un número que no se puede leer se avisa con su motivo antes de llamar a
+    // la acción (el esquema lo rechazaría igual, con un mensaje genérico).
+    const ilegible = primerNumeroIlegible(campos);
+    if (ilegible) {
+      push({ title: `Revisá: ${ilegible.campo}`, description: ilegible.mensaje, variant: "default" });
+      return;
+    }
     const datos = datosDesdeElFormulario(campos, zona);
     startTransition(() =>
       correrMutacion({
@@ -110,13 +118,13 @@ export function FormularioDelLanzamiento({
             <Input
               id="precio"
               inputMode="decimal"
-              placeholder="1.500,00"
+              placeholder="1.500,50"
               aria-describedby="precio-ayuda"
               value={campos.precioDeLaOferta}
               onChange={(e) => cambiar("precioDeLaOferta", e.target.value)}
             />
             <p id="precio-ayuda" className="text-xs text-muted-foreground">
-              Con coma para los decimales. Ej.: 1.500,00
+              Punto para los miles y coma para los decimales. Ej.: 1.500,50
             </p>
           </div>
         </div>

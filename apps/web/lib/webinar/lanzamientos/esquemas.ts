@@ -46,7 +46,8 @@ export const sesionSchema = z.object({
     .string()
     .min(1, "Cargá la fecha y hora de la sesión")
     .superRefine((valor, ctx) => {
-      if (INSTANTE.safeParse(valor).success) return;
+      // Vacía ya la rechaza `min(1)`: un solo motivo, no dos.
+      if (valor === "" || INSTANTE.safeParse(valor).success) return;
       ctx.addIssue({ code: "custom", message: motivoDeHoraInvalida(valor) });
     }),
   zoomWebinarId: z.string().trim().max(64, "Máximo 64 caracteres").nullable(),

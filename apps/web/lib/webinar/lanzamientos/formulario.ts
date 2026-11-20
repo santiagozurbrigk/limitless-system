@@ -14,16 +14,10 @@ import type { DatosDelLanzamientoInput } from "./esquemas";
  * se usa la zona del proceso: la pantalla de Configuración se arma en el
  * servidor y se edita en el navegador, y cada uno puede tener otra.
  *
- * Los números se escriben como en Argentina o como en inglés: "1.500,50",
- * "1500,50", "1500.50" y "1500" son lo mismo; "1.500" (punto y tres cifras, sin
- * coma) es mil quinientos. Lo ambiguo no se adivina: queda `NaN` y el esquema
- * lo rechaza con un motivo. Es ambiguo "1,500" (en Argentina, uno coma cinco;
- * en inglés, mil quinientos): una coma con exactamente tres cifras después,
- * sin puntos y con parte entera de 1 a 3 cifras que no es cero. "0,500" y
- * "1,50" no lo son. También "1.5.0", "1,500,00" y una parte entera de más de
- * una cifra que empieza con cero ("015.000", "015,000", "01,500", "015"). "0",
- * "0,5" y "0.500" sí se leen. Los casos están en una sola tabla en
- * `__tests__/formulario.test.ts` (`CASOS_DE_NUMEROS`).
+ * Los números se escriben como en Argentina: punto para los miles y coma
+ * para los decimales (`leerNumeroEscrito`). Lo que no se puede leer sin
+ * adivinar no se lee: el formulario avisa el motivo antes de llamar a la
+ * acción (`primerNumeroIlegible`) y el esquema lo rechaza igual.
  *
  * La hora de una sesión que ya existía viaja con su instante original: si el
  * texto no cambió, se manda ese instante y no el que sale de convertir el
@@ -63,51 +57,91 @@ export const SESION_VACIA: CamposDeSesion = { empiezaAt: "", zoomWebinarId: "", 
 /** Puntos de miles bien puestos: el primer grupo de 1 a 3 cifras sin empezar con cero. */
 const MILES = /^-?[1-9]\d{0,2}(\.\d{3})+$/;
 
+/** Por qué no se pudo leer un número escrito a mano. */
+export type MotivoDeNumero = "ambiguo" | "cero_adelante" | "punto_decimal" | "mal_escrito";
+
 /**
- * Un número escrito a mano; vacío es `null`; lo que no se puede leer sin
- * adivinar, `NaN` (lo rechaza el esquema con su motivo).
+ * Qué se le dice a la persona en cada caso, con el ejemplo de cómo escribirlo
+ * (6.ª revisión de #153: el motivo, no un "escribí un número" para todo).
  */
-export function numeroEscrito(texto: string): number | null {
+export const MENSAJE_DEL_MOTIVO: Record<MotivoDeNumero, string> = {
+  ambiguo: "¿1,5 o 1.500? Es ambiguo: escribí 1.500 si son miles o 1,5 si son decimales.",
+  cero_adelante: "Sacá el cero de adelante: por ejemplo, 15.000 en vez de 015.000.",
+  punto_decimal: "Usá coma para los decimales (2,75); el punto es sólo para los miles (1.500).",
+  mal_escrito: "Escribí el número con punto para los miles y coma para los decimales, por ejemplo 1.500,50.",
+};
+
+export type LecturaDeNumero = { ok: true; valor: number | null } | { ok: false; motivo: MotivoDeNumero };
+
+/**
+ * ⭐ Un número escrito a mano, como se escribe en Argentina: punto **sólo**
+ * para los miles (en grupos de tres) y coma para los decimales. Vacío es
+ * `null`. Lo que no se puede leer sin adivinar no se lee y dice por qué:
+ *   - `ambiguo`: "1,500" (¿uno coma cinco o mil quinientos?);
+ *   - `cero_adelante`: "015.000", "015,000", "015" (¿un cero de más?);
+ *   - `punto_decimal`: un punto que no forma grupos de tres, como "2.75",
+ *     "2.12" o "0.500" (decimales a la inglesa);
+ *   - `mal_escrito`: dos comas, puntos mal puestos, un separador en el borde
+ *     (".5", ",5", "1500.", "-.5") o letras.
+ * Los casos están en una sola tabla en `__tests__/formulario.test.ts`
+ * (`CASOS_DE_NUMEROS`).
+ */
+export function leerNumeroEscrito(texto: string): LecturaDeNumero {
   const limpio = texto.trim().replace(/\s/g, "");
-  if (limpio === "") return null;
-  if (!/^-?[\d.,]+$/.test(limpio)) return Number.NaN;
+  if (limpio === "") return { ok: true, valor: null };
+  const mal: LecturaDeNumero = { ok: false, motivo: "mal_escrito" };
+  if (!/^-?[\d.,]+$/.test(limpio)) return mal;
   const [entero = "", decimal, ...sobra] = limpio.split(",");
-  if (sobra.length > 0) return Number.NaN; // más de una coma
-  // Una parte entera de más de una cifra no empieza con cero ("015.000",
-  // "015,000", "01,500", "00.500"): ¿un cero de más (un precio en 0 al que se
-  // le escribió atrás) o un decimal? No se adivina. "0", "0,5" y "0.500" sí.
-  if (/^-?0\d/.test(entero)) return Number.NaN;
+  if (sobra.length > 0) return mal; // más de una coma
+  if (entero === "" || entero === "-" || /^-?\./.test(entero) || entero.endsWith(".")) return mal;
+  if (/^-?0\d/.test(entero)) return { ok: false, motivo: "cero_adelante" };
 
   if (decimal !== undefined) {
-    // Con coma: la coma es el decimal y los puntos, separadores de miles.
-    if (!/^\d+$/.test(decimal)) return Number.NaN;
+    if (!/^\d+$/.test(decimal)) return mal;
     if (entero.includes(".")) {
-      if (!MILES.test(entero)) return Number.NaN;
+      if (!MILES.test(entero)) return mal;
     } else if (decimal.length === 3 && /^-?[1-9]\d{0,2}$/.test(entero)) {
-      // "1,500": uno coma cinco (Argentina) o mil quinientos (inglés).
-      return Number.NaN;
+      return { ok: false, motivo: "ambiguo" };
     }
-    const numero = Number(`${entero.replace(/\./g, "")}.${decimal}`);
-    return entero === "" || entero === "-" ? Number.NaN : numero;
+    return { ok: true, valor: Number(`${entero.replace(/\./g, "")}.${decimal}`) };
   }
 
-  // Sin coma: punto de miles si cada grupo después del punto tiene tres cifras
-  // ("1.500", "1.000.000"); con un solo punto y otra cantidad de cifras, o con
-  // parte entera de más de tres cifras, decimal ("2.75", "1500.5").
-  if (MILES.test(entero)) return Number(entero.replace(/\./g, ""));
+  if (!entero.includes(".")) return { ok: true, valor: Number(entero) };
+  if (MILES.test(entero)) return { ok: true, valor: Number(entero.replace(/\./g, "")) };
   const puntos = (entero.match(/\./g) ?? []).length;
-  if (puntos > 1 || entero.startsWith(".") || entero.endsWith(".")) return Number.NaN;
-  return Number(entero);
+  return puntos === 1 ? { ok: false, motivo: "punto_decimal" } : mal;
+}
+
+/** Lo mismo como número: lo que no se lee es `NaN`, que el esquema rechaza. */
+export function numeroEscrito(texto: string): number | null {
+  const lectura = leerNumeroEscrito(texto);
+  return lectura.ok ? lectura.valor : Number.NaN;
 }
 
 /**
- * Un número guardado como se escribe en el formulario: coma decimal y sin
- * puntos, para que `numeroEscrito` lo lea igual ("2,125" y no "2.125", que
- * sería dos mil ciento veinticinco). Con exactamente tres decimales se suma un
+ * El primer número del formulario que no se puede leer, con el campo y el
+ * motivo, para avisarlo antes de llamar a la acción. `null` si todos se leen.
+ */
+export function primerNumeroIlegible(c: CamposDelLanzamiento): { campo: string; mensaje: string } | null {
+  const precio = leerNumeroEscrito(c.precioDeLaOferta);
+  if (!precio.ok) return { campo: "Precio de la oferta", mensaje: MENSAJE_DEL_MOTIVO[precio.motivo] };
+  for (const [i, s] of c.sesiones.entries()) {
+    const minuto = leerNumeroEscrito(s.minutoDeLaOferta);
+    if (!minuto.ok) {
+      return { campo: `Minuto de la oferta de la sesión ${i + 1}`, mensaje: MENSAJE_DEL_MOTIVO[minuto.motivo] };
+    }
+  }
+  return null;
+}
+
+/**
+ * Un número guardado como se escribe en el formulario: coma decimal, sin
+ * puntos y sin notación científica (1e-7 se escribe "0,0000001"), para que
+ * `leerNumeroEscrito` lo lea igual. Con exactamente tres decimales se suma un
  * cero ("2,1250"): "2,125" sería ambiguo y se rechazaría.
  */
 function comoSeEscribe(n: number): string {
-  const texto = String(n).replace(".", ",");
+  const texto = n.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 20 }).replace(".", ",");
   return /,\d{3}$/.test(texto) ? `${texto}0` : texto;
 }
 
