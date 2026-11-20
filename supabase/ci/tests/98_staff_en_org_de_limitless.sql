@@ -4,7 +4,9 @@
 -- comparación de emails que la app (fila de la lista tal cual, email de Auth
 -- normalizado), sin tocar rol ni estado, sin mover perfiles de otra org, una
 -- sola vez y abortando si no hay exactamente una org marcada (salvo que no haya
--- nada que asociar). La invitación deja entrar al staff sólo a la org de
+-- nada que asociar), y también si la org marcada no tiene skip_onboarding =
+-- true ni el gate de onboarding completado (el staff, founder con org, caería
+-- en /onboarding). La invitación deja entrar al staff sólo a la org de
 -- Limitless, como founder cuando crea el perfil; a otra org (o sin org marcada)
 -- sigue en cuenta_de_staff. Nadie con su JWT ni el service role llama a la
 -- asociación.
@@ -12,8 +14,11 @@
 
 begin;
 
-insert into public.organizations (id, name, experience) values
-  ('98000000-0000-0000-0000-000000000100', 'Org de Limitless', 'limitless');
+-- La org de Limitless nace con skip_onboarding = true y sin fila en
+-- onboarding_state: los casos de asociación e invitación corren con esa sola
+-- condición. El caso 6a prueba las otras combinaciones.
+insert into public.organizations (id, name, experience, skip_onboarding) values
+  ('98000000-0000-0000-0000-000000000100', 'Org de Limitless', 'limitless', true);
 insert into public.organizations (id, name) values
   ('98000000-0000-0000-0000-000000000a00', 'Org A');
 
@@ -138,7 +143,74 @@ select ci.espera(
   5, 'sin org marcada la asociación que aborta no cambia ningún perfil');
 update public.organizations set experience = 'limitless' where id = '98000000-0000-0000-0000-000000000100';
 
+-- ─── 6a. Org marcada sin skip_onboarding ni gate completado: aborta sin cambios ─
+savepoint org_sin_gate;
+update public.organizations set skip_onboarding = false where id = '98000000-0000-0000-0000-000000000100';
+do $$
+begin
+  begin
+    perform public.asociar_staff_a_la_org_de_limitless();
+  exception when others then
+    if sqlerrm like 'La organización de Limitless (experience = limitless) no tiene skip_onboarding = true ni el gate de onboarding completado%'
+       and position('update public.organizations set skip_onboarding = true where experience = ''limitless''' in sqlerrm) > 0
+       and position('paso 3b de docs/operacion/staff-en-org-de-limitless.md' in sqlerrm) > 0 then
+      return;
+    end if;
+    raise exception 'FALLA: con la org marcada sin skip_onboarding ni gate completado la asociación falló por otro motivo: %', sqlerrm;
+  end;
+  raise exception 'FALLA: con la org marcada sin skip_onboarding ni gate completado la asociación no abortó';
+end $$;
+select ci.espera(
+  (select count(*) from public.profiles
+    where organization_id is null
+      and id in ('98000000-0000-0000-0000-000000000001', '98000000-0000-0000-0000-000000000004',
+                 '98000000-0000-0000-0000-000000000005', '98000000-0000-0000-0000-000000000006',
+                 '98000000-0000-0000-0000-0000000000f1')),
+  5, 'con la org marcada sin skip_onboarding ni gate completado la asociación no asocia a nadie');
+
+-- Con fila en onboarding_state pero sin gate_completed_at, y skip_onboarding null: también aborta.
+update public.organizations set skip_onboarding = null where id = '98000000-0000-0000-0000-000000000100';
+insert into public.onboarding_state (organization_id) values ('98000000-0000-0000-0000-000000000100');
+do $$
+begin
+  begin
+    perform public.asociar_staff_a_la_org_de_limitless();
+  exception when others then
+    if sqlerrm like 'La organización de Limitless (experience = limitless) no tiene skip_onboarding = true ni el gate de onboarding completado%' then
+      return;
+    end if;
+    raise exception 'FALLA: con onboarding_state sin gate_completed_at y skip_onboarding null la asociación falló por otro motivo: %', sqlerrm;
+  end;
+  raise exception 'FALLA: con onboarding_state sin gate_completed_at y skip_onboarding null la asociación no abortó';
+end $$;
+select ci.espera(
+  (select count(*) from public.profiles
+    where organization_id is null
+      and id in ('98000000-0000-0000-0000-000000000001', '98000000-0000-0000-0000-000000000004',
+                 '98000000-0000-0000-0000-000000000006')),
+  3, 'con onboarding_state sin gate_completed_at la asociación no asocia a nadie');
+
+-- Sólo el gate completado (skip_onboarding = false): asocia.
+update public.organizations set skip_onboarding = false where id = '98000000-0000-0000-0000-000000000100';
+update public.onboarding_state set gate_completed_at = now() where organization_id = '98000000-0000-0000-0000-000000000100';
+select ci.espera(public.asociar_staff_a_la_org_de_limitless(), 3,
+  'con sólo gate_completed_at (skip_onboarding = false) la asociación pone en la org de Limitless a s1, s4 y s6');
+select ci.espera(
+  (select count(*) from public.profiles
+    where organization_id = '98000000-0000-0000-0000-000000000100'
+      and id in ('98000000-0000-0000-0000-000000000001', '98000000-0000-0000-0000-000000000004',
+                 '98000000-0000-0000-0000-000000000006')),
+  3, 'con sólo gate_completed_at s1, s4 y s6 quedan en la org de Limitless');
+rollback to savepoint org_sin_gate;
+
 -- ─── 6. Asociación ───────────────────────────────────────────────────────────
+-- Con sólo skip_onboarding = true (sin fila en onboarding_state).
+select ci.espera(
+  (select count(*) from public.organizations o
+    where o.id = '98000000-0000-0000-0000-000000000100'
+      and o.skip_onboarding is true
+      and not exists (select 1 from public.onboarding_state st where st.organization_id = o.id)),
+  1, 'la org de Limitless tiene sólo skip_onboarding = true, sin fila en onboarding_state');
 select ci.espera(public.asociar_staff_a_la_org_de_limitless(), 3,
   'la asociación pone en la org de Limitless a s1, s4 y s6');
 select ci.espera(
@@ -190,6 +262,23 @@ select ci.espera(
   0, 'la segunda corrida deja los perfiles exactamente igual');
 select ci.espera((select count(*) from public.profiles), (select count(*) from antes),
   'la segunda corrida no crea ni borra perfiles');
+
+-- ─── 7b. Sin staff pendiente, la org sin skip_onboarding ni gate igual aborta ─
+savepoint sin_pendientes_sin_gate;
+update public.organizations set skip_onboarding = false where id = '98000000-0000-0000-0000-000000000100';
+do $$
+begin
+  begin
+    perform public.asociar_staff_a_la_org_de_limitless();
+  exception when others then
+    if sqlerrm like 'La organización de Limitless (experience = limitless) no tiene skip_onboarding = true ni el gate de onboarding completado%' then
+      return;
+    end if;
+    raise exception 'FALLA: sin staff pendiente y con la org sin gate la asociación falló por otro motivo: %', sqlerrm;
+  end;
+  raise exception 'FALLA: sin staff pendiente y con la org sin gate la asociación no abortó';
+end $$;
+rollback to savepoint sin_pendientes_sin_gate;
 
 -- ─── 4. Ninguna org marcada y nada pendiente: 0 sin error ────────────────────
 savepoint sin_marcar;

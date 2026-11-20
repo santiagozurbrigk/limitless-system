@@ -22,10 +22,15 @@
 -- Idempotente: `if not exists`, `create or replace`, y la asociación sólo mira
 -- perfiles sin org (una segunda corrida no cambia nada).
 --
--- Fail-closed: si hay más de una org marcada, o si hay perfiles del staff para
--- asociar y ninguna org marcada, aborta y no deja nada aplicado (corre en una
--- transacción). Sin org marcada y sin staff pendiente (base vacía de CI o
--- local) termina con un notice, sin cambios.
+-- Fail-closed: si hay más de una org marcada, si hay perfiles del staff para
+-- asociar y ninguna org marcada, o si la org marcada no tiene
+-- `skip_onboarding = true` ni el gate de onboarding completado
+-- (`onboarding_state.gate_completed_at`), aborta y no deja nada aplicado (corre
+-- en una transacción). Lo último evita que el staff, founder con org, quede
+-- redirigido a /onboarding también en /super-admin/* (paso 3b de la guía); la
+-- migración sólo lee la org y onboarding_state, no los escribe. Sin org marcada
+-- y sin staff pendiente (base vacía de CI o local) termina con un notice, sin
+-- cambios.
 --
 -- Se aplica en producción en la ventana de SCRUM-532, después de marcar la org;
 -- el paso a paso y el precheck están en docs/operacion/staff-en-org-de-limitless.md.
@@ -113,6 +118,26 @@ begin
   where experience = 'limitless'
   for share;
 
+  -- La org de Limitless tiene que saltear el gate de onboarding o tenerlo
+  -- completado, con las mismas fuentes que el middleware
+  -- (organizations.skip_onboarding y onboarding_state.gate_completed_at; sin
+  -- fila equivale a no completado). Si no, el staff founder caería en
+  -- /onboarding. Aborta aunque no haya staff pendiente. Sólo lee.
+  if not exists (
+    select 1 from public.organizations o
+    where o.id = v_org
+      and (
+        o.skip_onboarding is true
+        or exists (
+          select 1 from public.onboarding_state st
+          where st.organization_id = o.id
+            and st.gate_completed_at is not null
+        )
+      )
+  ) then
+    raise exception 'La organización de Limitless (experience = limitless) no tiene skip_onboarding = true ni el gate de onboarding completado (onboarding_state.gate_completed_at): el staff, founder con organización, quedaría redirigido a /onboarding, también en /super-admin. Completá el gate o corré: update public.organizations set skip_onboarding = true where experience = ''limitless''; y reintentá (paso 3b de docs/operacion/staff-en-org-de-limitless.md). No se cambió nada';
+  end if;
+
   update public.profiles p
   set organization_id = v_org
   where p.organization_id is null
@@ -141,7 +166,7 @@ $$;
 revoke all on function public.asociar_staff_a_la_org_de_limitless() from public, anon, authenticated, service_role;
 
 comment on function public.asociar_staff_a_la_org_de_limitless() is
-  'SCRUM-552: pone en la org de Limitless (experience = limitless) los perfiles sin organización cuyo usuario de Auth tiene un email de super_admin_users (misma comparación que la app). Sólo cambia organization_id; nunca mueve un perfil que ya tiene org. Aborta si hay más de una org marcada, o si hay staff pendiente y ninguna marcada. Devuelve cuántos perfiles asoció. Re-ejecutable por el operador con el rol de migraciones: ningún rol de la API tiene EXECUTE.';
+  'SCRUM-552: pone en la org de Limitless (experience = limitless) los perfiles sin organización cuyo usuario de Auth tiene un email de super_admin_users (misma comparación que la app). Sólo cambia organization_id; nunca mueve un perfil que ya tiene org. Aborta si hay más de una org marcada, si hay staff pendiente y ninguna marcada, o si la org marcada no tiene skip_onboarding = true ni onboarding_state.gate_completed_at (sólo lee esas tablas). Devuelve cuántos perfiles asoció. Re-ejecutable por el operador con el rol de migraciones: ningún rol de la API tiene EXECUTE.';
 
 select public.asociar_staff_a_la_org_de_limitless();
 
