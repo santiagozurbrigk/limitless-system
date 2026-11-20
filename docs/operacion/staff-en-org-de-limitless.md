@@ -22,8 +22,9 @@ dentro de la ventana de SCRUM-532 (día 5). Depende de `20261019120000_organizat
 - El staff entra por `/login`; `/superadmin/login` redirige ahí.
 
 La migración es idempotente (98, caso 7: la segunda corrida devuelve 0 y deja los perfiles iguales) y
-fail-closed (98, casos 3 y 5: aborta sin cambios). Corre en una sola transacción: si aborta, no queda nada
-aplicado, ni el índice ni las funciones.
+fail-closed (98, casos 3, 5, 6a y 7b: aborta sin cambios). También aborta si la organización de Limitless no
+tiene `skip_onboarding = true` ni el gate de onboarding completado (paso 3b). Corre en una sola transacción: si
+aborta, no queda nada aplicado, ni el índice ni las funciones.
 
 ## Precheck (sólo lectura)
 
@@ -59,6 +60,19 @@ left join public.profiles p on p.id = u.id
 left join public.organizations o on o.id = p.organization_id
 order by s.email;
 
+-- P1b. Staff que la migración va a asociar (en la lista como la compara la app, con perfil y sin organización),
+--      con su role. Corre antes y después de 523. La asociación NO cambia role:
+--      no_es_founder = true => queda con su role actual (member) en la org de Limitless; decidir antes de la ventana.
+--      must_change_password = true => staff a mitad del alta: lo conserva después de la asociación.
+select s.email, u.id as user_id, p.role,
+       (p.role is distinct from 'founder') as no_es_founder,
+       p.must_change_password, p.is_active
+from public.super_admin_users s
+join auth.users u      on s.email = lower(btrim(u.email))
+join public.profiles p on p.id = u.id
+where p.organization_id is null
+order by no_es_founder desc, p.must_change_password desc, s.email;
+
 -- P2. Totales y vista previa exacta de lo que haría la migración (después del marcado; antes y después de 552).
 with lim as (select id from public.organizations where experience = 'limitless'),
 staff as (
@@ -88,7 +102,8 @@ from public.profiles p
 where p.organization_id = '<id de P0a>'
 order by en_lista_staff desc, p.email;
 
--- P4. Filas de la lista con mayúsculas/espacios: nunca dieron acceso y la migración NO las asocia.
+-- P4. Filas de la lista con mayúsculas/espacios: nunca dieron acceso y la migración NO las asocia
+--     (dar_de_baja_staff, en cambio, sí las encuentra: ver "Baja de alguien del staff").
 select email from public.super_admin_users where email <> lower(btrim(email));
 
 -- P5. Verificación posterior a 552: repetir P2. Esperado: perfil_sin_org_a_migrar = 0,
@@ -101,7 +116,7 @@ real acá.
 
 ## Pasos del día 5
 
-1. **Antes de la ventana (sólo lectura): P0a, P1, P3 y P4.**
+1. **Antes de la ventana (sólo lectura): P0a, P1, P1b, P3 y P4.**
    - Confirmar con Martín el id de la organización de Limitless entre las filas de P0a.
      **Esperado:** una candidata clara. Si ninguna fila es la de Limitless, o hay dudas, no seguir.
    - Si esa organización tiene `account_type = 'holding'`, **parar y escalar** (R8): esta HU no contempla que la
@@ -109,6 +124,10 @@ real acá.
    - En P1, revisar `coincide_como_la_app`: una fila en `false` con `user_id` presente es un email de la lista mal
      cargado (P4 lo confirma); no se asocia ni da panel. Corregir la fila de la lista (procedimiento de
      [alta-super-admin.md](alta-super-admin.md)) o dejarla documentada.
+   - En P1b, revisar el `role` de cada staff que la migración va a asociar. **Esperado:** todos con
+     `no_es_founder = false`. La asociación no cambia `role`: un staff que no es `founder` queda `member` (su role
+     actual) en la organización de Limitless. Decidir con Martín, antes de la ventana, qué hacer con cada uno; la
+     migración no lo corrige. Los que tienen `must_change_password = true` están a mitad del alta y lo conservan.
    - Decidir qué pasa con quien aparezca en otra organización (`org` con valor y distinto de la de Limitless) y
      con una persona del staff que tenga **otra** cuenta en la organización de Limitless (aparece en P3 con
      `en_lista_staff = false`): la migración no los mueve ni les da panel.
@@ -127,6 +146,14 @@ real acá.
    existe (`skip_onboarding = true`). Sin esto, el staff, ahora founder con organización, es redirigido a
    `/onboarding` en **cualquier ruta no pública, incluido `/super-admin/*`** (`lib/supabase/middleware.ts` y
    `lib/onboarding/gate-routing.ts`: `/super-admin` no es una ruta pública).
+
+   Si falta, la migración del paso 5 aborta sin cambios (también sin staff pendiente) con este mensaje:
+
+   ```
+   La organización de Limitless (experience = limitless) no tiene skip_onboarding = true ni el gate de onboarding completado (onboarding_state.gate_completed_at): el staff, founder con organización, quedaría redirigido a /onboarding, también en /super-admin. Completá el gate o corré: update public.organizations set skip_onboarding = true where experience = 'limitless'; y reintentá (paso 3b de docs/operacion/staff-en-org-de-limitless.md). No se cambió nada
+   ```
+
+   La migración no escribe en la organización ni en `onboarding_state`: el paso 3b lo hace el responsable.
 4. **P0b y P2.** **Esperado:** P0b, exactamente 1 fila (la de `'<id de P0a>'`); P2, `orgs_limitless = 1`.
    `perfil_sin_org_a_migrar` es la cantidad de perfiles que va a asociar la migración.
 5. **Aplicar `20261101120000_staff_en_org_de_limitless.sql`.** Si aborta, leer el mensaje (ver "Si la
@@ -159,7 +186,7 @@ real acá.
 
 ## Si la migración aborta
 
-La migración corre en una transacción: un aborto no deja nada aplicado. Los tres mensajes posibles:
+La migración corre en una transacción: un aborto no deja nada aplicado. Los cuatro mensajes posibles:
 
 - **`SCRUM-552 necesita 20261019120000_organizations_experience (SCRUM-523) aplicada antes`**
   No existe la columna `organizations.experience` o su CHECK no acepta `'limitless'`. Aplicar primero la
@@ -171,6 +198,11 @@ La migración corre en una transacción: un aborto no deja nada aplicado. Los tr
 - **`Hay N perfiles de staff sin organización y ninguna organización con experience = limitless. Marcala antes (docs/operacion/staff-en-org-de-limitless.md)`**
   Falta el paso 3: hay staff para asociar y ninguna organización marcada. Marcar la organización, repetir P0b y
   P2, y reintentar.
+- **`La organización de Limitless (experience = limitless) no tiene skip_onboarding = true ni el gate de onboarding completado (onboarding_state.gate_completed_at): el staff, founder con organización, quedaría redirigido a /onboarding, también en /super-admin. Completá el gate o corré: update public.organizations set skip_onboarding = true where experience = 'limitless'; y reintentá (paso 3b de docs/operacion/staff-en-org-de-limitless.md). No se cambió nada`**
+  Falta el paso 3b: P0b muestra `skip_onboarding` distinto de `true` y `gate_completed_at` vacío. Decidir con
+  Martín: completar el gate de la organización o correr
+  `update public.organizations set skip_onboarding = true where id = '<id de P0a>';` (equivalente a la sentencia
+  del mensaje), repetir P0b y reintentar.
 
 ## Baja de alguien del staff
 
@@ -183,6 +215,11 @@ EXECUTE):
 ```sql
 select public.dar_de_baja_staff('nombre@ejemplo.com');
 ```
+
+La función compara el email normalizado (`lower(btrim(...))`) de los dos lados: la entrada y lo guardado (la fila
+de `super_admin_users`, `holdings.owner_email` y el email de Auth). A diferencia de la app, que compara la fila de
+la lista tal cual, una fila guardada con mayúsculas o espacios también se encuentra y sale de la lista. Si dos
+filas de la lista quedan iguales al normalizar, aborta sin cambios: hay que revisar la lista a mano.
 
 Devuelve una fila con `perfil_desactivado`, `sin_perfil` o `sin_perfil_revisar`. Qué hacer con cada resultado y
 con cada mensaje si aborta, y la verificación de después (incluida la lista de perfiles activos de la
