@@ -1,10 +1,12 @@
 -- SCRUM-552 · Ajustes del PR #151: la baja de alguien del staff en una sola
 -- función. `dar_de_baja_staff` saca el email de la lista de staff y desactiva
 -- el perfil cuyo email de Auth es ese, todo o nada: nadie de la API la
--- ejecuta; compara como la app (entrada en minúsculas y sin espacios, fila de
--- la lista tal cual, email de Auth normalizado); no mira profiles.email; sólo
--- cambia is_active; aborta sin cambios si el email no está en la lista, si es
--- dueño de un holding o si hay más de un perfil con ese email de Auth; sin
+-- ejecuta; normaliza los dos lados (entrada, fila de la lista,
+-- holdings.owner_email y email de Auth en minúsculas y sin espacios), a
+-- diferencia de la app, que compara la fila tal cual; no mira profiles.email;
+-- sólo cambia is_active; aborta sin cambios si el email no está en la lista, si
+-- dos filas de la lista quedan iguales al normalizar, si es dueño de un holding
+-- o si hay más de un perfil con ese email de Auth; sin
 -- perfil devuelve sin_perfil, o sin_perfil_revisar si en la org de Limitless
 -- queda alguien activo fuera de la lista.
 -- Migración: 20261115120000_baja_de_staff.
@@ -119,21 +121,22 @@ select ci.espera(
      (select email from public.super_admin_users except select * from lista_antes)) d),
   0, 'la baja de un email fuera de la lista deja la lista exactamente igual');
 
--- ─── S5. Una fila de la lista mal cargada no coincide, como en la app ───────
-do $$
-begin
-  begin
-    perform public.dar_de_baja_staff('S6@test');
-  exception when others then
-    if sqlerrm like 'Ese email no está en la lista de staff%' then
-      return;
-    end if;
-    raise exception 'FALLA: con una fila mal cargada la baja falló por otro motivo: %', sqlerrm;
-  end;
-  raise exception 'FALLA: con una fila mal cargada la baja no abortó';
-end $$;
-select ci.espera((select count(*) from public.super_admin_users where email = 'S6@test'),
-  1, 'la fila mal cargada S6@test sigue en la lista');
+-- ─── S5. Una fila de la lista mal cargada también se encuentra y sale ───────
+-- A diferencia de la app, la función normaliza también lo guardado: la fila
+-- 'S6@test', que nunca dio el panel, sale de la lista con la entrada
+-- 's6@test'. Su usuario de Auth no tiene perfil y en la org de Limitless no hay
+-- nadie activo fuera de la lista: sin_perfil.
+insert into r values ('S5', public.dar_de_baja_staff('s6@test'));
+select ci.espera((select count(*) from r where caso = 'S5' and resultado = 'sin_perfil'),
+  1, 'la baja de una fila mal cargada (S6@test) devuelve sin_perfil');
+select ci.espera((select count(*) from public.super_admin_users where lower(btrim(email)) = 's6@test'),
+  0, 'la fila mal cargada S6@test sale de la lista');
+select ci.espera(
+  (select count(*) from (
+     (select * from antes except select id, organization_id, role, is_active, must_change_password, custom_role_id from public.profiles)
+     union all
+     (select id, organization_id, role, is_active, must_change_password, custom_role_id from public.profiles except select * from antes)) d),
+  0, 'la baja de la fila mal cargada sin perfil deja los perfiles exactamente igual');
 
 -- ─── S2. La baja: sale de la lista y el perfil queda inactivo ────────────────
 insert into r values ('S2', public.dar_de_baja_staff('b1@test'));
@@ -257,6 +260,72 @@ select ci.espera(
     where id in ('99000000-0000-0000-0000-0000000000d1', '99000000-0000-0000-0000-0000000000d2') and is_active),
   2, 'con dos perfiles, los dos siguen activos');
 
+-- ─── S11. Dueño de un holding con el email guardado con mayúsculas: aborta ──
+-- La FK de holdings.owner_email exige el valor exacto de la fila de la lista,
+-- así que la fila también va mal cargada.
+savepoint holding_mal_cargado;
+insert into public.super_admin_users (email) values (' B9@Test ');
+insert into public.holdings (name, owner_email) values ('Holding de b9', ' B9@Test ');
+insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values
+  ('99000000-0000-0000-0000-000000000009', 'b9@test', now(), '{}');
+insert into public.profiles (id, email, organization_id, role, full_name, is_active, must_change_password) values
+  ('99000000-0000-0000-0000-000000000009', 'b9@test', '99000000-0000-0000-0000-000000000100', 'founder', 'B9', true, false);
+do $$
+begin
+  begin
+    perform public.dar_de_baja_staff('b9@test');
+  exception when others then
+    if sqlerrm like 'Ese email es dueño de un holding%' then
+      return;
+    end if;
+    raise exception 'FALLA: con el dueño de un holding guardado con mayúsculas la baja falló por otro motivo: %', sqlerrm;
+  end;
+  raise exception 'FALLA: con el dueño de un holding guardado con mayúsculas la baja no abortó';
+end $$;
+select ci.espera((select count(*) from public.super_admin_users where email = ' B9@Test '),
+  1, 'el dueño de un holding guardado con mayúsculas sigue en la lista');
+select ci.espera(
+  (select count(*) from public.profiles where id = '99000000-0000-0000-0000-000000000009' and is_active),
+  1, 'el perfil del dueño de un holding guardado con mayúsculas sigue activo');
+rollback to savepoint holding_mal_cargado;
+
+-- ─── S12. Dos filas de la lista iguales al normalizar: aborta sin cambios ───
+savepoint dos_filas_iguales;
+insert into public.super_admin_users (email) values ('b10@test'), (' B10@Test');
+insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values
+  ('99000000-0000-0000-0000-000000000010', 'b10@test', now(), '{}');
+insert into public.profiles (id, email, organization_id, role, full_name, is_active, must_change_password) values
+  ('99000000-0000-0000-0000-000000000010', 'b10@test', '99000000-0000-0000-0000-000000000100', 'founder', 'B10', true, false);
+create temp table antes_s12 on commit drop as
+  select id, organization_id, role, is_active, must_change_password, custom_role_id from public.profiles;
+create temp table lista_antes_s12 on commit drop as
+  select email from public.super_admin_users;
+do $$
+begin
+  begin
+    perform public.dar_de_baja_staff('b10@test');
+  exception when others then
+    if sqlerrm like 'Hay 2 filas en la lista de staff (super_admin_users) que quedan iguales a ese email%' then
+      return;
+    end if;
+    raise exception 'FALLA: con dos filas iguales al normalizar la baja falló por otro motivo: %', sqlerrm;
+  end;
+  raise exception 'FALLA: con dos filas iguales al normalizar la baja no abortó';
+end $$;
+select ci.espera(
+  (select count(*) from (
+     (select * from antes_s12 except select id, organization_id, role, is_active, must_change_password, custom_role_id from public.profiles)
+     union all
+     (select id, organization_id, role, is_active, must_change_password, custom_role_id from public.profiles except select * from antes_s12)) d),
+  0, 'con dos filas iguales al normalizar los perfiles quedan exactamente igual');
+select ci.espera(
+  (select count(*) from (
+     (select * from lista_antes_s12 except select email from public.super_admin_users)
+     union all
+     (select email from public.super_admin_users except select * from lista_antes_s12)) d),
+  0, 'con dos filas iguales al normalizar la lista queda exactamente igual');
+rollback to savepoint dos_filas_iguales;
+
 -- ─── S9. En la lista sin perfil: sale de la lista, sin_perfil ────────────────
 insert into r values ('S9', public.dar_de_baja_staff('b4@test'));
 select ci.espera((select count(*) from r where caso = 'S9' and resultado = 'sin_perfil'),
@@ -283,12 +352,12 @@ select ci.espera((select count(*) from public.profiles), (select count(*) from a
   'las bajas no crean ni borran perfiles');
 select ci.espera(
   (select count(*) from (
-     (select * from lista_antes where email not in ('b1@test', 'b3@test', 'b4@test')
+     (select * from lista_antes where email not in ('b1@test', 'b3@test', 'b4@test', 'S6@test')
       except select email from public.super_admin_users)
      union all
      (select email from public.super_admin_users
-      except select * from lista_antes where email not in ('b1@test', 'b3@test', 'b4@test'))) d),
-  0, 'fuera de b1, b3 y b4 ninguna fila de la lista cambió');
+      except select * from lista_antes where email not in ('b1@test', 'b3@test', 'b4@test', 'S6@test'))) d),
+  0, 'fuera de b1, b3, b4 y S6@test ninguna fila de la lista cambió');
 
 -- ─── S10a. Un miembro legítimo fuera de la lista: sin_perfil_revisar ─────────
 savepoint miembro_legitimo;
@@ -305,6 +374,23 @@ select ci.espera(
   (select count(*) from public.profiles where id = '99000000-0000-0000-0000-0000000000a1' and is_active),
   1, 'el miembro legítimo sigue activo');
 rollback to savepoint miembro_legitimo;
+
+-- ─── S10c. Un staff activo con su fila guardada con mayúsculas: sin_perfil ───
+-- La cuenta final también normaliza la fila de la lista: b11, activo en la org
+-- de Limitless con la fila ' B11@Test', cuenta como de la lista.
+savepoint fila_mal_cargada_activa;
+insert into public.super_admin_users (email) values (' B11@Test');
+insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values
+  ('99000000-0000-0000-0000-000000000011', 'b11@test', now(), '{}');
+insert into public.profiles (id, email, organization_id, role, full_name, is_active, must_change_password) values
+  ('99000000-0000-0000-0000-000000000011', 'b11@test', '99000000-0000-0000-0000-000000000100', 'founder', 'B11', true, false);
+insert into r values ('S10c', public.dar_de_baja_staff('b8@test'));
+select ci.espera((select count(*) from r where caso = 'S10c' and resultado = 'sin_perfil'),
+  1, 'un perfil activo cuya fila de la lista está guardada con mayúsculas cuenta como de la lista: sin_perfil');
+select ci.espera(
+  (select count(*) from public.profiles where id = '99000000-0000-0000-0000-000000000011' and is_active),
+  1, 'el staff con la fila guardada con mayúsculas sigue activo');
+rollback to savepoint fila_mal_cargada_activa;
 
 -- ─── S10b. Un staff que cambió su email de Auth: sin_perfil_revisar ──────────
 -- b7nuevo es el staff b7@test después de cambiar su email de Auth; su
