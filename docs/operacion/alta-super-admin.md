@@ -249,14 +249,20 @@ select public.dar_de_baja_staff('nombre@ejemplo.com');
   espacios…`: dos o más filas de la lista son el mismo email con mayúsculas o espacios distintos. Míralas con:
 
   ```sql
-  select email from public.super_admin_users
+  select quote_literal(email) as valor, length(email) as largo
+  from public.super_admin_users
   where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'));
   ```
 
+  Un espacio al final no se ve en una columna de texto común: por eso la consulta muestra cada fila entre
+  comillas (`valor`) y su largo. `'b9@ejemplo.com'` (largo 14) y `'b9@ejemplo.com '` (largo 15) son filas
+  distintas.
+
   Deja una sola: la que ya está en minúsculas y sin espacios, si hay una (es la única que la app reconoce); si
   no, decide con el equipo. Borra las otras **de a una**, cada una con esta transacción. Antes, reemplaza los
-  valores: `'fila que dejas'` y `'fila que borras'` por el valor tal cual sale en la consulta de arriba (sin
-  `lower` ni `trim`), y `'nombre@ejemplo.com'` por el email de la baja. Si la fila que borras es dueña de un
+  valores: `'fila que dejas'` y `'fila que borras'`, cada uno entero y con sus comillas, por el `valor` exacto
+  que sale en la consulta de arriba (cópialo de la salida tal cual, con las comillas y los espacios de adentro;
+  sin `lower` ni `trim`), y `'nombre@ejemplo.com'` por el email de la baja. Si la fila que borras es dueña de un
   holding, el `delete` solo fallaría por la FK (`holdings_owner_email_fkey`): por eso el `update` primero pasa
   esos holdings, y solo esos, a la fila que dejas, que es la misma persona:
 
@@ -291,11 +297,13 @@ select public.dar_de_baja_staff('nombre@ejemplo.com');
   Después repite la llamada. Si la persona es dueña de un holding (ahora a nombre de la fila que dejaste), la
   función aborta con el mensaje siguiente: pásalo a otro super admin con esa receta y repite.
 - `Ese email es dueño de un holding (holdings.owner_email)…`: la función lo busca normalizando los dos lados, así
-  que el `owner_email` puede estar guardado con mayúsculas o espacios. Pasa el holding a otro super admin (el
-  email nuevo tiene que estar ya en `super_admin_users`, tal cual):
+  que el `owner_email` puede estar guardado con mayúsculas o espacios. Pasa el holding a otro super admin. El
+  `update` guarda el email nuevo en minúsculas y sin espacios, así que en `super_admin_users` tiene que existir
+  ya esa forma (la que reconoce la app); si en la lista solo está con mayúsculas o espacios, el `update` falla
+  por la FK y no cambia nada:
 
   ```sql
-  update public.holdings set owner_email = lower(trim('otro.super.admin@ejemplo.com'))
+  update public.holdings set owner_email = lower(btrim('otro.super.admin@ejemplo.com'))
   where lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'));
   ```
 
@@ -388,13 +396,15 @@ misma persona. Ningún holding ni fila de otro email queda alcanzado.
 
 ```sql
 begin;
-update public.holdings set owner_email = lower(trim('otro.super.admin@ejemplo.com'))
+update public.holdings set owner_email = lower(btrim('otro.super.admin@ejemplo.com'))
 where lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'));
 delete from public.super_admin_users where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'));
 commit;
 ```
 
-El email nuevo tiene que estar ya en `super_admin_users`, tal cual; si no, el `update` falla y no se borra nada.
+El `update` guarda el email nuevo en minúsculas y sin espacios, así que en `super_admin_users` tiene que existir
+ya esa forma (la que reconoce la app); si no, el `update` falla por la FK y no se borra nada. No alcanza con que
+esté guardado con mayúsculas o espacios, aunque se lo escriba igual.
 Si por error es el mismo email que la baja (con otras mayúsculas o espacios), el `delete` falla por la FK y
 tampoco se cambia nada.
 
