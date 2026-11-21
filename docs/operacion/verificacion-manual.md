@@ -213,9 +213,12 @@ del staff (en `super_admin_users`) y una cuenta de la org de Limitless que **no*
 2. Abrir `https://otc-plaform.vercel.app/superadmin/login`. Resultado: redirige a `/login`.
 3. 🔒⭐ Entrar con la cuenta de la org de Limitless que no está en la lista. Resultado: va al Panel de clientes
    (`/dashboard`), no al panel interno; abrir `/super-admin/organizations` a mano la manda a `/login`.
-4. 🔒 Con la cuenta del staff, si la org de Limitless no completó el onboarding y no tiene `skip_onboarding`,
-   abrir `/super-admin/organizations`. Resultado esperado: el gate de onboarding redirige a `/onboarding`
-   (esperado, ver el paso 3b de la guía); anotarlo si pasa sin haberse decidido el paso 3b.
+4. 🔒 Con la cuenta del staff, abrir `/super-admin/organizations`. Resultado esperado: entra al panel interno sin
+   pasar por `/onboarding`. La org de Limitless ya tiene `skip_onboarding = true` o el gate completado: si no los
+   tenía, la migración del paso 5 de la guía (y `select public.asociar_staff_a_la_org_de_limitless();`) aborta
+   sin cambios con el mensaje del paso 3b, el staff no queda asociado a la org y la ventana no llega a este
+   bloque hasta hacer el 3b. Si igual redirige a `/onboarding`, anotarlo: alguien cambió `skip_onboarding` o el
+   gate de la org después de la ventana (P0b de la guía lo muestra).
 5. 🔒⭐ Con una cuenta de staff de prueba, después de la ventana (paso 5b de la guía), correr en el SQL Editor
    `select public.dar_de_baja_staff('<email de la cuenta de prueba>');`. Resultado: `perfil_desactivado`; esa
    cuenta ya no entra a `/super-admin/organizations` ni ve datos de la org de Limitless.
