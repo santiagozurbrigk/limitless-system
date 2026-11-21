@@ -374,15 +374,18 @@ returning email;
 
 Es un solo statement, así que se aplica entero o no se aplica. **Resultado esperado:** 1 fila con el email.
 
-Si no devuelve ninguna fila, el email no coincide con ninguna de la lista. Busca cómo está guardado con
-`select email from public.super_admin_users;` y borra esa fila por su valor exacto, tal cual sale, sin
-`lower` ni `trim`:
+Si no devuelve ninguna fila, puede estar guardado con mayúsculas o espacios. No copies el valor de una consulta:
+un espacio al final no se ve. Bórralo comparando normalizado los dos lados, como la función:
 
 ```sql
 delete from public.super_admin_users
-where email = 'valor tal cual sale en la consulta'
-returning email;
+where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'))
+returning quote_literal(email) as email_guardado, length(email) as largo;
 ```
+
+**Resultado esperado:** las filas de ese email, entre comillas y con su largo, para ver qué tenían de más. Si
+tampoco devuelve ninguna, el email no está en la lista. Para ver cómo está guardada cada fila, con los espacios
+a la vista: `select quote_literal(email), length(email) from public.super_admin_users;`.
 
 Una fila con mayúsculas o espacios nunca dio acceso (la app compara contra el email limpio y en minúsculas),
 pero conviene borrarla para que la lista refleje la realidad.
