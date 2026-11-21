@@ -32,7 +32,10 @@ vi.mock("@/lib/auth/limite-login", () => ({
   limiteDeLogin: async () => ({ allowed: true, resetAt: 0 }),
 }));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
-vi.mock("@/lib/auth/require-super-admin", () => ({ isSuperAdminEmail: async () => false }));
+vi.mock("@/lib/auth/require-staff", async (importOriginal) => ({
+  DESTINO_DEL_STAFF: (await importOriginal<typeof import("@/lib/auth/require-staff")>()).DESTINO_DEL_STAFF,
+  isStaffEmail: async () => false,
+}));
 vi.mock("@/lib/auth/bootstrap", () => ({
   ensureCurrentUserBootstrap: async () => {
     sim.bootstraps += 1;

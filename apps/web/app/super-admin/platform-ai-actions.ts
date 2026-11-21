@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import { requireStaff } from "@/lib/auth/require-staff";
 import {
   assertClaudeKeyFormat,
   validateClaudeApiKey,
@@ -23,7 +23,7 @@ import { paths } from "@/routes";
  */
 
 export async function getPlatformClaudeKeyStatusAction(): Promise<PlatformClaudeKeyStatus> {
-  await requireSuperAdmin();
+  await requireStaff();
   return getPlatformClaudeKeyStatus();
 }
 
@@ -33,7 +33,7 @@ export async function savePlatformClaudeKeyAction(
   MutationResult<{ maskedKey: string; status: "valid" | "valid_no_credits" }>
 > {
   return runMutation(async () => {
-    const user = await requireSuperAdmin();
+    const user = await requireStaff();
     const trimmed = String(apiKey ?? "").trim();
     assertClaudeKeyFormat(trimmed);
 
@@ -50,7 +50,7 @@ export async function savePlatformClaudeKeyAction(
 
 export async function removePlatformClaudeKeyAction(): Promise<MutationResult> {
   return runMutation(async () => {
-    const user = await requireSuperAdmin();
+    const user = await requireStaff();
     await removePlatformClaudeKey(user.id);
     revalidatePath(paths.superAdmin.infrastructure);
     return undefined;

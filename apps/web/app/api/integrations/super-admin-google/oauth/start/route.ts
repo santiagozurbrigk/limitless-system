@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import { requireStaff } from "@/lib/auth/require-staff";
 import { createGooglePkce, getGoogleEnv, googleAuthUrl } from "@/lib/google/oauth";
 import { GOOGLE_FORMS_DRIVE_SCOPES } from "@/lib/google/scopes";
 
@@ -16,7 +16,7 @@ export async function GET(_request: NextRequest) {
     return NextResponse.json({ error: "Faltan env Google" }, { status: 500 });
   }
 
-  const user = await requireSuperAdmin();
+  const user = await requireStaff();
   const state = crypto.randomBytes(18).toString("hex");
   const { codeVerifier, codeChallenge } = createGooglePkce();
 
