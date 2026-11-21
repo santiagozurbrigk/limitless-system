@@ -253,8 +253,43 @@ select public.dar_de_baja_staff('nombre@ejemplo.com');
   where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'));
   ```
 
-  Decide a mano con el equipo cuál dejar, borra las otras por su valor exacto con el `delete` de "Si la función
-  todavía no existe" (el de `'valor tal cual sale en la consulta'`) y repite la llamada.
+  Deja una sola: la que ya está en minúsculas y sin espacios, si hay una (es la única que la app reconoce); si
+  no, decide con el equipo. Borra las otras **de a una**, cada una con esta transacción. Antes, reemplaza los
+  valores: `'fila que dejas'` y `'fila que borras'` por el valor tal cual sale en la consulta de arriba (sin
+  `lower` ni `trim`), y `'nombre@ejemplo.com'` por el email de la baja. Si la fila que borras es dueña de un
+  holding, el `delete` solo fallaría por la FK (`holdings_owner_email_fkey`): por eso el `update` primero pasa
+  esos holdings, y solo esos, a la fila que dejas, que es la misma persona:
+
+  ```sql
+  begin;
+  update public.holdings set owner_email = 'fila que dejas'
+  where owner_email = 'fila que borras'
+    and lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'))
+    and lower(btrim('fila que dejas')) = lower(btrim('nombre@ejemplo.com'))
+    and 'fila que dejas' <> 'fila que borras';
+  delete from public.super_admin_users
+  where email = 'fila que borras'
+    and email <> 'fila que dejas'
+    and lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'))
+    and lower(btrim('fila que dejas')) = lower(btrim('nombre@ejemplo.com'))
+    and exists (select 1 from public.super_admin_users k where k.email = 'fila que dejas');
+  commit;
+  ```
+
+  Las condiciones impiden tocar a otra persona o la fila que dejas. Si `'fila que borras'` no es el mismo email
+  que la baja, o es igual a `'fila que dejas'`, no se cambia nada. Si `'fila que dejas'` no es el mismo email que
+  la baja o no está en la lista tal cual, el `delete` no borra nada; y si había un holding, el `update` no lo
+  mueve o falla por la FK, y la transacción no deja cambios. Como el SQL Editor solo muestra el resultado del
+  último statement, verifica con la consulta de arriba (**esperado:** una sola fila, la que dejas) y con esta
+  (**esperado:** `0`):
+
+  ```sql
+  select count(*) as holdings_de_la_fila_borrada from public.holdings
+  where owner_email = 'fila que borras';
+  ```
+
+  Después repite la llamada. Si la persona es dueña de un holding (ahora a nombre de la fila que dejaste), la
+  función aborta con el mensaje siguiente: pásalo a otro super admin con esa receta y repite.
 - `Ese email es dueño de un holding (holdings.owner_email)…`: la función lo busca normalizando los dos lados, así
   que el `owner_email` puede estar guardado con mayúsculas o espacios. Pasa el holding a otro super admin (el
   email nuevo tiene que estar ya en `super_admin_users`, tal cual):
@@ -346,24 +381,31 @@ pero conviene borrarla para que la lista refleje la realidad.
 
 Si el borrado falla porque `holdings.owner_email` lo referencia (`holdings_owner_email_fkey`), el email es
 dueño de un holding. La app no tiene pantalla para cambiarlo: pasa el holding a otro super admin en la misma
-transacción, antes de borrar.
+transacción, antes de borrar. Las dos sentencias comparan normalizando los dos lados, como la función
+(`lower(btrim(...))`): el `update` pasa los holdings de cualquier fila que sea ese email, aunque esté guardada
+con mayúsculas o espacios, y el `delete` saca todas esas filas, la bien cargada y las mal cargadas, que son la
+misma persona. Ningún holding ni fila de otro email queda alcanzado.
 
 ```sql
 begin;
 update public.holdings set owner_email = lower(trim('otro.super.admin@ejemplo.com'))
-where owner_email = lower(trim('nombre@ejemplo.com'));
-delete from public.super_admin_users where email = lower(trim('nombre@ejemplo.com'));
+where lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'));
+delete from public.super_admin_users where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'));
 commit;
 ```
 
-El email nuevo tiene que estar ya en `super_admin_users`; si no, el `update` falla y no se borra nada.
+El email nuevo tiene que estar ya en `super_admin_users`, tal cual; si no, el `update` falla y no se borra nada.
+Si por error es el mismo email que la baja (con otras mayúsculas o espacios), el `delete` falla por la FK y
+tampoco se cambia nada.
 
 Como el SQL Editor sólo muestra el resultado del último statement, verifica después:
 
 ```sql
 select
-  (select count(*) from public.super_admin_users where email = lower(trim('nombre@ejemplo.com'))) as sigue_en_lista,
-  (select count(*) from public.holdings where owner_email = lower(trim('nombre@ejemplo.com'))) as holdings_a_su_nombre;
+  (select count(*) from public.super_admin_users
+     where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'))) as sigue_en_lista,
+  (select count(*) from public.holdings
+     where lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'))) as holdings_a_su_nombre;
 ```
 
 **Resultado esperado:** `0` y `0`.
