@@ -201,8 +201,8 @@ provocar a mano sin tocar la base es un `notFound()`.
 
 Lo que cubren los tests (Supabase simulado y la base del CI): `app/auth/__tests__/login-del-staff.test.ts`,
 `lib/supabase/__tests__/middleware-login-del-staff.test.ts`, `app/super-admin/__tests__/guard-de-staff-por-accion.test.ts`
-`supabase/ci/tests/98_staff_en_org_de_limitless.sql` y `supabase/ci/tests/99_baja_de_staff.sql` (este último no se
-corrió en la HU: se verifica en la ventana). Queda verlo en producción, después de la ventana de
+`supabase/ci/tests/98_staff_en_org_de_limitless.sql` y `supabase/ci/tests/99_baja_de_staff.sql` (los dos corren en
+la base del CI, job `migrations`; en la ventana se confirma contra producción). Queda verlo en producción, después de la ventana de
 SCRUM-532 ([`staff-en-org-de-limitless.md`](staff-en-org-de-limitless.md), paso 8).
 
 **Prerrequisitos:** 523 y 552 aplicadas; la org de Limitless marcada (`experience = 'limitless'`); una cuenta
