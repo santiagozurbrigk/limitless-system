@@ -541,6 +541,39 @@ const DEFINITIONS: IntegrationDefinition[] = [
     localDocs: "docs/external-apis/hyros/RESUMEN-LIMITLESS.md",
     listed: true,
   },
+  {
+    // Limitless Webinars (SCRUM-527): la landing del lanzamiento manda los
+    // registros y las visitas con una clave de ingesta que se crea acá. El
+    // endpoint que las recibe es SCRUM-528.
+    provider: "landing",
+    name: "Landing",
+    category: "embudos",
+    auth: "api_key",
+    summary:
+      "Registros y visitas de la landing del webinar, enviados por la propia landing con una clave de ingesta.",
+    feeds: ["Limitless Webinars: registros y visitas del lanzamiento"],
+    dataFlows: [
+      {
+        direction: "in",
+        label: "Registros al webinar",
+        lands: "landing_events, leads y launch_registrations",
+        transport: "webhook",
+      },
+      {
+        direction: "in",
+        label: "Visitas a la landing",
+        lands: "landing_events y landing_visits",
+        transport: "webhook",
+      },
+    ],
+    connect: "panel",
+    // Escondida hasta que exista la experiencia webinar por organización
+    // (SCRUM-523/524).
+    listed: !ESCONDIDO.ingestaLanding,
+    unlistedReason: ESCONDIDO.ingestaLanding
+      ? "Escondida hasta que la organización tenga la experiencia webinar (SCRUM-523/524)."
+      : undefined,
+  },
 
   // ── Cobros ─────────────────────────────────────────────────────────────────
   {

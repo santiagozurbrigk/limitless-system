@@ -75,6 +75,7 @@ Cada ítem es una bandera en `apps/web/lib/release/escondido.ts`; para volver a 
 | ManyChat en el catálogo de Integraciones | Lo que trae va a una bandeja que ninguna pantalla muestra; las 4 orgs conectadas siguen recibiendo | — | `integracionManyChat` |
 | `/redesign-preview`, `/demo` y `/design-system` (responden 404); "Recorrido guiado (demo)" sale del ⌘K y de la página de error | Pantallas internas o maquetas | — | `pantallasInternas` |
 | `/lanzamientos` (redirige al Panel) | "Próximamente", 0 lanzamientos | — | `lanzamientos` |
+| Landing en el catálogo de Integraciones (claves de ingesta de Limitless Webinars, SCRUM-527); las acciones de las claves responden que no está disponible | No está roto: es nuevo y espera la experiencia webinar por organización (SCRUM-523/524) | — | `ingestaLanding` |
 
 Además, el buscador ⌘K ya no lista las pantallas que el menú esconde (Administrar, Conexión con Ventas, UTMs,
 Overview de Marketing): se arma desde el mismo config filtrando `hidden`.

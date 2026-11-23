@@ -25,6 +25,7 @@ export const INTEGRATION_PROVIDERS = [
   "vturb",
   "webinarjam",
   "hyros",
+  "landing",
   // Pagos
   "whop",
   "fanbasis",

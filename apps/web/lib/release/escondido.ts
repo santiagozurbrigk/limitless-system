@@ -32,4 +32,12 @@ export const ESCONDIDO = {
   pantallasInternas: true,
   /** `/lanzamientos`: "Próximamente", sin lanzamientos cargados. */
   lanzamientos: true,
+  /**
+   * Integraciones → Landing: las claves de ingesta de Limitless Webinars
+   * (SCRUM-527). No es algo roto: es nuevo y todavía no tiene a quién
+   * mostrarse. Con `true` no se lista la entrada ni se monta su panel, y las
+   * acciones de las claves responden que no está disponible. SCRUM-523/524 la
+   * pasan a depender de la experiencia webinar de la organización.
+   */
+  ingestaLanding: true,
 } as const;

@@ -14,6 +14,7 @@ import { getHyrosStatusAction } from "@/app/hyros/actions";
 import { listUnlinkedRecordingsAction } from "@/app/fathom/sales-call-actions";
 import { getCurrentUserIdAction } from "@/app/auth/current-user-actions";
 import { getManyChatIntegrationStatusAction } from "@/app/manychat/actions";
+import { listarClavesDeIngestaAction } from "@/app/webinar/claves-de-ingesta-actions";
 import { IntegrationsBoard } from "@/components/integrations";
 import { VTurbSettings } from "@/components/integrations/settings/vturb-settings";
 import { HyrosSettings } from "@/components/integrations/settings/hyros-settings";
@@ -22,8 +23,10 @@ import { GHLOpportunitiesSettings } from "@/components/integrations/settings/ghl
 import { PaymentSettings } from "@/components/integrations/settings/payment-settings";
 import { FathomSettings } from "@/components/integrations/settings/fathom-settings";
 import { ManyChatSettings } from "@/components/integrations/settings/manychat-settings";
+import { LandingSettings } from "@/components/integrations/settings/landing-settings";
 import { PageHeader } from "@/components/shared/page-header";
 import type { IntegrationProvider } from "@/constants/integrations";
+import { ESCONDIDO } from "@/lib/release/escondido";
 import { paths } from "@/routes";
 import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
 
@@ -50,6 +53,7 @@ export default async function IntegrationsPage() {
     unlinkedRecordings,
     currentUserId,
     manychat,
+    clavesDeIngesta,
   ] = await Promise.all([
     getIntegrationsOverviewAction(),
     getPaymentIntegrationsStatusAction(),
@@ -61,6 +65,8 @@ export default async function IntegrationsPage() {
     listUnlinkedRecordingsAction(),
     getCurrentUserIdAction(),
     getManyChatIntegrationStatusAction(),
+    // Landing (SCRUM-527): escondida, ni se leen las claves.
+    ESCONDIDO.ingestaLanding ? null : listarClavesDeIngestaAction(),
   ]);
 
   const stateOf = (provider: IntegrationProvider) =>
@@ -85,6 +91,20 @@ export default async function IntegrationsPage() {
   if (manychat.connected) {
     settings.manychat = (
       <ManyChatSettings webhookUrl={manychat.webhookUrl ?? null} />
+    );
+  }
+
+  // Las claves vuelven como valor: sin permiso o con la base caída, el panel
+  // muestra el motivo en vez de tirar la pantalla.
+  if (clavesDeIngesta) {
+    settings.landing = (
+      <LandingSettings
+        lectura={
+          clavesDeIngesta.success
+            ? { ok: true, data: clavesDeIngesta.data }
+            : { ok: false, motivo: clavesDeIngesta.error }
+        }
+      />
     );
   }
 
