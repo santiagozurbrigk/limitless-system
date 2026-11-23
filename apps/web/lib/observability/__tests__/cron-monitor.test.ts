@@ -17,9 +17,10 @@ describe("monitores de crons (SCRUM-84)", () => {
     expect(horarioDeCron("/api/no-existe")).toBeUndefined();
   });
 
-  it("los 19 crons de vercel.json tienen monitor, con slugs distintos", () => {
+  it("los 20 crons de vercel.json tienen monitor, con slugs distintos", () => {
     const rutas = rutasDeCrons();
-    expect(rutas).toHaveLength(19);
+    // 20 desde SCRUM-528 (reproceso de la landing de Limitless Webinars).
+    expect(rutas).toHaveLength(20);
     expect(new Set(rutas.map(slugDeCron)).size).toBe(rutas.length);
 
     for (const ruta of rutas) {
