@@ -13,6 +13,22 @@ al terminar cada bloque de trabajo, aunque sea chico.
 ## Formato de entrada
 
 ```
+### 2026-11-23 — Kit de la landing del piloto para mandar registros y visitas a Limitless (SCRUM-530)
+
+**Rama:** `claude/scrum-530-landing-piloto`
+**Commit(s):** este
+**Módulo(s) afectado(s):** docs `integraciones/landing-del-piloto/` (nuevo: `README.md`, `limitless.js`, `register.js`, `visit.js`), `operacion/verificacion-manual.md` (V-LANDING-1)
+
+**Qué se hizo:**
+- Kit para copiar en la landing del piloto (proyecto aparte, en Vercel): `api/register.js` manda el registro a GHL y a Limitless en paralelo con `Promise.allSettled`, con timeout de 3 s por destino y un único reintento a Limitless al segundo si responde 500; `api/visit.js` manda la visita con la clave del lado del servidor; `limitless.js` arma los eventos del contrato de SCRUM-528.
+- La respuesta al navegador depende sólo de GHL: Limitless no puede romper la landing. Los logs llevan sólo estados, sin datos personales.
+- `client_registration_id` es un `randomUUID()` por registro, reusado sólo en el reintento: Limitless lo deduplica, y nunca se reusa para la misma persona en otro lanzamiento (revisión del #146).
+- Probado con un `fetch` simulado: 500 y después 200 da 2 intentos con el mismo id; 400 da 1 intento; el timeout corta a los 3 s; sin clave no se envía nada.
+
+**Por qué / finalidad:** dejar listo el cambio de la landing del piloto mientras no hay cliente piloto ni acceso a su landing.
+
+**Riesgos / deuda técnica pendiente:** falta adaptar la llamada actual a GHL en `register.js` y probar con un registro real (V-LANDING-1). Depende de SCRUM-522 (cliente piloto) y de los merges de 526–528.
+
 ### AAAA-MM-DD — Título corto del cambio
 
 **Rama:** `nombre-de-la-rama`

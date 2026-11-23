@@ -809,6 +809,16 @@ con una sesión real.
 
 ---
 
+### V-LANDING-1 · Landing del piloto enviando a Limitless (SCRUM-530) ⭐🔒
+
+**Prerrequisitos:** cliente piloto elegido y acceso a su landing (SCRUM-522); migraciones de 526 y 528 aplicadas y PRs mergeados (SCRUM-532); un lanzamiento del piloto con su `public_id`; una clave de ingesta creada; el kit de `docs/integraciones/landing-del-piloto/` copiado en la landing, con la llamada a GHL adaptada y las variables cargadas en Vercel.
+
+1. ⭐ Registrarse en la landing con un email de prueba. Resultado: el registro aparece una sola vez en Leads del lanzamiento, con sus UTM, y GHL lo recibe igual que antes.
+2. Repetir el registro en el mismo navegador. Resultado: un segundo registro (otro `client_registration_id`), no un duplicado del primero.
+3. Abrir la landing desde otro navegador. Resultado: el embudo suma un visitante en «Visitaron la landing».
+4. 🔒 Ver el código fuente de la página en el navegador. Resultado: la clave `lmt_ing_` no aparece por ningún lado.
+5. ⚠️ Cambiar `LIMITLESS_INGEST_KEY` por una inválida y registrarse. Resultado: la landing responde igual (GHL recibe el registro), y en el log de la landing queda `limitless: 401`, sin datos personales.
+
 ## Agente de negocio e IA
 
 Marcas: ⚠️ alta probabilidad de falla · 🔒 verifica seguridad · ⭐ verifica regla central.
