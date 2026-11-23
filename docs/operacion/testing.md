@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot`, `apps/reel-worker` | sí (`pnpm typecheck`, job `checks`) |
 | Lint | ESLint 9 (`next lint` en web; `eslint src/` con la base de `packages/config` en ui, reel-worker y bot) | `apps/web`, `packages/ui`, `apps/reel-worker`, `apps/discord-bot` | sí (`pnpm lint`, job `checks`) |
-| Unitarios | Vitest 3, entorno `node` | `apps/web` (306 archivos) | sí (`pnpm test`) |
+| Unitarios | Vitest 3, entorno `node` | `apps/web` (315 archivos) | sí (`pnpm test`) |
 | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** (se activa con staging, ver E2E) |
 | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
 | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
@@ -82,7 +82,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
 
 ## Cobertura actual por área
 
-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **306 archivos, ~3.581 casos** (SCRUM-542 suma sobre la cadena, recontado en la cadena de prueba con `contar-casos`; SCRUM-552 suma sobre la cadena, recontado en la cadena de prueba con `contar-casos`; SCRUM-524 suma sobre main con 540 y 523, recontado en la cadena de prueba con `contar-casos`; SCRUM-540 suma 12 archivos y 104 casos; el runner ejecuta 4.389. SCRUM-523 suma 6 archivos y 45 casos (merge de prueba de la cadena). Recontado el 2026-10-13 con la AR pasada 2 de SCRUM-502 integrada sobre la rama de SCRUM-519, base `main` `0353ec05`, que tenía 251 archivos y 2.848 casos, con `contar-casos.py` de la evidencia; el runner ejecuta 4.226 por los `it.each`, 3.859 en `main`; la tabla lista todas las carpetas con tests y sus filas suman ese total; las carpetas anidadas, como `app/api/integrations/fathom`, cuentan en la fila de su carpeta padre). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **315 archivos, ~3.692 casos** (SCRUM-545 suma sobre la cadena, recontado en la cadena de prueba con `contar-casos`; SCRUM-542 suma sobre la cadena, recontado en la cadena de prueba con `contar-casos`; SCRUM-552 suma sobre la cadena, recontado en la cadena de prueba con `contar-casos`; SCRUM-524 suma sobre main con 540 y 523, recontado en la cadena de prueba con `contar-casos`; SCRUM-540 suma 12 archivos y 104 casos; el runner ejecuta 4.389. SCRUM-523 suma 6 archivos y 45 casos (merge de prueba de la cadena). Recontado el 2026-10-13 con la AR pasada 2 de SCRUM-502 integrada sobre la rama de SCRUM-519, base `main` `0353ec05`, que tenía 251 archivos y 2.848 casos, con `contar-casos.py` de la evidencia; el runner ejecuta 4.226 por los `it.each`, 3.859 en `main`; la tabla lista todas las carpetas con tests y sus filas suman ese total; las carpetas anidadas, como `app/api/integrations/fathom`, cuentan en la fila de su carpeta padre). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
 
 | Carpeta | Archivos | Casos | Qué cubre |
 |---|---|---|---|

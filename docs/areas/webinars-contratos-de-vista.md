@@ -4,7 +4,7 @@ SCRUM-542 (A2 del plan "UI primero, datos después"). Qué recibe cada pantalla 
 y qué cambia cuando lea la base (B4). Es la referencia para construir Inicio (SCRUM-543), Lanzamientos
 (SCRUM-544), Leads y la Ficha (SCRUM-545) y la Configuración del lanzamiento.
 
-Código: `apps/web/lib/webinar/vistas/`. Las pantallas todavía no existen.
+Código: `apps/web/lib/webinar/vistas/`. Leads y la ficha del lead (SCRUM-545) ya existen, en `apps/web/app/(platform)/leads/`; las demás pantallas todavía no.
 
 ## La regla
 
@@ -106,7 +106,7 @@ Las tres pantallas de un lanzamiento o de un lead devuelven `Lectura` (`lib/clie
 
 ```tsx
 const lectura = await leerDetalleDelLanzamiento(params.id);
-if (!lectura.ok) return <ErrorDeCarga motivo={lectura.motivo} />;
+if (!lectura.ok) return <ErrorDeCarga motivo={lectura.motivo} />; // components/webinar/aviso-de-estado.tsx
 if (!lectura.data) notFound();
 const vista = lectura.data;
 ```

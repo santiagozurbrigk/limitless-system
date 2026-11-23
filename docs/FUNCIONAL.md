@@ -42,13 +42,13 @@ cambio, igual que el doc técnico del área.
 | [Clientes](#clientes) | 28 | 20 | 5 | 0 | 1 | 2 |
 | [Ventas](#ventas) | 28 | 14 | 9 | 2 | 2 | 1 |
 | [Marketing](#marketing) | 27 | 9 | 7 | 4 | 3 | 4 |
-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 24 | 11 | 3 | 1 | 3 | 6 |
+| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 25 | 11 | 3 | 1 | 4 | 6 |
 | [Agente de negocio e IA](#agente-de-negocio-e-ia) | 28 | 15 | 10 | 0 | 3 | 0 |
 | [Operaciones y equipo](#operaciones-y-equipo) | 23 | 16 | 4 | 0 | 2 | 1 |
 | [Finanzas](#finanzas) | 12 | 6 | 4 | 0 | 2 | 0 |
 | [Producto](#producto) | 15 | 13 | 0 | 0 | 2 | 0 |
 | [Discord](#discord) | 13 | 0 | 2 | 0 | 1 | 10 |
-| **Total** | **228** | **116** | **57** | **8** | **22** | **25** |
+| **Total** | **229** | **116** | **57** | **8** | **23** | **25** |
 
 Lecturas rápidas:
 
@@ -362,6 +362,7 @@ Doc técnico: [`docs/areas/embudos.md`](./areas/embudos.md)
 | F-EMB-22 | El sistema guarda la historia de cada embudo por período y manda un pulso diario | A medias | `EMBUDOS-SNAPSHOTS` | [`areas/embudos.md` § Modelo de datos](./areas/embudos.md#modelo-de-datos) · `lib/funnels/resolve.ts` | |
 | F-EMB-23 | El founder puede crear lanzamientos con objetivos, cargar métricas diarias y generar un post-mortem con IA | A medias | `LANZAMIENTOS-DORMIDO` | [`areas/embudos.md` § Lanzamientos](./areas/embudos.md#lanzamientos) · `app/(platform)/lanzamientos/page.tsx` | |
 | F-EMB-24 | El equipo puede asignar tareas del Tablero de trabajo a un lanzamiento y filtrar por lanzamiento | Funciona | `LANZAMIENTOS-DORMIDO` | [`areas/embudos.md` § Lanzamientos](./areas/embudos.md#lanzamientos) · `app/(platform)/workboard/page.tsx` | |
+| F-EMB-25 | En Limitless Webinars, el setter puede ver los leads de un lanzamiento en `/leads` (etapa, origen, responsable y último contacto, con los filtros de trabajo y su conteo en la URL), abrir la ficha de cada uno (WhatsApp, registros, línea de tiempo con la fuente, compras) y marcar avance, asignar responsable o agregar una nota; hoy sólo la organización de demo ve datos (de ejemplo) y esas tres acciones no se guardan: la ficha avisa que el cambio es de ejemplo y se pierde al recargar | A medias | `WEBINAR-LEADS-PERSISTIR`, `WEBINAR-VISTAS-LECTURA-REAL`, `WEBINAR-ORG-DE-DEMO`, `WEBINAR-LEADS-CREAR-LANZAMIENTO`, `WEBINAR-LEADS-SIN-ORGANIZACION` | [`areas/webinars-contratos-de-vista.md`](./areas/webinars-contratos-de-vista.md) · `app/(platform)/leads/page.tsx` · `app/(platform)/leads/[id]/page.tsx` | |
 
 ### Prometido y no existe
 

@@ -86,10 +86,10 @@ describe("⭐ paleta de una organización full: igual que antes", () => {
 });
 
 describe("⭐ paleta de una organización webinar", () => {
-  it("el pie lleva a la pantalla de inicio y sólo lista Equipo", () => {
-    const p = paleta("webinar", "/team", FOUNDER);
-    expect(p.pie).toEqual(["Ir al inicio /team"]);
-    expect(p.items).toEqual(["Equipo"]);
+  it("el pie lleva a la pantalla de inicio y sólo lista Leads y Equipo", () => {
+    const p = paleta("webinar", "/leads", FOUNDER);
+    expect(p.pie).toEqual(["Ir al inicio /leads"]);
+    expect(p.items).toEqual(["Leads", "Equipo"]);
   });
 
   it("un miembro sin Equipo: el pie lleva a Ajustes y no lista nada", () => {

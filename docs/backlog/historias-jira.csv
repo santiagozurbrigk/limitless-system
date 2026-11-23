@@ -1127,6 +1127,26 @@ Funcionalidad: F-EMB-21 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
 * Agustín: ¿el pulso diario que ya existe tiene que sumar los números de los embudos?
 
 Funcionalidad: F-EMB-22 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-22]",H-EMB-22,Embudos y Lanzamientos,P2,,EMBUDOS-SNAPSHOTS,
+[H-EMB-25] Seguir a los leads de un lanzamiento y marcar su avance (Limitless Webinars),Story,Medium,historia,embudos-y-lanzamientos,p2,para-confirmar,,,"*Historia:* Como setter de Limitless Webinars, quiero ver a los leads de un lanzamiento filtrados por lo que falta hacer y marcar el avance de cada uno desde su ficha, para encontrar rápido a quien levantó la mano y no dejar a nadie sin contactar.
+
+*Criterios de aceptación:*
+* Dado un lanzamiento con leads, cuando abro {{/leads?filtro=levanto_la_mano_sin_contactar}}, entonces veo ese filtro aplicado, con su conteo, y llego a marcar avance en 2 clics: la fila y el botón de la ficha.
+* Dado que marco avance, asigno responsable o agrego una nota, entonces el cambio queda guardado y lo ve el resto del equipo al recargar (hoy es de ejemplo y la ficha lo avisa).
+* Dada una organización que no es la de demo, cuando abro {{/leads}}, entonces veo sus leads reales y nunca un cero ni una lista inventada cuando una fuente no está conectada.
+* Dada una organización sin lanzamientos, cuando abro {{/leads}}, entonces veo cómo crear uno.
+
+*Tareas técnicas (PENDIENTES.md):*
+* [WEBINAR-LEADS-PERSISTIR] Las acciones de la ficha del lead guardan de verdad y /leads lee la base (B4) (P2)
+* [WEBINAR-VISTAS-LECTURA-REAL] Las funciones de lectura de Webinars leen la base (B4) (P2)
+* [WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars (P2)
+* [WEBINAR-LEADS-CREAR-LANZAMIENTO] El estado vacío de Leads no tiene enlace para crear un lanzamiento (P3)
+* [WEBINAR-LEADS-SIN-ORGANIZACION] Una cuenta sin organización que abre /leads deja dos eventos en Sentry (P3)
+
+*Para confirmar:*
+* Martín: ""menos de 3 clics"" se interpretó como 2 desde la lista ya filtrada (abrir la ficha y pulsar el botón de avance).
+* ---
+
+Funcionalidad: F-EMB-25 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-25]",H-EMB-25,Embudos y Lanzamientos,P2,,WEBINAR-LEADS-PERSISTIR WEBINAR-VISTAS-LECTURA-REAL WEBINAR-ORG-DE-DEMO WEBINAR-LEADS-CREAR-LANZAMIENTO WEBINAR-LEADS-SIN-ORGANIZACION,
 [H-FIN-11] Ver cobros y saldo de Stripe,Story,Medium,historia,operaciones-y-equipo,p2,para-confirmar,,,"*Historia:* Como founder, quiero conectar mi cuenta de Stripe y ver mis cobros y saldo, para tener mi plata en un solo lugar.
 
 *Criterios de aceptación:*
@@ -1475,7 +1495,6 @@ Funcionalidad: F-VEN-16 · No funciona · docs/FUNCIONAL.md · Fuente: docs/back
 
 *Para confirmar:*
 * Decisión: construir lo que falta o sacarlo de la pantalla.
-* ---
 
 Funcionalidad: F-EMB-23 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-23]",H-EMB-23,Embudos y Lanzamientos,P3,,LANZAMIENTOS-DORMIDO,
 [H-OPS-19] Dar de alta a un miembro con el rol correcto,Story,Low,historia,operaciones-y-equipo,p3,para-confirmar,,,"*Historia:* Como founder, quiero dar de alta a un miembro con un rol y que reciba una contraseña temporal para su primer ingreso, para sumar gente al equipo con el acceso justo.
