@@ -28,6 +28,27 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-23 — Documentación oficial de Zoom y resumen para decidir si entra la integración de webinars (SCRUM-531, parte de escritorio)
+
+**Rama:** `claude/scrum-531-zoom-docs` (base `main` `f4c02c8b`)
+**Commit(s):** este
+**Módulo(s) afectado(s):** documentación. `docs/external-apis/zoom/` (nuevo), `docs/external-apis/tools/{regenerar.sh,build_zoom.py,zoom-urls.txt,README.md}`, `docs/external-apis/README.md`, `docs/integraciones/README.md`, `docs/integraciones/apis-sin-documentacion.md`.
+
+**Qué se hizo:**
+- Se bajaron de `developers.zoom.us` los 4 specs OpenAPI oficiales que el sitio anuncia en `/.well-known/api-catalog.json` (Meetings métodos y eventos, Marketplace métodos y eventos) a `docs/external-apis/zoom/openapi/`, y 34 guías en el markdown que sirve el sitio (OAuth, tipos de app, distribución privada/beta/publicada, revisión del Marketplace, webhooks, rate limits) a `zoom/guias/`, con `title`/`source`/`capturado` en el front-matter.
+- Referencias legibles generadas con `openapi_md.py`, recortadas a lo que usa Limitless: `ENDPOINTS-webinars-y-reportes.md` (26 endpoints), `WEBHOOKS-webinars.md` (24 `webinar.*` + 7 `meeting.*`) y `MARKETPLACE-suscripciones-y-eventos.md` (suscripciones de eventos por API, logs, `app_deauthorized`).
+- `RESUMEN-LIMITLESS.md` responde registro de leads, asistencia por sesión, momento del reporte, plan, conexión multi-cliente, webhooks y rate limits, con veredicto provisorio **luz verde condicionada** y 12 pruebas concretas para la cuenta real.
+- Proveedor `zoom` en `regenerar.sh` (+ `build_zoom.py`, `zoom-urls.txt`); Zoom en los índices de `external-apis` y de integraciones.
+
+**Por qué / finalidad:** SCRUM-531 pide decidir si la integración de Zoom entra. Sin cuenta de Zoom, esta es la parte de documentación; la prueba real queda como checklist en el resumen.
+
+**Decisiones de diseño relevantes:**
+- Se guardan los specs completos pero la referencia en markdown es un recorte: el spec de Meetings renderizado entero pasa de 1 MB y casi todo es ajeno al producto. `zoom-urls.txt` es una lista a mano por la misma razón (el `llms.txt` de Zoom lista más de 1.100 páginas).
+- Hallazgos que condicionan el diseño: la asistencia viene **por tramo** (cada re-ingreso es otra fila), así que "se quedó hasta la oferta" se calcula por `registrant_id` y no sumando `duration`; con el ID del webinar los reportes devuelven sólo la **última instancia** (para una sesión concreta hace falta el UUID de `past_webinars/{id}/instances`); el reporte exige scope `report:read:admin`, o sea app **admin-managed**; Zoom **no documenta** cuándo está listo el reporte.
+- Una app no publicada sirve en cuentas de terceros sólo como **beta**: 10 cuentas (app de cuenta), 90 días como máximo y paquete de seguridad (SSDLC, SAST, DAST, privacidad y 3 de 5 políticas). Para producción hay que publicarla (listed o unlisted) y pasar revisión. Se deja documentado el plan B: S2S creado por cada cliente en su cuenta, con la duda de si los términos de Zoom lo permiten.
+
+**Riesgos / deuda técnica pendiente:** nada de esto se probó con una cuenta real (checklist al final de `docs/external-apis/zoom/RESUMEN-LIMITLESS.md`). No se bajaron las páginas comerciales de zoom.us (capacidades y precios por plan) ni el *Marketplace Developer Agreement*. La lista de proveedores con doc local de `CLAUDE.md` § 3 no se tocó (no nombra Zoom).
+
 ### 2026-10-20 — Las páginas y el marco de la plataforma chequean el módulo antes de leer, con mínimo privilegio (SCRUM-540)
 
 **Rama:** `fix/SCRUM-540-permisos-lecturas-por-modulo` (base `main` `4a542e5e`)

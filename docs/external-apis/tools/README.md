@@ -13,7 +13,7 @@ python3 -m pip install beautifulsoup4 lxml pyyaml playwright
 git diff docs/external-apis                          # revisar qué cambió del lado del proveedor
 ```
 
-Proveedores: `gohighlevel` `vturb` `whop` `commas` `hyros` `webinarjam`.
+Proveedores: `gohighlevel` `vturb` `whop` `commas` `hyros` `webinarjam` `zoom`.
 
 El HTML crudo queda cacheado en `tools/.work/` (ignorado por git). Una segunda
 corrida no vuelve a pegarle a los servidores salvo por los sitemaps.
@@ -38,8 +38,9 @@ correr `playwright install`.
 | `build_commas.py` | Commas: parte el DOM renderizado de la única página en un archivo por `<section id>`. |
 | `build_hyros.py` | Hyros: 3 specs + blueprint de Apiary + las guías, reconstruyendo los links de las tarjetas. |
 | `build_webinarjam.py` | WebinarJam: los 17 artículos del centro de ayuda, con los links `/*/articles/<id>` reescritos al slug real. |
+| `build_zoom.py` | Zoom: copia los 4 specs oficiales (Meetings y Marketplace, métodos y eventos), genera la referencia recortada a webinars/reportes/eventos y agrega front-matter a las guías de `zoom-urls.txt`. |
 | `make_indexes.py` | Genera los `INDEX.md` de Whop, Commas, Hyros y WebinarJam. |
-| `*-urls.txt`, `hyros-routes.txt` | Listas de URLs por proveedor. `regenerar.sh` las actualiza desde el sitemap (o desde el crawl, en Hyros) y avisa por diff si cambiaron. |
+| `*-urls.txt`, `hyros-routes.txt` | Listas de URLs por proveedor. `regenerar.sh` las actualiza desde el sitemap (o desde el crawl, en Hyros) y avisa por diff si cambiaron. `zoom-urls.txt` es a mano: el sitio de Zoom tiene más de 1.100 páginas y sólo se bajan las que tocan a Limitless. |
 
 ## Decisiones que conviene conocer antes de tocarlos
 

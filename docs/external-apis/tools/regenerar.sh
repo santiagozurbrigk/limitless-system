@@ -4,7 +4,7 @@
 #   ./docs/external-apis/tools/regenerar.sh            # todos los proveedores
 #   ./docs/external-apis/tools/regenerar.sh whop hyros # sólo algunos
 #
-# Proveedores: gohighlevel vturb whop commas hyros webinarjam
+# Proveedores: gohighlevel vturb whop commas hyros webinarjam zoom
 #
 # Requiere: python3 con beautifulsoup4, lxml, pyyaml y playwright
 #   python3 -m pip install beautifulsoup4 lxml pyyaml playwright
@@ -19,9 +19,9 @@ TOOLS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$TOOLS/.." && pwd)"
 export WORK="${WORK:-$TOOLS/.work}"
 FECHA="${FECHA:-$(date +%F)}"
-mkdir -p "$WORK/raw" "$WORK/hyros-ai" "$WORK/whop-specs"
+mkdir -p "$WORK/raw" "$WORK/hyros-ai" "$WORK/whop-specs" "$WORK/zoom-specs"
 
-TODOS="gohighlevel vturb whop commas hyros webinarjam"
+TODOS="gohighlevel vturb whop commas hyros webinarjam zoom"
 QUE="${*:-$TODOS}"
 quiere() { [[ " $QUE " == *" $1 "* ]]; }
 
@@ -114,6 +114,22 @@ if quiere webinarjam; then
   echo "==> WebinarJam / EverWebinar: artículos del centro de ayuda"
   python3 "$TOOLS/fetch_plain.py" "$TOOLS/webinarjam-urls.txt" cache-wj
   python3 "$TOOLS/build_webinarjam.py" "$ROOT/webinarjam" "$FECHA"
+fi
+
+# ────────────────────────────────────────────────────────────────── Zoom
+if quiere zoom; then
+  echo "==> Zoom: specs OpenAPI oficiales (anunciados en /.well-known/api-catalog.json) + guías .md"
+  for prod in meetings marketplace; do
+    for tipo in methods events; do
+      curl -sSL --max-time 120 "https://developers.zoom.us/api/zoap/$prod/$tipo/" \
+        -o "$WORK/zoom-specs/$prod-$tipo.json"
+    done
+  done
+  # las guías se sirven en markdown agregando .md; la lista es a mano (sólo lo que
+  # usa Limitless: OAuth, distribución de apps, webhooks, rate limits)
+  rm -rf "$WORK/cache-zoom"
+  python3 "$TOOLS/fetch_plain.py" "$TOOLS/zoom-urls.txt" cache-zoom
+  python3 "$TOOLS/build_zoom.py" "$ROOT/zoom" "$FECHA"
 fi
 
 echo "==> índices"

@@ -9,7 +9,7 @@
 La regla viene del `CLAUDE.md` (regla 3). En orden:
 
 1. **Buscá la doc antes de asumir.** `docs/external-apis/` tiene copias locales de
-   GoHighLevel, VTurb, Whop, Commas, Hyros, WebinarJam y Fathom, cada una con su
+   GoHighLevel, VTurb, Whop, Commas, Hyros, WebinarJam, Fathom y Zoom, cada una con su
    `RESUMEN-LIMITLESS.md`. Si el proveedor no está, **probá la URL** (el bloqueo de red que
    originó este archivo resultó no existir) y buscá un spec OpenAPI antes de raspar HTML.
    Bajala con `docs/external-apis/tools/regenerar.sh` como modelo y commiteala.

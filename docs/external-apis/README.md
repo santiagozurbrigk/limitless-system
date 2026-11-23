@@ -9,7 +9,7 @@ estaban bloqueados, y varias integraciones se construyeron a ciegas por eso.
 Teniendo la documentación acá adentro, cualquier sesión de Claude Code o cualquier
 desarrollador puede leerla sin depender de la red.
 
-**Fecha de captura: 2026-08-30** (Fathom: 2026-09-01). La fuente viva siempre manda: si algo no cierra,
+**Fecha de captura: 2026-08-30** (Fathom: 2026-09-01; Zoom: 2026-11-23). La fuente viva siempre manda: si algo no cierra,
 la URL de origen está en el front-matter de cada archivo.
 
 ---
@@ -28,6 +28,7 @@ la URL de origen está en el front-matter de cada archivo.
 | **QStash** (Upstash) | [`qstash/`](./qstash/) | 4 páginas: callbacks y failure callbacks, firma, reintentos (2026-10-03) | Colas de jobs (SCRUM-84) |
 | **Typeform** (Responses API) | [`typeform/`](./typeform/) | `retrieve-responses.md`: paginación con `before`/`after`, `since`, orden (2026-10-04) | Formularios (SCRUM-57) |
 | **Google Forms** (API v1) | [`google-forms/`](./google-forms/) | `forms.responses.list.md`: `pageToken`/`nextPageToken`, filtro por timestamp (2026-10-04) | Formularios (SCRUM-57) |
+| **Zoom** (Meetings / Webinars + Marketplace) | [`zoom/`](./zoom/) | **4 specs OpenAPI oficiales** · recorte de 26 endpoints de webinars y reportes · 31 eventos · 34 guías de OAuth, distribución de apps, webhooks y rate limits (2026-11-23) | Evaluación de webinars en Zoom (SCRUM-531); **sin integración construida** |
 
 **Los seis proveedores de las tres olas de integración están cubiertos**, más Fathom (bajado después, sin script en `regenerar.sh`: se reproduce con `tools/fathom-urls.txt`).
 
@@ -45,6 +46,7 @@ construir o corregir cualquiera de las integraciones.**
 | Arrancar el webinar (I-5) | [`webinarjam/RESUMEN-LIMITLESS.md`](./webinarjam/RESUMEN-LIMITLESS.md) |
 | Arrancar VTurb (I-6) | [`vturb/RESUMEN-LIMITLESS.md`](./vturb/RESUMEN-LIMITLESS.md) |
 | Arrancar Hyros (I-8) | [`hyros/RESUMEN-LIMITLESS.md`](./hyros/RESUMEN-LIMITLESS.md) |
+| Decidir si entra Zoom para webinars (SCRUM-531) | [`zoom/RESUMEN-LIMITLESS.md`](./zoom/RESUMEN-LIMITLESS.md) |
 | Buscar un endpoint por path | el `ENDPOINTS*.md` del proveedor |
 | Generar tipos o un cliente | los `openapi/*.json` y `*.yaml` |
 | Volver a bajar todo | [`tools/README.md`](./tools/README.md) |
@@ -64,6 +66,7 @@ a eso en vez de rasparlo todo igual:
 | **Commas** | SPA de **una sola página**: toda URL devuelve el mismo bundle y el router hace scroll. Se renderiza con Chromium una vez y se parte por `<section id>`. |
 | **Hyros** | Dos fuentes: la **referencia** son los specs OpenAPI 3.1 de `api-docs.hyros.com/ai-context/`, y las **guías** son la SPA de docs.hyros.com, renderizada con Chromium y crawleada hasta converger (482 páginas, de las cuales sólo 283 estaban en el bundle). |
 | **WebinarJam** | Centro de ayuda de Intercom, server-rendered. 17 artículos, con los links internos `/*/articles/<id>` reescritos al slug real. |
+| **Zoom** | `developers.zoom.us` anuncia sus specs en `/.well-known/api-catalog.json` (`/api/zoap/<producto>/<methods\|events>/`) y sirve cada guía en markdown agregando `.md`. Se guardan los 4 specs completos, una referencia recortada a lo que usa Limitless y 34 guías de una lista a mano (`tools/zoom-urls.txt`). |
 
 Todo el proceso es reproducible: `./tools/regenerar.sh`.
 
@@ -129,7 +132,7 @@ referencia que no se puede regenerar.
 
 ## Regla para Claude Code
 
-Antes de implementar contra cualquiera de estos siete proveedores, **leer de acá**, no
+Antes de implementar contra cualquiera de estos proveedores, **leer de acá**, no
 de memoria ni de una búsqueda web. Si un campo no está documentado en esta copia,
 tampoco está documentado en el proveedor: aplica la regla 3 de `CLAUDE.md` —persistir
 el payload crudo, no inventar el valor, y dejar la entrada en
