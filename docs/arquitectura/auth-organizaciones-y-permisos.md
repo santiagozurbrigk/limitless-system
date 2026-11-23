@@ -136,9 +136,10 @@ crea nace en `webinar` (lo manda explícito).
 - `webinar`: Limitless Webinars. Toda organización nueva nace así porque cada alta de la app lo
   manda explícito. Lo decidió el PO (19-oct-2026); no lo elige el cliente.
 - `limitless`: Limitless de gestión (Clientes, Tablero de trabajo, Ventas y Administración; decisión
-  del PO, 28-oct-2026). Ninguna alta la manda y la migración no le asigna este valor a nadie: qué
-  organización la recibe se decide fuera del código y se asigna por SQL con el service role, con su
-  precheck, en la guía de SCRUM-532. El código no tiene ids de organizaciones.
+  del PO, 28-oct-2026; además Equipo, provisoria hasta SCRUM-551). Ninguna alta la manda y la
+  migración no le asigna este valor a nadie: qué organización la recibe se decide fuera del código y
+  se asigna por SQL con el service role, con su precheck, en la guía de SCRUM-532. El código no
+  tiene ids de organizaciones.
 
 Las seis altas de la tabla de arriba mandan `experience` en el insert. Las cuatro que no crean un
 negocio dentro de un holding mandan `webinar`. Las dos que sí (Agregar negocio y el onboarding del
@@ -213,8 +214,23 @@ activa (la del negocio elegido en una cuenta holding) con la sesión de quien mi
   `lectura_degradada = organizacion:experiencia`, sin el valor leído.
 
 No se mezcla con las banderas de `lib/release/escondido.ts`, que esconden algo a todas las
-organizaciones. Qué cambia en el menú y las rutas con cada valor es SCRUM-524; hasta entonces nadie
-la llama.
+organizaciones.
+
+Qué cambia con cada valor (SCRUM-524): con `full`, nada (mismo menú, mismas rutas, mismo destino
+después del login). Con `webinar` o `limitless`, la barra y la paleta muestran sólo las entradas
+listas del menú de esa experiencia (`lib/navigation/menu-por-experiencia.ts`: Inicio, Lanzamientos,
+Leads y Equipo para `webinar`; Clientes, Tablero de trabajo, Ventas, Equipo (provisoria hasta
+SCRUM-551) y Administración para `limitless`) y toda otra ruta de `app/(platform)`, salvo
+`/onboarding`, `/holding` y `/settings` y las rutas extra de la experiencia (para `limitless`, los
+segmentos de `/integrations`, `/sops/[id]` y `/business-context/[id]`, adonde enlazan la Bandeja
+y el Tablero, con todo su contenido: `/integrations/*`, `/sops/*` y `/business-context/*`; fix-pack 1 de A1), redirige a la
+pantalla de inicio de esa experiencia. Una entrada no lista cuya pantalla todavía no existe
+(`/inicio`, `/leads`, `/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
+el layout de cada segmento de primer nivel, porque el de `(platform)` no se vuelve a ejecutar en
+una navegación del cliente. Detalle en
+[`diseno/ui-y-navegacion.md` § Menú por experiencia](../diseno/ui-y-navegacion.md#menú-por-experiencia-limitless-webinars-y-limitless-de-gestión).
+La experiencia no es un límite de seguridad de los datos: eso lo siguen haciendo los permisos por
+módulo y la RLS.
 
 ### Aceptar una invitación
 

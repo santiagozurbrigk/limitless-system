@@ -23,10 +23,10 @@ function stageIdFromPath(pathname: string): string | null {
 
 /**
  * La parte de cliente del layout del Agente: elige la conversación o la etapa
- * según la URL. El `layout.tsx` del segmento es de servidor porque antes
- * chequea el permiso del módulo (SCRUM-540): este provider pide las
- * conversaciones al montarse, y sin el chequeo las recibiría alguien sin
- * Agente de negocio.
+ * según la URL. El `layout.tsx` del segmento es de servidor porque antes hace
+ * el bloqueo por experiencia (SCRUM-524) y chequea el permiso del módulo
+ * (SCRUM-540): este provider pide las conversaciones al montarse, y sin el
+ * chequeo las recibiría alguien sin Agente de negocio.
  */
 export function AgentLayoutCliente({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

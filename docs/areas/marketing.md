@@ -34,7 +34,7 @@ notch nav pero la ruta funciona).
 | `/marketing/lead-magnets` | `marketing/lead-magnets/page.tsx` | CRUD de lead magnets y sus leads/atribución | Sí |
 | `/comentarios` | `(platform)/comentarios/page.tsx` → `components/comentarios/comentarios-page-content.tsx` | Comentarios de todas las cuentas Zernio: responder y ocultar | No (cuelga del módulo marketing en `lib/navigation/module-for-path.ts`) |
 
-`app/(platform)/marketing/layout.tsx` es un passthrough: no hay subnav (la notch nav lo reemplaza).
+`app/(platform)/marketing/layout.tsx` sólo aplica el bloqueo por experiencia (SCRUM-524): no hay subnav (la notch nav lo reemplaza).
 
 ## Modelo de datos
 

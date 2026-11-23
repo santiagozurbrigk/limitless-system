@@ -1,6 +1,9 @@
 import { paths } from "@/routes/paths";
 import { ESCONDIDO } from "@/lib/release/escondido";
 import type { AddOnId } from "@/lib/auth/get-current-permissions";
+import type { OrganizationExperience } from "@/lib/organization/experience";
+import { coincide, entradasListas, menuPorDefecto, segmentoDe } from "./rutas-por-experiencia";
+import type { EntradaDelMenu } from "./menu-por-experiencia";
 import type {
   SidebarDirectModule,
   SidebarNavConfig,
@@ -335,8 +338,53 @@ export const platformSidebarNav: SidebarNavConfig = {
   rootItems: platformRootItems,
 };
 
-/** Versión con add-ons inyectados — usar en componentes que tienen acceso a enabledAddOns */
-export function buildPlatformSidebarNav(enabledAddOns: AddOnId[]): SidebarNavConfig {
+/**
+ * La barra de una experiencia con menú propio (`webinar`, `limitless`;
+ * SCRUM-524): sólo las entradas listas de su menú
+ * (`lib/navigation/menu-por-experiencia.ts`), en su orden. Una entrada simple
+ * es un link directo con su módulo de permisos; una con `grupo` es ese grupo
+ * del menú completo, con sus hijos (Ventas en `limitless`). La barra los filtra
+ * por permiso como a cualquier otro. No hay grupo `configuracion`, así que
+ * tampoco aparece Integraciones en la isla derecha.
+ */
+export function buildSidebarNavDelMenu(menu: readonly EntradaDelMenu[]): SidebarNavConfig {
+  const listas = entradasListas(menu);
+  const grupos: Partial<Record<SidebarParentKey, SidebarParentModule>> = {};
+  const rootItems: SidebarNavRootItem[] = listas.map((entrada) => {
+    if (entrada.grupo) {
+      grupos[entrada.grupo] = modulesWithChildren[entrada.grupo];
+      return { type: "parent" as const, key: entrada.grupo };
+    }
+    return {
+      type: "link" as const,
+      module: {
+        label: entrada.label,
+        href: entrada.href,
+        icon: entrada.icon,
+        permissionId: entrada.permissionId,
+      },
+    };
+  });
+  return {
+    modulesWithChildren: grupos as Record<string, SidebarParentModule>,
+    getParentFromPath: (pathname) =>
+      listas.find(
+        (entrada) => entrada.grupo !== undefined && coincide(pathname, segmentoDe(entrada.href))
+      )?.grupo ?? null,
+    rootItems,
+  };
+}
+
+/**
+ * Versión con add-ons inyectados — usar en componentes que tienen acceso a
+ * enabledAddOns. Con `full` (el default) devuelve el menú de siempre; con otra
+ * experiencia, el de su config (`buildSidebarNavDelMenu`), sin add-ons.
+ */
+export function buildPlatformSidebarNav(
+  enabledAddOns: AddOnId[],
+  experiencia: OrganizationExperience = "full"
+): SidebarNavConfig {
+  if (experiencia !== "full") return buildSidebarNavDelMenu(menuPorDefecto(experiencia));
   return {
     modulesWithChildren,
     getParentFromPath,
