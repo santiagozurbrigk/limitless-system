@@ -57,6 +57,16 @@ export function usePermisosDeModulo(): PermisosDeModulo {
   return permisosEstables(useContext(PermissionsCtx));
 }
 
+/**
+ * Si quien mira está en la lista de staff (SCRUM-552; sólo se consulta en la
+ * experiencia `limitless`). Aparte de `usePermissions()` para que el menú del
+ * celular, que también pide con `leerDelMarco`, no dependa del objeto entero
+ * de permisos, que cambia de identidad en cada `router.refresh()` (SCRUM-540).
+ */
+export function useEsStaff(): boolean {
+  return useContext(PermissionsCtx).esStaff ?? false;
+}
+
 export function useModuleAccess(moduleId: PermissionModuleId): PermissionLevel {
   const { modules, isFounder } = useContext(PermissionsCtx);
   if (isFounder) return "full";

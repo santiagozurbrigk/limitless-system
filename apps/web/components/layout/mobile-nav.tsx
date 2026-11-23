@@ -11,7 +11,7 @@ import { paths } from "@/routes";
 import { buildPlatformSidebarNav } from "@/lib/navigation/sidebar-modules";
 import type { SidebarDirectModule } from "@/lib/navigation/sidebar-nav-config";
 import { isPathActive } from "@/lib/navigation/active-path";
-import { useEnabledAddOns, usePermisosDeModulo } from "@/providers/permissions-provider";
+import { useEnabledAddOns, useEsStaff, usePermisosDeModulo } from "@/providers/permissions-provider";
 import { useExperiencia } from "@/providers/experiencia-provider";
 import { leerDelMarco } from "@/lib/auth/lecturas-del-marco";
 import { SidebarTwoLevelNavigation } from "@/components/navigation/sidebar-two-level-navigation";
@@ -24,7 +24,8 @@ export function MobileNav() {
   const [pendingCalls, setPendingCalls] = useState(0);
   const enabledAddOns = useEnabledAddOns();
   const experiencia = useExperiencia();
-  const platformSidebarNav = buildPlatformSidebarNav(enabledAddOns, experiencia);
+  const esStaff = useEsStaff();
+  const platformSidebarNav = buildPlatformSidebarNav(enabledAddOns, experiencia, esStaff);
 
   const close = () => setOpen(false);
 

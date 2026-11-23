@@ -7,6 +7,8 @@ import {
 } from "@/lib/holding/session";
 import { PlatformLayout } from "@/layouts";
 import { getCurrentUserPermissions } from "@/lib/auth/get-current-permissions";
+import { isStaffUser } from "@/lib/auth/require-staff";
+import { permisosConStaff } from "@/lib/auth/permisos-con-staff";
 import { PermissionsProvider } from "@/providers/permissions-provider";
 import { OnboardingProvider } from "@/providers/onboarding-provider";
 import { TourRunner } from "@/components/onboarding/tour-runner";
@@ -80,7 +82,7 @@ export default async function PlatformRouteLayout({
    * Sentry (`lectura_degradada`) y la plataforma sigue con el valor de arriba.
    * Una sesión no válida o una cuenta desactivada no se degradan: se relanzan.
    */
-  const [holdingSession, permissions, onboarding, headerList, zona, experiencia] =
+  const [holdingSession, permisosDelRol, onboarding, headerList, zona, experiencia] =
     await Promise.all([
       lecturaDegradable(
         "layout-plataforma:holding",
@@ -105,6 +107,9 @@ export default async function PlatformRouteLayout({
       // Degradable por su cuenta: si no se puede leer, `full` (SCRUM-523).
       getOrganizationExperience(),
     ]);
+
+  // Administración (SCRUM-551): `esStaff` sólo en limitless (ver `permisosConStaff`).
+  const permissions = await permisosConStaff(experiencia, permisosDelRol, isStaffUser);
 
   /**
    * ⭐ El permiso se aplica acá, en el servidor, no sólo escondiendo links.

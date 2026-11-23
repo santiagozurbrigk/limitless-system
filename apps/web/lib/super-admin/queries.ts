@@ -1,3 +1,4 @@
+import { esExperienciaGuardada } from "@/lib/administracion/experiencia";
 import type { ClientRow } from "@/lib/clients/mapper";
 import {
   buildContentBreakdown,
@@ -612,7 +613,7 @@ export async function loadOrganizationDetail(
 
   const { data: org, error } = await admin
     .from("organizations")
-    .select("id, name, status, created_at, mrr_usd, timezone, enabled_add_ons")
+    .select("id, name, status, created_at, mrr_usd, timezone, enabled_add_ons, experience")
     .eq("id", orgId)
     .maybeSingle();
 
@@ -731,6 +732,7 @@ export async function loadOrganizationDetail(
   return {
     id: org.id,
     name: org.name,
+    experience: esExperienciaGuardada(org.experience) ? org.experience : null,
     status,
     plan: planPorMrr(mrrUsd),
     timezone: (org.timezone as string | null) ?? null,

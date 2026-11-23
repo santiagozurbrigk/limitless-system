@@ -146,18 +146,18 @@ describe("⭐ barra de una organización full: igual que antes", () => {
 });
 
 describe("⭐ barra de una organización webinar", () => {
-  const barra = dibujar("webinar", "/leads", FOUNDER);
+  const barra = dibujar("webinar", "/inicio", FOUNDER);
 
   it("el logo lleva a la pantalla de inicio", () => {
-    expect(barra.logo).toEqual(["/leads"]);
+    expect(barra.logo).toEqual(["/inicio"]);
   });
 
   it("el logo del celular también lleva a la pantalla de inicio", () => {
-    expect(barra.logoCelular).toEqual(["/leads"]);
+    expect(barra.logoCelular).toEqual(["/inicio"]);
   });
 
   it("sólo las entradas listas del menú", () => {
-    expect(barra.items).toEqual(["Leads", "Equipo"]);
+    expect(barra.items).toEqual(["Inicio", "Lanzamientos", "Leads", "Equipo"]);
   });
 
   it("⭐ la isla sin reportes ejecutivos, sin configuración pendiente y sin Integraciones: sólo Ajustes", () => {
@@ -167,8 +167,8 @@ describe("⭐ barra de una organización webinar", () => {
   });
 
   it("ningún link de la barra sale del menú o de las rutas libres", () => {
-    const todos = [...barra.logo, ...barra.islaHrefs, "/leads", "/team"];
-    for (const href of todos) expect(["/leads", "/team", "/settings"]).toContain(href);
+    const todos = [...barra.logo, ...barra.islaHrefs, "/inicio", "/leads", "/team"];
+    for (const href of todos) expect(["/inicio", "/leads", "/team", "/settings"]).toContain(href);
   });
 
   it("un miembro sin Equipo: sin entradas y el logo a Ajustes", () => {

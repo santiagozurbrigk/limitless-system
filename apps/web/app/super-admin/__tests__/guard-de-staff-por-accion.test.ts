@@ -336,6 +336,11 @@ const CASOS: Record<string, Record<string, Caso>> = {
       forma: "valor-success",
     },
     setOrganizationStatusAction: { invocar: (m) => m.setOrganizationStatusAction(ORG_A, true), forma: "valor-success" },
+    // SCRUM-551: la experiencia desde la consola.
+    setOrganizationExperienceAction: {
+      invocar: (m) => m.setOrganizationExperienceAction(ORG_A, "webinar"),
+      forma: "valor-success",
+    },
     updateOrganizationMrrAction: { invocar: (m) => m.updateOrganizationMrrAction(ORG_A, 100), forma: "valor-success" },
     addOrganizationNoteAction: { invocar: (m) => m.addOrganizationNoteAction(ORG_A, "Una nota"), forma: "valor-success" },
     deactivateUserAction: { invocar: (m) => m.deactivateUserAction(USUARIO_X), forma: "valor-success" },
@@ -669,7 +674,7 @@ describe("inventario del panel interno", () => {
   it("los totales de la tabla son los esperados", () => {
     const conCaso = Object.values(CASOS).reduce((n, c) => n + Object.keys(c).length, 0);
     const exentas = Object.values(EXENTAS).reduce((n, c) => n + Object.keys(c).length, 0);
-    expect({ conCaso, exentas, rutas: Object.keys(RUTAS).length }).toEqual({ conCaso: 55, exentas: 2, rutas: 2 });
+    expect({ conCaso, exentas, rutas: Object.keys(RUTAS).length }).toEqual({ conCaso: 56, exentas: 2, rutas: 2 });
   });
 });
 

@@ -219,13 +219,14 @@ organizaciones.
 Qué cambia con cada valor (SCRUM-524): con `full`, nada (mismo menú, mismas rutas, mismo destino
 después del login). Con `webinar` o `limitless`, la barra y la paleta muestran sólo las entradas
 listas del menú de esa experiencia (`lib/navigation/menu-por-experiencia.ts`: Inicio, Lanzamientos,
-Leads y Equipo para `webinar`; Clientes, Tablero de trabajo, Ventas, Equipo (provisoria hasta
-SCRUM-551) y Administración para `limitless`) y toda otra ruta de `app/(platform)`, salvo
-`/onboarding`, `/holding` y `/settings` y las rutas extra de la experiencia (para `limitless`, los
-segmentos de `/integrations`, `/sops/[id]` y `/business-context/[id]`, adonde enlazan la Bandeja
-y el Tablero, con todo su contenido: `/integrations/*`, `/sops/*` y `/business-context/*`; fix-pack 1 de A1), redirige a la
+Inicio, Lanzamientos, Leads y Equipo para `webinar`; Clientes, Tablero de trabajo, Ventas, Equipo (provisoria
+hasta cerrar SCRUM-551) y Administración (sólo staff) para
+`limitless`) y toda otra ruta de `app/(platform)`, salvo `/onboarding`, `/holding` y `/settings`
+y las rutas extra de la experiencia (para `limitless`, los segmentos de `/integrations`, `/sops/[id]`
+y `/business-context/[id]`, adonde enlazan la Bandeja y el Tablero, con todo su contenido:
+`/integrations/*`, `/sops/*` y `/business-context/*`; fix-pack 1 de A1), redirige a la
 pantalla de inicio de esa experiencia. Una entrada no lista cuya pantalla todavía no existe
-(`/inicio`, `/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
+(`/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
 el layout de cada segmento de primer nivel, porque el de `(platform)` no se vuelve a ejecutar en
 una navegación del cliente. Detalle en
 [`diseno/ui-y-navegacion.md` § Menú por experiencia](../diseno/ui-y-navegacion.md#menú-por-experiencia-limitless-webinars-y-limitless-de-gestión).
@@ -418,8 +419,12 @@ Si no está, la app muestra el negocio (cookie) pero RLS filtra por la org del h
     organización webinar vería «No tenés acceso» en vez de ir a su pantalla de inicio.
 - Mapeo ruta → módulo: tabla explícita `MODULE_BY_PREFIX` en `lib/navigation/module-for-path.ts`, gana el
   prefijo más largo. `/product`, `/sops`, `/intelligence`, `/executive-reports`, `/founder` → `operations`;
-  `/lanzamientos` → `funnels`; `/comentarios` → `marketing`. Libres: `/onboarding`, `/holding`,
-  `/redesign-preview`. El test (`lib/navigation/__tests__/module-for-path.test.ts`) recorre `app/` entero en
+  `/lanzamientos` → `funnels`; `/comentarios` → `marketing`; `/inicio` → `dashboard`; `/leads` → `sales`. Libres:
+  `/onboarding`, `/holding`, `/redesign-preview` y, como excepción por decisión, `/administracion`: la consola del
+  staff la gobierna la lista de staff (`isStaffUser()` en su layout, `requireStaff()` en cada acción), no un módulo,
+  así que sus páginas no llevan `exigirModuloDeLaPagina`. `module-for-path.test.ts` fija que el layout siga cortando
+  por la lista, y la entrada `soloStaff` del menú `limitless` conserva `permissionId: "settings"` sólo para
+  decidir si se dibuja. El test (`lib/navigation/__tests__/module-for-path.test.ts`) recorre `app/` entero en
   disco y falla si una ruta de `(platform)` no tiene módulo ni es libre, o si una ruta con módulo cuelga de un
   layout que no llama `moduloBloqueadoParaRuta` (así quedó afuera `/founder` hasta SCRUM-18). El de
   `lecturas-por-modulo` compara además el módulo que pide cada página con el de esta tabla.
@@ -470,7 +475,9 @@ Embudos va siempre), `growth_partners`. Los activa el super admin (`updateOrgAdd
 - **Super admin (staff de Limitless, SCRUM-552)**: allowlist por email, no por rol ni por pertenencia. El staff
   es **founder de la organización de Limitless**, la única con `organizations.experience = 'limitless'` (el
   índice único parcial `organizations_una_sola_limitless` impide una segunda). Entra por `/login` como todos
-  (`/superadmin/login` redirige ahí) y va a `DESTINO_DEL_STAFF` (`/super-admin/organizations`). El panel vive en
+  (`/superadmin/login` redirige ahí) y va a `DESTINO_DEL_STAFF` (`/super-admin/organizations`; pasa a la consola de
+  Administración, `/administracion`, cuando SCRUM-553 cierre el panel viejo). La consola (SCRUM-551) es una entrada
+  `soloStaff` del menú `limitless`: el layout de la plataforma suma `esStaff` a los permisos para esa experiencia. El panel vive en
   `/super-admin/*`; el layout (`app/(super-admin)/super-admin/layout.tsx`) y cada acción y lectura del panel
   pasan por `requireStaff()`/`isStaffUser()` (`lib/auth/require-staff.ts`), que deciden **sólo por la lista**
   (más el perfil no desactivado): un miembro o un founder de la org de Limitless que no está en la lista no tiene

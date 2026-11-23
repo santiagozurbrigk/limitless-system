@@ -30,9 +30,13 @@ import {
   getAiBrainSignedUrlSchema,
   prepareAiBrainFileUploadSchema,
   regenerateTempPasswordSchema,
+  setOrganizationExperienceSchema,
   setOrganizationStatusSchema,
   updateOrganizationMrrSchema,
 } from "@/lib/validations";
+import { leerExperienciaDeLaOrganizacion } from "@/lib/organization/experience";
+import { motivoParaNoCambiarLaExperiencia } from "@/lib/administracion/experiencia";
+import { ErrorEsperable } from "@/lib/server/error-esperable";
 import { ADD_ON_IDS } from "@/lib/auth/add-on-ids";
 import { processAiBrainDocument } from "@/lib/ai-brain/process-document";
 import { resolveBrainFileMimeType, isAllowedBrainFile as validateBrainFile } from "@/lib/ai-brain/file-types";
@@ -87,6 +91,8 @@ function revalidateSuperAdmin() {
   for (const p of REVALIDATE_ORGS) {
     revalidatePath(p);
   }
+  // La consola de Administración (SCRUM-551) muestra lo mismo.
+  revalidatePath(paths.platform.administracion, "layout");
   revalidatePath(paths.superAdmin.infrastructure);
   revalidatePath(paths.superAdmin.aiBrain.root);
   revalidatePath(paths.superAdmin.aiBrain.library);
@@ -304,6 +310,37 @@ export async function setOrganizationStatusAction(
       .update({ status: isActive ? "active" : "paused" })
       .eq("id", orgId);
 
+    if (error) throw new Error(error.message);
+    revalidateSuperAdmin();
+    revalidatePath(`${paths.superAdmin.organizations}/${orgId}`);
+  });
+}
+
+/**
+ * Cambia la experiencia de una organización desde Administración (SCRUM-551):
+ * sólo entre `webinar` y `full`; la org de Limitless (`limitless`) no se toca
+ * desde acá. Sólo staff (`requireStaff`).
+ */
+export async function setOrganizationExperienceAction(
+  organizationId: string,
+  experiencia: string
+): Promise<MutationResult> {
+  const auth = await requireStaffAndParse(setOrganizationExperienceSchema, {
+    organizationId,
+    experiencia,
+  });
+  if (!auth.success) {
+    return { success: false, error: auth.error };
+  }
+
+  const { organizationId: orgId, experiencia: nueva } = auth.data;
+
+  return runMutation(async () => {
+    const admin = createAdminClient();
+    const actual = await leerExperienciaDeLaOrganizacion(admin, orgId);
+    const motivo = motivoParaNoCambiarLaExperiencia(actual, nueva);
+    if (motivo) throw new ErrorEsperable(motivo);
+    const { error } = await admin.from("organizations").update({ experience: nueva }).eq("id", orgId);
     if (error) throw new Error(error.message);
     revalidateSuperAdmin();
     revalidatePath(`${paths.superAdmin.organizations}/${orgId}`);

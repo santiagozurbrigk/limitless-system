@@ -13,7 +13,6 @@ import {
   Input,
   Label,
 } from "@ai-coo/ui";
-import { paths } from "@/routes";
 import { formatUsd } from "@/lib/super-admin/org-metrics";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { AdminHoldingRow } from "@/lib/super-admin/holdings-admin";
@@ -26,6 +25,7 @@ import { DeletionDialog } from "@/components/super-admin/deletion-dialog";
 import { TempCredentialsDialog } from "@/components/shared/temp-credentials-dialog";
 import type { TempCredentials } from "@/lib/auth/temp-credentials";
 import { brand } from "@/lib/brand";
+import { rutasDeAdministracion, type BaseDeAdministracion } from "@/lib/administracion/rutas";
 
 function CreateHoldingDialog() {
   const [open, setOpen] = useState(false);
@@ -108,9 +108,12 @@ function CreateHoldingDialog() {
 
 export function HoldingsAdminPanel({
   holdings,
+  base,
 }: {
   holdings: AdminHoldingRow[];
+  base?: BaseDeAdministracion;
 }) {
+  const rutas = rutasDeAdministracion(base);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [aEliminar, setAEliminar] = useState<AdminHoldingRow | null>(null);
   const detail = holdings.find((h) => h.id === detailId);
@@ -178,7 +181,7 @@ export function HoldingsAdminPanel({
                   Ver portfolio
                 </Button>
                 <Button asChild size="sm" variant="ghost">
-                  <Link href={paths.superAdmin.organizationDetail(holding.id)}>
+                  <Link href={rutas.organizacion(holding.id)}>
                     Ver detalle
                   </Link>
                 </Button>

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -74,6 +74,16 @@ describe("permissionModuleForPath", () => {
     expect(permissionModuleForPath("/onboarding")).toBeNull();
     expect(permissionModuleForPath("/onboarding/holding")).toBeNull();
     expect(permissionModuleForPath("/holding")).toBeNull();
+  });
+
+  it("⭐ la consola de Administración no tiene módulo: la gobierna la lista de staff en su layout", () => {
+    expect(isRutaLibre("/administracion")).toBe(true);
+    expect(permissionModuleForPath("/administracion")).toBeNull();
+    expect(permissionModuleForPath("/administracion/organizaciones/abc")).toBeNull();
+    // La excepción sólo vale mientras el layout corte por la lista antes de dibujar.
+    const layout = readFileSync(join(APP_DIR, "(platform)", "administracion", "layout.tsx"), "utf8");
+    expect(layout).toMatch(/if \(!\(await isStaffUser\(\)\)\) redirect\(/);
+    expect(layout.indexOf("isStaffUser()")).toBeLessThan(layout.indexOf("return children"));
   });
 
   it("SOPs y Producto caen bajo Operaciones", () => {

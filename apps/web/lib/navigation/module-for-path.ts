@@ -23,14 +23,11 @@ import type { PermissionModuleId } from "@/constants/permission-modules";
  */
 const MODULE_BY_PREFIX: { prefix: string; moduleId: PermissionModuleId }[] = [
   { prefix: "/dashboard", moduleId: "dashboard" },
-  // Menús por experiencia (SCRUM-524). `/leads` y la ficha `/leads/[id]` son de
-  // SCRUM-545. Las otras dos pantallas todavía no existen (`/inicio` es de
-  // SCRUM-534; `/administracion`, de SCRUM-551, con un módulo provisorio que
-  // decide esa tarea), pero el módulo queda decidido acá y en
-  // `lib/navigation/menu-por-experiencia.ts`.
+  // Menús por experiencia (SCRUM-524). `/inicio` es de SCRUM-543; `/leads` y la
+  // ficha `/leads/[id]`, de SCRUM-545. `/administracion` no está acá: es una
+  // excepción declarada en `RUTAS_LIBRES` (la gobierna la lista de staff).
   { prefix: "/inicio", moduleId: "dashboard" },
   { prefix: "/leads", moduleId: "sales" },
-  { prefix: "/administracion", moduleId: "finance" },
   { prefix: "/workboard", moduleId: "workboard" },
 
   { prefix: "/agent", moduleId: "agent" },
@@ -65,8 +62,18 @@ const MODULE_BY_PREFIX: { prefix: string; moduleId: PermissionModuleId }[] = [
  * `/onboarding` y `/holding` son anteriores a que exista un rol: bloquearlas
  * por permiso dejaría a una cuenta nueva sin ningún lado adonde ir.
  * `/redesign-preview` es una pantalla interna de diseño, sin datos.
+ *
+ * ⭐ `/administracion` (la consola del staff, SCRUM-551) es una excepción por
+ * decisión, no una pantalla abierta: la gobierna la **lista de staff**, no los
+ * permisos por módulo. Su layout (`app/(platform)/administracion/layout.tsx`)
+ * corta con `isStaffUser()` antes de dibujar cualquier página, y cada acción
+ * vuelve a validar con `requireStaff()`. Por eso sus páginas no llevan
+ * `exigirModuloDeLaPagina` (SCRUM-540): un módulo acá sería un segundo
+ * permiso que nadie configura. El staff es founder de la org de Limitless, así
+ * que el acceso no cambia. `module-for-path.test.ts` fija que ese layout siga
+ * cortando por la lista.
  */
-const RUTAS_LIBRES = ["/onboarding", "/holding", "/redesign-preview"];
+const RUTAS_LIBRES = ["/onboarding", "/holding", "/redesign-preview", "/administracion"];
 
 function coincide(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);

@@ -4,10 +4,12 @@ import { exigirRutaDeLaExperiencia } from "@/lib/organization/ruta-de-la-experie
 import { paths } from "@/routes";
 
 /**
- * Primero el bloqueo por experiencia (SCRUM-524): una organización webinar va
- * a su pantalla de inicio mientras Lanzamientos no esté lista en su menú.
- * Después, "Próximamente" y sin lanzamientos cargados: lleva al Panel
- * (SCRUM-490), para todas las organizaciones.
+ * Primero el bloqueo por experiencia (SCRUM-524): una organización `limitless`
+ * va a su pantalla de inicio. Después la bandera de release: desde SCRUM-544
+ * la bandera `lanzamientos` de `ESCONDIDO` está en `false`: las pantallas son las de
+ * Limitless Webinars; volver a ponerla en `true` lleva a todos al Panel
+ * (SCRUM-490), y un test impide hacerlo con Lanzamientos lista en el menú
+ * webinar (bucle de redirecciones).
  */
 export default async function Layout({ children }: { children: React.ReactNode }) {
   await exigirRutaDeLaExperiencia("/lanzamientos");

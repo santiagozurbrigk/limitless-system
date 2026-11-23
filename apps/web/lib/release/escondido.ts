@@ -30,8 +30,11 @@ export const ESCONDIDO = {
   integracionManyChat: true,
   /** `/redesign-preview`, `/demo` y `/design-system`: pantallas internas o maquetas. */
   pantallasInternas: true,
-  /** `/lanzamientos`: "Próximamente", sin lanzamientos cargados. */
-  lanzamientos: true,
+  /**
+   * `/lanzamientos`: hasta SCRUM-544 era "Próximamente". Ahora son la lista y el
+   * detalle de Limitless Webinars (lista en el menú webinar): no se esconde.
+   */
+  lanzamientos: false,
   /**
    * Integraciones → Landing: las claves de ingesta de Limitless Webinars
    * (SCRUM-527). No es algo roto: es nuevo y todavía no tiene a quién
