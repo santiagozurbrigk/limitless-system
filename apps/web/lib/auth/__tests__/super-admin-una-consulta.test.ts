@@ -44,6 +44,16 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from(tabla: string) {
+      // SCRUM-552: para quien está en la lista el guard lee también su perfil
+      // (is_active). `sim.consultas` cuenta sólo la lista.
+      if (tabla === "profiles") {
+        const perfil = {
+          select: () => perfil,
+          eq: () => perfil,
+          maybeSingle: async () => ({ data: { is_active: true }, error: null }),
+        };
+        return perfil;
+      }
       expect(tabla).toBe("super_admin_users");
       let email = "";
       const builder = {

@@ -37,7 +37,11 @@ vi.mock("@/lib/auth/limite-login", () => ({
   limiteDeLogin: async () => ({ allowed: true, resetAt: 0 }),
 }));
 vi.mock("@/lib/supabase/env", () => ({ isSupabaseConfigured: () => true }));
-vi.mock("@/lib/auth/require-super-admin", () => ({ isSuperAdminEmail: async () => sim.superAdmin }));
+// SCRUM-552: el destino del staff lo decide `isStaffEmail` (antes `isSuperAdminEmail`).
+vi.mock("@/lib/auth/require-staff", () => ({
+  isStaffEmail: async () => sim.superAdmin,
+  DESTINO_DEL_STAFF: "/super-admin/organizations",
+}));
 vi.mock("@/lib/auth/get-current-permissions", () => ({
   getCurrentUserPermissions: async () => {
     sim.lecturasDePermisos += 1;

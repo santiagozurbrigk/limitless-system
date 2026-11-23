@@ -1,6 +1,6 @@
 "use server";
 
-import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import { requireStaff } from "@/lib/auth/require-staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { DriveFileListItem, DriveListResult } from "@/app/marketing/content/drive-actions";
 
@@ -9,7 +9,7 @@ const GOOGLE_FORMS_REDIRECT = () =>
   `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/super-admin-google/oauth/callback`;
 
 async function getSuperAdminAccessToken(): Promise<string> {
-  const user = await requireSuperAdmin();
+  const user = await requireStaff();
   const admin = createAdminClient();
 
   const { data, error } = await admin
