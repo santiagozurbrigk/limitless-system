@@ -131,6 +131,10 @@
     {
       "path": "/api/cron/daily-signals",
       "schedule": "20 7 * * *"
+    },
+    {
+      "path": "/api/cron/reprocesar-landing",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

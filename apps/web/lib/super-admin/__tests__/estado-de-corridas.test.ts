@@ -189,7 +189,7 @@ describe("loadUltimasCorridas", () => {
     };
     const corridas = await loadUltimasCorridas();
     expect(corridas.disponible).toBe(true);
-    expect(corridas.procesos).toHaveLength(19);
+    expect(corridas.procesos).toHaveLength(20);
     const ghl = corridas.procesos.find((p) => p.proceso === "/api/cron/ghl-sync");
     expect(ghl).toEqual({
       proceso: "/api/cron/ghl-sync",
@@ -211,7 +211,7 @@ describe("loadUltimasCorridas", () => {
       { columna: "fin", opciones: { ascending: false, nullsFirst: false } },
     ]);
     expect(sim.orgsPedidas).toEqual([ORG_A]);
-    expect(corridas.procesos.filter((p) => p.corrida === null)).toHaveLength(18);
+    expect(corridas.procesos.filter((p) => p.corrida === null)).toHaveLength(19);
   });
 
   it("si no se puede leer el registro, lo dice en vez de mostrar estados inventados", async () => {

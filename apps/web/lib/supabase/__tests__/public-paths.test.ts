@@ -20,6 +20,8 @@ describe("isPublicPath", () => {
     "/privacidad",
     // SCRUM-85: el monitor externo y el workflow de versión lo consultan sin cuenta.
     "/api/health",
+    // SCRUM-528: la landing manda los registros con su clave de ingesta, sin sesión.
+    "/api/ingest/landing",
   ])("deja pasar %s sin sesión", (pathname) => {
     expect(isPublicPath(pathname)).toBe(true);
   });
@@ -40,6 +42,10 @@ describe("isPublicPath", () => {
     // Sólo la ruta exacta del chequeo de salud es pública.
     "/api/healthz",
     "/api/health/detalle",
+    // Sólo la ruta exacta de la ingesta de la landing es pública.
+    "/api/ingest",
+    "/api/ingest/landing/otra",
+    "/api/ingest/landingx",
   ])("exige sesión en %s", (pathname) => {
     expect(isPublicPath(pathname)).toBe(false);
   });

@@ -1179,7 +1179,7 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 
 **Prerrequisitos:** Vercel → proyecto → Crons y Logs.
 
-1. Revisar que los 19 crons de `apps/web/vercel.json` figuren y su última ejecución.
+1. Revisar que los 20 crons de `apps/web/vercel.json` figuren y su última ejecución.
 2. Mirar `calendly-sync` y `calendly-sync-closers` de la misma hora.
 3. Correr a mano un cron con `?organizationId=` (`curl -X POST …/api/cron/sync-content-metrics?organizationId=<uuid> -H "Authorization: Bearer $CRON_SECRET"`).
 
@@ -1246,7 +1246,7 @@ en `sop_generation_jobs` (`status`, `error`): puede decir dónde falla sin subir
 
 **Verificado el 2026-10-09:** Sentry → Monitors muestra 20 monitores (crons + Error + Uptime), cada uno con las alertas conectadas. `cron-calendly-sync` registra check-ins desde la compra del plan (antes: "Errors were encountered while ingesting check-ins").
 
-1. Sentry → Crons: aparecen los 19 monitores, con el horario de `vercel.json`, después de su primera corrida.
+1. Sentry → Crons: aparecen los 20 monitores, con el horario de `vercel.json`, después de su primera corrida.
 2. ⭐ Error por org: en una org de prueba con GHL, poner un token inválido y esperar la corrida de las :00 de `cron-ghl-sync`. En Sentry aparece el issue con tag `org_id` de esa org y `provider=ghl`, y llega el mail.
 3. Cron que no corre: en Sentry → Crons, un monitor sin check-in pasado su horario + 5 min queda en "missed". Se puede forzar pausando un cron en Vercel una hora, y a las 2 faltas llega el mail.
 4. Job que agota reintentos: encolar un job de prueba contra un worker que responda 500 (por ejemplo `process-cron-sync-metrics` con una org inexistente). Después de los reintentos llega un issue "QStash: … agotó sus reintentos" con el worker y la org.
@@ -1270,7 +1270,7 @@ aplicada en producción (`limitless-auditoria/sql-produccion/scrum-85/`, con `02
 4. Discord (opcional): crear el webhook del canal del equipo, guardarlo como secreto `DISCORD_WEBHOOK_ALERTAS` en
    GitHub y repetir el paso 3: el aviso llega al canal.
 5. 🔒 Super-admin → Infraestructura: "Estado de la plataforma" con el commit desplegado y los chequeos en verde;
-   "Procesos programados" con los 19 crons, y después de la primera hora, `OK` o `Parcial` con hora y orgs en los
+   "Procesos programados" con los 20 crons, y después de la primera hora, `OK` o `Parcial` con hora y orgs en los
    horarios (los 6 crons con fan-out figuran como `Encolado: N jobs encolados`, nunca como `OK`). Ninguno tiene que quedar `Sin cierre` de forma repetida (si pasa, es el corte de 60 s, `[CRONS-CORTE-60S]`).
 6. En Supabase → SQL Editor, la consulta de [`alertas.md`](./alertas.md) § Registro de corridas: las filas coinciden
    con lo que muestra la página; a los 31 días, ninguna fila tiene más de 30 días.
@@ -1345,3 +1345,27 @@ Probado con `next start` y Supabase y Sentry falsos (evidencia de SCRUM-516); fa
    WEBP.". Borrar una captura con la red cortada: vuelve a aparecer con el motivo.
 7. Ventas → Cobros y el cierre de venta de Closing: los planes se ven como antes. En Sentry no aparecen eventos con
    `server_action` de estas acciones salvo fallas reales.
+
+## Ingesta de la landing de Limitless Webinars (SCRUM-528)
+
+**Prerrequisitos:** los PR de SCRUM-526, 527 y 528 mergeados y desplegados, y las dos migraciones aplicadas en
+producción en orden (SCRUM-532): `20261016120000_webinars_modelo_de_datos` (SCRUM-526) y
+`20261016130000_landing_events_reprocesos` (SCRUM-528), con los SQL de `limitless-auditoria/sql-produccion/` en el
+orden de `limitless-auditoria/sql-produccion/LEEME-scrum-532.md` (cada verificación inmediatamente después de su
+migración: la de 526 da false de forma esperable si se corre después de aplicar 528). Una organización de prueba con un lanzamiento `active` y una
+clave de ingesta (con `ESCONDIDO.ingestaLanding` en `true` hay que crearla con la bandera apagada en un preview o
+como lo defina SCRUM-532). Probado contra un Supabase local con `next start` (evidencia de SCRUM-528); falta en
+Vercel con la base real.
+
+1. ⭐ `curl -X POST "$APP/api/ingest/landing" -H "Authorization: Bearer <clave>" -H "content-type: application/json"
+   -d '{"type":"registration","launch_public_id":"<public_id>","client_registration_id":"prueba-1","email":"<email de prueba>"}'`
+   → `{"ok":true}` en menos de 300 ms. En la base: `landing_events` `processed`, un lead, un registro y un evento
+   `registered`. Repetir el mismo comando: nada se duplica.
+2. Sin el header, con otra clave o con una revocada → 401 `{"ok":false,"error":"No autorizado."}`.
+3. Un `launch_public_id` que no existe → 200 y el crudo `unmapped` con "Lanzamiento desconocido...".
+4. ⭐ Vercel → Settings → Cron Jobs: aparece `/api/cron/reprocesar-landing` cada 10 minutos. Sentry → Crons: el
+   monitor `cron-reprocesar-landing` en verde después de su primera corrida, y Super-admin → Infraestructura lo lista.
+5. Los logs de Vercel de esas llamadas no muestran el email, la clave ni su hash.
+6. Un payload con `"name":"Persona \u0000"` → 400 `Payload inválido.`, sin fila en `landing_events` y sin evento en
+   Sentry. Uno con `"occurred_at"` una hora adelantado o en 1900 → 200, y el registro queda con la hora de llegada
+   (`registered_at` = `received_at`).
