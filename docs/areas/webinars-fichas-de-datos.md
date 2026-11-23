@@ -38,6 +38,10 @@ y los filtros. Sale de los contratos de vista (`apps/web/lib/webinar/vistas/cont
   el módulo `sales` (`apps/web/lib/navigation/module-for-path.ts`, prefijo `/leads`) y la experiencia de la
   organización (`exigirRutaDeLaExperiencia("/leads")` en `app/(platform)/leads/layout.tsx`).
 - **Se ata a:** tabla.columna del modelo. "Calc." = se calcula en `calcular.ts` a partir de otros números.
+- **Claves de un `jsonb`:** una clave dentro de una columna `jsonb` del modelo se cita como `tabla.data.clave`
+  (por ejemplo `lead_events.data.amount`). Cuenta como atada al modelo si la columna existe y `calcular.ts` lee
+  la clave hoy; si nadie la lee, es un hueco, como una columna que falta. Las de esta ficha: `lead_events.data`
+  (`product`, `amount`, `currency`), que lee `calcular.ts`.
 
 ## 1. Inicio (`/inicio`, `leerInicio`)
 

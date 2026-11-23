@@ -42,6 +42,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 - Como en SCRUM-548, las fichas salen del contrato, de `calcular.ts` y de lo que dibujan las pantallas, no del diseño a mano.
 - Quién lo ve (Fernando, 2026-11-13): el Setter, persona de SCRUM-545; Dueño, Análisis y Closer quedan "a confirmar en la sesión del día 6". El bloqueo de hoy es el módulo `sales` y la experiencia de la organización.
 - Un solo pendiente: se amplía `[WEBINAR-FICHAS-HUECOS-DEL-MODELO]` en vez de abrir otro.
+- Claves de `jsonb` (2026-11-23): Convenciones dice cuándo una clave como `lead_events.data.amount` cuenta como atada al modelo (la columna existe y `calcular.ts` la lee). Cierra la duda del AC-3 ("solo tablas y columnas que existen") para las secciones 1 y 6 sin tocar la sección 1.
 
 **Riesgos / deuda técnica pendiente:** es un borrador: la tarea se acepta con las fichas confirmadas en la sesión del día 6, que todavía no ocurrió. Huecos nuevos: estado de venta y notas sin tabla (Fase 3), `note` en el `check` de `lead_events.kind` y no en `TIPOS_DE_EVENTO`, el equipo sin fuente en el modelo y los miembros sin permiso de escritura para las acciones de la ficha. La fila "Lo que el equipo mueve hoy" de Inicio (sección 1, de SCRUM-548) cita `lead_sales_state.stage`, que no existe en el modelo; no se tocó y queda anotado en el hueco 6.
 
