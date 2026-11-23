@@ -15,7 +15,7 @@ vi.mock("@/lib/supabase/admin", async () => {
   return { createAdminClient: () => crearBaseFalsa(sim.estado) };
 });
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/require-super-admin", () => ({ isSuperAdminEmail: async () => false }));
+vi.mock("@/lib/auth/require-staff", () => ({ isStaffEmail: async () => false }));
 
 import type { User } from "@supabase/supabase-js";
 import { estadoInicial, experienciaGuardada } from "@/lib/organization/__tests__/base-falsa";

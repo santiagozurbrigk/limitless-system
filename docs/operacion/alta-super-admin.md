@@ -10,9 +10,11 @@ de agregar su email a `super_admin_users`. Y la persona no entra a la app hasta 
 
 ## Por qué el orden importa
 
-Hoy la app decide quién es super admin **sólo por el email** (`isSuperAdminEmail` en
-`apps/web/lib/auth/require-super-admin.ts`): cualquier cuenta con un email de la lista entra al panel interno,
-sin importar quién la creó. De ahí salen dos problemas, uno por cada orden equivocado:
+Hoy la app decide quién es super admin **sólo por el email** (`isStaffEmail` en
+`apps/web/lib/auth/require-staff.ts`, SCRUM-552; `require-super-admin.ts` quedó como alias): cualquier cuenta
+con un email de la lista entra al panel interno, sin importar quién la creó. Estar en la organización de
+Limitless no da el panel: lo da sólo la lista (`app/super-admin/__tests__/guard-de-staff-por-accion.test.ts`,
+escenarios "miembro común" y "founder de Limitless fuera de la lista"). De ahí salen dos problemas, uno por cada orden equivocado:
 
 1. **Email en la lista antes de que exista la cuenta.** Cualquier founder puede invitar ese email a su
    organización desde Equipo. La invitación crea la cuenta ya confirmada y le muestra al founder la contraseña
@@ -130,8 +132,15 @@ where s.email = lower(trim('nombre@ejemplo.com'));
 ### 5. Primer ingreso de la persona
 
 1. Pásale la contraseña por el gestor de contraseñas o en persona.
-2. La persona entra por **`/superadmin/login`** (en producción, `https://otc-plaform.vercel.app/superadmin/login`).
-   La app le crea un perfil sin organización y la lleva a `/super-admin/organizations`.
+2. La persona entra por **`/login`**, el mismo login de todos (en producción,
+   `https://otc-plaform.vercel.app/login`). `/superadmin/login` redirige ahí (SCRUM-552). La app le crea el
+   perfil como **founder de la organización de Limitless** (la única con `experience = 'limitless'`) y la lleva
+   a `/super-admin/organizations` (`lib/auth/__tests__/bootstrap-staff-en-limitless.test.ts` y
+   `app/auth/__tests__/login-del-staff.test.ts`). Si todavía no hay ninguna organización marcada como Limitless,
+   el perfil nace sin organización, como antes.
+   Si la organización de Limitless no completó el onboarding (y no tiene `skip_onboarding`), el founder recién
+   llegado cae en `/onboarding` en cualquier ruta, incluido el panel: ver el paso 3b de
+   [staff-en-org-de-limitless.md](staff-en-org-de-limitless.md).
 3. Cambia la contraseña en **`/auth/update-password`**. Al guardar, la app la manda al Panel de clientes, que no es
    para super admins (puede mostrar un error): tiene que volver a `/super-admin/organizations`.
 
@@ -144,15 +153,218 @@ join auth.users u on u.id = p.id
 where lower(u.email) = lower(trim('nombre@ejemplo.com'));
 ```
 
-**Resultado esperado:** 1 fila con `organization_id` vacío y `must_change_password` en `false`.
+**Resultado esperado:** 1 fila con `organization_id` igual al id de la organización de Limitless, `role` en
+`founder` y `must_change_password` en `false`. Si todavía no se marcó la organización de Limitless,
+`organization_id` vacío (se asocia después con `select public.asociar_staff_a_la_org_de_limitless();`, ver
+[staff-en-org-de-limitless.md](staff-en-org-de-limitless.md)).
 
-Si `organization_id` tiene un valor, la app le creó una organización a esa cuenta antes de que estuviera en la
-lista. Primero haz la baja (sección siguiente) para que no conserve el acceso al panel interno, y después avisa
-en el canal del equipo. No borres la organización a mano, porque puede tener datos y roles colgando.
+Para saber si el `organization_id` es el de Limitless:
+
+```sql
+select id, name from public.organizations where experience = 'limitless';
+```
+
+Si `organization_id` es **otra** organización, la app le creó una organización propia a esa cuenta antes de que
+estuviera en la lista. Primero haz la baja (sección siguiente) para que no conserve el acceso al panel interno, y
+después avisa en el canal del equipo. No borres la organización a mano, porque puede tener datos y roles
+colgando.
+
+### Invitaciones a alguien del staff
+
+Una cuenta del staff sólo se suma por invitación de equipo a la **organización de Limitless**, y si la invitación
+le crea el perfil entra como **founder** (no como member). A cualquier otra organización la invitación se rechaza
+("Esta cuenta es del equipo de Limitless y sólo se puede sumar a la organización de Limitless…") y queda
+pendiente; sin organización marcada como Limitless también se rechaza. Una invitación nunca le cambia el rol a
+un perfil que ya existe. Testigo: `supabase/ci/tests/98_staff_en_org_de_limitless.sql`, caso 8.
 
 ## Dar de baja a un super admin
 
-Sacar el email de la lista le quita el acceso al panel interno en el próximo request:
+Desde SCRUM-552 el staff es founder de la organización de Limitless, así que **sacar el email de la lista ya no
+alcanza**: le quita el panel interno en el próximo request, pero la persona sigue siendo founder de la
+organización de Limitless y conserva sus datos (Clientes, Ventas, Administración). La baja tiene dos partes, las
+dos obligatorias: sacar el email de la lista y **desactivar su perfil** (`profiles.is_active = false`). Con el
+perfil desactivado el guard del panel también la rechaza (`lib/auth/__tests__/require-staff.test.ts`, "un staff
+con el perfil desactivado no entra"). Si la persona deja el equipo, borra también la cuenta (al final de esta
+sección).
+
+### El camino: la función `dar_de_baja_staff`
+
+Desde que se aplica `20261115120000_baja_de_staff.sql` en la ventana de SCRUM-532
+(después de `20261101120000_staff_en_org_de_limitless.sql`, paso 5b de
+[staff-en-org-de-limitless.md](staff-en-org-de-limitless.md)), la baja es una sola llamada que hace las dos partes
+juntas: si algo falla, no se cambia nada. Si la función todavía no existe, sigue los pasos de "Si la función
+todavía no existe (antes de la ventana)", al final de esta sección.
+
+**Antes de la llamada**, mira el perfil de la persona y su organización (solo lectura):
+
+```sql
+select p.id, p.organization_id, o.name as organizacion, o.experience, p.role, p.is_active
+from public.profiles p
+join auth.users u on u.id = p.id
+left join public.organizations o on o.id = p.organization_id
+where lower(btrim(u.email)) = lower(btrim('nombre@ejemplo.com'));
+```
+
+Para saber si esa organización es la de Limitless:
+
+```sql
+select id, name from public.organizations where experience = 'limitless';
+```
+
+La función desactiva el perfil cuyo usuario de Auth tiene ese email, **sin mirar la organización**: si la persona
+además es founder de **otra** organización (el caso de la sección anterior), queda inactiva también ahí. Si eso no
+es lo que quieres, no sigas y avisa en el canal del equipo.
+
+**La llamada.** Córrela en el **SQL Editor** de Supabase, que usa el rol de migraciones (ningún rol de la API
+puede ejecutarla):
+
+```sql
+select public.dar_de_baja_staff('nombre@ejemplo.com');
+```
+
+**Resultado esperado:** una fila con uno de estos tres valores:
+
+- `perfil_desactivado`: el email salió de la lista y el perfil cuyo email de Auth es ese quedó desactivado.
+- `sin_perfil`: el email salió de la lista y ningún perfil tiene hoy ese email de Auth. No quiere decir que la
+  persona "nunca entró": puede haber cambiado su email desde la app. En la organización de Limitless no quedó
+  ningún perfil activo fuera de la lista.
+- `sin_perfil_revisar`: el email salió de la lista y ningún perfil tiene hoy ese email de Auth (otra vez: puede
+  haber cambiado su email desde la app), pero en la organización de Limitless queda al menos un perfil activo
+  cuyo email de Auth no está en la lista. Puede ser la misma persona con otro email, o un miembro legítimo que no
+  es del staff. La función no desactiva a ninguno. **No des la baja por terminada**: sigue con la segunda
+  consulta de verificación (abajo) y desactiva a mano el perfil que corresponda.
+
+**Si la llamada aborta**, no se cambió nada. Según el mensaje:
+
+- `Ese email no está en la lista de staff (super_admin_users): ninguna fila, pasada a minúsculas y sin espacios,
+  es igual a ese email en minúsculas y sin espacios…`: la función compara normalizando los dos lados, así que una
+  fila mal cargada (con mayúsculas o espacios) no da este mensaje: la encuentra y la saca. Si aparece, el email
+  ya no está en la lista en ninguna forma (por ejemplo, una baja manual a medias de antes de la ventana: se sacó
+  de la lista y no se desactivó el perfil), y la función no puede terminarla. Corre la primera
+  consulta de "Verificación después de la baja": si `perfiles_activos` no es `0`, el perfil sigue activo.
+  Desactívalo por su `id` como en el paso 2 de "Si la función todavía no existe" (cuenta primero los perfiles
+  con ese email de Auth y desactiva solo si hay exactamente uno), y termina con las dos consultas de
+  "Verificación después de la baja".
+- `Hay N filas en la lista de staff (super_admin_users) que quedan iguales a ese email en minúsculas y sin
+  espacios…`: dos o más filas de la lista son el mismo email con mayúsculas o espacios distintos. Míralas con:
+
+  ```sql
+  select quote_literal(email) as valor, length(email) as largo
+  from public.super_admin_users
+  where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'));
+  ```
+
+  Un espacio al final no se ve en una columna de texto común: por eso la consulta muestra cada fila entre
+  comillas (`valor`) y su largo. `'b9@ejemplo.com'` (largo 14) y `'b9@ejemplo.com '` (largo 15) son filas
+  distintas.
+
+  Deja una sola: la que ya está en minúsculas y sin espacios, si hay una (es la única que la app reconoce); si
+  no, decide con el equipo. Borra las otras **de a una**, cada una con esta transacción. Antes, reemplaza los
+  valores: `'fila que dejas'` y `'fila que borras'`, cada uno entero y con sus comillas, por el `valor` exacto
+  que sale en la consulta de arriba (cópialo de la salida tal cual, con las comillas y los espacios de adentro;
+  sin `lower` ni `trim`), y `'nombre@ejemplo.com'` por el email de la baja. Si la fila que borras es dueña de un
+  holding, el `delete` solo fallaría por la FK (`holdings_owner_email_fkey`): por eso el `update` primero pasa
+  esos holdings, y solo esos, a la fila que dejas, que es la misma persona:
+
+  ```sql
+  begin;
+  update public.holdings set owner_email = 'fila que dejas'
+  where owner_email = 'fila que borras'
+    and lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'))
+    and lower(btrim('fila que dejas')) = lower(btrim('nombre@ejemplo.com'))
+    and 'fila que dejas' <> 'fila que borras';
+  delete from public.super_admin_users
+  where email = 'fila que borras'
+    and email <> 'fila que dejas'
+    and lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'))
+    and lower(btrim('fila que dejas')) = lower(btrim('nombre@ejemplo.com'))
+    and exists (select 1 from public.super_admin_users k where k.email = 'fila que dejas');
+  commit;
+  ```
+
+  Las condiciones impiden tocar a otra persona o la fila que dejas. Si `'fila que borras'` no es el mismo email
+  que la baja, o es igual a `'fila que dejas'`, no se cambia nada. Si `'fila que dejas'` no es el mismo email que
+  la baja o no está en la lista tal cual, el `delete` no borra nada; y si había un holding, el `update` no lo
+  mueve o falla por la FK, y la transacción no deja cambios. Como el SQL Editor solo muestra el resultado del
+  último statement, verifica con la consulta de arriba (**esperado:** una sola fila, la que dejas) y con esta
+  (**esperado:** `0`):
+
+  ```sql
+  select count(*) as holdings_de_la_fila_borrada from public.holdings
+  where owner_email = 'fila que borras';
+  ```
+
+  Después repite la llamada. Si la persona es dueña de un holding (ahora a nombre de la fila que dejaste), la
+  función aborta con el mensaje siguiente: pásalo a otro super admin con esa receta y repite.
+- `Ese email es dueño de un holding (holdings.owner_email)…`: la función lo busca normalizando los dos lados, así
+  que el `owner_email` puede estar guardado con mayúsculas o espacios. Pasa el holding a otro super admin. El
+  `update` guarda el email nuevo en minúsculas y sin espacios, así que en `super_admin_users` tiene que existir
+  ya esa forma (la que reconoce la app); si en la lista solo está con mayúsculas o espacios, el `update` falla
+  por la FK y no cambia nada:
+
+  ```sql
+  update public.holdings set owner_email = lower(btrim('otro.super.admin@ejemplo.com'))
+  where lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'));
+  ```
+
+  Verifica que no quedó ninguno a su nombre (**esperado:** ninguna fila) y repite la llamada:
+
+  ```sql
+  select id, name, owner_email from public.holdings
+  where lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'));
+  ```
+
+- `Hay N perfiles cuyo email de Auth coincide con ese email…`: más de un usuario de Auth tiene ese email (con
+  mayúsculas o espacios distintos). Revísalos a mano con la consulta de "Antes de la llamada" y decide cuál
+  desactivar antes de repetir.
+
+### Verificación después de la baja
+
+Dos consultas de solo lectura. La primera:
+
+```sql
+select
+  (select count(*) from public.super_admin_users
+     where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'))) as sigue_en_lista,
+  (select count(*) from public.profiles p
+     join auth.users u on u.id = p.id
+     where p.is_active and lower(btrim(u.email)) = lower(btrim('nombre@ejemplo.com'))) as perfiles_activos;
+```
+
+**Resultado esperado:** `0` y `0`.
+
+La segunda lista los perfiles activos de la organización de Limitless cuyo email de Auth no está en la lista de
+staff:
+
+```sql
+select p.id, u.email as email_de_auth, p.email, p.role
+from public.profiles p
+join public.organizations o on o.id = p.organization_id and o.experience = 'limitless'
+join auth.users u on u.id = p.id
+where p.is_active
+  and not exists (
+    select 1 from public.super_admin_users s
+    where lower(btrim(s.email)) = lower(btrim(u.email))
+  );
+```
+
+Compara normalizando los dos lados, como la función: un perfil cuyo email de Auth solo coincide con una fila mal
+cargada de la lista no aparece, igual que no lo contó la función.
+
+**Resultado esperado:** solo miembros conocidos que no son del staff, y no la persona dada de baja. `p.email` se
+muestra solo como pista: lo edita el usuario y no sirve para decidir. Si aparece la persona dada de baja (por
+ejemplo, con otro email de Auth), desactívala a mano por su `id`:
+
+```sql
+update public.profiles set is_active = false where id = '<id>' returning id;
+```
+
+### Si la función todavía no existe (antes de la ventana)
+
+Mientras `20261115120000_baja_de_staff.sql` no esté aplicada, la baja son dos pasos manuales, los dos
+obligatorios.
+
+**1. Sacar el email de la lista.** Le quita el acceso al panel interno en el próximo request:
 
 ```sql
 delete from public.super_admin_users
@@ -162,41 +374,79 @@ returning email;
 
 Es un solo statement, así que se aplica entero o no se aplica. **Resultado esperado:** 1 fila con el email.
 
-Si no devuelve ninguna fila, el email no coincide con ninguna de la lista. Busca cómo está guardado con
-`select email from public.super_admin_users;` y borra esa fila por su valor exacto, tal cual sale, sin
-`lower` ni `trim`:
+Si no devuelve ninguna fila, puede estar guardado con mayúsculas o espacios. No copies el valor de una consulta:
+un espacio al final no se ve. Bórralo comparando normalizado los dos lados, como la función:
 
 ```sql
 delete from public.super_admin_users
-where email = 'valor tal cual sale en la consulta'
-returning email;
+where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'))
+returning quote_literal(email) as email_guardado, length(email) as largo;
 ```
+
+**Resultado esperado:** las filas de ese email, entre comillas y con su largo, para ver qué tenían de más. Si
+tampoco devuelve ninguna, el email no está en la lista. Para ver cómo está guardada cada fila, con los espacios
+a la vista: `select quote_literal(email), length(email) from public.super_admin_users;`.
 
 Una fila con mayúsculas o espacios nunca dio acceso (la app compara contra el email limpio y en minúsculas),
 pero conviene borrarla para que la lista refleje la realidad.
 
 Si el borrado falla porque `holdings.owner_email` lo referencia (`holdings_owner_email_fkey`), el email es
 dueño de un holding. La app no tiene pantalla para cambiarlo: pasa el holding a otro super admin en la misma
-transacción, antes de borrar.
+transacción, antes de borrar. Las dos sentencias comparan normalizando los dos lados, como la función
+(`lower(btrim(...))`): el `update` pasa los holdings de cualquier fila que sea ese email, aunque esté guardada
+con mayúsculas o espacios, y el `delete` saca todas esas filas, la bien cargada y las mal cargadas, que son la
+misma persona. Ningún holding ni fila de otro email queda alcanzado.
 
 ```sql
 begin;
-update public.holdings set owner_email = lower(trim('otro.super.admin@ejemplo.com'))
-where owner_email = lower(trim('nombre@ejemplo.com'));
-delete from public.super_admin_users where email = lower(trim('nombre@ejemplo.com'));
+update public.holdings set owner_email = lower(btrim('otro.super.admin@ejemplo.com'))
+where lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'));
+delete from public.super_admin_users where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'));
 commit;
 ```
 
-El email nuevo tiene que estar ya en `super_admin_users`; si no, el `update` falla y no se borra nada.
+El `update` guarda el email nuevo en minúsculas y sin espacios, así que en `super_admin_users` tiene que existir
+ya esa forma (la que reconoce la app); si no, el `update` falla por la FK y no se borra nada. No alcanza con que
+esté guardado con mayúsculas o espacios, aunque se lo escriba igual.
+Si por error es el mismo email que la baja (con otras mayúsculas o espacios), el `delete` falla por la FK y
+tampoco se cambia nada.
 
 Como el SQL Editor sólo muestra el resultado del último statement, verifica después:
 
 ```sql
 select
-  (select count(*) from public.super_admin_users where email = lower(trim('nombre@ejemplo.com'))) as sigue_en_lista,
-  (select count(*) from public.holdings where owner_email = lower(trim('nombre@ejemplo.com'))) as holdings_a_su_nombre;
+  (select count(*) from public.super_admin_users
+     where lower(btrim(email)) = lower(btrim('nombre@ejemplo.com'))) as sigue_en_lista,
+  (select count(*) from public.holdings
+     where lower(btrim(owner_email)) = lower(btrim('nombre@ejemplo.com'))) as holdings_a_su_nombre;
 ```
 
 **Resultado esperado:** `0` y `0`.
+
+**2. Desactivar el perfil.** Se identifica por el email de Auth, no por `profiles.email` (lo edita el usuario).
+Primero lista los perfiles que coinciden (solo lectura, no cambia nada):
+
+```sql
+select p.id, u.email as email_de_auth, p.organization_id, p.role, p.is_active
+from public.profiles p
+join auth.users u on u.id = p.id
+where lower(btrim(u.email)) = lower(btrim('nombre@ejemplo.com'));
+```
+
+- **Exactamente 1 fila:** desactiva ese perfil por su `id`:
+
+  ```sql
+  update public.profiles set is_active = false where id = '<id>' returning id;
+  ```
+
+  **Resultado esperado:** 1 fila con el `id`.
+- **Ninguna fila:** ningún perfil tiene hoy ese email de Auth (la persona puede haber cambiado su email desde la
+  app). No desactives nada todavía: la segunda consulta de "Verificación después de la baja" muestra si queda
+  alguien activo en la organización de Limitless fuera de la lista.
+- **Más de una fila:** no desactives nada. Más de un usuario de Auth tiene ese email (con mayúsculas o espacios
+  distintos): revísalos a mano y decide cuál es antes de desactivar uno por su `id`, igual que cuando la función
+  aborta con `Hay N perfiles…`.
+
+Termina con las dos consultas de "Verificación después de la baja", igual que con la función.
 
 La cuenta de Supabase queda. Si la persona deja el equipo, bórrala también desde **Authentication → Users**.

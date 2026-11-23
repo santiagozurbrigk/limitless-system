@@ -80,7 +80,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
 
 | Área | Doc | P0 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 32 | 18 |
+| [Plataforma: auth, permisos, holding, super admin, panel, onboarding, UI y Discord](#plataforma-auth-permisos-holding-super-admin-panel-onboarding-ui-y-discord) | [`docs/areas/plataforma.md`](./docs/areas/plataforma.md) | 1 | 11 | 36 | 19 |
 | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
 | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
 | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
@@ -434,14 +434,48 @@ Prioridad sugerida P2: hoy hay pocas bajas y está la pausa como alternativa; re
 #### [ORG-EXPERIENCIA-CAMBIO] Cómo pasa a `full` o a `limitless` una organización que lo necesite
 - **Tipo:** decisión de negocio
 - **Severidad:** Media
-- **Estado verificado:** desde SCRUM-523 (`20261019120000_organizations_experience.sql`) toda organización nueva nace con `organizations.experience = 'webinar'` porque las altas lo mandan explícito (el default de la columna es `full`), salvo el negocio creado dentro de un holding, que hereda la del holding. Las altas del super admin (`createFounderAccountAction`, `createOrganizationFromHoldingAction`, `createHoldingOrgAction` en `app/super-admin/actions.ts`) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para `authenticated`) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL). `limitless` (Limitless de gestión, decisión del PO del 28-oct-2026) no la manda ninguna alta: se asigna sólo así, con el SQL y el precheck de la guía de SCRUM-532.
+- **Estado verificado:** desde SCRUM-523 (`20261019120000_organizations_experience.sql`) toda organización nueva nace con `organizations.experience = 'webinar'` porque las altas lo mandan explícito (el default de la columna es `full`), salvo el negocio creado dentro de un holding, que toma la del holding (o `full` si el holding es `limitless`). Las altas del super admin (`createFounderAccountAction`, `createOrganizationFromHoldingAction`, `createHoldingOrgAction` en `app/super-admin/actions.ts`) no dejan elegir. Ningún usuario puede cambiar la columna (sin UPDATE para `authenticated`) y no hay pantalla ni acción de super admin que la cambie: hoy sólo se puede con el service role (SQL). `limitless` (Limitless de gestión, decisión del PO del 28-oct-2026) no la manda ninguna alta: se asigna sólo así, con el SQL y el precheck de la guía de SCRUM-532.
 - **Riesgo:** cuando SCRUM-524 esconda el menú según la experiencia, un cliente nuevo que compró Limitless completo (o una cuenta holding nueva, cuyos negocios heredan `webinar`) va a ver sólo Webinars hasta que alguien cambie el dato a mano en la base.
 - **Impacto:** clientes nuevos de Limitless completo dados de alta por el super admin después del deploy de SCRUM-523.
 - **Qué hay que hacer:** que el PO decida quién y desde dónde pasa una organización a `full` o a `limitless` (por ejemplo, un selector en el detalle de la organización del super admin, con `createAdminClient` y `requireSuperAdmin`, como `updateOrgAddOnsAction`), y si el cambio de un holding se propaga a sus negocios.
 - **Criterio de aceptación:** el super admin pasa una organización entre `webinar`, `limitless` y `full` sin SQL; un usuario de la organización sigue sin poder cambiarla (`supabase/ci/tests/97_experiencia_de_la_organizacion.sql`).
 - **Dónde:** `app/super-admin/actions.ts`, `organizations.experience`, `lib/organization/experience.ts`.
 
+#### [STAFF-INVITAR-DESDE-OTRA-ORG] Un founder puede invitar a su org el email de alguien del staff (nuevo, SCRUM-552)
+- **Tipo:** deuda técnica
+- **Estado verificado:** `inviteTeamMemberAction` (`apps/web/app/team/actions.ts:328`) no mira `super_admin_users`: crea la invitación aunque el email sea del staff. La aceptación la rechaza con `cuenta_de_staff` si la org no es la de Limitless (`aceptar_invitacion_de_equipo`, `supabase/migrations/20261101120000_staff_en_org_de_limitless.sql`; `supabase/ci/tests/98_staff_en_org_de_limitless.sql`, caso 8), así que la invitación queda pendiente sin efecto. Viene de antes de SCRUM-552 (riesgo R5 del SDD), que no lo empeora.
+- **Qué hay que hacer:** rechazar en `inviteTeamMemberAction` un email de la lista cuando la org que invita no es la de Limitless, con el mismo mensaje de `MENSAJE_INVITACION.cuenta_de_staff`.
+- **Dónde:** `apps/web/app/team/actions.ts`, `apps/web/lib/team/invitacion.ts`.
+
+#### [STAFF-BORRAR-ORG-DE-LIMITLESS] Nada impide dar de baja la org de Limitless desde el panel (nuevo, SCRUM-552)
+- **Tipo:** deuda técnica
+- **Estado verificado:** `deleteOrganizationAction` (`apps/web/app/super-admin/delete-actions.ts`) y `advertenciasDeOrganizacion` (`apps/web/lib/super-admin/deletion-plan.ts`) no miran `organizations.experience`: un staff puede dar de baja la org de Limitless, donde está todo el staff como founder, con la confirmación por nombre de siempre. Preexistente (riesgo R11 del SDD); SCRUM-552 sólo hace que esa org tenga al staff adentro.
+- **Qué hay que hacer:** que la vista previa de la baja bloquee (`estaBloqueada`) la org con `experience = 'limitless'`, con su test en `deletion-plan`.
+- **Dónde:** `apps/web/lib/super-admin/deletion-plan.ts`, `apps/web/app/super-admin/delete-actions.ts`.
+
+#### [STAFF-RESTOS-LOGIN-VIEJO] Restos del login propio del staff (nuevo, SCRUM-552)
+- **Tipo:** deuda técnica
+- **Estado verificado:** desde SCRUM-552 el staff entra por `/login` y `/superadmin/login` redirige ahí (`apps/web/app/superadmin/login/page.tsx`). Quedan sin uso o con un salto de más:
+  - la variante `"superAdmin"` de `LoginScreen` (`apps/web/components/auth/login-screen.tsx:15`), que ya no renderiza nadie;
+  - el flujo `"signin-superadmin"` de `apps/web/lib/auth/limite-login.ts:23`, que sólo usa su test (lo usaba `signInSuperAdminAction`, borrada);
+  - `apps/web/lib/navigation/redirects.ts:37` (`/superadmin` → `/superadmin/login`), que ahora es un doble salto hasta `/login`;
+  - `paths.superAdmin.login` (`apps/web/routes/paths.ts`), marcado como legado.
+- **Qué hay que hacer:** borrarlos en C3 (SCRUM-553), junto con `/superadmin/login`.
+- **Dónde:** los archivos de arriba y `apps/web/lib/supabase/public-paths.ts`.
+
+#### [STAFF-ALIAS-REQUIRE-SUPER-ADMIN] Seis módulos del panel siguen en el alias `require-super-admin` (nuevo, SCRUM-552)
+- **Tipo:** deuda técnica
+- **Estado verificado:** `apps/web/lib/auth/require-super-admin.ts` es un re-export `@deprecated` de `require-staff.ts` (mismo guard, mismo `cache`; `lib/auth/__tests__/require-staff.test.ts`, "el alias de require-super-admin es el mismo guard"). Lo importan todavía `lib/super-admin/{org-health,waitlist-queries,client-health,onboarding-progress,holding-queries,holdings-admin}.ts` y los tests `lib/super-admin/__tests__/load-onboarding-progress.test.ts` y `lib/auth/__tests__/super-admin-una-consulta.test.ts`. El test por acción del panel ya los cubre a través del alias.
+- **Qué hay que hacer:** pasarlos a `requireStaff` y borrar el alias en C3 (SCRUM-553).
+- **Dónde:** `apps/web/lib/super-admin/`, `apps/web/lib/auth/require-super-admin.ts`.
+
 ### Plataforma · P3
+
+#### [STAFF-GUARD-CON-PERTENENCIA] Endurecer el guard del staff con la pertenencia a la org de Limitless (nuevo, SCRUM-552)
+- **Tipo:** decisión de negocio
+- **Estado verificado:** `isStaffUser`/`requireStaff` (`apps/web/lib/auth/require-staff.ts`) deciden por la lista y por el perfil no desactivado; no exigen estar en la org de Limitless, para que el panel siga andando si el código se despliega antes de la migración de SCRUM-552 (decisión DT-6 del SDD).
+- **Qué hay que hacer:** después de la ventana de SCRUM-532, decidir si el guard exige además `organization_id` = la org de Limitless, y si es así cambiarlo con su test.
+- **Dónde:** `apps/web/lib/auth/require-staff.ts`.
 
 #### [MIDDLEWARE-COOKIE-REFRESCADA] El middleware le pasa a la página la cookie de sesión vieja después de refrescarla (nuevo)
 - **Tipo:** bug

@@ -78,6 +78,7 @@ import { ErrorEsperable } from "@/lib/server/error-esperable";
 import {
   EXPERIENCIA_SI_FALLA,
   EXPERIENCIAS,
+  experienciaDelNegocioDeUnHolding,
   getOrganizationExperience,
   leerExperienciaDeLaOrganizacion,
 } from "../experience";
@@ -265,5 +266,22 @@ describe("leerExperienciaDeLaOrganizacion (lectura estricta, para heredar)", () 
     await expect(leerExperienciaDeLaOrganizacion(await cliente() as never, "h-1")).rejects.toThrow();
     sim.respuesta = { data: { experience: "otra" }, error: null };
     await expect(leerExperienciaDeLaOrganizacion(await cliente() as never, "h-1")).rejects.toThrow();
+  });
+});
+
+describe("experienciaDelNegocioDeUnHolding (SCRUM-552)", () => {
+  it("⭐ un holding limitless crea negocios full", () => {
+    expect(experienciaDelNegocioDeUnHolding("limitless")).toBe("full");
+  });
+
+  it("un holding full o webinar crea negocios con su misma experiencia", () => {
+    expect(experienciaDelNegocioDeUnHolding("full")).toBe("full");
+    expect(experienciaDelNegocioDeUnHolding("webinar")).toBe("webinar");
+  });
+
+  it("⭐ nunca devuelve limitless, sea cual sea la experiencia del holding", () => {
+    for (const experiencia of EXPERIENCIAS) {
+      expect(experienciaDelNegocioDeUnHolding(experiencia)).not.toBe("limitless");
+    }
   });
 });
