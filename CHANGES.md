@@ -28,6 +28,20 @@ al terminar cada bloque de trabajo, aunque sea chico.
 **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
 ```
 
+### 2026-11-23 — Limitless Webinars: los tests de RLS de 526 y 528 pasan a 91_ y 92_ (SCRUM-528)
+
+**Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (sobre `73e21b40`)
+**Commit(s):** este.
+**Módulo(s) afectado(s):** `supabase/ci/tests/91_webinars_modelo_de_datos.sql` (antes `97_`), `supabase/ci/tests/92_landing_events_reprocesos.sql` (antes `98_`), y las referencias en `docs/operacion/testing.md`, `docs/areas/embudos.md`, `docs/arquitectura/base-de-datos.md` y este archivo.
+
+**Qué se hizo:** se renombran los dos tests de RLS de Webinars, sin tocar su contenido.
+
+**Por qué / finalidad:** en el ensayo de la cadena de merge del Sprint 2 (comentario de Santiago en #153), al final quedaban dos `97_` (523 y 526) y dos `98_` (552 y 528). Corren igual, pero rompen la convención de un número por archivo.
+
+**Decisiones de diseño relevantes:** se renombran los de 526 y 528, y no los de 523 (`97_experiencia_de_la_organizacion.sql`) y 552 (`98_staff_en_org_de_limitless.sql`, `99_baja_de_staff.sql`), que ya están aprobados. Del 91 al 94 estaban libres. Que corran antes que `95_` y `96_` no cambia nada: cada archivo arma sus datos dentro de `begin; ... rollback;` y no depende de otro. El cambio va en la punta de la pila (#146) para no tener que llevarlo por merge de #141 a #144 y #146.
+
+**Riesgos / deuda técnica pendiente:** entre el merge de #141 y el de #146, `main` tiene el `97_` repetido un rato, dentro de la misma ventana.
+
 ### 2026-10-17 — Limitless Webinars: menores de la QA de la ingesta de la landing (SCRUM-528)
 
 **Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (sobre `6625f9fb`)
@@ -49,7 +63,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (sobre `6ba9da71`)
 **Commit(s):** `c2d8949e`: fix(webinars): un occurred_at fuera de la ventana se ignora y vale received_at en vez de rechazar el registro; sin índice parcial redundante en la migración 20261016130000; y este (docs).
-**Módulo(s) afectado(s):** `apps/web/lib/webinar/normalize/evento.ts`, `apps/web/lib/webinar/ingesta-landing.ts`, `apps/web/lib/webinar/reprocesar-landing.ts` (comentario), `supabase/migrations/20261016130000_landing_events_reprocesos.sql` (todavía no aplicada), `supabase/ci/tests/98_landing_events_reprocesos.sql`, tests de `lib/webinar/__tests__/`; docs de embudos, seguridad, base de datos, testing y verificación manual; `limitless-auditoria/sql-produccion/scrum-528/`.
+**Módulo(s) afectado(s):** `apps/web/lib/webinar/normalize/evento.ts`, `apps/web/lib/webinar/ingesta-landing.ts`, `apps/web/lib/webinar/reprocesar-landing.ts` (comentario), `supabase/migrations/20261016130000_landing_events_reprocesos.sql` (todavía no aplicada), `supabase/ci/tests/92_landing_events_reprocesos.sql`, tests de `lib/webinar/__tests__/`; docs de embudos, seguridad, base de datos, testing y verificación manual; `limitless-auditoria/sql-produccion/scrum-528/`.
 
 **Qué se hizo:**
 - **MAYOR-4:** un `occurred_at` bien escrito pero fuera de la ventana (más de 5 minutos adelantado, más de 30 días atrás, año 0 o 10000) ya no rechaza el registro ni la visita: se ignora y vale `received_at`. El crudo guarda el valor original. La decisión se toma al normalizar, contra `received_at`, así es la misma en el endpoint y en cualquier reproceso (se sacó la holgura de un minuto, que ya no hace falta). 400 queda sólo para lo que no se puede guardar o no cumple el contrato, incluido un `occurred_at` que no es fecha ISO con zona.
@@ -68,7 +82,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Rama:** `feat/SCRUM-528-webinars-endpoint-de-ingesta` (sobre `efcce6c0`)
 **Commit(s):** `44d6fff9`: feat(webinars): reprocess_attempts y status failed en landing_events con índice parcial para el cron, migración nueva y test de estructura; `d29b49fb`: fix(webinars): la ingesta rechaza con 400 textos no guardables, anidamiento y occurred_at fuera de ventana; reproceso por columnas; sin lead suelto con un id reusado; email NFC y 429 con forma propia; `83b67404`: test(webinars): el test 98 nombra la falla cuando landing_events no acepta failed; y este (docs).
-**Módulo(s) afectado(s):** `supabase/migrations/20261016130000_landing_events_reprocesos.sql` (nueva), `supabase/ci/tests/98_landing_events_reprocesos.sql` (nuevo), `apps/web/lib/webinar/{endpoint-de-ingesta,ingesta-landing,reprocesar-landing,identity}.ts`, `apps/web/lib/webinar/normalize/{evento,filas,reproceso}.ts`, tests de `lib/webinar/__tests__/`; docs de embudos, seguridad, base de datos, jobs, alertas (runbook) y testing.
+**Módulo(s) afectado(s):** `supabase/migrations/20261016130000_landing_events_reprocesos.sql` (nueva), `supabase/ci/tests/92_landing_events_reprocesos.sql` (nuevo), `apps/web/lib/webinar/{endpoint-de-ingesta,ingesta-landing,reprocesar-landing,identity}.ts`, `apps/web/lib/webinar/normalize/{evento,filas,reproceso}.ts`, tests de `lib/webinar/__tests__/`; docs de embudos, seguridad, base de datos, jobs, alertas (runbook) y testing.
 
 **Qué se hizo:** los 6 hallazgos de la AR pasada 1 (3 MAYOR, 3 MENOR).
 - **MAYOR-1:** después de `JSON.parse` se recorre el valor con profundidad acotada (10 niveles) y se rechaza con 400 todo texto, valor o clave (también las de más), con NUL o con un surrogate suelto (lo mismo que `isWellFormed()`). Antes, esos payloads pasaban Zod, la base no los podía guardar como jsonb y respondían 500 en bucle con un evento de Sentry por pedido.
@@ -144,7 +158,7 @@ al terminar cada bloque de trabajo, aunque sea chico.
 
 **Rama:** `feat/SCRUM-526-webinars-modelo-de-datos` (base `main` `4a542e5e`)
 **Commit(s):** `f83ced3f`: feat(webinars): modelo de datos de Limitless Webinars, Fase 1; `55e6c38b` (docs); AR pasada 1: `c5c71c37`: fix(webinars): un lanzamiento con datos no se borra y el test vigila la escritura sin filtro de org; este (docs)
-**Módulo(s) afectado(s):** base de datos: `supabase/migrations/20261016120000_webinars_modelo_de_datos.sql` (nueva), `supabase/ci/tests/97_webinars_modelo_de_datos.sql` (nuevo); docs `arquitectura/base-de-datos.md`, `areas/embudos.md`, `operacion/testing.md`
+**Módulo(s) afectado(s):** base de datos: `supabase/migrations/20261016120000_webinars_modelo_de_datos.sql` (nueva), `supabase/ci/tests/91_webinars_modelo_de_datos.sql` (nuevo); docs `arquitectura/base-de-datos.md`, `areas/embudos.md`, `operacion/testing.md`
 
 **Qué se hizo:** primera pieza de la épica SCRUM-521. Una migración con las 10 tablas de la Fase 1 de los requerimientos técnicos: `webinar_launches`, `webinar_sessions`, `launch_ad_campaigns`, `launch_products`, `leads`, `launch_registrations`, `landing_visits`, `lead_events`, `ingest_keys` y `landing_events`, con RLS, policies, grants, índices y CHECKs en el mismo archivo. Instala `pg_trgm` en el schema `extensions` (índices GIN trigram sobre `leads.name` y `leads.email_normalized`) y suma `launch_registrations` a `supabase_realtime` de forma idempotente. No hay código de la app: claves e ingesta son SCRUM-527 y SCRUM-528. No se corrió nada en producción: los SQL para SCRUM-532 están en `limitless-auditoria/sql-produccion/scrum-526/`.
 

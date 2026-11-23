@@ -216,7 +216,7 @@ Reglas comunes:
 - **Ningún DELETE de un usuario se lleva historial**: las FK de `launch_registrations`, `landing_visits` y `lead_events` hacia el lanzamiento son NO ACTION. Un lanzamiento con registros, visitas o eventos no se puede borrar (23503); un borrador vacío sí, y sus sesiones, campañas y productos se van en cascada. Borrar la organización sigue borrando todo (NO ACTION se chequea al final de la sentencia). Las FK hacia `leads` siguen en cascada porque ningún usuario borra leads. Si en vez de borrar se quiere archivar, se decide en SCRUM-522.
 - **Lectura**: miembros de la org (`get_my_organization_id()`) en todas, salvo `ingest_keys` y `landing_events`.
 - **Escritura**: la configuración (`webinar_launches`, `webinar_sessions`, `launch_ad_campaigns`, `launch_products`) sólo founder o admin de la org activa (también el founder de un holding que opera uno de sus negocios) (`current_user_has_org_role(array['founder','admin'])`, patrón de SCRUM-1; SCRUM-533 la pasa a permisos por módulo). `leads`, `launch_registrations`, `landing_visits` y `lead_events` no tienen grants de escritura para `authenticated`: las escribe la ingesta con el service role. `anon` no tiene ningún grant.
-- Tests: `supabase/ci/tests/97_webinars_modelo_de_datos.sql` y `98_landing_events_reprocesos.sql` (columna, CHECKs, `failed`, sin índice propio, sin acceso para usuarios).
+- Tests: `supabase/ci/tests/91_webinars_modelo_de_datos.sql` y `92_landing_events_reprocesos.sql` (columna, CHECKs, `failed`, sin índice propio, sin acceso para usuarios).
 
 ### Discord (`docs/areas/discord.md`)
 `discord_integrations`, `discord_client_links`, `discord_messages`, `discord_pending_links` (vacía), `discord_channel_clients`, `discord_team_members`.

@@ -329,7 +329,7 @@ Lo que ya hace cumplir la base:
   `error_message`, `processed_at`), para que la ingesta reutilice ese reclamo y reproceso.
 
 Detalle de columnas y reglas: `docs/arquitectura/base-de-datos.md` § Limitless Webinars.
-Tests: `supabase/ci/tests/97_webinars_modelo_de_datos.sql`.
+Tests: `supabase/ci/tests/91_webinars_modelo_de_datos.sql`.
 
 #### Claves de ingesta de la landing (SCRUM-527)
 
