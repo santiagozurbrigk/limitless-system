@@ -133,7 +133,7 @@ Es el incidente más grave (fuga entre clientes).
 ### H · Se borraron datos por error (baja de org, script, migración)
 1. Parar lo que esté borrando (cancelar el deploy, el script, el cron).
 2. Dump inmediato (§0) para no empeorar.
-3. Sin backup (plan Free) **no hay restauración**: reconstruir con lo que se pueda (tabla "Qué se puede reconstruir" de la auditoría): re-sincronizar proveedores, pedir al cliente los archivos y la carga manual.
+3. Restaurar: producción está en plan Pro de Supabase (confirmado por Fernando el 15-oct-2026). Qué backups hay y cómo se restauran (los de Supabase y el dump propio del workflow "Backup de producción") está en [`backups-y-restauracion.md`](./backups-y-restauracion.md); la retención y si hay PITR se confirman ahí y en el panel, no en este doc. Lo que no esté en un backup se reconstruye con lo que se pueda (tabla "Qué se puede reconstruir" de la auditoría): re-sincronizar proveedores, pedir al cliente los archivos y la carga manual. Los backups de la base no incluyen los archivos de Storage.
 4. Una baja de org hecha por el super admin queda en `super_admin_deletions` (quién, cuándo, resultado), pero los datos no se recuperan.
 
 ### I · El bot de Discord o el worker de reels no responden

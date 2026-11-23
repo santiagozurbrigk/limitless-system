@@ -12,7 +12,9 @@
 La prioridad (P0–P3) dice qué tan urgente es cada ítem por separado. El plan agrega dos criterios:
 
 1. **Dependencias.** Algunos arreglos habilitan o hacen seguros a otros. El caso más claro: **no se debería
-   aplicar ninguna migración de arreglo sin un backup de la base**, y hoy no hay backups.
+   aplicar ninguna migración de arreglo sin un backup de la base**, y cuando se armó el plan no había backups.
+   (Nota del 2026-10-16: producción ya está en plan Pro de Supabase, confirmado por Fernando el 15-oct-2026;
+   los backups vigentes están en `docs/operacion/backups-y-restauracion.md`.)
 2. **Costo de oportunidad.** Varios hallazgos críticos se resuelven cambiando una configuración o con una
    migración de pocas líneas. Van primero porque el riesgo es alto y el trabajo, chico.
 
