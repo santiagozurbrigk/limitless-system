@@ -350,7 +350,7 @@ export const ETIQUETA_DEL_FILTRO: Record<FiltroDeLeads, string> = {
 
 /** Lo que llega de la URL de `/leads` (los filtros viven en la URL, §11.3). */
 export type ParametrosDeLeads = {
-  /** Sin lanzamiento: el activo; si no hay activo, el más nuevo. */
+  /** Sin lanzamiento: el activo; si no hay activo, el borrador más nuevo; si no hay borradores, el cerrado más nuevo (el orden de `lanzamientosOrdenados` en `calcular.ts`). */
   launchId?: string | null;
   /**
    * Llega como texto de la URL (`?filtro=`): la lectura lo valida y uno que no
