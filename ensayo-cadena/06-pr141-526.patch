@@ -1,0 +1,1512 @@
+commit 9a0c3bf0d5408f291bcbce91ad12e150df73f33d
+Author: Claude <noreply@anthropic.com>
+Date:   Mon Nov 23 13:55:12 2026 +0000
+
+    squash #141 feat/SCRUM-526-webinars-modelo-de-datos
+
+diff --git a/CHANGES.md b/CHANGES.md
+index 994aaf7a..5960f388 100644
+--- a/CHANGES.md
++++ b/CHANGES.md
+@@ -28,6 +28,40 @@ al terminar cada bloque de trabajo, aunque sea chico.
+ **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
+ ```
+ 
++### 2026-10-16 — Limitless Webinars: modelo de datos, Fase 1 (SCRUM-526)
++
++**Rama:** `feat/SCRUM-526-webinars-modelo-de-datos` (base `main` `4a542e5e`)
++**Commit(s):** `f83ced3f`: feat(webinars): modelo de datos de Limitless Webinars, Fase 1; `55e6c38b` (docs); AR pasada 1: `c5c71c37`: fix(webinars): un lanzamiento con datos no se borra y el test vigila la escritura sin filtro de org; este (docs)
++**Módulo(s) afectado(s):** base de datos: `supabase/migrations/20261016120000_webinars_modelo_de_datos.sql` (nueva), `supabase/ci/tests/97_webinars_modelo_de_datos.sql` (nuevo); docs `arquitectura/base-de-datos.md`, `areas/embudos.md`, `operacion/testing.md`
++
++**Qué se hizo:** primera pieza de la épica SCRUM-521. Una migración con las 10 tablas de la Fase 1 de los requerimientos técnicos: `webinar_launches`, `webinar_sessions`, `launch_ad_campaigns`, `launch_products`, `leads`, `launch_registrations`, `landing_visits`, `lead_events`, `ingest_keys` y `landing_events`, con RLS, policies, grants, índices y CHECKs en el mismo archivo. Instala `pg_trgm` en el schema `extensions` (índices GIN trigram sobre `leads.name` y `leads.email_normalized`) y suma `launch_registrations` a `supabase_realtime` de forma idempotente. No hay código de la app: claves e ingesta son SCRUM-527 y SCRUM-528. No se corrió nada en producción: los SQL para SCRUM-532 están en `limitless-auditoria/sql-produccion/scrum-526/`.
++
++**Por qué / finalidad:** Limitless Webinars necesita guardar lanzamientos, leads y lo que manda la landing antes de construir la ingesta y las pantallas.
++
++**Decisiones de diseño relevantes:**
++- Una fila hija no puede apuntar a otra organización: las FK hacia `webinar_launches`, `leads` y `landing_events` son compuestas `(x_id, organization_id)` contra un único `(id, organization_id)` del padre, en vez de un trigger. Vale para el service role (la ingesta), que no pasa por RLS. Mover un lanzamiento con hijas a otra org también falla.
++- Llaves únicas de datos externos con la organización (convención del repo): `(organization_id, client_registration_id)`, `(organization_id, source, source_ref, kind)`, `(organization_id, email_normalized)`. Las que empiezan por `launch_id` ya quedan dentro de una org.
++- `public_id` = 32 hex de `gen_random_uuid()` (122 bits aleatorios, sin depender de `pgcrypto` ni de su schema). Grants por columna en `webinar_launches`: ningún usuario elige ni cambia `public_id`, `id` ni `created_at`, ni mueve `organization_id`.
++- Sin escritura para `authenticated` en `leads`, `launch_registrations`, `landing_visits` y `lead_events` (ni grant ni policy): un intento da error de permisos (42501), no "0 filas". Así `lead_events` no tiene UPDATE ni DELETE para los usuarios; desde la AR pasada 1 tampoco se lo puede borrar por la cascada de un lanzamiento (ver abajo). `anon` no tiene ningún grant en las 10.
++- `ingest_keys` y `landing_events`: RLS sin policies y sin grants para `anon` ni `authenticated`.
++- `lead_events.launch_id` obligatorio (todo evento cuenta para un lanzamiento); relajarlo después es una migración de expansión. `webinar_sessions.report_status` sin CHECK: sus valores se definen con Zoom (Fase 2). `ingest_keys.key_hash` sin formato fijo (hex o base64 lo decide SCRUM-527).
++- Otros CHECKs: moneda `^[A-Z]{3}$`, `closed_at` sólo con `status = 'closed'`, `email_normalized` sin mayúsculas A-Z ni espacios en los bordes (con `collate "C"`, ver abajo), `phone_e164`, montos no negativos y metas mayores que 0. `goal_sales` y `goal_revenue` opcionales (null si no hay meta).
++- `updated_at` con `set_updated_at()` en las tablas con filas editables (todas menos `landing_visits` y `lead_events`).
++- `landing_events` con `error_message` y `processed_at` (patrón de `lib/webhooks/reclamar.ts`), `fanbasis` en `lead_events.source` y metas mayores que 0 (AR pasada 1).
++- `docs/arquitectura/base-de-datos.md`: producción está en plan Pro (confirmado por Fernando el 15-oct-2026); el doc ya no dice que no hay backups y remite a `docs/operacion/backups-y-restauracion.md` sin afirmar retención ni PITR.
++
++**Verificación (evidencia en `limitless-auditoria/evidencia-sprint2/scrum-526/`):** sin Docker: PostgreSQL 17.10 del paquete npm `@embedded-postgres/linux-x64` con pgvector 0.8.7 (paquete de apt.postgresql.org) y `psql` 16.15, todo en `~/.cache/pg17-embedded`, fuera del repo (`entorno-pg.sh`). `check-migrations.sh` en `main` `4a542e5e`: 193 migraciones y 12 archivos de tests en verde (`00_baseline_main_check-migrations.txt`); en `f83ced3f`: 194 migraciones y 13 archivos en verde (`01_check-migrations.txt`). La migración corre dos veces sin error (`02_idempotencia.txt`). 71 mutantes sobre policies, grants, FK, únicos, CHECKs, realtime e índices, cada uno con su marca verificada en el catálogo antes de correr: los 71 mueren por el texto literal de su control (`03_mutantes.txt`, `mutantes.py`). `tsc --noEmit` limpio (`04_tsc.txt`), suite 266 archivos y 4.226 tests (`05_vitest.txt`), los dos `--check` del backlog (`06_backlog-check.txt`). SQL de producción probados sobre una base con las 193 migraciones previas y su historial: precheck, migración, verificación en sesión `read only` con `todo_ok = true`, segunda corrida, y 14 mutaciones que la verificación detecta (`sql-produccion/scrum-526/prueba-local.txt`).
++
++**AR pasada 1 (2026-10-16, CAMBIOS: 2 BLOQUEANTES, 1 MAYOR, 5 MENORES):** BLQ-1: un founder o admin borraba un lanzamiento y la cascada se llevaba registros, visitas y eventos; ahora esas tres FK hacia el lanzamiento son NO ACTION: un lanzamiento con datos no se borra (23503), un borrador vacío sí y borrar la organización sigue borrando todo. Las FK hacia `leads` quedan en cascada (ningún usuario borra leads). Archivar en vez de borrar queda a confirmar en SCRUM-522 (`decisiones-a-confirmar-scrum-522.md`). BLQ-2: el test 97 probaba la escritura entre orgs con WHERE, que también aplica la policy de lectura; ahora UPDATE y DELETE sin WHERE e INSERT en otra org para la configuración, con 12 mutantes "sin org". MAY-1: `02_verificacion.sql` fija el `search_path` y compara los índices trigram por catálogo; el precheck muestra el `search_path`. m1: `landing_events` con `error_message` y `processed_at`. m2: `fanbasis`. m3: metas > 0. m4: holding en el test 97 (founder del holding en su negocio sí, en uno ajeno no; member del holding lee y no escribe). m5: `docs/operacion/incidentes.md` y `docs/auditoria/plan-de-remediacion.md` ya no dicen plan Free ni "sin backups". Verificación sobre `c5c71c37`: `check-migrations.sh` con 194 migraciones y 13 archivos en verde (`01_check-migrations-p2.txt`); segunda aplicación exit 0 (`02_idempotencia-p2.txt`); 94 mutantes, los 94 mueren por su control (`03_mutantes-p2.txt`; el mutante RESTRICT en vez de NO ACTION sobrevivió en el borrador, `03_mutantes-p2-borrador.txt`: en PG 17.10 borrar la org funciona igual, es equivalente para este test y se sacó); `tsc` limpio (`04_tsc-p2.txt`); suite 266 archivos y 4.226 tests (`05_vitest-p2.txt`); los dos `--check` (`06_backlog-check-p2.txt`). SQL de producción (`sql-produccion/scrum-526/prueba-local.txt`): bloque de `01_migracion.sql` idéntico al archivo, `todo_ok = t` en sesión read only y con 4 `search_path` (con y sin `extensions`), segunda corrida, y 21 mutaciones detectadas.
++
++**AR pasada 2 (2026-10-16, aprobada con 1 MENOR):** m6: el comentario de la migración decía que RESTRICT traba la cascada de la organización, y es falso; ahora dice que se usa NO ACTION porque es el default y que RESTRICT se comportaría igual en este caso. Commit: este. Verificación en `*-p3.txt` y `sql-produccion/scrum-526/prueba-local.txt`.
++
++**QA (2026-10-16, aprobado para DONE con 2 MENORES):** MENOR-1: `02_verificacion.sql` además compara las 102 columnas de las 10 tablas (ni una más ni una menos, con su tipo y su NOT NULL), que las metas sean nullables, los tipos de montos y fechas clave, y los 8 triggers de `updated_at` (BEFORE UPDATE, por fila, habilitados, con `set_updated_at()`); sigue siendo de sólo lectura. MENOR-2: esta entrada decía "montos y metas no negativos"; las metas son mayores que 0. La migración no cambió. Verificación: `check-migrations.sh` en verde (`01_check-migrations-p4.txt`) y prueba de los SQL de producción con el bloque de 01 idéntico, `todo_ok = t` con los 4 `search_path` y 30 alteraciones detectadas, 10 de ellas nuevas de QA (`07_prueba-sql-produccion-p4.txt`).
++
++**Collation del CHECK de `leads.email_normalized` (2026-10-16, AR pasada 2 de SCRUM-528, MENOR-5):** el CHECK era `email_normalized = lower(btrim(email_normalized))` y `lower()` usa la collation de la base: con tr-TR, `lower('I')` es `ı`, y con en_US o C.UTF-8 `lower('Á')` es `á`, así que el mismo valor se aceptaba o no según la base. Ahora es `lower(btrim(email_normalized) collate "C")`: sólo pasa A-Z a minúsculas, igual en cualquier base. Sigue impidiendo mayúsculas ASCII y espacios en los bordes; una mayúscula fuera de ASCII no la juzga la base (la normaliza la ingesta). Como la migración no está aplicada, se corrige en el mismo archivo. Test 97: espacios en el borde rechazados y `Ángel@test.com` aceptado; mutantes con la collation de la base, con `tr-TR-x-icu` y sin `btrim`. `02_verificacion.sql` compara la definición nueva y `00_precheck.sql` muestra `datcollate`, `datctype`, `datlocprovider` y `datlocale`. Verificación en `*-p5.txt`.
++
++**Riesgos / deuda técnica pendiente:** aplicar en producción es SCRUM-532 (incluye instalar `pg_trgm`). Los permisos de escritura de la configuración pasan a permisos por módulo en SCRUM-533. Borrar o archivar un lanzamiento se confirma en SCRUM-522.
++
+ ### 2026-11-02 — Leads y ficha del lead de Limitless Webinars (SCRUM-545, A7)
+ 
+ **Rama:** `feat/SCRUM-545-webinars-leads-y-ficha` (base: integración local `09131c63` de #148 y #150, sin mergear)
+diff --git a/docs/areas/embudos.md b/docs/areas/embudos.md
+index 2c662c0e..15f501ba 100644
+--- a/docs/areas/embudos.md
++++ b/docs/areas/embudos.md
+@@ -306,6 +306,35 @@ No tiene relación con el motor de embudos (no usa `funnel_instances`) ni con la
+ "próximo lanzamiento" del onboarding de clientes, que es un campo configurable del área
+ Clientes.
+ 
++### Limitless Webinars (Fase 1: sólo modelo de datos)
++
++SCRUM-526 (épica SCRUM-521) creó las tablas de los lanzamientos de webinars en
++`supabase/migrations/20261016120000_webinars_modelo_de_datos.sql`: `webinar_launches`,
++`webinar_sessions`, `launch_ad_campaigns`, `launch_products`, `leads`,
++`launch_registrations`, `landing_visits`, `lead_events`, `ingest_keys` y `landing_events`.
++No reutiliza `launches` ni `launch_metrics` (quedan como están). Todavía no hay código de la
++app que las use: las claves de ingesta y el endpoint de la landing son SCRUM-527 y SCRUM-528.
++
++Lo que ya hace cumplir la base:
++- Cada miembro lee sólo lo de su organización; la configuración del lanzamiento (lanzamiento,
++  sesiones, campañas, productos) la escriben founder o admin.
++- Leads, registros, visitas y eventos sólo los escribe el service role (la ingesta). Los
++  eventos del lead son append-only para los usuarios, y un lanzamiento con registros,
++  visitas o eventos no se puede borrar (un borrador vacío sí). Archivar en vez de borrar
++  queda para decidir en SCRUM-522.
++- Las claves de ingesta (sólo el hash) y los crudos de la landing no los ve nadie con sesión.
++- Un reintento de la landing no duplica: `client_registration_id` es único por organización y
++  la llave natural de `lead_events` también.
++- Una fila no puede apuntar a un lanzamiento, un lead o un crudo de otra organización (FK
++  compuestas con `organization_id`).
++- `launch_registrations` está en realtime y `leads` tiene índices trigram para buscar por
++  nombre o email.
++- `landing_events` tiene las columnas de `lib/webhooks/reclamar.ts` (`status`,
++  `error_message`, `processed_at`), para que la ingesta reutilice ese reclamo y reproceso.
++
++Detalle de columnas y reglas: `docs/arquitectura/base-de-datos.md` § Limitless Webinars.
++Tests: `supabase/ci/tests/97_webinars_modelo_de_datos.sql`.
++
+ ## Archivos clave
+ 
+ 1. `apps/web/lib/funnels/resolve.ts` — de dónde sale cada número
+diff --git a/docs/arquitectura/base-de-datos.md b/docs/arquitectura/base-de-datos.md
+index d1b19ec1..d1e0b905 100644
+--- a/docs/arquitectura/base-de-datos.md
++++ b/docs/arquitectura/base-de-datos.md
+@@ -4,13 +4,13 @@
+ 
+ ## Qué es
+ 
+-Una sola base PostgreSQL 17 en Supabase (Auth + Storage + pgvector), multi-tenant por `organization_id`. **El schema se define sólo con las migraciones de `supabase/migrations/`**: no hay `database.types.ts` generado ni ORM; los tipos de fila se escriben a mano en `apps/web/types/` o junto al mapper de cada dominio. Producción tiene 147 tablas en `public`, todas con RLS habilitado. **Producción está en plan Free de Supabase: no hay backups ni PITR** (`[DR-BACKUPS-SUPABASE]`; ver [`../auditoria/backups-y-recuperacion.md`](../auditoria/backups-y-recuperacion.md)).
++Una sola base PostgreSQL 17 en Supabase (Auth + Storage + pgvector), multi-tenant por `organization_id`. **El schema se define sólo con las migraciones de `supabase/migrations/`**: no hay `database.types.ts` generado ni ORM; los tipos de fila se escriben a mano en `apps/web/types/` o junto al mapper de cada dominio. Producción tiene 147 tablas en `public`, todas con RLS habilitado. **Producción está en plan Pro de Supabase** (confirmado por Fernando el 15-oct-2026). Qué backups tiene y cómo se restaura está en [`../operacion/backups-y-restauracion.md`](../operacion/backups-y-restauracion.md); desde este doc no se verificó la retención ni si hay PITR. La auditoría [`../auditoria/backups-y-recuperacion.md`](../auditoria/backups-y-recuperacion.md) es del 2026-09-23, cuando estaba en Free, y sus cupos y conclusiones son de ese plan (`[DR-BACKUPS-SUPABASE]`).
+ 
+ ## Migraciones
+ 
+ ### Cómo están organizadas
+ 
+-- 175 archivos `supabase/migrations/<AAAAMMDDHHMMSS>_<nombre_snake>.sql`, del `20260521000000_phase1_orgs_profiles` al `20260923140000_onboarding_de_clientes`.
++- 194 archivos `supabase/migrations/<AAAAMMDDHHMMSS>_<nombre_snake>.sql`, del `20260521000000_phase1_orgs_profiles` al `20261016120000_webinars_modelo_de_datos` (conteo del 2026-10-16; el invariante de abajo se verificó con 175).
+ - Una migración por cambio de feature; las primeras usan nombres en inglés, las de septiembre en español.
+ - Idempotentes en lo posible (`if not exists`, `drop policy if exists`), porque parte de producción se armó a mano antes de ordenar el historial.
+ - `supabase/scripts/` guarda SQL que **no** es migración: `legacy_RUN_ALL_PHASE1_NO_EJECUTAR.sql` (pisa `get_my_organization_id()`; no correr) y `mark_fathom_business_context_calls.sql`.
+@@ -38,7 +38,7 @@ Matices que un dev tiene que saber:
+ 
+ ### Chequeo en CI
+ 
+-El job `migrations` de `.github/workflows/ci.yml` levanta `pgvector/pgvector:pg17`, carga `supabase/ci/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, schemas `auth`/`storage`, `auth.uid()`/`auth.jwt()`, tablas mínimas de storage, publicación de realtime) y corre `supabase/ci/check-migrations.sh`: valida nombres y versiones únicas y aplica las 193 en orden, cada una en su transacción; después corre los tests de RLS de `supabase/ci/tests/` (12 archivos). Si una migración nueva usa otra pieza de la plataforma (otro schema, otra extensión), hay que sumarla a los stubs.
++El job `migrations` de `.github/workflows/ci.yml` levanta `pgvector/pgvector:pg17`, carga `supabase/ci/supabase-stubs.sql` (roles `anon`/`authenticated`/`service_role`, schemas `auth`/`storage`, `auth.uid()`/`auth.jwt()`, tablas mínimas de storage, publicación de realtime) y corre `supabase/ci/check-migrations.sh`: valida nombres y versiones únicas y aplica las 194 en orden, cada una en su transacción; después corre los tests de RLS de `supabase/ci/tests/` (13 archivos). Si una migración nueva usa otra pieza de la plataforma (otro schema, otra extensión), hay que sumarla a los stubs.
+ 
+ ## RLS y acceso
+ 
+@@ -62,7 +62,7 @@ El claim `active_business_org_id` lo agrega el Auth Hook `custom_access_token_ho
+ 
+ Lectura de portfolio del holding: `get_my_holding_business_org_ids()` + policies `holding_reads_*` sobre `organizations`, `clients`, `closing_calls`, `conversations` (`20260630100000_holding_portfolio_rls.sql`). **No miran el rol**: cualquier miembro de la org holding lee esas tablas de todos los negocios (`[HOLDING-PORTFOLIO-ROL]`).
+ 
+-**Casi ninguna policy filtra por rol**: la única excepción en el repo es `Founders update org profiles` (UPDATE de `profiles`, `20260616100000_workboard_time_tracking.sql`), que deja a un `founder`/`admin` editar los perfiles de su org; en prod esa lógica está en la policy consolidada con `current_user_is_founder_or_admin()`. Los permisos por módulo (`team_roles.permissions`) se aplican en el render de `app/(platform)/layout.tsx`, no en la base ni en las actions (`[PERMISOS-SERVER-ACTIONS]`).
++**Casi ninguna policy filtra por rol** (las excepciones nuevas usan `current_user_has_org_role()`: equipo y configuración desde SCRUM-1, `20260929100000`, y la configuración de Limitless Webinars, `20261016120000`). La excepción vieja es `Founders update org profiles` (UPDATE de `profiles`, `20260616100000_workboard_time_tracking.sql`), que deja a un `founder`/`admin` editar los perfiles de su org; en prod esa lógica está en la policy consolidada con `current_user_is_founder_or_admin()`. Los permisos por módulo (`team_roles.permissions`) se aplican en el render de `app/(platform)/layout.tsx`, no en la base ni en las actions (`[PERMISOS-SERVER-ACTIONS]`).
+ 
+ ### Tablas sin lectura para el usuario
+ 
+@@ -74,6 +74,7 @@ Estas tablas se leen sólo con `createAdminClient()` (service role). El cliente
+ | `zernio_integrations` | `api_key` (cifrada) y `webhook_secret` |
+ | `instagram_integrations`, `stripe_integrations`, `mercadopago_integrations`, `vturb_integrations`, `webinarjam_integrations`, `hyros_integrations`, `payment_integrations`, `super_admin_google_tokens` | RLS sin policies |
+ | `ghl_integrations` | El miembro puede insertar/actualizar/borrar la de su org, pero no leerla |
++| `ingest_keys`, `landing_events` | Hash de las claves de ingesta de la landing y crudos de la landing (Limitless Webinars, `20261016120000`). RLS sin policies y sin grants para `anon` ni `authenticated` (con sesión da error de permisos, no cero filas) |
+ | `ai_brain_documents`, `super_admin_users`, `super_admin_deletions`, `platform_ai_credentials`, `fathom_webhook_events`, `fathom_sync_fallas`, `corridas_de_procesos`, `waitlist_leads`, `rate_limits`, `holding_active_sessions` | Sólo service role / plataforma |
+ 
+ Excepciones que **sí** son editables por cualquier miembro: `discord_integrations` y `unipile_integrations` (policy `FOR ALL` por org) y `team_member_integrations` (sólo la fila propia).
+@@ -106,7 +107,7 @@ Excepciones que **sí** son editables por cualquier miembro: `discord_integratio
+ | `get_current_week_start()` | Semana de weekly inputs | |
+ | `set_updated_at()` | Trigger genérico de `updated_at` | trigger |
+ 
+-Vistas: `organization_claude_status` (estado de la key de Claude, filtrada por org) y `workboard_time_by_member`. Ninguna vista de `public` tiene escritura para `anon` ni `authenticated` (`20260928200000_vistas_sin_escritura`): los default privileges del proyecto les dan `GRANT ALL` a las vistas nuevas, así que la migración que crea una vista tiene que revocarles INSERT, UPDATE, DELETE y TRUNCATE. `supabase/ci/check-migrations.sh` falla si alguna queda con escritura. Realtime publicado en `business_context_documents`, `reel_variation_jobs` y `sop_generation_jobs`. Extensión: `vector`.
++Vistas: `organization_claude_status` (estado de la key de Claude, filtrada por org) y `workboard_time_by_member`. Ninguna vista de `public` tiene escritura para `anon` ni `authenticated` (`20260928200000_vistas_sin_escritura`): los default privileges del proyecto les dan `GRANT ALL` a las vistas nuevas, así que la migración que crea una vista tiene que revocarles INSERT, UPDATE, DELETE y TRUNCATE. `supabase/ci/check-migrations.sh` falla si alguna queda con escritura. Realtime publicado en `business_context_documents`, `reel_variation_jobs`, `sop_generation_jobs` y `launch_registrations`. Extensiones: `vector` y `pg_trgm` (en el schema `extensions`, la instala `20261016120000`; en producción entra cuando se aplique esa migración, SCRUM-532).
+ 
+ ## Storage
+ 
+@@ -195,6 +196,29 @@ Propósito de cada una en el doc del área. Las notas del cliente son columnas d
+ ### Operaciones (`docs/areas/operaciones.md`)
+ `workboard_tasks`, `workboard_task_attachments`, `workboard_task_documents`, `sprints` (a lo sumo uno `active` por organización: índice único parcial `sprints_un_activo_por_org`, `20261008120000`), `sops`, `sop_versions`, `sop_attachments`, `sop_generation_jobs`, `weekly_inputs`, `weekly_reports`, `intelligence_snapshots`, `executive_reports`, `launches`, `launch_metrics`.
+ 
++### Limitless Webinars (`docs/areas/embudos.md`)
++Fase 1 del modelo de datos (SCRUM-526, `20261016120000_webinars_modelo_de_datos`). Sin código de la app todavía: las claves y la ingesta de la landing son SCRUM-527 y SCRUM-528. Las tablas viejas `launches` y `launch_metrics` (Operaciones) no se usan para esto.
++
++| Tabla | Propósito y reglas |
++|---|---|
++| `webinar_launches` | Lanzamiento: `name`, `variant` (`organic`, `paid`, `paid_plus`), `offer_price` y `currency` (3 letras mayúsculas), `capture_starts_on`, `closes_on`, `goal_sales` y `goal_revenue` (opcionales; si están, mayores que 0), `status` (`draft`, `active`, `closed`; `closed_at` sólo si está `closed`). `public_id` va en la landing: único en toda la base, 32 hex aleatorios de `gen_random_uuid()`, y ningún usuario lo elige ni lo cambia (grants por columna). Índice `(organization_id, status)` |
++| `webinar_sessions` | Sesiones del lanzamiento: `starts_at`, `zoom_webinar_id`, `offer_offset_seconds`, `report_status` (sus valores se definen con Zoom, Fase 2) |
++| `launch_ad_campaigns` | Campañas de anuncios del lanzamiento. Única `(launch_id, platform, campaign_external_id)` |
++| `launch_products` | Productos del lanzamiento, `role` `main` o `vip`. Única `(launch_id, provider, product_external_id)` |
++| `leads` | La persona: `email`, `email_normalized` (CHECK: sin mayúsculas A-Z ni espacios en los bordes, con `lower(... collate "C")` para no depender de la collation de la base; una mayúscula fuera de ASCII la normaliza la ingesta), `name`, `phone_e164`, `first_seen_at`. Única `(organization_id, email_normalized)`; índices GIN trigram (`pg_trgm`) sobre `name` y `email_normalized` para buscar |
++| `launch_registrations` | Registro de un lead en un lanzamiento con UTM, `fbclid`, `sl`, `ab_variant`, `qualification`, `zoom_join_url` y `raw_event_id` (el crudo). Única `(organization_id, client_registration_id)` (un reintento de la landing no duplica) y `(launch_id, lead_id)`; índice `(launch_id, registered_at)`. Publicada en realtime |
++| `landing_visits` | Visitas: única `(launch_id, visitor_id, day)` |
++| `lead_events` | Eventos del lead, append-only: `kind` (16 tipos, de `registered` a `note`), `source` (`landing`, `zoom`, `ghl`, `calendly`, `whop`, `fanbasis`, `commas`, `manual`), `source_ref`, `occurred_at`, `actor_user_id`, `data`. Única `(organization_id, source, source_ref, kind)`; índices `(launch_id, kind, lead_id)` y `(lead_id, occurred_at)`. `launch_id` es obligatorio |
++| `ingest_keys` | Hash de la clave de ingesta (`key_hash` único), `label`, `last_used_at`, `revoked_at`. Sólo service role |
++| `landing_events` | Crudo de la landing: `kind` (`registration`, `visit`), `payload`, `received_at`, `status` (`pending`, `processed`, `unmapped`, `error`), `error_message`, `processed_at`: las columnas del patrón de reclamo y reproceso de `lib/webhooks/reclamar.ts` (los requerimientos decían `error`). Índice `(status, received_at)`. Sólo service role |
++
++Reglas comunes:
++- **Ninguna fila hija apunta a otra organización**: las FK hacia `webinar_launches`, `leads` y `landing_events` son compuestas con `organization_id` (contra un único `(id, organization_id)` del padre). Vale también para el service role.
++- **Ningún DELETE de un usuario se lleva historial**: las FK de `launch_registrations`, `landing_visits` y `lead_events` hacia el lanzamiento son NO ACTION. Un lanzamiento con registros, visitas o eventos no se puede borrar (23503); un borrador vacío sí, y sus sesiones, campañas y productos se van en cascada. Borrar la organización sigue borrando todo (NO ACTION se chequea al final de la sentencia). Las FK hacia `leads` siguen en cascada porque ningún usuario borra leads. Si en vez de borrar se quiere archivar, se decide en SCRUM-522.
++- **Lectura**: miembros de la org (`get_my_organization_id()`) en todas, salvo `ingest_keys` y `landing_events`.
++- **Escritura**: la configuración (`webinar_launches`, `webinar_sessions`, `launch_ad_campaigns`, `launch_products`) sólo founder o admin de la org activa (también el founder de un holding que opera uno de sus negocios) (`current_user_has_org_role(array['founder','admin'])`, patrón de SCRUM-1; SCRUM-533 la pasa a permisos por módulo). `leads`, `launch_registrations`, `landing_visits` y `lead_events` no tienen grants de escritura para `authenticated`: las escribe la ingesta con el service role. `anon` no tiene ningún grant.
++- Tests: `supabase/ci/tests/97_webinars_modelo_de_datos.sql`.
++
+ ### Discord (`docs/areas/discord.md`)
+ `discord_integrations`, `discord_client_links`, `discord_messages`, `discord_pending_links` (vacía), `discord_channel_clients`, `discord_team_members`.
+ 
+diff --git a/docs/auditoria/plan-de-remediacion.md b/docs/auditoria/plan-de-remediacion.md
+index 85bcde0b..fc17ac16 100644
+--- a/docs/auditoria/plan-de-remediacion.md
++++ b/docs/auditoria/plan-de-remediacion.md
+@@ -12,7 +12,9 @@
+ La prioridad (P0–P3) dice qué tan urgente es cada ítem por separado. El plan agrega dos criterios:
+ 
+ 1. **Dependencias.** Algunos arreglos habilitan o hacen seguros a otros. El caso más claro: **no se debería
+-   aplicar ninguna migración de arreglo sin un backup de la base**, y hoy no hay backups.
++   aplicar ninguna migración de arreglo sin un backup de la base**, y cuando se armó el plan no había backups.
++   (Nota del 2026-10-16: producción ya está en plan Pro de Supabase, confirmado por Fernando el 15-oct-2026;
++   los backups vigentes están en `docs/operacion/backups-y-restauracion.md`.)
+ 2. **Costo de oportunidad.** Varios hallazgos críticos se resuelven cambiando una configuración o con una
+    migración de pocas líneas. Van primero porque el riesgo es alto y el trabajo, chico.
+ 
+diff --git a/docs/operacion/incidentes.md b/docs/operacion/incidentes.md
+index e01419fe..90341760 100644
+--- a/docs/operacion/incidentes.md
++++ b/docs/operacion/incidentes.md
+@@ -133,7 +133,7 @@ Es el incidente más grave (fuga entre clientes).
+ ### H · Se borraron datos por error (baja de org, script, migración)
+ 1. Parar lo que esté borrando (cancelar el deploy, el script, el cron).
+ 2. Dump inmediato (§0) para no empeorar.
+-3. Sin backup (plan Free) **no hay restauración**: reconstruir con lo que se pueda (tabla "Qué se puede reconstruir" de la auditoría): re-sincronizar proveedores, pedir al cliente los archivos y la carga manual.
++3. Restaurar: producción está en plan Pro de Supabase (confirmado por Fernando el 15-oct-2026). Qué backups hay y cómo se restauran (los de Supabase y el dump propio del workflow "Backup de producción") está en [`backups-y-restauracion.md`](./backups-y-restauracion.md); la retención y si hay PITR se confirman ahí y en el panel, no en este doc. Lo que no esté en un backup se reconstruye con lo que se pueda (tabla "Qué se puede reconstruir" de la auditoría): re-sincronizar proveedores, pedir al cliente los archivos y la carga manual. Los backups de la base no incluyen los archivos de Storage.
+ 4. Una baja de org hecha por el super admin queda en `super_admin_deletions` (quién, cuándo, resultado), pero los datos no se recuperan.
+ 
+ ### I · El bot de Discord o el worker de reels no responden
+diff --git a/docs/operacion/testing.md b/docs/operacion/testing.md
+index c3e4f796..e54bcd78 100644
+--- a/docs/operacion/testing.md
++++ b/docs/operacion/testing.md
+@@ -73,7 +73,7 @@ Prueban lo que la base deja hacer a cada usuario, que Vitest no puede ver porque
+ 
+ - `00_ayudas.sql` crea el schema `ci` con `ci.jwt(sub, extra)` (deja el JWT de un usuario para la transacción), `ci.rechazado(sql, qué)` (tiene que fallar con 42501), `ci.filas(sql)` (filas tocadas: la RLS en UPDATE y DELETE no da error, afecta 0) y `ci.espera(real, esperado, qué)`.
+ - Cada archivo arma sus datos dentro de `begin; ... rollback;`, actúa con `select ci.jwt(...); set local role authenticated;` y vuelve con `reset role`.
+-- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9). Hoy son 15 (`00_ayudas.sql` a `99_baja_de_staff.sql`). SCRUM-503, `95_crear_sprint.sql`: `crear_sprint` crea en la organización propia y no en otra, deja un solo sprint activo y anon no la puede llamar. SCRUM-504, `96_registrar_pago_de_cliente.sql`: el pago y su cuota en una transacción, con la RLS y la org de la sesión, la clave de idempotencia (la misma clave con otro cliente, monto, fecha o cuota se rechaza; el monto se compara redondeado; el comprobante que faltaba se suma), sólo el comprobante editable por un miembro (la definición de la policy de UPDATE y las dos columnas con grant se verifican) y sin EXECUTE para anon ni public. SCRUM-523, `97_experiencia_de_la_organizacion.sql`: una organización creada sin decir la experiencia queda en `full` y el default es `full` (falla si cambia), la columna sólo acepta `webinar`, `limitless` o `full` (inserta una `limitless`, rechaza `otra` y compara la definición entera del CHECK con `pg_get_constraintdef`: un valor de más o de menos en la migración falla), `authenticated` la lee y nadie la cambia (ni a `full` ni a `limitless`) (ni el founder, que sí cambia el nombre, ni un member, ni anon; con privilegio de columna y con `ci.rechazado`), y ninguna función SQL de ningún schema (también las de triggers), con los comentarios quitados, tiene un `insert into`, `merge into` o `copy` sobre `organizations`, ni una regla inserta en ella (quita los comentarios con texto, no con un parser: no ve SQL armado en tiempo de ejecución, un `--` o un `/*` dentro de un string, ni comentarios anidados). SCRUM-552, `98_staff_en_org_de_limitless.sql`: a lo sumo una org `limitless` (índice único parcial; la segunda da `unique_violation`), la asociación del staff (`asociar_staff_a_la_org_de_limitless`, sin EXECUTE para anon, authenticated ni service_role, `security invoker`) asocia sólo perfiles sin org cuyo email de Auth normalizado coincide con la fila de la lista tal cual (una fila con mayúsculas no asocia), no cambia rol, estado ni `must_change_password` (en los dos sentidos) ni asigna `custom_role_id` (la foto de la segunda corrida compara las cuatro columnas), no mueve a quien está en otra org, la segunda corrida no cambia nada, aborta con más de una org marcada o con staff pendiente y ninguna marcada, aborta sin asociar a nadie si la org marcada no tiene `skip_onboarding = true` ni `onboarding_state.gate_completed_at` (también sin staff pendiente, y aunque otra org sí los tenga) y asocia con una sola de las dos condiciones, y devuelve 0 sin error si no hay nada que asociar; la invitación deja entrar al staff sólo a la org de Limitless y como founder si crea el perfil (una fila mal cargada entra member; un perfil existente no cambia de rol), a otra org o sin org marcada da `cuenta_de_staff`, y `aceptar_invitacion_de_equipo` sigue `security definer` con EXECUTE sólo para service_role. SCRUM-552, `99_baja_de_staff.sql`: la baja del staff (`dar_de_baja_staff`) no la ejecuta ningún rol de la API (ni anon, ni authenticated, ni service_role), es `security invoker` y no tiene sobrecargas; saca el email de la lista y desactiva el perfil buscado por su email de Auth y no por `profiles.email` (un señuelo con ese `profiles.email` sigue activo), sin cambiar rol, org, `custom_role_id` ni `must_change_password`, y normalizando la entrada y lo guardado (fila de la lista, `holdings.owner_email`, email de Auth): una fila de la lista mal cargada se encuentra y sale de la lista; aborta sin cambios con un email que no está en la lista en ninguna forma, con dos filas de la lista que quedan iguales al normalizar, con el dueño de un holding (también con el `owner_email` guardado con mayúsculas) y con dos perfiles del mismo email de Auth; si desactivar el perfil falla, el email no sale de la lista (todo o nada); sin perfil devuelve `sin_perfil`, o `sin_perfil_revisar` si en la org de Limitless queda un perfil activo fuera de la lista (un miembro legítimo, o el mismo staff con otro email de Auth); y fuera de los dados de baja nada cambia. Corre en la base del CI (job `migrations`); en la ventana de SCRUM-532 se confirma contra producción.
++- Un archivo por arreglo, con el ID de Jira y del backlog en el encabezado (`10_vistas_sin_escritura.sql` es SCRUM-9). Hoy son 16 (`00_ayudas.sql` a `99_baja_de_staff.sql`; hay dos `97_`, de SCRUM-523 y SCRUM-526). SCRUM-503, `95_crear_sprint.sql`: `crear_sprint` crea en la organización propia y no en otra, deja un solo sprint activo y anon no la puede llamar. SCRUM-504, `96_registrar_pago_de_cliente.sql`: el pago y su cuota en una transacción, con la RLS y la org de la sesión, la clave de idempotencia (la misma clave con otro cliente, monto, fecha o cuota se rechaza; el monto se compara redondeado; el comprobante que faltaba se suma), sólo el comprobante editable por un miembro (la definición de la policy de UPDATE y las dos columnas con grant se verifican) y sin EXECUTE para anon ni public. SCRUM-523, `97_experiencia_de_la_organizacion.sql`: una organización creada sin decir la experiencia queda en `full` y el default es `full` (falla si cambia), la columna sólo acepta `webinar`, `limitless` o `full` (inserta una `limitless`, rechaza `otra` y compara la definición entera del CHECK con `pg_get_constraintdef`: un valor de más o de menos en la migración falla), `authenticated` la lee y nadie la cambia (ni a `full` ni a `limitless`) (ni el founder, que sí cambia el nombre, ni un member, ni anon; con privilegio de columna y con `ci.rechazado`), y ninguna función SQL de ningún schema (también las de triggers), con los comentarios quitados, tiene un `insert into`, `merge into` o `copy` sobre `organizations`, ni una regla inserta en ella (quita los comentarios con texto, no con un parser: no ve SQL armado en tiempo de ejecución, un `--` o un `/*` dentro de un string, ni comentarios anidados). SCRUM-552, `98_staff_en_org_de_limitless.sql`: a lo sumo una org `limitless` (índice único parcial; la segunda da `unique_violation`), la asociación del staff (`asociar_staff_a_la_org_de_limitless`, sin EXECUTE para anon, authenticated ni service_role, `security invoker`) asocia sólo perfiles sin org cuyo email de Auth normalizado coincide con la fila de la lista tal cual (una fila con mayúsculas no asocia), no cambia rol, estado ni `must_change_password` (en los dos sentidos) ni asigna `custom_role_id` (la foto de la segunda corrida compara las cuatro columnas), no mueve a quien está en otra org, la segunda corrida no cambia nada, aborta con más de una org marcada o con staff pendiente y ninguna marcada, aborta sin asociar a nadie si la org marcada no tiene `skip_onboarding = true` ni `onboarding_state.gate_completed_at` (también sin staff pendiente, y aunque otra org sí los tenga) y asocia con una sola de las dos condiciones, y devuelve 0 sin error si no hay nada que asociar; la invitación deja entrar al staff sólo a la org de Limitless y como founder si crea el perfil (una fila mal cargada entra member; un perfil existente no cambia de rol), a otra org o sin org marcada da `cuenta_de_staff`, y `aceptar_invitacion_de_equipo` sigue `security definer` con EXECUTE sólo para service_role. SCRUM-552, `99_baja_de_staff.sql`: la baja del staff (`dar_de_baja_staff`) no la ejecuta ningún rol de la API (ni anon, ni authenticated, ni service_role), es `security invoker` y no tiene sobrecargas; saca el email de la lista y desactiva el perfil buscado por su email de Auth y no por `profiles.email` (un señuelo con ese `profiles.email` sigue activo), sin cambiar rol, org, `custom_role_id` ni `must_change_password`, y normalizando la entrada y lo guardado (fila de la lista, `holdings.owner_email`, email de Auth): una fila de la lista mal cargada se encuentra y sale de la lista; aborta sin cambios con un email que no está en la lista en ninguna forma, con dos filas de la lista que quedan iguales al normalizar, con el dueño de un holding (también con el `owner_email` guardado con mayúsculas) y con dos perfiles del mismo email de Auth; si desactivar el perfil falla, el email no sale de la lista (todo o nada); sin perfil devuelve `sin_perfil`, o `sin_perfil_revisar` si en la org de Limitless queda un perfil activo fuera de la lista (un miembro legítimo, o el mismo staff con otro email de Auth); y fuera de los dados de baja nada cambia. Corre en la base del CI (job `migrations`); en la ventana de SCRUM-532 se confirma contra producción. SCRUM-526, `97_webinars_modelo_de_datos.sql`: tablas de Limitless Webinars; cada miembro lee sólo su organización, la configuración del lanzamiento la escriben founder o admin, nadie con sesión escribe leads, registros, visitas ni eventos (append-only), `ingest_keys` y `landing_events` sin acceso, llaves únicas por organización, ninguna fila hija apunta a otra organización (también con el service role), UPDATE y DELETE sin WHERE e INSERT en otra org de la configuración (sin WHERE, Postgres sólo mira la policy de escritura), un lanzamiento con registros, visitas o eventos no se borra y la org sí, el founder de un holding en su negocio y no en uno ajeno, CHECKs de los enums y metas mayores que 0, realtime en `launch_registrations` e índices trigram de `leads` (por catálogo, no por el texto del índice, que cambia con el `search_path`).
+ - Validez, igual que en Vitest: sacar la migración que arregla el problema y confirmar que el test falla con `FALLA: ...`.
+ - Una migración editada después de aplicarla en una base local (como `20261019120000_organizations_experience.sql`, que pasó de dos a tres valores en el CHECK sin cambiar de versión) no se vuelve a correr: la CLI de Supabase registra la versión y la saltea. En esas bases hace falta `supabase db reset` (o aplicar a mano el `drop constraint` y el `add constraint` del archivo); si no, `update organizations set experience = 'limitless'` falla con `check_violation`. `check-migrations.sh` arma la base desde cero y no lo ve. Producción no tiene aplicada esa migración (se aplica en SCRUM-532).
+ - Para correrlos a mano: los mismos comandos de "Migraciones" más arriba.
+diff --git a/supabase/ci/tests/97_webinars_modelo_de_datos.sql b/supabase/ci/tests/97_webinars_modelo_de_datos.sql
+new file mode 100644
+index 00000000..7e56d0d8
+--- /dev/null
++++ b/supabase/ci/tests/97_webinars_modelo_de_datos.sql
+@@ -0,0 +1,721 @@
++-- SCRUM-526 · Limitless Webinars, modelo de datos (Fase 1)
++-- Cada miembro lee sólo lo de su organización; la configuración del
++-- lanzamiento la escribe founder o admin; leads, registros, visitas y eventos
++-- no los escribe ningún usuario (la ingesta usa el service role); las claves de
++-- ingesta y los crudos de la landing no los ve nadie con sesión. Ninguna fila
++-- hija apunta a un lanzamiento o lead de otra organización, ni siquiera con el
++-- service role. lead_events es append-only para los usuarios y un lanzamiento
++-- con registros, visitas o eventos no se puede borrar (un borrador vacío sí;
++-- borrar la organización borra todo). Las policies de escritura filtran por
++-- organización aun sin WHERE, y valen para el founder de un holding que opera
++-- uno de sus negocios.
++-- Migración: 20261016120000_webinars_modelo_de_datos.
++
++begin;
++
++-- ─── Datos ───────────────────────────────────────────────────────────────────
++-- Org A: founder (FA), admin (AA), member (MA). Org B: founder (FB).
++-- Una fila de cada tabla en cada org (cargadas sin RLS, como la ingesta), más
++-- un lead de A sin registro y un borrador vacío de A.
++insert into auth.users (id, email) values
++  ('97000000-0000-0000-0000-0000000000fa', 'fa@test'),
++  ('97000000-0000-0000-0000-0000000000aa', 'aa@test'),
++  ('97000000-0000-0000-0000-0000000000ba', 'ma@test'),
++  ('97000000-0000-0000-0000-0000000000fb', 'fb@test');
++insert into public.organizations (id, name) values
++  ('97000000-0000-0000-0000-000000000a00', 'Org A'),
++  ('97000000-0000-0000-0000-000000000b00', 'Org B');
++insert into public.profiles (id, email, organization_id, role, full_name, is_active) values
++  ('97000000-0000-0000-0000-0000000000fa', 'fa@test', '97000000-0000-0000-0000-000000000a00', 'founder', 'FA', true),
++  ('97000000-0000-0000-0000-0000000000aa', 'aa@test', '97000000-0000-0000-0000-000000000a00', 'admin',   'AA', true),
++  ('97000000-0000-0000-0000-0000000000ba', 'ma@test', '97000000-0000-0000-0000-000000000a00', 'member',  'MA', true),
++  ('97000000-0000-0000-0000-0000000000fb', 'fb@test', '97000000-0000-0000-0000-000000000b00', 'founder', 'FB', true);
++
++insert into public.webinar_launches (id, organization_id, name, variant, currency, status) values
++  ('97000000-0000-0000-0000-00000000a001', '97000000-0000-0000-0000-000000000a00', 'Lanzamiento A', 'paid', 'USD', 'active'),
++  -- Borrador vacío: lo que un member intenta borrar (uno con datos no se puede
++  -- borrar por la FK, y el control dejaría de mirar la policy).
++  ('97000000-0000-0000-0000-00000000a002', '97000000-0000-0000-0000-000000000a00', 'Borrador A', 'paid', 'USD', 'draft'),
++  ('97000000-0000-0000-0000-00000000b001', '97000000-0000-0000-0000-000000000b00', 'Lanzamiento B', 'organic', 'USD', 'active');
++insert into public.webinar_sessions (organization_id, launch_id, starts_at) values
++  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', now() + interval '7 days'),
++  ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', now() + interval '7 days');
++insert into public.launch_ad_campaigns (organization_id, launch_id, platform, campaign_external_id) values
++  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'meta', 'camp-1'),
++  ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', 'meta', 'camp-1');
++insert into public.launch_products (organization_id, launch_id, provider, product_external_id, role) values
++  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'whop', 'prod-1', 'main'),
++  ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', 'whop', 'prod-1', 'main');
++insert into public.leads (id, organization_id, email, email_normalized, name) values
++  ('97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-000000000a00', 'Ana@Test.com', 'ana@test.com', 'Ana'),
++  ('97000000-0000-0000-0000-00000000b0b1', '97000000-0000-0000-0000-000000000b00', 'ana@test.com', 'ana@test.com', 'Ana'),
++  -- Sin registro: para que los inserts de prueba de un registro en A sólo
++  -- choquen con los permisos.
++  ('97000000-0000-0000-0000-00000000a0a3', '97000000-0000-0000-0000-000000000a00', 'dani@test.com', 'dani@test.com', 'Dani');
++insert into public.landing_events (id, organization_id, kind, payload) values
++  ('97000000-0000-0000-0000-00000000ae01', '97000000-0000-0000-0000-000000000a00', 'registration', '{}'),
++  ('97000000-0000-0000-0000-00000000be01', '97000000-0000-0000-0000-000000000b00', 'registration', '{}');
++insert into public.launch_registrations (organization_id, launch_id, lead_id, client_registration_id, raw_event_id) values
++  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', '97000000-0000-0000-0000-00000000a0a1', 'reg-1', '97000000-0000-0000-0000-00000000ae01'),
++  ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', '97000000-0000-0000-0000-00000000b0b1', 'reg-b', '97000000-0000-0000-0000-00000000be01');
++insert into public.landing_visits (organization_id, launch_id, visitor_id, day) values
++  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'v-1', current_date),
++  ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', 'v-1', current_date);
++insert into public.lead_events (id, organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref) values
++  ('97000000-0000-0000-0000-00000000ee01', '97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-00000000a001', 'registered', now(), 'landing', 'reg-1'),
++  ('97000000-0000-0000-0000-00000000ee02', '97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b0b1', '97000000-0000-0000-0000-00000000b001', 'registered', now(), 'landing', 'reg-b');
++insert into public.ingest_keys (organization_id, key_hash, label) values
++  ('97000000-0000-0000-0000-000000000a00', repeat('a', 64), 'Landing A'),
++  ('97000000-0000-0000-0000-000000000b00', repeat('b', 64), 'Landing B');
++
++-- ─── Member de A: lee lo suyo, no escribe nada ───────────────────────────────
++select ci.jwt('97000000-0000-0000-0000-0000000000ba');
++set local role authenticated;
++
++select ci.espera((select count(*) from public.webinar_launches), 2, 'un member lee sólo los lanzamientos de su org');
++select ci.espera((select count(*) from public.webinar_sessions), 1, 'un member lee sólo las sesiones de su org');
++select ci.espera((select count(*) from public.launch_ad_campaigns), 1, 'un member lee sólo las campañas de su org');
++select ci.espera((select count(*) from public.launch_products), 1, 'un member lee sólo los productos de su org');
++select ci.espera((select count(*) from public.leads), 2, 'un member lee sólo los leads de su org');
++select ci.espera((select count(*) from public.launch_registrations), 1, 'un member lee sólo los registros de su org');
++select ci.espera((select count(*) from public.landing_visits), 1, 'un member lee sólo las visitas de su org');
++select ci.espera((select count(*) from public.lead_events), 1, 'un member lee sólo los eventos de su org');
++
++select ci.rechazado($$select * from public.ingest_keys$$, 'que un member lea ingest_keys');
++select ci.rechazado($$select * from public.landing_events$$, 'que un member lea landing_events');
++
++select ci.rechazado(
++  $$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000a00', 'hack', 'paid', 'USD')$$,
++  'que un member cree un lanzamiento');
++select ci.espera(ci.filas($$update public.webinar_launches set name = 'hack' where id = '97000000-0000-0000-0000-00000000a001'$$),
++  0, 'un member no cambia un lanzamiento');
++select ci.espera(ci.filas($$delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a002'$$),
++  0, 'un member no borra un lanzamiento');
++select ci.rechazado(
++  $$insert into public.webinar_sessions (organization_id, launch_id, starts_at) values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', now())$$,
++  'que un member cree una sesión');
++select ci.rechazado(
++  $$insert into public.launch_ad_campaigns (organization_id, launch_id, platform, campaign_external_id) values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'meta', 'camp-x')$$,
++  'que un member asocie una campaña');
++select ci.rechazado(
++  $$insert into public.launch_products (organization_id, launch_id, provider, product_external_id, role) values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'whop', 'prod-x', 'vip')$$,
++  'que un member asocie un producto');
++
++select ci.rechazado(
++  $$update public.lead_events set kind = 'purchased' where id = '97000000-0000-0000-0000-00000000ee01'$$,
++  'que un member cambie un evento de lead');
++select ci.rechazado(
++  $$delete from public.lead_events where id = '97000000-0000-0000-0000-00000000ee01'$$,
++  'que un member borre un evento de lead');
++
++reset role;
++
++-- ─── Founder de A: configura el lanzamiento, nada más ────────────────────────
++select ci.jwt('97000000-0000-0000-0000-0000000000fa');
++set local role authenticated;
++
++select ci.espera(ci.filas($$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000a00', 'Nuevo', 'paid_plus', 'USD')$$),
++  1, 'el founder crea un lanzamiento');
++select ci.espera((select count(*) from public.webinar_launches where name = 'Nuevo' and public_id ~ '^[0-9a-f]{32}$'),
++  1, 'el lanzamiento nuevo trae un public_id aleatorio');
++select ci.espera(ci.filas($$update public.webinar_launches set goal_sales = 50, goal_revenue = 50000 where id = '97000000-0000-0000-0000-00000000a001'$$),
++  1, 'el founder cambia las metas de un lanzamiento');
++select ci.espera(ci.filas($$insert into public.webinar_sessions (organization_id, launch_id, starts_at) values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', now() + interval '8 days')$$),
++  1, 'el founder crea una sesión');
++select ci.espera(ci.filas($$insert into public.launch_ad_campaigns (organization_id, launch_id, platform, campaign_external_id) values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'meta', 'camp-2')$$),
++  1, 'el founder asocia una campaña');
++select ci.espera(ci.filas($$insert into public.launch_products (organization_id, launch_id, provider, product_external_id, role) values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'whop', 'prod-2', 'vip')$$),
++  1, 'el founder asocia un producto');
++select ci.espera(ci.filas($$delete from public.webinar_launches where name = 'Nuevo'$$),
++  1, 'el founder borra un lanzamiento');
++
++select ci.rechazado(
++  $$update public.webinar_launches set public_id = 'ffffffffffffffffffffffffffffffff' where id = '97000000-0000-0000-0000-00000000a001'$$,
++  'que el founder cambie el public_id');
++select ci.rechazado(
++  $$insert into public.webinar_launches (organization_id, name, variant, currency, public_id) values ('97000000-0000-0000-0000-000000000a00', 'Elegido', 'paid', 'USD', '00000000000000000000000000000000')$$,
++  'que el founder elija el public_id');
++select ci.rechazado(
++  $$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000b00', 'En B', 'paid', 'USD')$$,
++  'que el founder cree un lanzamiento en otra org');
++select ci.espera(ci.filas($$update public.webinar_launches set name = 'hack' where id = '97000000-0000-0000-0000-00000000b001'$$),
++  0, 'el founder no cambia un lanzamiento de otra org');
++select ci.espera(ci.filas($$delete from public.webinar_sessions where organization_id = '97000000-0000-0000-0000-000000000b00'$$),
++  0, 'el founder no borra sesiones de otra org');
++
++-- Insertar configuración en otra org, colgada de un lanzamiento de esa org (la
++-- FK compuesta no lo impide: lo impide la policy).
++select ci.rechazado(
++  $$insert into public.webinar_sessions (organization_id, launch_id, starts_at) values ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', now())$$,
++  'que el founder cree una sesión en otra org');
++select ci.rechazado(
++  $$insert into public.launch_ad_campaigns (organization_id, launch_id, platform, campaign_external_id) values ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', 'meta', 'camp-en-b')$$,
++  'que el founder asocie una campaña en otra org');
++select ci.rechazado(
++  $$insert into public.launch_products (organization_id, launch_id, provider, product_external_id, role) values ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', 'whop', 'prod-en-b', 'vip')$$,
++  'que el founder asocie un producto en otra org');
++
++-- UPDATE y DELETE sin WHERE: sólo miran la policy de escritura (con WHERE,
++-- Postgres aplica también la de lectura y eso tapaba una policy de escritura
++-- sin filtro de org). Tocan exactamente las filas de A: 2 lanzamientos (el de
++-- los datos y el borrador) y 2 sesiones, campañas y productos (la de los datos
++-- y la que creó el founder).
++-- Todo en un savepoint que se deshace.
++savepoint sin_where;
++select ci.espera(ci.filas($$update public.webinar_launches set name = 'pisado'$$),
++  2, 'el founder actualiza sin WHERE sólo los lanzamientos de su org');
++select ci.espera(ci.filas($$update public.webinar_sessions set zoom_webinar_id = 'pisado'$$),
++  2, 'el founder actualiza sin WHERE sólo las sesiones de su org');
++select ci.espera(ci.filas($$update public.launch_ad_campaigns set platform = 'pisado'$$),
++  2, 'el founder actualiza sin WHERE sólo las campañas de su org');
++select ci.espera(ci.filas($$update public.launch_products set provider = 'pisado'$$),
++  2, 'el founder actualiza sin WHERE sólo los productos de su org');
++select ci.espera(ci.filas($$delete from public.webinar_sessions$$),
++  2, 'el founder borra sin WHERE sólo las sesiones de su org');
++select ci.espera(ci.filas($$delete from public.launch_ad_campaigns$$),
++  2, 'el founder borra sin WHERE sólo las campañas de su org');
++select ci.espera(ci.filas($$delete from public.launch_products$$),
++  2, 'el founder borra sin WHERE sólo los productos de su org');
++reset role;
++-- Sin registros, visitas ni eventos (en ninguna org), los lanzamientos se
++-- pueden borrar: así un DELETE sin filtro de org llegaría también al de B.
++delete from public.launch_registrations;
++delete from public.landing_visits;
++delete from public.lead_events;
++set local role authenticated;
++select ci.espera(ci.filas($$delete from public.webinar_launches$$),
++  2, 'el founder borra sin WHERE sólo los lanzamientos de su org');
++reset role;
++-- Lo de B quedó igual (visto sin RLS).
++select ci.espera((select count(*) from public.webinar_launches where organization_id = '97000000-0000-0000-0000-000000000b00' and name = 'Lanzamiento B'),
++  1, 'el lanzamiento de B sigue igual después de la escritura sin WHERE de A');
++select ci.espera((select count(*) from public.webinar_sessions where organization_id = '97000000-0000-0000-0000-000000000b00' and zoom_webinar_id is null),
++  1, 'la sesión de B sigue igual después de la escritura sin WHERE de A');
++select ci.espera((select count(*) from public.launch_ad_campaigns where organization_id = '97000000-0000-0000-0000-000000000b00' and platform = 'meta'),
++  1, 'la campaña de B sigue igual después de la escritura sin WHERE de A');
++select ci.espera((select count(*) from public.launch_products where organization_id = '97000000-0000-0000-0000-000000000b00' and provider = 'whop'),
++  1, 'el producto de B sigue igual después de la escritura sin WHERE de A');
++rollback to savepoint sin_where;
++select ci.jwt('97000000-0000-0000-0000-0000000000fa');
++set local role authenticated;
++
++-- Una sesión de su org colgada de un lanzamiento de otra org: la RLS la deja
++-- pasar (la fila es de A); la FK compuesta no.
++do $$
++begin
++  begin
++    insert into public.webinar_sessions (organization_id, launch_id, starts_at)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000b001', now());
++    raise exception 'FALLA: se permitió una sesión de A en un lanzamiento de B';
++  exception when foreign_key_violation then null;
++  end;
++end $$;
++
++-- Ni el founder escribe los datos que trae la ingesta.
++select ci.rechazado(
++  $$insert into public.leads (organization_id, email, email_normalized) values ('97000000-0000-0000-0000-000000000a00', 'x@test.com', 'x@test.com')$$,
++  'que el founder inserte un lead');
++select ci.rechazado(
++  $$update public.leads set name = 'hack' where id = '97000000-0000-0000-0000-00000000a0a1'$$,
++  'que el founder cambie un lead');
++select ci.rechazado(
++  $$insert into public.launch_registrations (organization_id, launch_id, lead_id, client_registration_id) values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', '97000000-0000-0000-0000-00000000a0a3', 'reg-x')$$,
++  'que el founder inserte un registro');
++select ci.rechazado(
++  $$delete from public.launch_registrations where organization_id = '97000000-0000-0000-0000-000000000a00'$$,
++  'que el founder borre registros');
++select ci.rechazado(
++  $$insert into public.landing_visits (organization_id, launch_id, visitor_id, day) values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'v-x', current_date)$$,
++  'que el founder inserte una visita');
++select ci.rechazado(
++  $$insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref) values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-00000000a001', 'note', now(), 'manual', 'n-1')$$,
++  'que el founder inserte un evento de lead');
++select ci.rechazado(
++  $$update public.lead_events set kind = 'purchased' where id = '97000000-0000-0000-0000-00000000ee01'$$,
++  'que el founder cambie un evento de lead');
++select ci.rechazado(
++  $$delete from public.lead_events where id = '97000000-0000-0000-0000-00000000ee01'$$,
++  'que el founder borre un evento de lead');
++select ci.rechazado($$select * from public.ingest_keys$$, 'que el founder lea ingest_keys');
++select ci.rechazado(
++  $$insert into public.ingest_keys (organization_id, key_hash, label) values ('97000000-0000-0000-0000-000000000a00', 'h', 'x')$$,
++  'que el founder cree una clave de ingesta por la API');
++select ci.rechazado($$select * from public.landing_events$$, 'que el founder lea landing_events');
++
++reset role;
++
++-- ─── Admin de A: configura, pero no borra historial ──────────────────────────
++-- Un lanzamiento con sólo registros, otro con sólo visitas y otro con sólo
++-- eventos (cada FK se prueba sola), y un borrador vacío.
++insert into public.webinar_launches (id, organization_id, name, variant, currency) values
++  ('97000000-0000-0000-0000-00000000a011', '97000000-0000-0000-0000-000000000a00', 'Con registros', 'paid', 'USD'),
++  ('97000000-0000-0000-0000-00000000a012', '97000000-0000-0000-0000-000000000a00', 'Con visitas', 'paid', 'USD'),
++  ('97000000-0000-0000-0000-00000000a013', '97000000-0000-0000-0000-000000000a00', 'Con eventos', 'paid', 'USD'),
++  ('97000000-0000-0000-0000-00000000a014', '97000000-0000-0000-0000-000000000a00', 'Borrador vacío', 'paid', 'USD');
++insert into public.webinar_sessions (organization_id, launch_id, starts_at) values
++  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a014', now());
++insert into public.launch_registrations (organization_id, launch_id, lead_id, client_registration_id) values
++  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a011', '97000000-0000-0000-0000-00000000a0a1', 'reg-a011');
++insert into public.landing_visits (organization_id, launch_id, visitor_id, day) values
++  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a012', 'v-a012', current_date);
++insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref) values
++  ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-00000000a013', 'purchased', now(), 'whop', 'pay-a013');
++
++select ci.jwt('97000000-0000-0000-0000-0000000000aa');
++set local role authenticated;
++select ci.espera(ci.filas($$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000a00', 'Del admin', 'organic', 'EUR')$$),
++  1, 'un admin crea un lanzamiento');
++do $$
++begin
++  begin
++    delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a011';
++    raise exception 'FALLA: un admin borró un lanzamiento con registros';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a012';
++    raise exception 'FALLA: un admin borró un lanzamiento con visitas';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a013';
++    raise exception 'FALLA: un admin borró un lanzamiento con eventos';
++  exception when foreign_key_violation then null;
++  end;
++end $$;
++select ci.espera(ci.filas($$delete from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a014'$$),
++  1, 'un admin borra un borrador vacío');
++select ci.espera((select count(*) from public.webinar_sessions where launch_id = '97000000-0000-0000-0000-00000000a014'),
++  0, 'las sesiones del borrador borrado se van con él');
++reset role;
++select ci.espera((select count(*) from public.launch_registrations where launch_id = '97000000-0000-0000-0000-00000000a011')
++               + (select count(*) from public.landing_visits where launch_id = '97000000-0000-0000-0000-00000000a012')
++               + (select count(*) from public.lead_events where launch_id = '97000000-0000-0000-0000-00000000a013'),
++  3, 'los registros, visitas y eventos siguen después de los intentos de borrado');
++
++-- ─── Founder de B: lee sólo lo suyo ──────────────────────────────────────────
++select ci.jwt('97000000-0000-0000-0000-0000000000fb');
++set local role authenticated;
++select ci.espera((select count(*) from public.webinar_launches where organization_id = '97000000-0000-0000-0000-000000000a00'),
++  0, 'el founder de B no ve los lanzamientos de A');
++select ci.espera((select count(*) from public.leads), 1, 'el founder de B lee sólo sus leads');
++select ci.espera((select count(*) from public.launch_registrations), 1, 'el founder de B lee sólo sus registros');
++reset role;
++
++-- ─── anon: nada ──────────────────────────────────────────────────────────────
++set local role anon;
++select ci.rechazado($$select * from public.webinar_launches$$, 'que anon lea lanzamientos');
++select ci.rechazado($$select * from public.leads$$, 'que anon lea leads');
++select ci.rechazado(
++  $$insert into public.landing_events (organization_id, kind, payload) values ('97000000-0000-0000-0000-000000000a00', 'visit', '{}')$$,
++  'que anon inserte un crudo de la landing');
++reset role;
++
++-- ─── Service role (la ingesta): llaves y organizaciones ──────────────────────
++-- El schema `ci` es sólo para anon y authenticated: acá las afirmaciones van
++-- con `raise`.
++set local role service_role;
++do $$
++begin
++  -- El mismo client_registration_id en otra org se acepta (reg-1 ya está en
++  -- A). El lead de B ya tiene registro en su lanzamiento: va con un lead nuevo.
++  insert into public.leads (id, organization_id, email, email_normalized)
++  values ('97000000-0000-0000-0000-00000000b0b2', '97000000-0000-0000-0000-000000000b00', 'beto@test.com', 'beto@test.com');
++  insert into public.launch_registrations (organization_id, launch_id, lead_id, client_registration_id)
++  values ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b001', '97000000-0000-0000-0000-00000000b0b2', 'reg-1');
++  if (select count(*) from public.launch_registrations where client_registration_id = 'reg-1') <> 2 then
++    raise exception 'FALLA: el mismo client_registration_id en dos organizaciones no quedó en las dos';
++  end if;
++
++  -- Repetido en la misma org: falla.
++  insert into public.leads (id, organization_id, email, email_normalized)
++  values ('97000000-0000-0000-0000-00000000a0a2', '97000000-0000-0000-0000-000000000a00', 'carla@test.com', 'carla@test.com');
++  begin
++    insert into public.launch_registrations (organization_id, launch_id, lead_id, client_registration_id)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', '97000000-0000-0000-0000-00000000a0a2', 'reg-1');
++    raise exception 'FALLA: se aceptó el mismo client_registration_id repetido en la misma organización';
++  exception when unique_violation then null;
++  end;
++
++  -- Un lead se registra una vez por lanzamiento.
++  begin
++    insert into public.launch_registrations (organization_id, launch_id, lead_id, client_registration_id)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', '97000000-0000-0000-0000-00000000a0a1', 'reg-otro');
++    raise exception 'FALLA: se aceptaron dos registros del mismo lead en el mismo lanzamiento';
++  exception when unique_violation then null;
++  end;
++
++  -- Un lead por email normalizado y organización.
++  begin
++    insert into public.leads (organization_id, email, email_normalized)
++    values ('97000000-0000-0000-0000-000000000a00', 'ANA@test.com', 'ana@test.com');
++    raise exception 'FALLA: se aceptaron dos leads con el mismo email en la misma organización';
++  exception when unique_violation then null;
++  end;
++
++  -- La llave natural de lead_events: por organización.
++  insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref)
++  values ('97000000-0000-0000-0000-000000000b00', '97000000-0000-0000-0000-00000000b0b1', '97000000-0000-0000-0000-00000000b001', 'registered', now(), 'landing', 'reg-1');
++  begin
++    insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-00000000a001', 'registered', now(), 'landing', 'reg-1');
++    raise exception 'FALLA: se aceptó el mismo evento externo dos veces en la misma organización';
++  exception when unique_violation then null;
++  end;
++
++  -- Una visita por visitante, lanzamiento y día.
++  begin
++    insert into public.landing_visits (organization_id, launch_id, visitor_id, day)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'v-1', current_date);
++    raise exception 'FALLA: se aceptó la misma visita dos veces en el día';
++  exception when unique_violation then null;
++  end;
++
++  -- La misma campaña y el mismo producto, una vez por lanzamiento.
++  begin
++    insert into public.launch_ad_campaigns (organization_id, launch_id, platform, campaign_external_id)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'meta', 'camp-1');
++    raise exception 'FALLA: se aceptó la misma campaña dos veces en un lanzamiento';
++  exception when unique_violation then null;
++  end;
++  begin
++    insert into public.launch_products (organization_id, launch_id, provider, product_external_id, role)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'whop', 'prod-1', 'vip');
++    raise exception 'FALLA: se aceptó el mismo producto dos veces en un lanzamiento';
++  exception when unique_violation then null;
++  end;
++
++  -- La clave de ingesta es única por hash.
++  begin
++    insert into public.ingest_keys (organization_id, key_hash, label)
++    values ('97000000-0000-0000-0000-000000000b00', repeat('a', 64), 'Copia');
++    raise exception 'FALLA: se aceptó el mismo key_hash dos veces';
++  exception when unique_violation then null;
++  end;
++
++  -- El public_id es único en toda la base.
++  begin
++    update public.webinar_launches
++       set public_id = (select public_id from public.webinar_launches where id = '97000000-0000-0000-0000-00000000a001')
++     where id = '97000000-0000-0000-0000-00000000b001';
++    raise exception 'FALLA: se aceptó el mismo public_id en dos lanzamientos';
++  exception when unique_violation then null;
++  end;
++end $$;
++
++-- Ninguna fila hija de A apunta a algo de B, aunque escriba el service role.
++do $$
++begin
++  begin
++    insert into public.launch_registrations (organization_id, launch_id, lead_id, client_registration_id)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000b001', '97000000-0000-0000-0000-00000000a0a1', 'reg-cruzado-1');
++    raise exception 'FALLA: se permitió un registro de A en un lanzamiento de B';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    insert into public.launch_registrations (organization_id, launch_id, lead_id, client_registration_id)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', '97000000-0000-0000-0000-00000000b0b2', 'reg-cruzado-2');
++    raise exception 'FALLA: se permitió un registro de A con un lead de B';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    insert into public.launch_registrations (organization_id, launch_id, lead_id, client_registration_id, raw_event_id)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', '97000000-0000-0000-0000-00000000a0a2', 'reg-cruzado-3', '97000000-0000-0000-0000-00000000be01');
++    raise exception 'FALLA: se permitió un registro de A con el crudo de B';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000b0b1', '97000000-0000-0000-0000-00000000a001', 'note', now(), 'manual', 'cruzado-1');
++    raise exception 'FALLA: se permitió un evento de A con un lead de B';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-00000000b001', 'note', now(), 'manual', 'cruzado-2');
++    raise exception 'FALLA: se permitió un evento de A en un lanzamiento de B';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    insert into public.landing_visits (organization_id, launch_id, visitor_id, day)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000b001', 'v-cruzado', current_date);
++    raise exception 'FALLA: se permitió una visita de A en un lanzamiento de B';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    insert into public.webinar_sessions (organization_id, launch_id, starts_at)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000b001', now());
++    raise exception 'FALLA: se permitió una sesión de A en un lanzamiento de B (service role)';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    insert into public.launch_ad_campaigns (organization_id, launch_id, platform, campaign_external_id)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000b001', 'meta', 'camp-cruzada');
++    raise exception 'FALLA: se permitió una campaña de A en un lanzamiento de B';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    insert into public.launch_products (organization_id, launch_id, provider, product_external_id, role)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000b001', 'whop', 'prod-cruzado', 'main');
++    raise exception 'FALLA: se permitió un producto de A en un lanzamiento de B';
++  exception when foreign_key_violation then null;
++  end;
++  begin
++    update public.webinar_launches set organization_id = '97000000-0000-0000-0000-000000000b00'
++     where id = '97000000-0000-0000-0000-00000000a001';
++    raise exception 'FALLA: se permitió mover a otra org un lanzamiento con filas hijas';
++  exception when foreign_key_violation then null;
++  end;
++end $$;
++reset role;
++
++-- ─── Valores fuera de los permitidos ─────────────────────────────────────────
++do $$
++begin
++  begin
++    insert into public.webinar_launches (organization_id, name, variant, currency)
++    values ('97000000-0000-0000-0000-000000000a00', 'X', 'viral', 'USD');
++    raise exception 'FALLA: se aceptó un variant fuera de organic, paid y paid_plus';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.webinar_launches (organization_id, name, variant, currency, status)
++    values ('97000000-0000-0000-0000-000000000a00', 'X', 'paid', 'USD', 'paused');
++    raise exception 'FALLA: se aceptó un status de lanzamiento fuera de draft, active y closed';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.webinar_launches (organization_id, name, variant, currency)
++    values ('97000000-0000-0000-0000-000000000a00', 'X', 'paid', 'usd');
++    raise exception 'FALLA: se aceptó una moneda que no son 3 letras mayúsculas';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.webinar_launches (organization_id, name, variant, currency, status)
++    values ('97000000-0000-0000-0000-000000000a00', 'X', 'paid', 'USD', 'closed');
++    raise exception 'FALLA: se aceptó un lanzamiento cerrado sin closed_at';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.launch_products (organization_id, launch_id, provider, product_external_id, role)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a001', 'whop', 'prod-r', 'upsell');
++    raise exception 'FALLA: se aceptó un role de producto fuera de main y vip';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-00000000a001', 'clicked', now(), 'landing', 'k-1');
++    raise exception 'FALLA: se aceptó un kind de evento de lead desconocido';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref)
++    values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-00000000a001', 'note', now(), 'hubspot', 's-1');
++    raise exception 'FALLA: se aceptó un source de evento de lead desconocido';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.landing_events (organization_id, kind, payload)
++    values ('97000000-0000-0000-0000-000000000a00', 'click', '{}');
++    raise exception 'FALLA: se aceptó un kind de landing_events fuera de registration y visit';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.landing_events (organization_id, kind, payload, status)
++    values ('97000000-0000-0000-0000-000000000a00', 'visit', '{}', 'done');
++    raise exception 'FALLA: se aceptó un status de landing_events fuera de pending, processed, unmapped y error';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.leads (organization_id, email, email_normalized)
++    values ('97000000-0000-0000-0000-000000000a00', 'Mayus@test.com', 'Mayus@test.com');
++    raise exception 'FALLA: se aceptó un email_normalized sin normalizar';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.leads (organization_id, email, email_normalized)
++    values ('97000000-0000-0000-0000-000000000a00', ' borde@test.com', ' borde@test.com');
++    raise exception 'FALLA: se aceptó un email_normalized con espacios en el borde';
++  exception when check_violation then null;
++  end;
++  -- El CHECK no depende de la collation de la base (AR de SCRUM-528): sólo
++  -- juzga A-Z. Una mayúscula fuera de ASCII la normaliza la ingesta; si el
++  -- CHECK usara la collation de la base (en el CI, en_US o C.UTF-8, que pasan
++  -- 'Á' a 'á'; con tr-TR, además 'I' a 'ı'), este valor se rechazaría.
++  begin
++    insert into public.leads (organization_id, email, email_normalized)
++    values ('97000000-0000-0000-0000-000000000a00', 'Ángel@test.com', 'Ángel@test.com');
++  exception when check_violation then
++    raise exception 'FALLA: el CHECK de email_normalized depende de la collation de la base';
++  end;
++end $$;
++
++-- Las metas son opcionales, pero nunca cero (sin meta es null).
++do $$
++begin
++  insert into public.webinar_launches (organization_id, name, variant, currency, goal_sales, goal_revenue)
++  values ('97000000-0000-0000-0000-000000000a00', 'Sin metas', 'organic', 'USD', null, null);
++  begin
++    insert into public.webinar_launches (organization_id, name, variant, currency, goal_sales)
++    values ('97000000-0000-0000-0000-000000000a00', 'Meta cero', 'organic', 'USD', 0);
++    raise exception 'FALLA: se aceptó una meta de ventas en cero';
++  exception when check_violation then null;
++  end;
++  begin
++    insert into public.webinar_launches (organization_id, name, variant, currency, goal_revenue)
++    values ('97000000-0000-0000-0000-000000000a00', 'Meta cero', 'organic', 'USD', 0);
++    raise exception 'FALLA: se aceptó una meta de facturación en cero';
++  exception when check_violation then null;
++  end;
++  -- Fanbasis es proveedor de pagos del repo (payments_whop_fanbasis).
++  insert into public.lead_events (organization_id, lead_id, launch_id, kind, occurred_at, source, source_ref)
++  values ('97000000-0000-0000-0000-000000000a00', '97000000-0000-0000-0000-00000000a0a1', '97000000-0000-0000-0000-00000000a001', 'purchased', now(), 'fanbasis', 'fb-1');
++end $$;
++
++-- ─── Catálogo: realtime, índices, RLS y grants ───────────────────────────────
++do $$
++declare
++  v_tablas constant text[] := array[
++    'webinar_launches', 'webinar_sessions', 'launch_ad_campaigns', 'launch_products', 'leads',
++    'launch_registrations', 'landing_visits', 'lead_events', 'ingest_keys', 'landing_events'];
++  v_tabla text;
++begin
++  if not exists (select 1 from pg_publication_tables
++                  where pubname = 'supabase_realtime' and schemaname = 'public'
++                    and tablename = 'launch_registrations') then
++    raise exception 'FALLA: launch_registrations no está en la publicación supabase_realtime';
++  end if;
++
++  -- Por catálogo y no por el texto de pg_indexes: ese texto cambia según el
++  -- search_path (con `extensions` en el path, el opclass sale sin calificar).
++  if not exists (select 1 from pg_index i
++                   join pg_class ix on ix.oid = i.indexrelid
++                   join pg_am am on am.oid = ix.relam
++                   join pg_opclass oc on oc.oid = i.indclass[0]
++                   join pg_attribute a on a.attrelid = i.indrelid and a.attnum = i.indkey[0]
++                  where i.indrelid = 'public.leads'::regclass and i.indnatts = 1 and am.amname = 'gin'
++                    and oc.opcname = 'gin_trgm_ops' and oc.opcnamespace = 'extensions'::regnamespace
++                    and a.attname = 'name') then
++    raise exception 'FALLA: falta el índice trigram sobre leads.name';
++  end if;
++  if not exists (select 1 from pg_index i
++                   join pg_class ix on ix.oid = i.indexrelid
++                   join pg_am am on am.oid = ix.relam
++                   join pg_opclass oc on oc.oid = i.indclass[0]
++                   join pg_attribute a on a.attrelid = i.indrelid and a.attnum = i.indkey[0]
++                  where i.indrelid = 'public.leads'::regclass and i.indnatts = 1 and am.amname = 'gin'
++                    and oc.opcname = 'gin_trgm_ops' and oc.opcnamespace = 'extensions'::regnamespace
++                    and a.attname = 'email_normalized') then
++    raise exception 'FALLA: falta el índice trigram sobre leads.email_normalized';
++  end if;
++
++  -- landing_events con las columnas del patrón de lib/webhooks/reclamar.ts y
++  -- reprocesar.ts (las que usa para reclamar y cerrar un evento).
++  if (select count(*) from information_schema.columns
++       where table_schema = 'public' and table_name = 'landing_events'
++         and column_name in ('status', 'error_message', 'processed_at', 'received_at', 'payload')) <> 5 then
++    raise exception 'FALLA: landing_events no tiene las columnas de reclamar.ts (status, error_message, processed_at, received_at, payload)';
++  end if;
++
++  foreach v_tabla in array v_tablas loop
++    if not (select relrowsecurity from pg_class where oid = ('public.' || v_tabla)::regclass) then
++      raise exception 'FALLA: % sin RLS', v_tabla;
++    end if;
++    if has_table_privilege('anon', 'public.' || v_tabla, 'SELECT')
++       or has_any_column_privilege('anon', 'public.' || v_tabla, 'INSERT')
++       or has_any_column_privilege('anon', 'public.' || v_tabla, 'UPDATE')
++       or has_table_privilege('anon', 'public.' || v_tabla, 'DELETE')
++       or has_table_privilege('anon', 'public.' || v_tabla, 'TRUNCATE') then
++      raise exception 'FALLA: anon tiene algún grant sobre %', v_tabla;
++    end if;
++    if has_table_privilege('authenticated', 'public.' || v_tabla, 'TRUNCATE') then
++      raise exception 'FALLA: authenticated puede vaciar %', v_tabla;
++    end if;
++  end loop;
++
++  if exists (select 1 from pg_policies where schemaname = 'public'
++              and tablename in ('ingest_keys', 'landing_events')) then
++    raise exception 'FALLA: ingest_keys o landing_events tienen policies (deben ser sólo del service role)';
++  end if;
++
++  -- Ninguna policy de escritura sin chequeo de rol (se suman con OR).
++  if exists (select 1 from pg_policies where schemaname = 'public'
++              and tablename in ('webinar_launches', 'webinar_sessions', 'launch_ad_campaigns', 'launch_products')
++              and cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')
++              and coalesce(qual, '') || coalesce(with_check, '') not like '%current_user_has_org_role%') then
++    raise exception 'FALLA: queda una policy de escritura de la configuración del lanzamiento sin chequeo de rol';
++  end if;
++  if exists (select 1 from pg_policies where schemaname = 'public'
++              and tablename in ('leads', 'launch_registrations', 'landing_visits', 'lead_events')
++              and cmd <> 'SELECT') then
++    raise exception 'FALLA: leads, registros, visitas o eventos tienen una policy de escritura';
++  end if;
++end $$;
++
++-- ─── Holding: el founder del holding operando uno de sus negocios ────────────
++-- Holding H con el negocio C; D es un negocio ajeno. FH es founder del holding
++-- y MH member del holding.
++insert into auth.users (id, email) values
++  ('97000000-0000-0000-0000-0000000000f1', 'fh@test'),
++  ('97000000-0000-0000-0000-0000000000f2', 'mh@test');
++insert into public.organizations (id, name, account_type) values
++  ('97000000-0000-0000-0000-000000000100', 'Holding H', 'holding');
++insert into public.organizations (id, name) values
++  ('97000000-0000-0000-0000-000000000c00', 'Negocio C'),
++  ('97000000-0000-0000-0000-000000000d00', 'Negocio D ajeno');
++insert into public.holding_businesses (holding_org_id, business_org_id, business_name, status) values
++  ('97000000-0000-0000-0000-000000000100', '97000000-0000-0000-0000-000000000c00', 'Negocio C', 'active');
++insert into public.profiles (id, email, organization_id, role, full_name, is_active) values
++  ('97000000-0000-0000-0000-0000000000f1', 'fh@test', '97000000-0000-0000-0000-000000000100', 'founder', 'FH', true),
++  ('97000000-0000-0000-0000-0000000000f2', 'mh@test', '97000000-0000-0000-0000-000000000100', 'member',  'MH', true);
++insert into public.webinar_launches (organization_id, name, variant, currency) values
++  ('97000000-0000-0000-0000-000000000c00', 'De C', 'paid', 'USD'),
++  ('97000000-0000-0000-0000-000000000d00', 'De D', 'paid', 'USD');
++
++select ci.jwt('97000000-0000-0000-0000-0000000000f1', '{"active_business_org_id": "97000000-0000-0000-0000-000000000c00"}');
++set local role authenticated;
++select ci.espera((select count(*) from public.webinar_launches), 1, 'el founder del holding lee sólo los lanzamientos del negocio que opera');
++select ci.espera(ci.filas($$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000c00', 'Nuevo en C', 'paid', 'USD')$$),
++  1, 'el founder del holding crea un lanzamiento en su negocio');
++select ci.espera(ci.filas($$update public.webinar_launches set name = 'C editado'$$),
++  2, 'el founder del holding edita sin WHERE sólo los lanzamientos de su negocio');
++reset role;
++
++-- Un claim hacia un negocio que no es del holding (el hook no lo emitiría): el
++-- rol no vale ahí.
++select ci.jwt('97000000-0000-0000-0000-0000000000f1', '{"active_business_org_id": "97000000-0000-0000-0000-000000000d00"}');
++set local role authenticated;
++select ci.rechazado(
++  $$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000d00', 'En D', 'paid', 'USD')$$,
++  'que el founder del holding cree un lanzamiento en un negocio ajeno');
++reset role;
++
++select ci.jwt('97000000-0000-0000-0000-0000000000f2', '{"active_business_org_id": "97000000-0000-0000-0000-000000000c00"}');
++set local role authenticated;
++select ci.espera((select count(*) from public.webinar_launches), 2, 'un member del holding lee los lanzamientos del negocio que opera');
++select ci.rechazado(
++  $$insert into public.webinar_launches (organization_id, name, variant, currency) values ('97000000-0000-0000-0000-000000000c00', 'De MH', 'paid', 'USD')$$,
++  'que un member del holding cree un lanzamiento');
++reset role;
++
++-- ─── Borrar la organización sigue borrando todo ──────────────────────────────
++-- Las FK de datos hacia el lanzamiento son NO ACTION: se chequean al final de
++-- la sentencia, cuando los registros, visitas y eventos ya se fueron por su
++-- propia FK a organizations.
++delete from public.organizations where id = '97000000-0000-0000-0000-000000000a00';
++select ci.espera(
++  (select count(*) from public.webinar_launches where organization_id = '97000000-0000-0000-0000-000000000a00')
++  + (select count(*) from public.webinar_sessions where organization_id = '97000000-0000-0000-0000-000000000a00')
++  + (select count(*) from public.launch_ad_campaigns where organization_id = '97000000-0000-0000-0000-000000000a00')
++  + (select count(*) from public.launch_products where organization_id = '97000000-0000-0000-0000-000000000a00')
++  + (select count(*) from public.leads where organization_id = '97000000-0000-0000-0000-000000000a00')
++  + (select count(*) from public.launch_registrations where organization_id = '97000000-0000-0000-0000-000000000a00')
++  + (select count(*) from public.landing_visits where organization_id = '97000000-0000-0000-0000-000000000a00')
++  + (select count(*) from public.lead_events where organization_id = '97000000-0000-0000-0000-000000000a00')
++  + (select count(*) from public.ingest_keys where organization_id = '97000000-0000-0000-0000-000000000a00')
++  + (select count(*) from public.landing_events where organization_id = '97000000-0000-0000-0000-000000000a00'),
++  0, 'borrar la organización borra sus filas de las 10 tablas');
++select ci.espera((select count(*) from public.webinar_launches where id = '97000000-0000-0000-0000-00000000b001'),
++  1, 'borrar una organización no toca a otra');
++
++rollback;
+diff --git a/supabase/migrations/20261016120000_webinars_modelo_de_datos.sql b/supabase/migrations/20261016120000_webinars_modelo_de_datos.sql
+new file mode 100644
+index 00000000..00c0e364
+--- /dev/null
++++ b/supabase/migrations/20261016120000_webinars_modelo_de_datos.sql
+@@ -0,0 +1,562 @@
++-- SCRUM-526 · Limitless Webinars, Fase 1: modelo de datos (épica SCRUM-521).
++--
++-- Tablas del lanzamiento de un webinar y de sus leads, según la sección 4 de
++-- los requerimientos técnicos y las decisiones del sprint 2:
++--   - configuración del lanzamiento (la edita founder o admin):
++--     webinar_launches, webinar_sessions, launch_ad_campaigns, launch_products;
++--   - datos de la landing y del lead (los escribe la ingesta con el service
++--     role, SCRUM-527 y SCRUM-528; los miembros sólo leen):
++--     leads, launch_registrations, landing_visits, lead_events;
++--   - credenciales y crudos (sólo service role, sin policies):
++--     ingest_keys, landing_events.
++-- Fuera de esta migración: organizations.experience (SCRUM-523), lead_sales_state
++-- y lead_notes (Fase 3), Zoom y Vercel (Fases 2 y 4), snapshots (Fase 5) y el id
++-- de campaña en ad_metrics_daily (SCRUM-535). Las tablas viejas `launches` y
++-- `launch_metrics` (módulo apagado, sin filas en producción) quedan como están.
++--
++-- Reglas que la base hace cumplir:
++--   - Toda fila lleva organization_id. Una fila hija no puede apuntar a un
++--     lanzamiento, a un lead ni a un evento crudo de otra organización: las FK
++--     hacia webinar_launches, leads y landing_events son compuestas con
++--     organization_id (contra un único (id, organization_id) del padre). Vale
++--     también para el service role, que no pasa por RLS.
++--   - Toda llave única de datos externos incluye la organización (convención
++--     del repo, como payment_*, ghl_*, ad_metrics_daily): client_registration_id
++--     y la llave natural de lead_events son únicas por organización. Las que
++--     empiezan por launch_id ya quedan dentro de una organización.
++--   - webinar_launches.public_id va en la landing: único en toda la base y
++--     aleatorio (122 bits de gen_random_uuid(), en hexadecimal). Ningún usuario
++--     lo elige ni lo cambia (grants por columna).
++--   - lead_events es append-only para los usuarios: authenticated no tiene
++--     UPDATE ni DELETE (ni policy ni grant). El estado actual de venta va a ser
++--     una proyección aparte (lead_sales_state, Fase 3).
++--   - Ningún DELETE de un usuario se lleva historial: las FK de
++--     launch_registrations, landing_visits y lead_events hacia el lanzamiento
++--     son NO ACTION (sin `on delete`). Un lanzamiento con registros, visitas o
++--     eventos no se puede borrar (23503); un borrador vacío sí, y sus sesiones,
++--     campañas y productos (configuración) se van en cascada. Borrar la
++--     organización entera sigue borrando todo: NO ACTION se chequea al final
++--     de la sentencia, cuando las filas hijas ya se fueron por su propia FK a
++--     organizations. Se usa NO ACTION porque es el default de Postgres;
++--     RESTRICT se comportaría igual en este caso (probado: con RESTRICT borrar
++--     la organización también funciona). A confirmar en SCRUM-522 si en vez de
++--     borrar se quiere archivar.
++--   - Las FK hacia leads quedan en cascada: ningún usuario borra leads (no
++--     tienen grant de DELETE); sólo el service role, por ejemplo para un
++--     pedido de borrado de datos personales.
++--   - RLS en todas: lectura para los miembros de la organización
++--     (get_my_organization_id()), salvo ingest_keys y landing_events, que no
++--     tienen policies. La escritura de la configuración del lanzamiento es de
++--     founder o admin (current_user_has_org_role, patrón de SCRUM-1; SCRUM-533
++--     la pasa a permisos por módulo). anon no tiene ningún grant.
++--
++-- No borra ni transforma datos: sólo crea tablas, índices, policies, la
++-- extensión pg_trgm (en producción está disponible pero no instalada) y suma
++-- launch_registrations a la publicación de realtime.
++
++-- ─── 0. Extensión para la búsqueda de leads ──────────────────────────────────
++create extension if not exists pg_trgm with schema extensions;
++
++-- ─── 1. webinar_launches ─────────────────────────────────────────────────────
++create table if not exists public.webinar_launches (
++  id uuid primary key default gen_random_uuid(),
++  organization_id uuid not null references public.organizations(id) on delete cascade,
++  name text not null check (char_length(btrim(name)) between 1 and 200),
++  variant text not null check (variant in ('organic', 'paid', 'paid_plus')),
++  offer_price numeric(12, 2) check (offer_price >= 0),
++  currency text not null check (currency ~ '^[A-Z]{3}$'),
++  capture_starts_on date,
++  closes_on date,
++  -- Metas opcionales: sin meta es null, nunca cero (el porcentaje de la meta
++  -- divide por ella).
++  goal_sales integer check (goal_sales > 0),
++  goal_revenue numeric(14, 2) check (goal_revenue > 0),
++  status text not null default 'draft' check (status in ('draft', 'active', 'closed')),
++  public_id text not null default replace(gen_random_uuid()::text, '-', '')
++    check (public_id ~ '^[0-9a-f]{32}$'),
++  closed_at timestamptz,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  constraint webinar_launches_public_id_key unique (public_id),
++  -- Destino de las FK compuestas de las tablas hijas.
++  constraint webinar_launches_id_org_key unique (id, organization_id),
++  constraint webinar_launches_fechas_en_orden
++    check (capture_starts_on is null or closes_on is null or closes_on >= capture_starts_on),
++  constraint webinar_launches_closed_at_segun_status
++    check ((status = 'closed') = (closed_at is not null))
++);
++
++comment on table public.webinar_launches is
++  'Lanzamiento de un webinar (Limitless Webinars, SCRUM-526). public_id es el identificador que va en la landing: aleatorio, único y no editable por usuarios.';
++
++create index if not exists webinar_launches_org_status
++  on public.webinar_launches (organization_id, status);
++
++-- ─── 2. webinar_sessions ─────────────────────────────────────────────────────
++create table if not exists public.webinar_sessions (
++  id uuid primary key default gen_random_uuid(),
++  organization_id uuid not null references public.organizations(id) on delete cascade,
++  launch_id uuid not null,
++  starts_at timestamptz not null,
++  zoom_webinar_id text,
++  offer_offset_seconds integer check (offer_offset_seconds >= 0),
++  -- Estado del reporte de Zoom: sus valores se definen con la integración de
++  -- Zoom (Fase 2).
++  report_status text,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  constraint webinar_sessions_launch_fkey foreign key (launch_id, organization_id)
++    references public.webinar_launches (id, organization_id) on delete cascade
++);
++
++create index if not exists webinar_sessions_launch_starts
++  on public.webinar_sessions (launch_id, starts_at);
++
++-- ─── 3. launch_ad_campaigns ──────────────────────────────────────────────────
++create table if not exists public.launch_ad_campaigns (
++  id uuid primary key default gen_random_uuid(),
++  organization_id uuid not null references public.organizations(id) on delete cascade,
++  launch_id uuid not null,
++  platform text not null check (char_length(btrim(platform)) between 1 and 50),
++  campaign_external_id text not null check (char_length(btrim(campaign_external_id)) between 1 and 200),
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  constraint launch_ad_campaigns_launch_fkey foreign key (launch_id, organization_id)
++    references public.webinar_launches (id, organization_id) on delete cascade,
++  constraint launch_ad_campaigns_launch_platform_campaign_key
++    unique (launch_id, platform, campaign_external_id)
++);
++
++-- ─── 4. launch_products ──────────────────────────────────────────────────────
++create table if not exists public.launch_products (
++  id uuid primary key default gen_random_uuid(),
++  organization_id uuid not null references public.organizations(id) on delete cascade,
++  launch_id uuid not null,
++  provider text not null check (char_length(btrim(provider)) between 1 and 50),
++  product_external_id text not null check (char_length(btrim(product_external_id)) between 1 and 200),
++  role text not null check (role in ('main', 'vip')),
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  constraint launch_products_launch_fkey foreign key (launch_id, organization_id)
++    references public.webinar_launches (id, organization_id) on delete cascade,
++  constraint launch_products_launch_provider_product_key
++    unique (launch_id, provider, product_external_id)
++);
++
++-- ─── 5. leads ────────────────────────────────────────────────────────────────
++-- La persona es la unidad de dato: un lead por email normalizado y organización.
++create table if not exists public.leads (
++  id uuid primary key default gen_random_uuid(),
++  organization_id uuid not null references public.organizations(id) on delete cascade,
++  email text not null check (char_length(btrim(email)) between 3 and 320),
++  -- El CHECK no depende de la collation de la base: lower() con la collation
++  -- por defecto cambia según el locale (con tr-TR, lower('I') es 'ı'). Con
++  -- collate "C" sólo pasa A-Z a minúsculas, igual en cualquier base. Impide
++  -- mayúsculas ASCII y espacios en los bordes; una mayúscula fuera de ASCII
++  -- no la juzga la base (la normalización completa es de la ingesta).
++  email_normalized text not null
++    check (email_normalized = lower(btrim(email_normalized) collate "C") and char_length(email_normalized) between 3 and 320),
++  name text,
++  phone_e164 text check (phone_e164 ~ '^\+[1-9][0-9]{6,14}$'),
++  first_seen_at timestamptz not null default now(),
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  constraint leads_org_email_normalized_key unique (organization_id, email_normalized),
++  constraint leads_id_org_key unique (id, organization_id)
++);
++
++comment on table public.leads is
++  'Persona que se registró en un lanzamiento (SCRUM-526). Única por (organization_id, email_normalized). Datos personales: no van a logs ni a Sentry.';
++
++-- Búsqueda por nombre o email (ilike '%texto%').
++create index if not exists leads_name_trgm
++  on public.leads using gin (name extensions.gin_trgm_ops);
++create index if not exists leads_email_normalized_trgm
++  on public.leads using gin (email_normalized extensions.gin_trgm_ops);
++
++-- ─── 6. landing_events (crudo) ───────────────────────────────────────────────
++-- Todo lo que manda la landing se guarda tal cual antes de normalizarlo; si la
++-- normalización falla, queda con su estado y se reprocesa.
++-- Columnas del patrón de reclamo y reproceso de lib/webhooks/reclamar.ts y
++-- reprocesar.ts (las mismas que payment_webhook_events y ghl_webhook_events):
++-- status, error_message, processed_at (marca del reclamo y del cierre) y
++-- received_at. Los requerimientos la llamaban `error`; va `error_message` para
++-- reutilizar ese patrón tal cual.
++create table if not exists public.landing_events (
++  id uuid primary key default gen_random_uuid(),
++  organization_id uuid not null references public.organizations(id) on delete cascade,
++  kind text not null check (kind in ('registration', 'visit')),
++  payload jsonb not null,
++  received_at timestamptz not null default now(),
++  status text not null default 'pending' check (status in ('pending', 'processed', 'unmapped', 'error')),
++  error_message text,
++  processed_at timestamptz,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  constraint landing_events_id_org_key unique (id, organization_id)
++);
++
++create index if not exists landing_events_status_received
++  on public.landing_events (status, received_at);
++
++-- ─── 7. launch_registrations ─────────────────────────────────────────────────
++create table if not exists public.launch_registrations (
++  id uuid primary key default gen_random_uuid(),
++  organization_id uuid not null references public.organizations(id) on delete cascade,
++  launch_id uuid not null,
++  lead_id uuid not null,
++  client_registration_id text not null check (char_length(btrim(client_registration_id)) between 1 and 200),
++  registered_at timestamptz not null default now(),
++  utm_source text,
++  utm_medium text,
++  utm_campaign text,
++  utm_content text,
++  utm_term text,
++  fbclid text,
++  sl text,
++  ab_variant text,
++  qualification text,
++  zoom_join_url text,
++  raw_event_id uuid,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  -- NO ACTION: un lanzamiento con registros no se borra.
++  constraint launch_registrations_launch_fkey foreign key (launch_id, organization_id)
++    references public.webinar_launches (id, organization_id),
++  constraint launch_registrations_lead_fkey foreign key (lead_id, organization_id)
++    references public.leads (id, organization_id) on delete cascade,
++  -- Si se borra el crudo, el registro queda (sólo se limpia raw_event_id).
++  constraint launch_registrations_raw_event_fkey foreign key (raw_event_id, organization_id)
++    references public.landing_events (id, organization_id) on delete set null (raw_event_id),
++  -- Un reintento de la landing no duplica el registro.
++  constraint launch_registrations_org_client_registration_key
++    unique (organization_id, client_registration_id),
++  -- Un lead se registra una vez por lanzamiento (la ingesta se queda con el primero).
++  constraint launch_registrations_launch_lead_key unique (launch_id, lead_id)
++);
++
++create index if not exists launch_registrations_launch_registered
++  on public.launch_registrations (launch_id, registered_at);
++-- Para el borrado en cascada de un lead.
++create index if not exists launch_registrations_lead
++  on public.launch_registrations (lead_id);
++
++-- ─── 8. landing_visits ───────────────────────────────────────────────────────
++create table if not exists public.landing_visits (
++  id uuid primary key default gen_random_uuid(),
++  organization_id uuid not null references public.organizations(id) on delete cascade,
++  launch_id uuid not null,
++  visitor_id text not null check (char_length(btrim(visitor_id)) between 1 and 200),
++  day date not null,
++  created_at timestamptz not null default now(),
++  -- NO ACTION: un lanzamiento con visitas no se borra.
++  constraint landing_visits_launch_fkey foreign key (launch_id, organization_id)
++    references public.webinar_launches (id, organization_id),
++  constraint landing_visits_launch_visitor_day_key unique (launch_id, visitor_id, day)
++);
++
++-- ─── 9. lead_events ──────────────────────────────────────────────────────────
++-- Append-only. Los números del lanzamiento salen de contar leads distintos por
++-- kind y lanzamiento. launch_id es obligatorio (todo evento cuenta para un
++-- lanzamiento); si una fase posterior necesita eventos sin lanzamiento, se
++-- relaja en otra migración.
++create table if not exists public.lead_events (
++  id uuid primary key default gen_random_uuid(),
++  organization_id uuid not null references public.organizations(id) on delete cascade,
++  lead_id uuid not null,
++  launch_id uuid not null,
++  kind text not null check (kind in (
++    'registered', 'zoom_link_created', 'email_confirmed', 'vip_purchased',
++    'attended', 'stayed_to_offer', 'raised_hand', 'contacted', 'qualified',
++    'disqualified', 'call_booked', 'call_attended', 'call_no_show',
++    'purchased', 'refunded', 'note'
++  )),
++  occurred_at timestamptz not null,
++  source text not null check (source in ('landing', 'zoom', 'ghl', 'calendly', 'whop', 'fanbasis', 'commas', 'manual')),
++  source_ref text not null check (char_length(btrim(source_ref)) between 1 and 200),
++  actor_user_id uuid references auth.users(id) on delete set null,
++  data jsonb not null default '{}'::jsonb,
++  created_at timestamptz not null default now(),
++  constraint lead_events_lead_fkey foreign key (lead_id, organization_id)
++    references public.leads (id, organization_id) on delete cascade,
++  -- NO ACTION: un lanzamiento con eventos no se borra.
++  constraint lead_events_launch_fkey foreign key (launch_id, organization_id)
++    references public.webinar_launches (id, organization_id),
++  -- Llave natural: un reintento del mismo evento externo no lo duplica.
++  constraint lead_events_org_source_ref_kind_key unique (organization_id, source, source_ref, kind)
++);
++
++create index if not exists lead_events_launch_kind_lead
++  on public.lead_events (launch_id, kind, lead_id);
++create index if not exists lead_events_lead_occurred
++  on public.lead_events (lead_id, occurred_at);
++
++-- ─── 10. ingest_keys ─────────────────────────────────────────────────────────
++-- Clave de ingesta de la landing: se guarda sólo el hash (sha256); la clave se
++-- muestra una vez al crearla (SCRUM-527).
++create table if not exists public.ingest_keys (
++  id uuid primary key default gen_random_uuid(),
++  organization_id uuid not null references public.organizations(id) on delete cascade,
++  key_hash text not null check (char_length(key_hash) between 1 and 200),
++  label text not null check (char_length(btrim(label)) between 1 and 100),
++  last_used_at timestamptz,
++  revoked_at timestamptz,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  constraint ingest_keys_key_hash_key unique (key_hash)
++);
++
++create index if not exists ingest_keys_org
++  on public.ingest_keys (organization_id);
++
++-- ─── 11. updated_at ──────────────────────────────────────────────────────────
++-- public.set_updated_at() existe desde 20260903080000_field_definitions.
++drop trigger if exists webinar_launches_updated_at on public.webinar_launches;
++create trigger webinar_launches_updated_at
++  before update on public.webinar_launches
++  for each row execute function public.set_updated_at();
++
++drop trigger if exists webinar_sessions_updated_at on public.webinar_sessions;
++create trigger webinar_sessions_updated_at
++  before update on public.webinar_sessions
++  for each row execute function public.set_updated_at();
++
++drop trigger if exists launch_ad_campaigns_updated_at on public.launch_ad_campaigns;
++create trigger launch_ad_campaigns_updated_at
++  before update on public.launch_ad_campaigns
++  for each row execute function public.set_updated_at();
++
++drop trigger if exists launch_products_updated_at on public.launch_products;
++create trigger launch_products_updated_at
++  before update on public.launch_products
++  for each row execute function public.set_updated_at();
++
++drop trigger if exists leads_updated_at on public.leads;
++create trigger leads_updated_at
++  before update on public.leads
++  for each row execute function public.set_updated_at();
++
++drop trigger if exists landing_events_updated_at on public.landing_events;
++create trigger landing_events_updated_at
++  before update on public.landing_events
++  for each row execute function public.set_updated_at();
++
++drop trigger if exists launch_registrations_updated_at on public.launch_registrations;
++create trigger launch_registrations_updated_at
++  before update on public.launch_registrations
++  for each row execute function public.set_updated_at();
++
++drop trigger if exists ingest_keys_updated_at on public.ingest_keys;
++create trigger ingest_keys_updated_at
++  before update on public.ingest_keys
++  for each row execute function public.set_updated_at();
++
++-- ─── 12. RLS ─────────────────────────────────────────────────────────────────
++alter table public.webinar_launches enable row level security;
++alter table public.webinar_sessions enable row level security;
++alter table public.launch_ad_campaigns enable row level security;
++alter table public.launch_products enable row level security;
++alter table public.leads enable row level security;
++alter table public.launch_registrations enable row level security;
++alter table public.landing_visits enable row level security;
++alter table public.lead_events enable row level security;
++alter table public.ingest_keys enable row level security;
++alter table public.landing_events enable row level security;
++
++-- Lectura para los miembros de la organización (no ingest_keys ni landing_events).
++drop policy if exists "Org members read webinar_launches" on public.webinar_launches;
++create policy "Org members read webinar_launches"
++  on public.webinar_launches for select to authenticated
++  using (organization_id = public.get_my_organization_id());
++
++drop policy if exists "Org members read webinar_sessions" on public.webinar_sessions;
++create policy "Org members read webinar_sessions"
++  on public.webinar_sessions for select to authenticated
++  using (organization_id = public.get_my_organization_id());
++
++drop policy if exists "Org members read launch_ad_campaigns" on public.launch_ad_campaigns;
++create policy "Org members read launch_ad_campaigns"
++  on public.launch_ad_campaigns for select to authenticated
++  using (organization_id = public.get_my_organization_id());
++
++drop policy if exists "Org members read launch_products" on public.launch_products;
++create policy "Org members read launch_products"
++  on public.launch_products for select to authenticated
++  using (organization_id = public.get_my_organization_id());
++
++drop policy if exists "Org members read leads" on public.leads;
++create policy "Org members read leads"
++  on public.leads for select to authenticated
++  using (organization_id = public.get_my_organization_id());
++
++drop policy if exists "Org members read launch_registrations" on public.launch_registrations;
++create policy "Org members read launch_registrations"
++  on public.launch_registrations for select to authenticated
++  using (organization_id = public.get_my_organization_id());
++
++drop policy if exists "Org members read landing_visits" on public.landing_visits;
++create policy "Org members read landing_visits"
++  on public.landing_visits for select to authenticated
++  using (organization_id = public.get_my_organization_id());
++
++drop policy if exists "Org members read lead_events" on public.lead_events;
++create policy "Org members read lead_events"
++  on public.lead_events for select to authenticated
++  using (organization_id = public.get_my_organization_id());
++
++-- Escritura de la configuración del lanzamiento: founder o admin.
++drop policy if exists "Founders and admins insert webinar_launches" on public.webinar_launches;
++create policy "Founders and admins insert webinar_launches"
++  on public.webinar_launches for insert to authenticated
++  with check (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++drop policy if exists "Founders and admins update webinar_launches" on public.webinar_launches;
++create policy "Founders and admins update webinar_launches"
++  on public.webinar_launches for update to authenticated
++  using (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  )
++  with check (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++drop policy if exists "Founders and admins delete webinar_launches" on public.webinar_launches;
++create policy "Founders and admins delete webinar_launches"
++  on public.webinar_launches for delete to authenticated
++  using (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++
++drop policy if exists "Founders and admins insert webinar_sessions" on public.webinar_sessions;
++create policy "Founders and admins insert webinar_sessions"
++  on public.webinar_sessions for insert to authenticated
++  with check (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++drop policy if exists "Founders and admins update webinar_sessions" on public.webinar_sessions;
++create policy "Founders and admins update webinar_sessions"
++  on public.webinar_sessions for update to authenticated
++  using (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  )
++  with check (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++drop policy if exists "Founders and admins delete webinar_sessions" on public.webinar_sessions;
++create policy "Founders and admins delete webinar_sessions"
++  on public.webinar_sessions for delete to authenticated
++  using (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++
++drop policy if exists "Founders and admins insert launch_ad_campaigns" on public.launch_ad_campaigns;
++create policy "Founders and admins insert launch_ad_campaigns"
++  on public.launch_ad_campaigns for insert to authenticated
++  with check (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++drop policy if exists "Founders and admins update launch_ad_campaigns" on public.launch_ad_campaigns;
++create policy "Founders and admins update launch_ad_campaigns"
++  on public.launch_ad_campaigns for update to authenticated
++  using (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  )
++  with check (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++drop policy if exists "Founders and admins delete launch_ad_campaigns" on public.launch_ad_campaigns;
++create policy "Founders and admins delete launch_ad_campaigns"
++  on public.launch_ad_campaigns for delete to authenticated
++  using (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++
++drop policy if exists "Founders and admins insert launch_products" on public.launch_products;
++create policy "Founders and admins insert launch_products"
++  on public.launch_products for insert to authenticated
++  with check (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++drop policy if exists "Founders and admins update launch_products" on public.launch_products;
++create policy "Founders and admins update launch_products"
++  on public.launch_products for update to authenticated
++  using (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  )
++  with check (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++drop policy if exists "Founders and admins delete launch_products" on public.launch_products;
++create policy "Founders and admins delete launch_products"
++  on public.launch_products for delete to authenticated
++  using (
++    organization_id = public.get_my_organization_id()
++    and public.current_user_has_org_role(array['founder', 'admin'])
++  );
++
++-- ─── 13. Grants ──────────────────────────────────────────────────────────────
++-- En Supabase las tablas nuevas nacen con GRANT ALL a anon y authenticated
++-- (default privileges): se revoca todo y se da sólo lo que cada tabla necesita.
++revoke all on
++  public.webinar_launches, public.webinar_sessions, public.launch_ad_campaigns,
++  public.launch_products, public.leads, public.launch_registrations,
++  public.landing_visits, public.lead_events, public.ingest_keys, public.landing_events
++  from anon, authenticated;
++
++grant select, insert, update, delete on
++  public.webinar_launches, public.webinar_sessions, public.launch_ad_campaigns,
++  public.launch_products, public.leads, public.launch_registrations,
++  public.landing_visits, public.lead_events, public.ingest_keys, public.landing_events
++  to service_role;
++
++-- Lectura (la policy filtra por organización).
++grant select on
++  public.webinar_launches, public.webinar_sessions, public.launch_ad_campaigns,
++  public.launch_products, public.leads, public.launch_registrations,
++  public.landing_visits, public.lead_events
++  to authenticated;
++
++-- Configuración del lanzamiento (la policy exige founder o admin). En
++-- webinar_launches, id, public_id y created_at los pone la base y nadie los
++-- cambia; organization_id se da al crear y no se mueve.
++grant insert (organization_id, name, variant, offer_price, currency, capture_starts_on,
++              closes_on, goal_sales, goal_revenue, status, closed_at)
++  on public.webinar_launches to authenticated;
++grant update (name, variant, offer_price, currency, capture_starts_on,
++              closes_on, goal_sales, goal_revenue, status, closed_at)
++  on public.webinar_launches to authenticated;
++grant delete on public.webinar_launches to authenticated;
++grant insert, update, delete on
++  public.webinar_sessions, public.launch_ad_campaigns, public.launch_products
++  to authenticated;
++
++-- ─── 14. Realtime ────────────────────────────────────────────────────────────
++-- La pantalla del lanzamiento muestra los registros a medida que llegan.
++-- Mismo patrón que 20260711100000_business_context_realtime.sql.
++do $$
++begin
++  if not exists (
++    select 1
++    from pg_publication_tables
++    where pubname = 'supabase_realtime'
++      and schemaname = 'public'
++      and tablename = 'launch_registrations'
++  ) then
++    alter publication supabase_realtime add table public.launch_registrations;
++  end if;
++end $$;

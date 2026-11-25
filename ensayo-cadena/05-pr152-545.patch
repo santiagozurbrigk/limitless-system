@@ -1,0 +1,3814 @@
+commit c735cdb9701b410cb521abc038c216d5e56871de
+Author: Claude <noreply@anthropic.com>
+Date:   Mon Nov 23 13:51:16 2026 +0000
+
+    squash #152 feat/SCRUM-545-webinars-leads-y-ficha
+
+diff --git a/CHANGES.md b/CHANGES.md
+index 943e0f46..994aaf7a 100644
+--- a/CHANGES.md
++++ b/CHANGES.md
+@@ -28,6 +28,36 @@ al terminar cada bloque de trabajo, aunque sea chico.
+ **Riesgos / deuda técnica pendiente:** qué quedó sin hacer o puede romperse (con ID de PENDIENTES si aplica).
+ ```
+ 
++### 2026-11-02 — Leads y ficha del lead de Limitless Webinars (SCRUM-545, A7)
++
++**Rama:** `feat/SCRUM-545-webinars-leads-y-ficha` (base: integración local `09131c63` de #148 y #150, sin mergear)
++**Commit(s):** `27b6b035` — ruta de la ficha y config de Leads (W0); `e84ba501` — lógica, acciones simuladas y avisos (W1); `de2323cf` — pantalla de Leads y ficha del lead (W2); `ff4982e9` — enciende Leads en el menú webinar y sus rutas (W3); este (W4, docs)
++**Módulo(s) afectado(s):** Embudos y Lanzamientos (Webinars) y Plataforma (menú por experiencia): `app/(platform)/leads/{layout,page}.tsx`, `app/(platform)/leads/[id]/page.tsx`, `app/leads/actions.ts`, `lib/webinar/leads/{config,url,estado-local,esquemas}.ts`, `components/webinar/{pantalla-de-leads,filtros-de-leads,tabla-de-leads,ficha-del-lead,panel-de-venta-del-lead,panel-de-venta-cliente,aviso-de-estado,fecha-de-la-org}.tsx`, `routes/paths.ts`, `lib/navigation/{menu-por-experiencia,page-meta,module-for-path}.ts`; 9 tests nuevos y 8 actualizados; docs `FUNCIONAL.md` (F-EMB-25), `backlog/historias.md` (H-EMB-25), `areas/webinars-contratos-de-vista.md`, `operacion/verificacion-manual.md`, `operacion/testing.md`, `diseno/ui-y-navegacion.md`, `arquitectura/auth-organizaciones-y-permisos.md`
++
++**Qué se hizo:**
++- `/leads`: tabla con nombre (o email), etapa, origen, responsable y último contacto ("Sin contactar"), en el orden y con las 50 filas que da el contrato; los 5 filtros de `FILTROS_DE_LEADS` con su conteo, como enlaces; selector de lanzamiento; buscador `<form method="get">` con filtro y lanzamiento ocultos y sin cursor; paginación "Siguiente" y "Volver al principio". Filtro, búsqueda, lanzamiento y cursor viven en la URL (`/leads?filtro=<id>` abre con el filtro aplicado). Un dato que no llega `medido` muestra su estado y su motivo (`AvisoDeEstado`), sin cero ni filas. Sin lanzamientos: estado vacío sin enlace (`RUTA_PARA_CREAR_LANZAMIENTO = null`).
++- `/leads/[id]`: contacto, WhatsApp (`whatsappUrl` tal cual; "No dejó teléfono"), registros por lanzamiento con origen y calificación, línea de tiempo con la fuente y quién cargó cada evento, avisos de fuentes, compras (monto sin leer: "—"), y el panel de venta. `{ ok: false }` dibuja `ErrorDeCarga` con el motivo; `{ ok: true, data: null }`, el 404 de la app. La fila de la tabla enlaza a la ficha con `?lanzamiento=` y el enlace cubre toda la fila.
++- Panel de venta: un solo botón "Marcar como …" con el mapa explícito `SIGUIENTE_ETAPA` (`raised_hand` → `contacted` → `qualified`), selector de responsable y notas. Presentación sin hooks (`panel-de-venta-del-lead.tsx`) y envoltorio `"use client"` (`panel-de-venta-cliente.tsx`) con el estado local.
++- Tres Server Actions simuladas en `app/leads/actions.ts`: `runMutation(async () => { await requireOrganizationId(); validar; devolver })`, sin escribir, sin Supabase y sin revalidar. Con éxito, la ficha refleja el cambio sólo en su estado local y avisa "Cambio de ejemplo: no se guardó y se pierde al recargar."
++- Menú: la entrada Leads de `webinar` pasa a `lista: true`; `page-meta` suma "Leads" y "Ficha del lead" (vuelve a Leads); `paths.platform.webinars.lead(id)`. Comentarios que decían que Leads era de SCRUM-537 o que `/leads` no tenía pantalla, corregidos.
++
++**Por qué / finalidad:** que el setter encuentre a quien levantó la mano y marque avance en 2 clics desde la lista filtrada (SCRUM-545), con las pantallas leyendo sólo de `leerLeads` y `leerFichaDelLead` (SCRUM-542) antes de que exista la base (B4).
++
++**Decisiones de diseño relevantes:**
++- Las acciones no persisten (no hay migración ni tabla): devuelven éxito sin escribir y la interfaz lo dice. Persistir es `[WEBINAR-LEADS-PERSISTIR]`.
++- Con una cuenta sin organización, las acciones devuelven el texto de `SIN_ORGANIZACION_VINCULADA`, `runMutation` deja su aviso en los logs y no va a Sentry; la acción no lo atrapa ni lo traduce.
++- La pantalla de inicio de `webinar` pasa de `/team` a `/leads` para quien tiene `sales` y para el founder (es la primera entrada lista que ve); sin `sales`, sigue `/team`. No se tocó `pantallaDeInicio` ni el orden del menú.
++- En `full`, `/leads` abre tipeando la URL (antes daba 404), sin entrada en el menú. Sin `sales`, «No tenés acceso a Ventas» para quien tiene rol configurado; el founder y las cuentas sin rol entran por la regla general de módulos. No se agregó un chequeo propio.
++- Navegación sin Client Components: filtros, selector y paginación son `Link`; las fechas las formatea la hoja cliente `FechaDeLaOrg` en la zona de la organización.
++
++**Verificación:**
++- `cd apps/web && pnpm test`: 297 archivos y 4.720 tests, sin rojos (base `09131c63`: 288 y 4.592).
++- `tsc --noEmit` limpio.
++- Mutantes, cada uno con su rojo leído y revertido: `"Supabase"` en `TEXTO_DE_INFRAESTRUCTURA` (caso sin organización de las tres acciones), una llamada a `createClient` en `actions.ts` (control "ninguna llama a Supabase"), un hook en `panel-de-venta-del-lead.tsx` (lectura del fuente), el módulo de `/leads` cambiado a `finance` (caso sin Ventas del layout en `full`) y las líneas del founder y del sin rol de `acceso-a-modulo.ts` (sus casos).
++- No verificable en esta ventana (pasos en `verificacion-manual.md`, Embudos V12): el conteo real de clics, la interacción en el navegador, el toast con el motivo, una organización `webinar` o `full` real con la base.
++
++**Riesgos / deuda técnica pendiente:** `[WEBINAR-LEADS-PERSISTIR]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]` (AC-6 parcial hasta SCRUM-544), `[WEBINAR-LEADS-SIN-ORGANIZACION]` (una cuenta sin organización que abre `/leads` cae en la pantalla de error de la plataforma y deja dos eventos en Sentry), `[WEBINAR-NUMEROS-DE-TICKET]`. Volver de la ficha a la lista pierde el filtro (no se arregla en esta HU). Cruce con SCRUM-537, 543 y 544 en `menu-por-experiencia.ts`, `paths.ts` y `module-for-path.ts` al mergear.
++
+ ### 2026-11-01 — Webinars: contratos de vista y escenario de ejemplo (SCRUM-542)
+ 
+ **Rama:** `feat/SCRUM-542-webinars-contratos-de-vista` (base `main` `4a542e5e`)
+diff --git a/PENDIENTES.md b/PENDIENTES.md
+index 88501044..2cf9d6b3 100644
+--- a/PENDIENTES.md
++++ b/PENDIENTES.md
+@@ -84,7 +84,7 @@ Los informes de auditoría con el mismo criterio (hecho · observación · riesg
+ | [Clientes](#clientes) | [`docs/areas/clientes.md`](./docs/areas/clientes.md) | 0 | 7 | 15 | 11 |
+ | [Ventas](#ventas) | [`docs/areas/ventas.md`](./docs/areas/ventas.md) | 11 | 0 | 16 | 8 |
+ | [Marketing](#marketing) | [`docs/areas/marketing.md`](./docs/areas/marketing.md) | 0 | 6 | 20 | 5 |
+-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 18 | 7 |
++| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | [`docs/areas/embudos.md`](./docs/areas/embudos.md) | 0 | 6 | 19 | 10 |
+ | [Agente de negocio e IA](#agente-de-negocio-e-ia) | [`docs/areas/agente-ia.md`](./docs/areas/agente-ia.md) | 0 | 4 | 18 | 7 |
+ | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | [`docs/areas/operaciones.md`](./docs/areas/operaciones.md) | 0 | 7 | 15 | 9 |
+ | [Infraestructura, seguridad y tests (transversal)](#infraestructura-seguridad-y-tests-transversal) | [`docs/arquitectura/vision-general.md`](./docs/arquitectura/vision-general.md) | 1 | 21 | 44 | 13 |
+@@ -1416,6 +1416,12 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
+ - **Qué hay que hacer:** cuando B4 lea los pagos reales, asociar por el id de orden del proveedor (`orderExternalId` de Whop/Commas) en vez de lead + lanzamiento + producto, sumar los reembolsos parciales de una misma orden y definir qué pasa con un reembolso cuya orden no se encuentra. Actualizar la regla en `docs/areas/webinars-contratos-de-vista.md`.
+ - **Dónde:** `apps/web/lib/webinar/vistas/{filas,calcular}.ts`, `docs/areas/webinars-contratos-de-vista.md`.
+ 
++#### [WEBINAR-LEADS-PERSISTIR] Las acciones de la ficha del lead guardan de verdad y `/leads` lee la base (B4)
++- **Tipo:** feature
++- **Estado verificado:** las tres Server Actions de la ficha (`marcarAvanceDelLeadAction`, `asignarResponsableDelLeadAction`, `agregarNotaDelLeadAction`, `apps/web/app/leads/actions.ts`, SCRUM-545) exigen organización con `requireOrganizationId()`, validan la entrada y devuelven éxito sin escribir en ninguna base; la ficha muestra el cambio sólo en su estado local y avisa que es de ejemplo. No miran el módulo de permisos: `/leads` lo protege el layout de la plataforma con `sales`. `/leads` y `/leads/[id]` leen de `leerLeads` y `leerFichaDelLead`, que devuelven el escenario a la organización de demo y `sin_fuente` o "no existe" a las demás (`[WEBINAR-VISTAS-LECTURA-REAL]`).
++- **Qué hay que hacer:** cuando B4 migre el modelo, que las tres acciones escriban la etapa, el responsable y la nota, con el chequeo de módulo `sales` en la acción (`[PERMISOS-SERVER-ACTIONS]`: hoy se apoyan sólo en el layout); que la ficha deje el estado local y el aviso de ejemplo y muestre lo guardado; y, cuando `/leads` lea la base, un chequeo de permisos propio en la página para lo que no tiene que llegarle a alguien sin `sales` (R-8 de SCRUM-545).
++- **Dónde:** `apps/web/app/leads/actions.ts`, `apps/web/components/webinar/panel-de-venta-cliente.tsx`, `apps/web/lib/webinar/leads/estado-local.ts`, `apps/web/app/(platform)/leads/`.
++
+ #### [EMBUDOS-SALUD] Habilitar el estado de salud (bandas de la §04) ⏸️
+ - **Tipo:** decisión de negocio / feature
+ - **Estado verificado:** `applyHealthBand`, `resolveBenchmark`, `CROSS_FUNNEL_BANDS` sólo se usan en tests; la tabla de pasos muestra `benchmarkLabel` como texto. `funnel_benchmarks` sin uso. `diagnoseFunnel()` no existe.
+@@ -1508,6 +1514,24 @@ Doc del área: [`docs/areas/embudos.md`](./docs/areas/embudos.md)
+ 
+ ### Embudos y Lanzamientos · P3
+ 
++#### [WEBINAR-LEADS-SIN-ORGANIZACION] Una cuenta sin organización que abre `/leads` deja dos eventos en Sentry
++- **Tipo:** bug
++- **Estado verificado:** para SCRUM-542 (dueño de `lib/webinar/vistas/`). Una cuenta sin organización (un super admin) que abre `/leads` o `/leads/<id>` pasa el bloqueo por experiencia (queda en `full`) y la página llama a `leerLeads` o `leerFichaDelLead`, que lanzan en `requireOrganizationId` (`apps/web/lib/webinar/vistas/leer.ts:60`) en vez de devolver `sin_fuente`. Next dibuja `app/(platform)/error.tsx` y quedan dos eventos en Sentry: el del servidor por `onRequestError` y el del navegador por `components/platform/pantalla-de-error.tsx`. Leído en el código, no ejecutado en la app (DT-28 y R-10 de SCRUM-545; `app/(platform)/leads/__tests__/pantallas-de-leads.test.ts` prueba que las dos páginas rechazan con `SIN_ORGANIZACION_VINCULADA`). SCRUM-545 no cambia `lib/webinar/vistas/`.
++- **Qué hay que hacer:** que las funciones de lectura de Webinars traten la cuenta sin organización como "sin fuente" (o "no existe" en la ficha) sin lanzar, igual que hace `getOrganizationExperience` con `SIN_ORGANIZACION_VINCULADA`.
++- **Dónde:** `apps/web/lib/webinar/vistas/leer.ts`, `apps/web/app/(platform)/leads/`.
++
++#### [WEBINAR-LEADS-CREAR-LANZAMIENTO] El estado vacío de Leads no tiene enlace para crear un lanzamiento
++- **Tipo:** feature
++- **Estado verificado:** sin lanzamientos, `/leads` muestra «Todavía no hay lanzamientos.» sin enlace: `RUTA_PARA_CREAR_LANZAMIENTO` es `null` en `apps/web/lib/webinar/leads/config.ts` porque no existe la pantalla de creación (SCRUM-544). `PantallaDeLeads` dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22).
++- **Qué hay que hacer:** que SCRUM-544 ponga en `RUTA_PARA_CREAR_LANZAMIENTO` la ruta de su pantalla de creación (desde `routes/paths.ts`).
++- **Dónde:** `apps/web/lib/webinar/leads/config.ts`.
++
++#### [WEBINAR-NUMEROS-DE-TICKET] Los comentarios y docs de Webinars citan SCRUM-534 y SCRUM-529 donde corresponde 543 y 544
++- **Tipo:** deuda técnica
++- **Estado verificado:** Inicio figura como SCRUM-534 y Lanzamientos como SCRUM-529, y el plan de Webinars los tiene como SCRUM-543 y SCRUM-544 (drift detectado en el SDD de SCRUM-545, que no los corrigió): `apps/web/lib/navigation/menu-por-experiencia.ts:15,16,66,74`, `apps/web/routes/paths.ts:29,31`, `apps/web/lib/navigation/module-for-path.ts:26`, `apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts:103`, `docs/diseno/ui-y-navegacion.md:88-89` y `PENDIENTES.md:457`.
++- **Qué hay que hacer:** confirmar con Martín qué ticket es cada pantalla y corregir los números donde corresponda.
++- **Dónde:** archivos citados.
++
+ #### [FEAT-GHL-OAUTH] App del Marketplace de GHL
+ - **Tipo:** feature
+ - **Estado verificado:** sólo PIT + `location_id` (`ghl-connect-dialog.tsx`); no hay rutas OAuth de GHL.
+diff --git a/apps/web/app/(platform)/leads/[id]/page.tsx b/apps/web/app/(platform)/leads/[id]/page.tsx
+new file mode 100644
+index 00000000..37edc272
+--- /dev/null
++++ b/apps/web/app/(platform)/leads/[id]/page.tsx
+@@ -0,0 +1,28 @@
++import { notFound } from "next/navigation";
++import { ErrorDeCarga } from "@/components/webinar/aviso-de-estado";
++import { FichaDelLead } from "@/components/webinar/ficha-del-lead";
++import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
++import { lanzamientoDesdeUrl, type ParametrosDeLaUrl } from "@/lib/webinar/leads/url";
++import { leerFichaDelLead } from "@/lib/webinar/vistas/leer";
++
++/**
++ * Ficha del lead de Limitless Webinars (SCRUM-545). `?lanzamiento=` elige el
++ * lanzamiento del estado de venta. Si no se pudo leer, el motivo; si no existe
++ * (o es de otra organización), el 404 de la app (AC-8).
++ */
++export default async function FichaDelLeadPage({
++  params,
++  searchParams,
++}: {
++  params: Promise<{ id: string }>;
++  searchParams: Promise<ParametrosDeLaUrl>;
++}) {
++  const sinAcceso = await exigirModuloDeLaPagina("sales");
++  if (sinAcceso) return sinAcceso;
++
++  const { id } = await params;
++  const lectura = await leerFichaDelLead(id, lanzamientoDesdeUrl(await searchParams));
++  if (!lectura.ok) return <ErrorDeCarga motivo={lectura.motivo} />;
++  if (!lectura.data) notFound();
++  return <FichaDelLead vista={lectura.data} />;
++}
+diff --git a/apps/web/app/(platform)/leads/__tests__/pantallas-de-leads.test.ts b/apps/web/app/(platform)/leads/__tests__/pantallas-de-leads.test.ts
+new file mode 100644
+index 00000000..77cc5b22
+--- /dev/null
++++ b/apps/web/app/(platform)/leads/__tests__/pantallas-de-leads.test.ts
+@@ -0,0 +1,162 @@
++/**
++ * SCRUM-545 · ⭐ Las dos páginas de Leads punta a punta, con la función de
++ * lectura real y el escenario de la organización de demo (DT-21): página,
++ * `leer`, escenario y markup, sin base. El escenario llega sólo a través de
++ * `leer` (CD-14); el id del lead se saca del `href` de la fila.
++ *
++ * Mocks: `server-only`, la organización activa, la zona, Sentry y el toast del
++ * envoltorio cliente del panel. `leerFichaDelLead` se reemplaza sólo en el caso
++ * `{ ok: false }`.
++ */
++import { renderToStaticMarkup } from "react-dom/server";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++const DEMO = "11111111-2222-4333-8444-555555555555";
++const REAL = "99999999-8888-4777-8666-555555555555";
++
++const sim = vi.hoisted(() => ({
++  organizacionActiva: null as string | null,
++  fichaQueFalla: null as string | null,
++}));
++
++// SCRUM-540: la página arranca con el guardia del módulo; acá entra alguien con el módulo.
++vi.mock("@/lib/auth/acceso-a-modulo", async (importOriginal) => ({
++  ...(await importOriginal<typeof import("@/lib/auth/acceso-a-modulo")>()),
++  exigirModuloDeLaPagina: async () => null,
++}));
++vi.mock("server-only", () => ({}));
++vi.mock("@/lib/auth/bootstrap", async () => {
++  const { SIN_ORGANIZACION_VINCULADA } = await vi.importActual<typeof import("@/lib/auth/bootstrap")>(
++    "@/lib/auth/bootstrap"
++  );
++  return {
++    SIN_ORGANIZACION_VINCULADA,
++    requireOrganizationId: async () => {
++      if (sim.organizacionActiva === null) throw new Error(SIN_ORGANIZACION_VINCULADA);
++      return sim.organizacionActiva;
++    },
++  };
++});
++vi.mock("@/lib/fechas/organizacion-activa", () => ({ zonaDeLaOrganizacionActiva: async () => null }));
++vi.mock("@/lib/observability/reportar-falla", () => ({ reportarFalla: vi.fn() }));
++vi.mock("@/providers/toast-provider", () => ({ useToast: () => ({ push: () => undefined }) }));
++vi.mock("@/lib/webinar/vistas/leer", async (original) => {
++  const real = await original<typeof import("@/lib/webinar/vistas/leer")>();
++  return {
++    ...real,
++    leerFichaDelLead: (...args: Parameters<typeof real.leerFichaDelLead>) =>
++      sim.fichaQueFalla !== null
++        ? Promise.resolve({ ok: false as const, motivo: sim.fichaQueFalla })
++        : real.leerFichaDelLead(...args),
++  };
++});
++
++import { SIN_ORGANIZACION_VINCULADA } from "@/lib/auth/bootstrap";
++import { getPageMeta } from "@/lib/navigation/page-meta";
++import LeadsPage from "../page";
++import FichaDelLeadPage from "../[id]/page";
++
++async function leads(params: Record<string, string> = {}): Promise<string> {
++  return renderToStaticMarkup(await LeadsPage({ searchParams: Promise.resolve(params) }));
++}
++
++async function ficha(id: string, params: Record<string, string> = {}): Promise<string> {
++  return renderToStaticMarkup(
++    await FichaDelLeadPage({ params: Promise.resolve({ id }), searchParams: Promise.resolve(params) })
++  );
++}
++
++/** El primer enlace de fila a una ficha: id del lead y lanzamiento. */
++function primeraFila(html: string): { id: string; lanzamiento: string } {
++  const m = /<tr class="[^"]*" data-lead="[^"]+"><td[^>]*><a[^>]*href="\/leads\/([^"?]+)\?lanzamiento=([^"&]+)"/.exec(html);
++  expect(m, "no hay fila con enlace a la ficha").not.toBeNull();
++  return { id: m![1]!, lanzamiento: m![2]! };
++}
++
++beforeEach(() => {
++  vi.stubEnv("WEBINAR_DEMO_ORGANIZATION_ID", DEMO);
++  sim.organizacionActiva = DEMO;
++  sim.fichaQueFalla = null;
++});
++afterEach(() => {
++  vi.unstubAllEnvs();
++});
++
++describe("⭐ organización de demo: de la lista filtrada al botón de avance (AC-3, AC-7, AC-11)", () => {
++  it("/leads?filtro=levanto_la_mano_sin_contactar abre con el filtro aplicado, la fila enlaza a la ficha y la ficha tiene el botón", async () => {
++    const html = await leads({ filtro: "levanto_la_mano_sin_contactar" });
++    expect(html).toContain('data-cartel="datos-de-ejemplo"');
++    expect(html).toMatch(/aria-current="page" data-filtro="levanto_la_mano_sin_contactar"/);
++    expect(html.match(/aria-current="page" data-filtro=/g)).toHaveLength(1);
++    expect(html).toMatch(/data-total="true">\d+ leads?</);
++    expect(html).toContain("<table");
++
++    const { id, lanzamiento } = primeraFila(html);
++    const laFicha = await ficha(id, { lanzamiento });
++    expect(laFicha).toContain('data-cartel="datos-de-ejemplo"');
++    expect(laFicha).toContain("Estas acciones son de ejemplo: no se guardan.");
++    expect(laFicha).toMatch(/<button[^>]*data-accion="marcar-avance"[^>]*>Marcar como Contactado<\/button>/);
++    expect(laFicha).not.toContain("aria-haspopup");
++  });
++
++  it("sin filtro en la URL: «Todos» aplicado", async () => {
++    expect(await leads()).toMatch(/aria-current="page" data-filtro="todos"/);
++  });
++
++  it("un lead que no existe: el 404 de la app (AC-8)", async () => {
++    await expect(ficha("99999999-0000-4000-8000-000000000000")).rejects.toMatchObject({
++      digest: "NEXT_HTTP_ERROR_FALLBACK;404",
++    });
++  });
++});
++
++describe("⭐ organización que no es la de demo (AC-4, AC-13)", () => {
++  beforeEach(() => {
++    sim.organizacionActiva = REAL;
++  });
++
++  it("Leads muestra sin_fuente con su motivo, sin cero ni filas", async () => {
++    const html = await leads({ filtro: "levanto_la_mano_sin_contactar" });
++    expect(html).toContain("Sin fuente");
++    expect(html).toContain('data-estado="sin_fuente"');
++    expect(html).not.toContain(">0<");
++    expect(html).not.toContain("<table");
++    expect(html).not.toContain("datos-de-ejemplo");
++  });
++
++  it("la ficha da el 404 de la app", async () => {
++    await expect(ficha("abc")).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" });
++  });
++});
++
++describe("la ficha que no se pudo leer (AC-8)", () => {
++  it("{ ok: false }: el error de carga con el motivo", async () => {
++    sim.fichaQueFalla = "La base no respondió.";
++    const html = await ficha("abc");
++    expect(html).toContain('role="alert"');
++    expect(html).toContain("No pudimos cargar esta ficha.");
++    expect(html).toContain("La base no respondió.");
++  });
++});
++
++describe("⭐ cuenta sin organización (QA-1, DT-28)", () => {
++  beforeEach(() => {
++    sim.organizacionActiva = null;
++  });
++
++  it("las dos páginas rechazan con SIN_ORGANIZACION_VINCULADA y no dibujan sin_fuente", async () => {
++    await expect(leads()).rejects.toThrow(SIN_ORGANIZACION_VINCULADA);
++    await expect(ficha("abc")).rejects.toThrow(SIN_ORGANIZACION_VINCULADA);
++  });
++});
++
++describe("título y vuelta (getPageMeta)", () => {
++  it("/leads: «Leads», sin vuelta; /leads/<id>: «Ficha del lead», vuelve a Leads", () => {
++    expect(getPageMeta("/leads")).toEqual({ title: "Leads", subtitle: undefined });
++    expect(getPageMeta("/leads/abc")).toEqual({
++      title: "Ficha del lead",
++      subtitle: undefined,
++      back: { href: "/leads", label: "Leads" },
++    });
++  });
++});
+diff --git a/apps/web/app/(platform)/leads/layout.tsx b/apps/web/app/(platform)/leads/layout.tsx
+new file mode 100644
+index 00000000..4ce1666c
+--- /dev/null
++++ b/apps/web/app/(platform)/leads/layout.tsx
+@@ -0,0 +1,7 @@
++import { exigirRutaDeLaExperiencia } from "@/lib/organization/ruta-de-la-experiencia";
++
++/** Bloqueo por experiencia de la organización (SCRUM-524, SCRUM-545). */
++export default async function Layout({ children }: { children: React.ReactNode }) {
++  await exigirRutaDeLaExperiencia("/leads");
++  return children;
++}
+diff --git a/apps/web/app/(platform)/leads/page.tsx b/apps/web/app/(platform)/leads/page.tsx
+new file mode 100644
+index 00000000..aeb40446
+--- /dev/null
++++ b/apps/web/app/(platform)/leads/page.tsx
+@@ -0,0 +1,22 @@
++import { PantallaDeLeads } from "@/components/webinar/pantalla-de-leads";
++import { exigirModuloDeLaPagina } from "@/lib/auth/acceso-a-modulo";
++import { parametrosDesdeUrl, type ParametrosDeLaUrl } from "@/lib/webinar/leads/url";
++import { leerLeads } from "@/lib/webinar/vistas/leer";
++
++/**
++ * Leads de Limitless Webinars (SCRUM-545). Filtro, búsqueda, lanzamiento y
++ * cursor llegan de la URL (`/leads?filtro=<id>` abre con el filtro aplicado);
++ * la pantalla dibuja sólo lo que devuelve `leerLeads`.
++ */
++export default async function LeadsPage({
++  searchParams,
++}: {
++  searchParams: Promise<ParametrosDeLaUrl>;
++}) {
++  const sinAcceso = await exigirModuloDeLaPagina("sales");
++  if (sinAcceso) return sinAcceso;
++
++  const parametros = parametrosDesdeUrl(await searchParams);
++  const vista = await leerLeads(parametros);
++  return <PantallaDeLeads vista={vista} cursor={parametros.cursor ?? null} />;
++}
+diff --git a/apps/web/app/__tests__/bloqueo-por-experiencia.test.ts b/apps/web/app/__tests__/bloqueo-por-experiencia.test.ts
+index 5d664385..b148f884 100644
+--- a/apps/web/app/__tests__/bloqueo-por-experiencia.test.ts
++++ b/apps/web/app/__tests__/bloqueo-por-experiencia.test.ts
+@@ -160,6 +160,7 @@ describe("los segmentos de la plataforma", () => {
+       "integrations",
+       "intelligence",
+       "lanzamientos",
++      "leads",
+       "marketing",
+       "onboarding",
+       "operations",
+@@ -179,22 +180,31 @@ describe("⭐ organización webinar", () => {
+     sim.organizacionActiva = "org-webinar";
+   });
+ 
+-  it("todo segmento fuera de Equipo y de los libres redirige a Equipo, sin SinAcceso", async () => {
++  it("todo segmento fuera de Leads, Equipo y de los libres redirige a Leads (con Ventas), sin SinAcceso", async () => {
+     const resultado: Record<string, string> = {};
+     for (const segmento of SEGMENTOS) resultado[segmento] = await entrar(segmento);
+     const esperado = Object.fromEntries(
+       SEGMENTOS.map((s) => [
+         s,
+-        ["team", "settings", "holding", "onboarding"].includes(s) ? "pasa" : "redirect /team",
++        ["leads", "team", "settings", "holding", "onboarding"].includes(s) ? "pasa" : "redirect /leads",
+       ])
+     );
+     expect(resultado).toEqual(esperado);
+   });
+ 
+-  it("tipear /finance, /marketing o /lanzamientos lleva a Equipo (no al Panel)", async () => {
++  it("tipear /finance, /marketing o /lanzamientos lleva a Leads (no al Panel)", async () => {
++    expect(await entrar("finance")).toBe("redirect /leads");
++    expect(await entrar("marketing")).toBe("redirect /leads");
++    expect(await entrar("lanzamientos")).toBe("redirect /leads");
++  });
++
++  it("⭐ SCRUM-545: /leads abre; un miembro con Equipo y sin Ventas sigue yendo a Equipo", async () => {
++    expect(await entrar("leads")).toBe("pasa");
++    sim.permisos = { isFounder: false, modules: { team: "view" } };
++    expect(await entrar("leads")).toBe("pasa");
+     expect(await entrar("finance")).toBe("redirect /team");
+-    expect(await entrar("marketing")).toBe("redirect /team");
+-    expect(await entrar("lanzamientos")).toBe("redirect /team");
++    sim.permisos = { isFounder: false, modules: { sales: "view", team: "view" } };
++    expect(await entrar("finance")).toBe("redirect /leads");
+   });
+ 
+   it("una ruta anidada tipeada (/finance/expenses, /lanzamientos/[id]) redirige por un layout de su cadena", async () => {
+@@ -218,12 +228,12 @@ describe("⭐ organización webinar", () => {
+           break;
+         }
+       }
+-      expect(destino, ruta).toBe("redirect /team");
++      expect(destino, ruta).toBe("redirect /leads");
+     }
+   });
+ 
+-  it("/dashboard, el destino por defecto de las pantallas del cliente, lleva a Equipo", async () => {
+-    expect(await entrar("dashboard")).toBe("redirect /team");
++  it("/dashboard, el destino por defecto de las pantallas del cliente, lleva a Leads", async () => {
++    expect(await entrar("dashboard")).toBe("redirect /leads");
+   });
+ 
+   it("⭐ un miembro sin Equipo va a Ajustes (no a una pantalla con «No tenés acceso»)", async () => {
+@@ -236,7 +246,7 @@ describe("⭐ organización webinar", () => {
+   it("los permisos se leen sólo para elegir el destino de una redirección", async () => {
+     expect(await entrar("team")).toBe("pasa");
+     expect(sim.lecturasDePermisos).toBe(0);
+-    expect(await entrar("finance")).toBe("redirect /team");
++    expect(await entrar("finance")).toBe("redirect /leads");
+     expect(sim.lecturasDePermisos).toBe(1);
+   });
+ 
+@@ -282,7 +292,7 @@ describe("⭐ organización limitless", () => {
+     }
+     sim.organizacionActiva = "org-webinar";
+     for (const segmento of ["integrations", "sops", "business-context"]) {
+-      expect(await entrar(segmento), segmento).toBe("redirect /team");
++      expect(await entrar(segmento), segmento).toBe("redirect /leads");
+     }
+   });
+ 
+@@ -291,6 +301,10 @@ describe("⭐ organización limitless", () => {
+     expect(await entrar("lanzamientos")).toBe("redirect /clients");
+   });
+ 
++  it("⭐ SCRUM-545: /leads no abre en limitless: lleva a Clientes", async () => {
++    expect(await entrar("leads")).toBe("redirect /clients");
++  });
++
+   it("⭐ un miembro con sólo Ventas va a la Bandeja; sin ninguna de las tres, a Ajustes", async () => {
+     sim.permisos = { isFounder: false, modules: { sales: "view" } };
+     expect(await entrar("dashboard")).toBe("redirect /sales/inbox");
+@@ -315,6 +329,11 @@ describe("⭐ organización full: todo igual que antes", () => {
+     // después del bloqueo por experiencia; ningún bloqueo por experiencia lee permisos en `full`.
+     expect(sim.lecturasDePermisos).toBe(1);
+   });
++
++  it("⭐ SCRUM-545: /leads abre en full tipeando la URL (antes daba 404)", async () => {
++    expect(await entrar("leads")).toBe("pasa");
++    expect(sim.lecturasDePermisos).toBe(0);
++  });
+ });
+ 
+ describe("⭐ la experiencia es la de la organización activa", () => {
+@@ -322,7 +341,7 @@ describe("⭐ la experiencia es la de la organización activa", () => {
+     sim.organizacionActiva = "holding-1";
+     expect(await entrar("finance")).toBe("pasa");
+     sim.organizacionActiva = "org-webinar";
+-    expect(await entrar("finance")).toBe("redirect /team");
++    expect(await entrar("finance")).toBe("redirect /leads");
+     sim.organizacionActiva = "holding-1";
+     expect(await entrar("finance")).toBe("pasa");
+   });
+@@ -333,7 +352,7 @@ describe("⭐ la experiencia es la de la organización activa", () => {
+     expect(await entrar("team")).toBe("pasa");
+     expect(await entrar("finance")).toBe("redirect /clients");
+     sim.organizacionActiva = "org-webinar";
+-    expect(await entrar("clients")).toBe("redirect /team");
++    expect(await entrar("clients")).toBe("redirect /leads");
+     expect(await entrar("team")).toBe("pasa");
+     sim.organizacionActiva = "holding-1";
+     expect(await entrar("clients")).toBe("pasa");
+@@ -344,6 +363,12 @@ describe("⭐ la experiencia es la de la organización activa", () => {
+     sim.organizacionActiva = null;
+     expect(await entrar("finance")).toBe("pasa");
+   });
++
++  it("⭐ SCRUM-545 (QA-1): sin organización activa, /leads tampoco se bloquea", async () => {
++    sim.organizacionActiva = null;
++    expect(await entrar("leads")).toBe("pasa");
++    expect(sim.reportes).toBe(0);
++  });
+ });
+ 
+ describe("⭐ una falla de lectura no bloquea a nadie", () => {
+diff --git a/apps/web/app/__tests__/layout-plataforma-leads-en-full.test.ts b/apps/web/app/__tests__/layout-plataforma-leads-en-full.test.ts
+new file mode 100644
+index 00000000..1cf35b00
+--- /dev/null
++++ b/apps/web/app/__tests__/layout-plataforma-leads-en-full.test.ts
+@@ -0,0 +1,144 @@
++/**
++ * SCRUM-545 · AC-13 / DT-24: en una organización `full`, `/leads` se abre
++ * tipeando la URL y el layout real de la plataforma decide con la regla
++ * general de módulos (`moduloBloqueadoParaRuta`, módulo `sales`):
++ *   (a) rol configurado sin Ventas: «No tenés acceso a Ventas», sin la pantalla;
++ *   (b) el founder (aun sin módulos) y una cuenta sin rol configurado: la pantalla;
++ *   (c) con Ventas: la pantalla.
++ *
++ * Mocks como `layout-plataforma-permisos.test.ts`: providers y marco se
++ * reemplazan por envoltorios. No prueba que la página exista (eso lo cubren
++ * `rutas-por-experiencia-en-disco.test.ts` y `pantallas-de-leads.test.ts`).
++ */
++
++import { createElement, Fragment, type ReactNode } from "react";
++import { renderToStaticMarkup } from "react-dom/server";
++import { describe, expect, it, vi } from "vitest";
++
++vi.mock("@/lib/organization/experience", () => ({
++  getOrganizationExperience: async () => "full",
++}));
++import { emptyPermissions } from "@/constants/permission-modules";
++import type { UserPermissions } from "@/lib/auth/get-current-permissions";
++import type { HoldingSessionState } from "@/lib/holding/session";
++
++const sim = vi.hoisted(() => ({
++  pathname: "/leads",
++  permisos: null as unknown as UserPermissions,
++  holding: {
++    isHolding: false,
++    viewingBusiness: false,
++    businesses: [],
++  } as HoldingSessionState,
++}));
++
++vi.mock("next/headers", () => ({
++  headers: async () => new Headers({ "x-pathname": sim.pathname }),
++}));
++vi.mock("@/lib/auth/get-current-permissions", () => ({
++  getCurrentUserPermissions: async () => sim.permisos,
++}));
++vi.mock("@/lib/holding/session", () => ({
++  getHoldingSessionState: async () => sim.holding,
++}));
++vi.mock("@/lib/onboarding/current", () => ({
++  getCurrentOnboardingContext: async () => null,
++}));
++vi.mock("@/lib/fechas/organizacion-activa", () => ({
++  zonaDeLaOrganizacionActiva: async () => "America/Lima",
++}));
++
++function envoltorio({ children }: { children?: ReactNode }) {
++  return createElement(Fragment, null, children);
++}
++function nada() {
++  return null;
++}
++
++vi.mock("@/providers", () => ({ AppProviders: envoltorio }));
++vi.mock("@/components/platform/welcome-gate", () => ({ WelcomeGate: envoltorio }));
++vi.mock("@/components/holding/holding-platform-provider", () => ({
++  HoldingPlatformProvider: envoltorio,
++}));
++vi.mock("@/layouts", () => ({ PlatformLayout: envoltorio }));
++vi.mock("@/providers/permissions-provider", () => ({
++  PermissionsProvider: envoltorio,
++}));
++vi.mock("@/providers/onboarding-provider", () => ({
++  OnboardingProvider: envoltorio,
++}));
++vi.mock("@/providers/zona-de-la-organizacion-provider", () => ({
++  ZonaDeLaOrganizacionProvider: envoltorio,
++}));
++vi.mock("@/components/onboarding/tour-runner", () => ({ TourRunner: nada }));
++vi.mock("@/components/platform/aviso-clave-ia", () => ({ AvisoClaveIa: nada }));
++
++import PlatformRouteLayout from "../(platform)/layout";
++
++const PANTALLA = "Pantalla de Leads";
++const RUTAS = ["/leads", "/leads/abc"];
++
++async function render(pathname: string): Promise<string> {
++  sim.pathname = pathname;
++  const arbol = await PlatformRouteLayout({
++    children: createElement("p", null, PANTALLA),
++  });
++  return renderToStaticMarkup(arbol);
++}
++
++function member(
++  modulos: Partial<UserPermissions["modules"]>,
++  hasRoleConfigured = true
++): UserPermissions {
++  return {
++    role: "member",
++    isFounder: false,
++    modules: { ...emptyPermissions(), ...modulos },
++    hasRoleConfigured,
++    enabledAddOns: [],
++  };
++}
++
++describe("⭐ /leads en una organización full, dentro del layout de la plataforma (AC-13)", () => {
++  it("(a) rol configurado sin Ventas: «No tenés acceso a Ventas» y no la pantalla", async () => {
++    sim.permisos = member({ dashboard: "full" });
++    for (const ruta of RUTAS) {
++      const html = await render(ruta);
++      expect(html, ruta).toContain("No tenés acceso a Ventas");
++      expect(html, ruta).not.toContain(PANTALLA);
++    }
++  });
++
++  it("(b) el founder, aun sin módulos, ve la pantalla", async () => {
++    sim.permisos = {
++      role: "founder",
++      isFounder: true,
++      modules: emptyPermissions(),
++      hasRoleConfigured: true,
++      enabledAddOns: [],
++    };
++    for (const ruta of RUTAS) {
++      const html = await render(ruta);
++      expect(html, ruta).toContain(PANTALLA);
++      expect(html, ruta).not.toContain("No tenés acceso");
++    }
++  });
++
++  it("(b) una cuenta sin rol configurado ve la pantalla (regla general de módulos)", async () => {
++    sim.permisos = member({}, false);
++    for (const ruta of RUTAS) {
++      const html = await render(ruta);
++      expect(html, ruta).toContain(PANTALLA);
++      expect(html, ruta).not.toContain("No tenés acceso");
++    }
++  });
++
++  it("(c) con Ventas ve la pantalla", async () => {
++    sim.permisos = member({ sales: "view" });
++    for (const ruta of RUTAS) {
++      const html = await render(ruta);
++      expect(html, ruta).toContain(PANTALLA);
++      expect(html, ruta).not.toContain("No tenés acceso");
++    }
++  });
++});
+diff --git a/apps/web/app/auth/__tests__/destino-por-experiencia.test.ts b/apps/web/app/auth/__tests__/destino-por-experiencia.test.ts
+index 6a669705..c5220bee 100644
+--- a/apps/web/app/auth/__tests__/destino-por-experiencia.test.ts
++++ b/apps/web/app/auth/__tests__/destino-por-experiencia.test.ts
+@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
+ /**
+  * SCRUM-524 · ⭐ Después del login, cada organización va a su pantalla de
+  * inicio: el Panel para `full`, la primera entrada lista del menú de su
+- * experiencia para `webinar` (hoy, Equipo) y `limitless` (Clientes). Vale para el login con contraseña
++ * experiencia para `webinar` (hoy, Leads con Ventas; sin Ventas, Equipo) y `limitless` (Clientes). Vale para el login con contraseña
+  * (`signInAction`) y para `/auth/callback`. Se respetan `destinoSeguro` y el
+  * `next` de las invitaciones. Las pantallas del cliente que mandan a
+  * `/dashboard` (recuperar contraseña, cambio obligatorio, aceptar invitación)
+@@ -138,8 +138,10 @@ describe("⭐ login con contraseña", () => {
+     expect(await login()).toBe("/settings");
+   });
+ 
+-  it("webinar: a su pantalla de inicio (hoy, Equipo)", async () => {
++  it("webinar: a su pantalla de inicio (hoy, Leads con Ventas o founder; sin Ventas, Equipo)", async () => {
+     sim.experiencia = "webinar";
++    expect(await login()).toBe("/leads");
++    sim.permisos = { isFounder: false, modules: { team: "view" } };
+     expect(await login()).toBe("/team");
+   });
+ 
+@@ -150,7 +152,7 @@ describe("⭐ login con contraseña", () => {
+ 
+   it("webinar con un next que no es invitación: se ignora, como siempre, y va a su inicio", async () => {
+     sim.experiencia = "webinar";
+-    expect(await login("https://evil.com")).toBe("/team");
++    expect(await login("https://evil.com")).toBe("/leads");
+   });
+ 
+   it("⭐ limitless: a Clientes; un miembro con sólo Ventas, a la Bandeja", async () => {
+@@ -174,9 +176,11 @@ describe("⭐ login con contraseña", () => {
+ });
+ 
+ describe("⭐ /auth/callback", () => {
+-  it("sin next: full al Panel, webinar a Equipo", async () => {
++  it("sin next: full al Panel, webinar a Leads (con Ventas o founder) o a Equipo (sin Ventas)", async () => {
+     expect(await volverDelMail()).toBe("/dashboard");
+     sim.experiencia = "webinar";
++    expect(await volverDelMail()).toBe("/leads");
++    sim.permisos = { isFounder: false, modules: { team: "view" } };
+     expect(await volverDelMail()).toBe("/team");
+   });
+ 
+@@ -198,8 +202,8 @@ describe("⭐ /auth/callback", () => {
+ 
+   it("un next que no pasa destinoSeguro cae en la pantalla de inicio de la experiencia", async () => {
+     sim.experiencia = "webinar";
+-    expect(await volverDelMail("//evil.com")).toBe("/team");
+-    expect(await volverDelMail("https://evil.com/x")).toBe("/team");
++    expect(await volverDelMail("//evil.com")).toBe("/leads");
++    expect(await volverDelMail("https://evil.com/x")).toBe("/leads");
+   });
+ 
+   it("la invitación en el next: vuelve a ella sin crear organización", async () => {
+diff --git a/apps/web/app/leads/__tests__/actions.test.ts b/apps/web/app/leads/__tests__/actions.test.ts
+new file mode 100644
+index 00000000..da4b7565
+--- /dev/null
++++ b/apps/web/app/leads/__tests__/actions.test.ts
+@@ -0,0 +1,247 @@
++/**
++ * SCRUM-545 · Las tres acciones simuladas de la ficha del lead (AC-9, AC-10).
++ *
++ * Corre el `runMutation` real (no se mockea `@/lib/server/action-result`): lo
++ * que se prueba es lo que le llega a la pantalla, el aviso en los logs y que
++ * nada vaya a Sentry. `requireOrganizationId` se simula como en
++ * `bloqueo-por-experiencia.test.ts`, con la constante real.
++ */
++
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++const sim = vi.hoisted(() => ({
++  organizacionActiva: "org-webinar" as string | null,
++  resolverLanza: null as unknown,
++}));
++const reportarFalla = vi.hoisted(() => vi.fn());
++const createClient = vi.hoisted(() => vi.fn(async () => ({})));
++
++vi.mock("@/lib/auth/bootstrap", async () => {
++  const { SIN_ORGANIZACION_VINCULADA } = await vi.importActual<typeof import("@/lib/auth/bootstrap")>(
++    "@/lib/auth/bootstrap"
++  );
++  return {
++    SIN_ORGANIZACION_VINCULADA,
++    requireOrganizationId: async () => {
++      if (sim.resolverLanza) throw sim.resolverLanza;
++      if (sim.organizacionActiva === null) throw new Error(SIN_ORGANIZACION_VINCULADA);
++      return sim.organizacionActiva;
++    },
++  };
++});
++vi.mock("@/lib/observability/reportar-falla", () => ({ reportarFalla }));
++// Si una acción llamara a Supabase, queda registrado (el control de abajo).
++vi.mock("@/lib/supabase/server", () => ({ createClient }));
++
++import { SIN_ORGANIZACION_VINCULADA } from "@/lib/auth/bootstrap";
++import { CUENTA_DESACTIVADA_MESSAGE } from "@/lib/auth/cuenta-desactivada";
++import { ErrorEsperable } from "@/lib/server/action-result";
++import {
++  agregarNotaDelLeadAction,
++  asignarResponsableDelLeadAction,
++  marcarAvanceDelLeadAction,
++} from "../actions";
++
++const LEAD = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
++const LANZAMIENTO = "8f0e7c52-3a1b-4c6d-9e2f-1a2b3c4d5e6f";
++const SETTER = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
++
++/** Las tres acciones con una entrada válida, para los casos que valen en las tres. */
++const ACCIONES = {
++  marcarAvance: () =>
++    marcarAvanceDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, etapaActual: "raised_hand" }),
++  asignarResponsable: () =>
++    asignarResponsableDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, responsableUserId: SETTER }),
++  agregarNota: () => agregarNotaDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, texto: "Llamar mañana" }),
++};
++
++let warn: ReturnType<typeof vi.spyOn>;
++let error: ReturnType<typeof vi.spyOn>;
++
++beforeEach(() => {
++  sim.organizacionActiva = "org-webinar";
++  sim.resolverLanza = null;
++  reportarFalla.mockClear();
++  createClient.mockClear();
++  warn = vi.spyOn(console, "warn").mockImplementation(() => {});
++  error = vi.spyOn(console, "error").mockImplementation(() => {});
++});
++afterEach(() => {
++  vi.restoreAllMocks();
++});
++
++describe("éxito sin escribir (AC-9)", () => {
++  it("marcar avance devuelve la etapa siguiente del mapa", async () => {
++    expect(
++      await marcarAvanceDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, etapaActual: "raised_hand" })
++    ).toEqual({ success: true, data: { etapa: "contacted" } });
++    expect(
++      await marcarAvanceDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, etapaActual: "contacted" })
++    ).toEqual({ success: true, data: { etapa: "qualified" } });
++  });
++
++  it("asignar responsable devuelve el responsable (o null para quitarlo)", async () => {
++    expect(
++      await asignarResponsableDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, responsableUserId: SETTER })
++    ).toEqual({ success: true, data: { responsableUserId: SETTER } });
++    expect(
++      await asignarResponsableDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, responsableUserId: null })
++    ).toEqual({ success: true, data: { responsableUserId: null } });
++  });
++
++  it("agregar nota devuelve el texto recortado y la fecha", async () => {
++    const r = await agregarNotaDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, texto: "  Llamar mañana  " });
++    expect(r.success).toBe(true);
++    if (!r.success) return;
++    expect(r.data.texto).toBe("Llamar mañana");
++    expect(Number.isNaN(new Date(r.data.creadaAt).getTime())).toBe(false);
++  });
++
++  it("⭐ control: ninguna de las tres llama a Supabase", async () => {
++    for (const correr of Object.values(ACCIONES)) {
++      expect((await correr()).success).toBe(true);
++    }
++    expect(createClient).not.toHaveBeenCalled();
++  });
++});
++
++describe("⭐ AC-10: los cuatro casos en las tres acciones", () => {
++  for (const [nombre, correr] of Object.entries(ACCIONES)) {
++    describe(nombre, () => {
++      it("sin sesión: el texto del ErrorEsperable, sin aviso ni Sentry", async () => {
++        sim.resolverLanza = new ErrorEsperable("Sesión no válida");
++        expect(await correr()).toEqual({ success: false, error: "Sesión no válida" });
++        expect(warn).not.toHaveBeenCalled();
++        expect(error).not.toHaveBeenCalled();
++        expect(reportarFalla).not.toHaveBeenCalled();
++      });
++
++      it("cuenta desactivada: el texto del ErrorEsperable, sin aviso ni Sentry", async () => {
++        sim.resolverLanza = new ErrorEsperable(CUENTA_DESACTIVADA_MESSAGE);
++        expect(await correr()).toEqual({ success: false, error: CUENTA_DESACTIVADA_MESSAGE });
++        expect(warn).not.toHaveBeenCalled();
++        expect(error).not.toHaveBeenCalled();
++        expect(reportarFalla).not.toHaveBeenCalled();
++      });
++
++      it("sin organización: el texto de SIN_ORGANIZACION_VINCULADA, aviso en logs y sin Sentry", async () => {
++        sim.organizacionActiva = null;
++        expect(await correr()).toEqual({ success: false, error: SIN_ORGANIZACION_VINCULADA });
++        // Primero lo de Sentry: es el control que mata el mutante de TEXTO_DE_INFRAESTRUCTURA.
++        expect(reportarFalla).not.toHaveBeenCalled();
++        expect(error).not.toHaveBeenCalled();
++        expect(warn).toHaveBeenCalledWith("[runMutation] rechazo sin marcar:", SIN_ORGANIZACION_VINCULADA);
++      });
++
++      it("control vivo: una falla de infraestructura sí va a Sentry", async () => {
++        sim.resolverLanza = new Error("fetch failed");
++        expect(await correr()).toEqual({ success: false, error: "fetch failed" });
++        expect(warn).not.toHaveBeenCalled();
++        expect(reportarFalla).toHaveBeenCalledTimes(1);
++      });
++    });
++  }
++});
++
++describe("entrada inválida (AC-10)", () => {
++  const sinAvisos = () => {
++    expect(warn).not.toHaveBeenCalled();
++    expect(error).not.toHaveBeenCalled();
++    expect(reportarFalla).not.toHaveBeenCalled();
++  };
++
++  it("marcar avance: lead, lanzamiento y etapa", async () => {
++    expect(
++      await marcarAvanceDelLeadAction({ leadId: "no-uuid", launchId: LANZAMIENTO, etapaActual: "raised_hand" })
++    ).toEqual({ success: false, error: "ID inválido" });
++    expect(
++      await marcarAvanceDelLeadAction({ leadId: LEAD, launchId: "no-uuid", etapaActual: "raised_hand" })
++    ).toEqual({ success: false, error: "ID inválido" });
++    expect(
++      await marcarAvanceDelLeadAction({
++        leadId: LEAD,
++        launchId: LANZAMIENTO,
++        etapaActual: "inventada" as "raised_hand",
++      })
++    ).toEqual({ success: false, error: "Etapa inválida" });
++    sinAvisos();
++  });
++
++  it("marcar avance: una etapa sin paso siguiente no devuelve éxito", async () => {
++    for (const etapaActual of ["registered", "qualified", "purchased"] as const) {
++      expect(
++        await marcarAvanceDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, etapaActual })
++      ).toEqual({ success: false, error: "Esta etapa no tiene un paso siguiente." });
++    }
++    sinAvisos();
++  });
++
++  it("asignar responsable: lead, lanzamiento y responsable", async () => {
++    expect(
++      await asignarResponsableDelLeadAction({ leadId: "x", launchId: LANZAMIENTO, responsableUserId: SETTER })
++    ).toEqual({ success: false, error: "ID inválido" });
++    expect(
++      await asignarResponsableDelLeadAction({ leadId: LEAD, launchId: "x", responsableUserId: SETTER })
++    ).toEqual({ success: false, error: "ID inválido" });
++    expect(
++      await asignarResponsableDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, responsableUserId: "x" })
++    ).toEqual({ success: false, error: "ID inválido" });
++    sinAvisos();
++  });
++
++  it("agregar nota: lead, lanzamiento, vacía y larga", async () => {
++    expect(
++      await agregarNotaDelLeadAction({ leadId: "x", launchId: LANZAMIENTO, texto: "Hola" })
++    ).toEqual({ success: false, error: "ID inválido" });
++    expect(
++      await agregarNotaDelLeadAction({ leadId: LEAD, launchId: "x", texto: "Hola" })
++    ).toEqual({ success: false, error: "ID inválido" });
++    expect(
++      await agregarNotaDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, texto: "   " })
++    ).toEqual({ success: false, error: "Escribí la nota antes de agregarla" });
++    expect(
++      await agregarNotaDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, texto: "a".repeat(5001) })
++    ).toEqual({ success: false, error: "Máximo 5.000 caracteres" });
++    expect(
++      (await agregarNotaDelLeadAction({ leadId: LEAD, launchId: LANZAMIENTO, texto: "a".repeat(5000) })).success
++    ).toBe(true);
++    sinAvisos();
++  });
++
++  it("primero la organización, después la entrada", async () => {
++    sim.organizacionActiva = null;
++    expect(
++      await marcarAvanceDelLeadAction({ leadId: "x", launchId: "x", etapaActual: "qualified" })
++    ).toEqual({ success: false, error: SIN_ORGANIZACION_VINCULADA });
++    expect(
++      await asignarResponsableDelLeadAction({ leadId: "x", launchId: "x", responsableUserId: "x" })
++    ).toEqual({ success: false, error: SIN_ORGANIZACION_VINCULADA });
++    expect(await agregarNotaDelLeadAction({ leadId: "x", launchId: "x", texto: "" })).toEqual({
++      success: false,
++      error: SIN_ORGANIZACION_VINCULADA,
++    });
++  });
++});
++
++describe("lectura del fuente", () => {
++  const raiz = process.cwd();
++
++  it("bootstrap.ts sigue lanzando los tres textos que esta prueba simula", () => {
++    const fuente = readFileSync(join(raiz, "lib", "auth", "bootstrap.ts"), "utf8");
++    expect(fuente).toContain('throw new ErrorEsperable("Sesión no válida")');
++    expect(fuente).toContain("throw new ErrorEsperable(CUENTA_DESACTIVADA_MESSAGE)");
++    expect(fuente).toContain("throw new Error(SIN_ORGANIZACION_VINCULADA)");
++  });
++
++  it("actions.ts no importa Supabase, no revalida y sólo exporta funciones async (CD-15)", () => {
++    const fuente = readFileSync(join(raiz, "app", "leads", "actions.ts"), "utf8");
++    expect(fuente.startsWith('"use server";')).toBe(true);
++    expect(fuente).not.toContain("lib/supabase");
++    expect(fuente).not.toContain("revalidatePath");
++    const exportaciones = fuente.match(/^export .*$/gm) ?? [];
++    expect(exportaciones).toHaveLength(3);
++    for (const linea of exportaciones) expect(linea).toMatch(/^export async function \w+Action\(/);
++  });
++});
+diff --git a/apps/web/app/leads/actions.ts b/apps/web/app/leads/actions.ts
+new file mode 100644
+index 00000000..5f0f0e52
+--- /dev/null
++++ b/apps/web/app/leads/actions.ts
+@@ -0,0 +1,72 @@
++"use server";
++
++import { requireOrganizationId } from "@/lib/auth/bootstrap";
++import {
++  ErrorEsperable,
++  runMutation,
++  type MutationResult,
++} from "@/lib/server/action-result";
++import { firstZodError } from "@/lib/validations";
++import { siguienteEtapa } from "@/lib/webinar/leads/config";
++import {
++  agregarNotaSchema,
++  asignarResponsableSchema,
++  marcarAvanceSchema,
++  type AgregarNotaInput,
++  type AsignarResponsableInput,
++  type MarcarAvanceInput,
++} from "@/lib/webinar/leads/esquemas";
++import type { EtapaDelLead } from "@/lib/webinar/vistas/contratos";
++
++/**
++ * ⭐ Las tres acciones de la ficha del lead (SCRUM-545), **simuladas**: exigen
++ * organización, validan la entrada y devuelven éxito sin escribir en ninguna
++ * base (AC-9, DT-12). La ficha refleja el cambio sólo en su estado local y
++ * avisa que no se guarda (DT-10). Persistir es `[WEBINAR-LEADS-PERSISTIR]`.
++ *
++ * Primero la organización, después la entrada. Lo que lance
++ * `requireOrganizationId` no se atrapa acá: `runMutation` devuelve el texto de
++ * una sesión no válida o una cuenta desactivada (`ErrorEsperable`) y el de una
++ * cuenta sin organización, que deja un aviso en los logs sin Sentry (DT-27).
++ * No se revalida ninguna ruta: nada cambió. Sin chequeo de módulo mientras no
++ * lean ni escriban nada (DT-20).
++ */
++
++function validar<T>(
++  resultado: { success: true; data: T } | { success: false; error: Parameters<typeof firstZodError>[0] }
++): T {
++  if (!resultado.success) throw new ErrorEsperable(firstZodError(resultado.error));
++  return resultado.data;
++}
++
++export async function marcarAvanceDelLeadAction(
++  input: MarcarAvanceInput
++): Promise<MutationResult<{ etapa: EtapaDelLead }>> {
++  return runMutation(async () => {
++    await requireOrganizationId();
++    const { etapaActual } = validar(marcarAvanceSchema.safeParse(input));
++    const etapa = siguienteEtapa(etapaActual);
++    if (!etapa) throw new ErrorEsperable("Esta etapa no tiene un paso siguiente.");
++    return { etapa };
++  });
++}
++
++export async function asignarResponsableDelLeadAction(
++  input: AsignarResponsableInput
++): Promise<MutationResult<{ responsableUserId: string | null }>> {
++  return runMutation(async () => {
++    await requireOrganizationId();
++    const { responsableUserId } = validar(asignarResponsableSchema.safeParse(input));
++    return { responsableUserId };
++  });
++}
++
++export async function agregarNotaDelLeadAction(
++  input: AgregarNotaInput
++): Promise<MutationResult<{ texto: string; creadaAt: string }>> {
++  return runMutation(async () => {
++    await requireOrganizationId();
++    const { texto } = validar(agregarNotaSchema.safeParse(input));
++    return { texto, creadaAt: new Date().toISOString() };
++  });
++}
+diff --git a/apps/web/components/layout/__tests__/menu-celular-por-experiencia.test.ts b/apps/web/components/layout/__tests__/menu-celular-por-experiencia.test.ts
+index acd8d3ba..99c38314 100644
+--- a/apps/web/components/layout/__tests__/menu-celular-por-experiencia.test.ts
++++ b/apps/web/components/layout/__tests__/menu-celular-por-experiencia.test.ts
+@@ -102,10 +102,10 @@ describe("⭐ menú del celular de una organización full: igual que antes", ()
+ });
+ 
+ describe("⭐ menú del celular de una organización webinar", () => {
+-  it("sólo las entradas listas: Equipo, sin grupos", () => {
+-    const menu = menuAbierto("webinar", "/team", FOUNDER);
++  it("sólo las entradas listas: Leads y Equipo, sin grupos", () => {
++    const menu = menuAbierto("webinar", "/leads", FOUNDER);
+     expect(menu.html).toContain('data-dialogo="abierto"');
+-    expect(menu.links).toEqual(["Equipo /team"]);
++    expect(menu.links).toEqual(["Leads /leads", "Equipo /team"]);
+     expect(menu.grupos).toEqual([]);
+   });
+ 
+diff --git a/apps/web/components/navigation/__tests__/paleta-por-experiencia.test.ts b/apps/web/components/navigation/__tests__/paleta-por-experiencia.test.ts
+index 36b3e8d7..7f5326e2 100644
+--- a/apps/web/components/navigation/__tests__/paleta-por-experiencia.test.ts
++++ b/apps/web/components/navigation/__tests__/paleta-por-experiencia.test.ts
+@@ -86,10 +86,10 @@ describe("⭐ paleta de una organización full: igual que antes", () => {
+ });
+ 
+ describe("⭐ paleta de una organización webinar", () => {
+-  it("el pie lleva a la pantalla de inicio y sólo lista Equipo", () => {
+-    const p = paleta("webinar", "/team", FOUNDER);
+-    expect(p.pie).toEqual(["Ir al inicio /team"]);
+-    expect(p.items).toEqual(["Equipo"]);
++  it("el pie lleva a la pantalla de inicio y sólo lista Leads y Equipo", () => {
++    const p = paleta("webinar", "/leads", FOUNDER);
++    expect(p.pie).toEqual(["Ir al inicio /leads"]);
++    expect(p.items).toEqual(["Leads", "Equipo"]);
+   });
+ 
+   it("un miembro sin Equipo: el pie lleva a Ajustes y no lista nada", () => {
+diff --git a/apps/web/components/navigation/notch-nav/__tests__/barra-por-experiencia.test.ts b/apps/web/components/navigation/notch-nav/__tests__/barra-por-experiencia.test.ts
+index ecc99f76..335dba44 100644
+--- a/apps/web/components/navigation/notch-nav/__tests__/barra-por-experiencia.test.ts
++++ b/apps/web/components/navigation/notch-nav/__tests__/barra-por-experiencia.test.ts
+@@ -146,18 +146,18 @@ describe("⭐ barra de una organización full: igual que antes", () => {
+ });
+ 
+ describe("⭐ barra de una organización webinar", () => {
+-  const barra = dibujar("webinar", "/team", FOUNDER);
++  const barra = dibujar("webinar", "/leads", FOUNDER);
+ 
+   it("el logo lleva a la pantalla de inicio", () => {
+-    expect(barra.logo).toEqual(["/team"]);
++    expect(barra.logo).toEqual(["/leads"]);
+   });
+ 
+   it("el logo del celular también lleva a la pantalla de inicio", () => {
+-    expect(barra.logoCelular).toEqual(["/team"]);
++    expect(barra.logoCelular).toEqual(["/leads"]);
+   });
+ 
+   it("sólo las entradas listas del menú", () => {
+-    expect(barra.items).toEqual(["Equipo"]);
++    expect(barra.items).toEqual(["Leads", "Equipo"]);
+   });
+ 
+   it("⭐ la isla sin reportes ejecutivos, sin configuración pendiente y sin Integraciones: sólo Ajustes", () => {
+@@ -167,8 +167,8 @@ describe("⭐ barra de una organización webinar", () => {
+   });
+ 
+   it("ningún link de la barra sale del menú o de las rutas libres", () => {
+-    const todos = [...barra.logo, ...barra.islaHrefs, "/team"];
+-    for (const href of todos) expect(["/team", "/settings"]).toContain(href);
++    const todos = [...barra.logo, ...barra.islaHrefs, "/leads", "/team"];
++    for (const href of todos) expect(["/leads", "/team", "/settings"]).toContain(href);
+   });
+ 
+   it("un miembro sin Equipo: sin entradas y el logo a Ajustes", () => {
+diff --git a/apps/web/components/webinar/__tests__/ficha-del-lead.test.ts b/apps/web/components/webinar/__tests__/ficha-del-lead.test.ts
+new file mode 100644
+index 00000000..b431cf82
+--- /dev/null
++++ b/apps/web/components/webinar/__tests__/ficha-del-lead.test.ts
+@@ -0,0 +1,157 @@
++/**
++ * SCRUM-545 · La ficha del lead (AC-5, AC-7). El envoltorio cliente del panel
++ * usa `useToast`, que lanza fuera de `ToastProvider`: acá se reemplaza por uno
++ * que sólo anota lo que recibe. El panel en sí se prueba aparte.
++ */
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { createElement } from "react";
++import { renderToStaticMarkup } from "react-dom/server";
++import { describe, expect, it, vi } from "vitest";
++
++vi.mock("../panel-de-venta-cliente", () => ({
++  PanelDeVentaCliente: (props: { leadId: string; launchId: string }) =>
++    createElement("div", { "data-panel": `${props.leadId}|${props.launchId}` }),
++}));
++
++import type { VistaFichaDelLead } from "@/lib/webinar/vistas/contratos";
++import { conError, medido, sinFuente } from "@/lib/webinar/vistas/dato";
++import { FichaDelLead } from "../ficha-del-lead";
++
++const AHORA = "2026-11-02T12:00:00.000Z";
++const LEAD = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
++const NOV = { id: "8f0e7c52-3a1b-4c6d-9e2f-1a2b3c4d5e6f", nombre: "Webinar de noviembre", estado: "active" as const };
++const OCT = { id: "9a0e7c52-3a1b-4c6d-9e2f-1a2b3c4d5e6f", nombre: "Webinar de octubre", estado: "closed" as const };
++const SOFIA = { userId: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e", nombre: "Sofía" };
++const SIN_ORIGEN = { utmSource: null, utmMedium: null, utmCampaign: null, utmContent: null };
++
++function vista(cambios: Partial<VistaFichaDelLead> = {}): VistaFichaDelLead {
++  return {
++    esEjemplo: true,
++    lead: { id: LEAD, nombre: "Ana Pérez", email: "ana@correo.com", telefono: "+54 9 11 5555-0000", primeraVezAt: AHORA },
++    whatsappUrl: "https://wa.me/5491155550000",
++    registros: [
++      { lanzamiento: NOV, registradoAt: AHORA, origen: { ...SIN_ORIGEN, utmSource: "instagram" }, calificacion: "Facturo más de 10k" },
++      { lanzamiento: OCT, registradoAt: "2026-10-01T12:00:00.000Z", origen: SIN_ORIGEN, calificacion: null },
++    ],
++    lanzamientoElegido: NOV,
++    lineaDeTiempo: medido(
++      [
++        { id: "ev-1", launchId: NOV.id, tipo: "registered", occurredAt: AHORA, fuente: "landing", cargadoPor: null, sesionId: null },
++        { id: "ev-2", launchId: NOV.id, tipo: "contacted", occurredAt: AHORA, fuente: "manual", cargadoPor: SOFIA, sesionId: null },
++      ],
++      "calculado",
++      AHORA
++    ),
++    avisosDeFuentes: [
++      { fuente: "zoom", state: "sin_fuente", reason: "Zoom sin conectar: no sabemos si asistió.", ultimaLecturaAt: null },
++    ],
++    estadoDeVenta: medido({ etapa: "raised_hand", responsable: null, ultimoContactoAt: null }, "manual", AHORA),
++    notas: medido([], "manual", AHORA),
++    compras: medido(
++      [
++        { eventoId: "c-1", launchId: NOV.id, producto: "Programa", monto: null, moneda: "USD", estado: "cobrada", fuente: "whop", occurredAt: AHORA },
++        { eventoId: "c-2", launchId: NOV.id, producto: "VIP", monto: 97, moneda: "USD", estado: "reembolsada", fuente: "whop", occurredAt: AHORA },
++      ],
++      "whop",
++      AHORA
++    ),
++    equipo: [SOFIA],
++    ...cambios,
++  };
++}
++
++const render = (v: VistaFichaDelLead) => renderToStaticMarkup(createElement(FichaDelLead, { vista: v }));
++
++describe("contacto y WhatsApp (AC-7)", () => {
++  it("con teléfono: el enlace de WhatsApp tal cual viene del contrato", () => {
++    const html = render(vista());
++    expect(html).toContain("Ana Pérez");
++    expect(html).toContain("ana@correo.com");
++    expect(html).toMatch(
++      /<a href="https:\/\/wa\.me\/5491155550000" target="_blank" rel="noopener noreferrer"[^>]*>.*Escribir por WhatsApp<\/a>/
++    );
++    expect(html).not.toContain("No dejó teléfono");
++  });
++
++  it("sin teléfono: «No dejó teléfono» y sin enlace", () => {
++    const html = render(vista({ whatsappUrl: null, lead: { ...vista().lead, telefono: null } }));
++    expect(html).toContain("No dejó teléfono");
++    expect(html).not.toContain("wa.me");
++  });
++
++  it("sin nombre: el email como título", () => {
++    expect(render(vista({ lead: { ...vista().lead, nombre: null } }))).toContain(
++      '<h2 class="text-lg font-semibold">ana@correo.com</h2>'
++    );
++  });
++});
++
++describe("registros, línea de tiempo y avisos de fuentes (AC-7)", () => {
++  const html = render(vista());
++
++  it("cada registro con su lanzamiento, origen y calificación", () => {
++    expect(html).toContain("Webinar de noviembre");
++    expect(html).toContain("Webinar de octubre");
++    expect(html).toContain("Origen: instagram");
++    expect(html).toContain("Origen: Directo o sin dato");
++    expect(html).toContain("Calificación: Facturo más de 10k");
++  });
++
++  it("⭐ cada evento con la etiqueta de su fuente y quién lo cargó", () => {
++    expect(html).toContain("Se registró");
++    expect(html).toContain("Fuente: Landing");
++    expect(html).toContain("Contactado");
++    expect(html).toContain("Fuente: Equipo");
++    expect(html).toContain("Cargado por Sofía");
++  });
++
++  it("los avisos de fuentes que no están al día", () => {
++    expect(html).toContain("Zoom");
++    expect(html).toContain("Zoom sin conectar: no sabemos si asistió.");
++    expect(html).toContain('data-estado="sin_fuente"');
++  });
++
++  it("una línea de tiempo con error: el estado y el motivo, sin eventos", () => {
++    const conFalla = render(vista({ lineaDeTiempo: conError("zoom", "No pudimos leer Zoom.") }));
++    expect(conFalla).toContain("No pudimos leer Zoom.");
++    expect(conFalla).not.toContain('data-evento="');
++  });
++});
++
++describe("compras (AC-7, CD-4)", () => {
++  it("un monto null no es cero", () => {
++    const html = render(vista());
++    const programa = html.match(/<li[^>]*data-compra="c-1"[^>]*>.*?<\/li>/)?.[0] ?? "";
++    expect(programa).toContain('<span class="font-medium">Programa</span><span>—</span>');
++    expect(programa).not.toMatch(/<span>[^<]*\b0\b[^<]*<\/span>/);
++    expect(html).toContain("USD 97");
++    expect(html).toContain("Reembolsada");
++  });
++
++  it("compras sin fuente: el estado, sin lista", () => {
++    const html = render(vista({ compras: sinFuente("whop", "Whop sin conectar.") }));
++    expect(html).toContain("Whop sin conectar.");
++    expect(html).not.toContain('data-compra="');
++  });
++});
++
++describe("cartel y panel (AC-5, AC-11)", () => {
++  it("el cartel de ejemplo arriba de todo", () => {
++    const html = render(vista());
++    expect(html).toMatch(/^<div[^>]*><div role="status" data-cartel="datos-de-ejemplo"/);
++    expect(html.indexOf('data-cartel="datos-de-ejemplo"')).toBeLessThan(html.indexOf("Ana Pérez"));
++    expect(render(vista({ esEjemplo: false }))).not.toContain("datos-de-ejemplo");
++  });
++
++  it("el panel de venta está, con el lead y el lanzamiento elegido", () => {
++    expect(render(vista())).toContain(`data-panel="${LEAD}|${NOV.id}"`);
++  });
++
++  it("ficha-del-lead.tsx no tiene hooks, \"use client\" ni acciones (CD-13)", () => {
++    const fuente = readFileSync(join(process.cwd(), "components", "webinar", "ficha-del-lead.tsx"), "utf8");
++    expect(fuente).not.toMatch(/\buse[A-Z]\w*\(/);
++    expect(fuente).not.toContain("use client");
++    expect(fuente).not.toContain("actions");
++  });
++});
+diff --git a/apps/web/components/webinar/__tests__/panel-de-venta-del-lead.test.ts b/apps/web/components/webinar/__tests__/panel-de-venta-del-lead.test.ts
+new file mode 100644
+index 00000000..f9743638
+--- /dev/null
++++ b/apps/web/components/webinar/__tests__/panel-de-venta-del-lead.test.ts
+@@ -0,0 +1,180 @@
++/**
++ * SCRUM-545 · El panel de venta de la ficha (AC-9, AC-9b, AC-11): un solo
++ * botón de avance sin menú, avisos de que el cambio es de ejemplo, responsable
++ * y notas. Es presentación pura (DT-11): se dibuja con `renderToStaticMarkup`.
++ */
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { createElement } from "react";
++import { renderToStaticMarkup } from "react-dom/server";
++import { describe, expect, it } from "vitest";
++import {
++  agregarNotaLocal,
++  aplicarAvance,
++  estadoInicial,
++  type EstadoLocalDelLead,
++} from "@/lib/webinar/leads/estado-local";
++import type { EstadoDeVenta, NotaDelLead } from "@/lib/webinar/vistas/contratos";
++import { conError, medido, sinFuente, type Dato } from "@/lib/webinar/vistas/dato";
++import { PanelDeVentaDelLead } from "../panel-de-venta-del-lead";
++
++const AHORA = "2026-11-02T12:00:00.000Z";
++const LANZAMIENTO = "8f0e7c52-3a1b-4c6d-9e2f-1a2b3c4d5e6f";
++const SOFIA = { userId: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e", nombre: "Sofía" };
++const TOMAS = { userId: "3c4d5e6f-7a8b-4c9d-8e0f-2a3b4c5d6e7f", nombre: "Tomás" };
++const NOTA: NotaDelLead = {
++  id: "nota-1",
++  launchId: LANZAMIENTO,
++  texto: "Pidió que lo llamen a la tarde",
++  autor: SOFIA,
++  creadaAt: AHORA,
++};
++
++function venta(cambios: Partial<EstadoDeVenta> = {}): EstadoDeVenta {
++  return { etapa: "raised_hand", responsable: null, ultimoContactoAt: null, ...cambios };
++}
++
++function render({
++  estadoDeVenta = medido(venta(), "manual", AHORA) as Dato<EstadoDeVenta>,
++  notas = medido([NOTA], "manual", AHORA) as Dato<NotaDelLead[]>,
++  local,
++}: {
++  estadoDeVenta?: Dato<EstadoDeVenta>;
++  notas?: Dato<NotaDelLead[]>;
++  local?: EstadoLocalDelLead | null;
++} = {}) {
++  const nada = () => {};
++  return renderToStaticMarkup(
++    createElement(PanelDeVentaDelLead, {
++      estadoDeVenta,
++      notas,
++      equipo: [SOFIA, TOMAS],
++      local:
++        local !== undefined
++          ? local
++          : estadoDeVenta.state === "medido"
++            ? estadoInicial(estadoDeVenta.value)
++            : null,
++      borradorDeNota: "",
++      ocupado: false,
++      alMarcarAvance: nada,
++      alAsignarResponsable: nada,
++      alCambiarBorrador: nada,
++      alAgregarNota: nada,
++    })
++  );
++}
++
++describe("⭐ botón de avance (AC-9b, AC-11)", () => {
++  it("levantó la mano: un solo botón «Marcar como Contactado», sin menú", () => {
++    const html = render();
++    expect(html.match(/data-accion="marcar-avance"/g)).toHaveLength(1);
++    expect(html).toMatch(/<button[^>]*data-accion="marcar-avance"[^>]*>Marcar como Contactado<\/button>/);
++    expect(html).not.toContain("aria-haspopup");
++    expect(html).not.toContain('role="menu"');
++    expect(html).not.toContain("<details");
++  });
++
++  it("contactado: «Marcar como Calificado»", () => {
++    const html = render({ estadoDeVenta: medido(venta({ etapa: "contacted" }), "manual", AHORA) });
++    expect(html).toContain(">Marcar como Calificado</button>");
++  });
++
++  it("después del avance local, el botón sigue al estado local", () => {
++    const local = aplicarAvance(estadoInicial(venta()), "contacted");
++    expect(render({ local })).toContain(">Marcar como Calificado</button>");
++    expect(render({ local: aplicarAvance(local, "qualified") })).not.toContain("Marcar como");
++  });
++
++  it("una etapa sin paso en el mapa no tiene botón", () => {
++    for (const etapa of ["registered", "qualified", "call_booked", "purchased"] as const) {
++      const html = render({ estadoDeVenta: medido(venta({ etapa }), "manual", AHORA) });
++      expect(html, etapa).not.toContain("Marcar como");
++      expect(html, etapa).not.toContain('data-accion="marcar-avance"');
++    }
++  });
++});
++
++describe("avisos de ejemplo (AC-9, CD-8)", () => {
++  it("el aviso fijo siempre; el de cambio, sólo después de un cambio", () => {
++    const antes = render();
++    expect(antes).toContain("Estas acciones son de ejemplo: no se guardan.");
++    expect(antes).not.toContain("Cambio de ejemplo");
++
++    const despues = render({ local: aplicarAvance(estadoInicial(venta()), "contacted") });
++    expect(despues).toContain("Estas acciones son de ejemplo: no se guardan.");
++    expect(despues).toMatch(/<p role="status"[^>]*>Cambio de ejemplo: no se guardó y se pierde al recargar\.<\/p>/);
++    expect(despues).toContain(">Contactado</div>");
++  });
++});
++
++describe("responsable y equipo", () => {
++  it("sin responsable: la opción «Sin responsable» elegida y el equipo", () => {
++    const html = render();
++    expect(html).toContain('<option value="" selected="">Sin responsable</option>');
++    expect(html).toContain(`<option value="${SOFIA.userId}">Sofía</option>`);
++    expect(html).toContain(`<option value="${TOMAS.userId}">Tomás</option>`);
++  });
++
++  it("con responsable: elegido", () => {
++    const html = render({ estadoDeVenta: medido(venta({ responsable: TOMAS }), "manual", AHORA) });
++    expect(html).toContain(`<option value="${TOMAS.userId}" selected="">Tomás</option>`);
++  });
++
++  it("sin contacto: «Sin contactar»", () => {
++    expect(render()).toContain("Sin contactar");
++  });
++});
++
++describe("notas", () => {
++  it("la nota local primero, marcada de ejemplo; después las del contrato con su autor", () => {
++    const local = agregarNotaLocal(estadoInicial(venta()), {
++      launchId: LANZAMIENTO,
++      texto: "Nota nueva",
++      creadaAt: AHORA,
++    });
++    const html = render({ local });
++    expect(html.indexOf('data-nota="local-1"')).toBeGreaterThan(-1);
++    expect(html.indexOf('data-nota="local-1"')).toBeLessThan(html.indexOf('data-nota="nota-1"'));
++    expect(html).toContain("Nota de ejemplo");
++    expect(html).toContain("Pidió que lo llamen a la tarde");
++    expect(html).toContain("Sofía · ");
++    expect(html).toContain(">Agregar nota</button>");
++  });
++});
++
++describe("⭐ un Dato sin valor no muestra sus controles (AC-4)", () => {
++  it("estado de venta sin fuente: el estado, sin botón ni selector", () => {
++    const html = render({ estadoDeVenta: sinFuente("ghl", "GoHighLevel sin conectar.") });
++    expect(html).toContain("Sin fuente");
++    expect(html).toContain("GoHighLevel sin conectar.");
++    expect(html).not.toContain("Marcar como");
++    expect(html).not.toContain("<select");
++    expect(html).not.toContain("Agregar nota");
++  });
++
++  it("notas con error: el estado, sin formulario ni lista", () => {
++    const html = render({ notas: conError("manual", "No pudimos leer las notas.") });
++    expect(html).toContain("No pudimos leer las notas.");
++    expect(html).not.toContain("<textarea");
++    expect(html).not.toContain("Agregar nota");
++    expect(html).toContain("Marcar como Contactado");
++  });
++});
++
++describe("⭐ lectura del fuente (DT-11, CD-13)", () => {
++  const dir = join(process.cwd(), "components", "webinar");
++
++  it("panel-de-venta-del-lead.tsx no tiene hooks, \"use client\" ni acciones", () => {
++    const fuente = readFileSync(join(dir, "panel-de-venta-del-lead.tsx"), "utf8");
++    expect(fuente).not.toMatch(/\buse[A-Z]\w*\(/);
++    expect(fuente).not.toContain("use client");
++    expect(fuente).not.toContain("actions");
++  });
++
++  it("panel-de-venta-cliente.tsx es el envoltorio \"use client\"", () => {
++    const fuente = readFileSync(join(dir, "panel-de-venta-cliente.tsx"), "utf8");
++    expect(fuente.startsWith('"use client";')).toBe(true);
++    expect(fuente).toContain('from "@/app/leads/actions"');
++  });
++});
+diff --git a/apps/web/components/webinar/__tests__/pantalla-de-leads.test.ts b/apps/web/components/webinar/__tests__/pantalla-de-leads.test.ts
+new file mode 100644
+index 00000000..a3a6f962
+--- /dev/null
++++ b/apps/web/components/webinar/__tests__/pantalla-de-leads.test.ts
+@@ -0,0 +1,283 @@
++/**
++ * SCRUM-545 · La pantalla de Leads: tabla, filtros, buscador, paginación y
++ * estados sin medir (AC-1 a AC-6, AC-11). Fixtures a mano con los
++ * constructores de `dato.ts` (CD-14).
++ */
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { createElement } from "react";
++import { renderToStaticMarkup } from "react-dom/server";
++import { describe, expect, it } from "vitest";
++import {
++  ETIQUETA_DEL_FILTRO,
++  FILTROS_DE_LEADS,
++  type FilaDeLead,
++  type VistaLeads,
++} from "@/lib/webinar/vistas/contratos";
++import { COLUMNAS_DE_LEADS } from "@/lib/webinar/leads/config";
++import { conError, medido, sinFuente } from "@/lib/webinar/vistas/dato";
++import { PantallaDeLeads } from "../pantalla-de-leads";
++
++const AHORA = "2026-11-02T12:00:00.000Z";
++const LANZAMIENTO = { id: "8f0e7c52-3a1b-4c6d-9e2f-1a2b3c4d5e6f", nombre: "Webinar de noviembre", estado: "active" as const };
++const OTRO = { id: "9a0e7c52-3a1b-4c6d-9e2f-1a2b3c4d5e6f", nombre: "Webinar de octubre", estado: "closed" as const };
++const SIN_ORIGEN = { utmSource: null, utmMedium: null, utmCampaign: null, utmContent: null };
++
++function fila(id: string, cambios: Partial<FilaDeLead> = {}): FilaDeLead {
++  return {
++    leadId: id,
++    nombre: `Persona ${id}`,
++    email: `${id}@correo.com`,
++    telefono: null,
++    etapa: "raised_hand",
++    origen: SIN_ORIGEN,
++    registradoAt: AHORA,
++    responsable: null,
++    ultimoContactoAt: null,
++    ...cambios,
++  };
++}
++
++// El orden del contrato no es alfabético a propósito: la pantalla no reordena.
++const FILAS: FilaDeLead[] = [
++  fila("zeta", { origen: { ...SIN_ORIGEN, utmSource: "instagram" }, responsable: { userId: "u1", nombre: "Sofía" } }),
++  fila("alfa", { nombre: null, etapa: "contacted", ultimoContactoAt: "2026-11-01T15:30:00.000Z" }),
++  fila("medio", { etapa: "call_booked" }),
++];
++
++function vista(cambios: Partial<VistaLeads> = {}): VistaLeads {
++  return {
++    esEjemplo: true,
++    lanzamientos: medido([LANZAMIENTO, OTRO], "landing", AHORA),
++    lanzamientoElegido: LANZAMIENTO,
++    filtroElegido: "levanto_la_mano_sin_contactar",
++    busqueda: "ana",
++    filtros: FILTROS_DE_LEADS.map((f, i) => ({
++      filtro: f,
++      etiqueta: ETIQUETA_DEL_FILTRO[f],
++      personas: medido(10 + i, "calculado", AHORA),
++    })),
++    total: medido(3, "calculado", AHORA),
++    filas: medido(FILAS, "landing", AHORA),
++    siguienteCursor: null,
++    ...cambios,
++  };
++}
++
++function render(v: VistaLeads, extra: { cursor?: string | null; hrefCrearLanzamiento?: string | null } = {}) {
++  return renderToStaticMarkup(
++    createElement(PantallaDeLeads, { vista: v, cursor: extra.cursor ?? null, ...("hrefCrearLanzamiento" in extra ? { hrefCrearLanzamiento: extra.hrefCrearLanzamiento } : {}) })
++  );
++}
++
++/** Los `href` de los enlaces, decodificados del HTML. */
++function hrefs(html: string): string[] {
++  return [...html.matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replaceAll("&amp;", "&"));
++}
++
++describe("tabla (AC-1, AC-11)", () => {
++  const html = render(vista());
++
++  it("las columnas y los textos de cada fila", () => {
++    for (const columna of ["Lead", "Etapa", "Origen", "Responsable", "Último contacto"]) {
++      expect(html).toContain(`>${columna}</th>`);
++    }
++    expect(html).toContain("Persona zeta");
++    expect(html).toContain("Levantó la mano");
++    expect(html).toContain("instagram");
++    expect(html).toContain("Directo o sin dato");
++    expect(html).toContain("Sofía");
++    expect(html).toContain("Sin responsable");
++  });
++
++  it("cada celda va bajo su encabezado, en el orden de COLUMNAS_DE_LEADS", () => {
++    const sinEtiquetas = (s: string) => s.replace(/<[^>]*>/g, "");
++    const encabezados = [...(html.match(/<thead[^>]*>.*?<\/thead>/)?.[0] ?? "").matchAll(/<th[^>]*>(.*?)<\/th>/g)].map((m) =>
++      sinEtiquetas(m[1])
++    );
++    expect(encabezados).toEqual(COLUMNAS_DE_LEADS.map((c) => c.etiqueta));
++    const filaZeta = html.match(/<tr [^>]*data-lead="zeta">(.*?)<\/tr>/)?.[1] ?? "";
++    const celdas = [...filaZeta.matchAll(/<td[^>]*>(.*?)<\/td>/g)].map((m) => sinEtiquetas(m[1]));
++    // Lo que tiene que haber bajo cada encabezado para la fila "zeta".
++    const esperado: Record<(typeof COLUMNAS_DE_LEADS)[number]["id"], string> = {
++      lead: "Persona zeta",
++      etapa: "Levantó la mano",
++      origen: "instagram",
++      responsable: "Sofía",
++      ultimoContacto: "Sin contactar",
++    };
++    expect(celdas).toEqual(COLUMNAS_DE_LEADS.map((c) => esperado[c.id]));
++  });
++
++  it("nombre null: muestra el email", () => {
++    expect(html).toContain("alfa@correo.com");
++    expect(html).not.toContain("Persona alfa");
++  });
++
++  it("sin contacto: «Sin contactar»; con contacto, la fecha", () => {
++    expect(html).toContain("Sin contactar");
++    expect(html).toContain('<time dateTime="2026-11-01T15:30:00.000Z">01/11/2026 12:30</time>');
++  });
++
++  it("el orden recibido, sin tocar (CD-16)", () => {
++    const orden = ["zeta", "alfa", "medio"].map((id) => html.indexOf(`data-lead="${id}"`));
++    expect(orden.every((i) => i >= 0)).toBe(true);
++    expect([...orden].sort((a, b) => a - b)).toEqual(orden);
++  });
++
++  it("⭐ la fila enlaza a la ficha con el lanzamiento, cubriendo toda la fila", () => {
++    expect(hrefs(html)).toContain(`/leads/zeta?lanzamiento=${LANZAMIENTO.id}`);
++    expect(html).toMatch(/<tr class="[^"]*\brelative\b[^"]*" data-lead="zeta">/);
++    expect(html).toMatch(/<a class="[^"]*after:absolute after:inset-0[^"]*" href="\/leads\/zeta\?lanzamiento=/);
++  });
++
++  it("el cartel de datos de ejemplo arriba (AC-5)", () => {
++    expect(html).toContain('data-cartel="datos-de-ejemplo"');
++    expect(html.indexOf("datos-de-ejemplo")).toBeLessThan(html.indexOf("<table"));
++    expect(render(vista({ esEjemplo: false }))).not.toContain("datos-de-ejemplo");
++  });
++});
++
++describe("filtros (AC-2, AC-3)", () => {
++  const html = render(vista(), { cursor: "50" });
++
++  it("los 5 filtros con su conteo y su href (sin cursor, con búsqueda y lanzamiento)", () => {
++    FILTROS_DE_LEADS.forEach((f, i) => {
++      expect(html).toContain(ETIQUETA_DEL_FILTRO[f]);
++      const href = `/leads?filtro=${f}&busqueda=ana&lanzamiento=${LANZAMIENTO.id}`;
++      expect(hrefs(html)).toContain(href);
++      expect(html).toMatch(new RegExp(`data-filtro="${f}"[^>]*>.*?<span class="font-medium" data-conteo="medido">${10 + i}</span>`));
++    });
++  });
++
++  it("el filtro elegido queda marcado (y sólo ése)", () => {
++    expect(html).toMatch(/aria-current="page" data-filtro="levanto_la_mano_sin_contactar"/);
++    expect(html.match(/aria-current="page" data-filtro=/g)).toHaveLength(1);
++  });
++
++  it("el total del filtro", () => {
++    expect(html).toContain("3 leads");
++  });
++
++  it("el selector de lanzamiento conserva filtro y búsqueda y vuelve a la primera página", () => {
++    expect(hrefs(html)).toContain(
++      `/leads?filtro=levanto_la_mano_sin_contactar&busqueda=ana&lanzamiento=${OTRO.id}`
++    );
++  });
++});
++
++describe("⭐ estados sin medir (AC-4)", () => {
++  const SIN = "La landing todavía no está conectada.";
++  const ERR = "No pudimos leer los registros.";
++
++  it("sin_fuente: estado y motivo, sin cero ni filas", () => {
++    const html = render(
++      vista({
++        esEjemplo: false,
++        lanzamientos: sinFuente("landing", SIN),
++        lanzamientoElegido: null,
++        filtros: FILTROS_DE_LEADS.map((f) => ({ filtro: f, etiqueta: ETIQUETA_DEL_FILTRO[f], personas: sinFuente("landing", SIN) })),
++        total: sinFuente("landing", SIN),
++        filas: sinFuente("landing", SIN),
++      })
++    );
++    expect(html).toContain("Sin fuente");
++    expect(html).toContain(SIN);
++    expect(html).not.toContain(">0<");
++    expect(html).not.toContain("<table");
++    expect(html).not.toContain("leads</p>");
++    expect(html).not.toContain("Ningún lead coincide");
++    expect(html).toContain('data-conteo="sin_fuente">Sin fuente<');
++  });
++
++  it("error: estado y motivo, sin cero ni filas", () => {
++    const html = render(
++      vista({
++        filtros: FILTROS_DE_LEADS.map((f) => ({ filtro: f, etiqueta: ETIQUETA_DEL_FILTRO[f], personas: conError("landing", ERR) })),
++        total: conError("landing", ERR),
++        filas: conError("landing", ERR),
++      })
++    );
++    expect(html).toContain("Error");
++    expect(html).toContain(ERR);
++    expect(html).not.toContain(">0<");
++    expect(html).not.toContain("<table");
++    expect(html).not.toContain("Persona zeta");
++  });
++});
++
++describe("vacíos (AC-6)", () => {
++  it("medido con [] filas: «Ningún lead coincide con este filtro.»", () => {
++    const html = render(vista({ total: medido(0, "calculado", AHORA), filas: medido([], "landing", AHORA) }));
++    expect(html).toContain("Ningún lead coincide con este filtro.");
++    expect(html).not.toContain("<table");
++  });
++
++  it("sin lanzamientos y sin ruta (hoy): el texto, sin enlace", () => {
++    const html = render(vista({ lanzamientos: medido([], "landing", AHORA), lanzamientoElegido: null }));
++    expect(html).toContain("Todavía no hay lanzamientos.");
++    expect(html).toContain("Cuando exista uno, sus leads van a aparecer acá.");
++    expect(html).not.toContain("Crear un lanzamiento");
++    expect(html).not.toContain("<table");
++  });
++
++  it("sin lanzamientos y con ruta: el enlace para crear uno", () => {
++    const html = render(vista({ lanzamientos: medido([], "landing", AHORA), lanzamientoElegido: null }), {
++      hrefCrearLanzamiento: "/lanzamientos/nuevo",
++    });
++    expect(html).toContain("Crear un lanzamiento");
++    expect(hrefs(html)).toContain("/lanzamientos/nuevo");
++  });
++});
++
++describe("paginación y buscador", () => {
++  it("«Siguiente» con el cursor del contrato; sin cursor en la URL no hay «Volver al principio»", () => {
++    const html = render(vista({ siguienteCursor: "50" }));
++    expect(html).toContain(">Siguiente</a>");
++    expect(hrefs(html)).toContain(
++      `/leads?filtro=levanto_la_mano_sin_contactar&busqueda=ana&lanzamiento=${LANZAMIENTO.id}&cursor=50`
++    );
++    expect(html).not.toContain("Volver al principio");
++    expect(html).not.toContain("Anterior");
++  });
++
++  it("con cursor: «Volver al principio» sin cursor; en la última página no hay «Siguiente»", () => {
++    const html = render(vista({ siguienteCursor: null }), { cursor: "50" });
++    expect(html).toContain(">Volver al principio</a>");
++    expect(hrefs(html)).toContain(`/leads?filtro=levanto_la_mano_sin_contactar&busqueda=ana&lanzamiento=${LANZAMIENTO.id}`);
++    expect(html).not.toContain(">Siguiente</a>");
++  });
++
++  it("con cursor y medido con [] filas (cursor más allá del final): «Volver al principio» igual", () => {
++    const html = render(vista({ total: medido(0, "calculado", AHORA), filas: medido([], "landing", AHORA), siguienteCursor: null }), {
++      cursor: "500",
++    });
++    expect(html).toContain("Ningún lead coincide con este filtro.");
++    expect(html).toContain('<nav aria-label="Páginas"');
++    expect(html).toContain(">Volver al principio</a>");
++    expect(hrefs(html)).toContain(`/leads?filtro=levanto_la_mano_sin_contactar&busqueda=ana&lanzamiento=${LANZAMIENTO.id}`);
++    expect(html).not.toContain(">Siguiente</a>");
++  });
++
++  it("el buscador es un GET a /leads con filtro y lanzamiento ocultos, sin cursor", () => {
++    const html = render(vista(), { cursor: "50" });
++    const form = html.match(/<form[^>]*>.*?<\/form>/)?.[0] ?? "";
++    expect(form).toMatch(/method="get"/);
++    expect(form).toMatch(/action="\/leads"/);
++    expect(form).toContain('<input type="hidden" name="filtro" value="levanto_la_mano_sin_contactar"/>');
++    expect(form).toContain(`<input type="hidden" name="lanzamiento" value="${LANZAMIENTO.id}"/>`);
++    expect(form).not.toContain('name="cursor"');
++    expect(form).toMatch(/name="busqueda"[^>]*value="ana"|value="ana"[^>]*name="busqueda"/);
++  });
++});
++
++describe("lectura del fuente (CD-13)", () => {
++  it("pantalla, filtros, tabla y avisos no tienen hooks, \"use client\" ni acciones", () => {
++    for (const archivo of ["pantalla-de-leads.tsx", "filtros-de-leads.tsx", "tabla-de-leads.tsx", "aviso-de-estado.tsx"]) {
++      const fuente = readFileSync(join(process.cwd(), "components", "webinar", archivo), "utf8");
++      expect(fuente, archivo).not.toMatch(/\buse[A-Z]\w*\(/);
++      expect(fuente, archivo).not.toContain("use client");
++      expect(fuente, archivo).not.toContain("actions");
++    }
++  });
++});
+diff --git a/apps/web/components/webinar/aviso-de-estado.tsx b/apps/web/components/webinar/aviso-de-estado.tsx
+new file mode 100644
+index 00000000..81fd1929
+--- /dev/null
++++ b/apps/web/components/webinar/aviso-de-estado.tsx
+@@ -0,0 +1,54 @@
++import { AlertTriangle, Info } from "lucide-react";
++import { ETIQUETA_DEL_ESTADO, type EstadoDelDato } from "@/lib/webinar/vistas/dato";
++
++/**
++ * Lo que se muestra en lugar de un número o una lista que no llegó `medido`
++ * (SCRUM-545, AC-4): el estado (`ETIQUETA_DEL_ESTADO`) y su motivo. Nunca un
++ * cero ni una lista inventada (CD-4). Sin estado ni efectos.
++ *
++ * `que` dice de qué parte de la pantalla es el aviso ("Total", "Leads"...).
++ */
++export function AvisoDeEstado({
++  estado,
++  reason,
++  que,
++}: {
++  estado: EstadoDelDato;
++  reason: string | null;
++  que?: string;
++}) {
++  return (
++    <div
++      role="status"
++      data-estado={estado}
++      className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm"
++    >
++      <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
++      <p>
++        {que ? <span className="text-muted-foreground">{que}: </span> : null}
++        <span className="font-medium">{ETIQUETA_DEL_ESTADO[estado]}.</span>
++        {reason ? <span className="text-muted-foreground"> {reason}</span> : null}
++      </p>
++    </div>
++  );
++}
++
++/**
++ * La ficha no se pudo leer (`{ ok: false, motivo }` de la función de lectura,
++ * AC-8): el título fijo y el motivo. Lo usa la página dentro de la cáscara de
++ * la plataforma.
++ */
++export function ErrorDeCarga({ motivo }: { motivo: string }) {
++  return (
++    <div
++      role="alert"
++      className="flex items-start gap-2 rounded-lg border border-destructive/40 px-4 py-3 text-sm"
++    >
++      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
++      <div>
++        <p className="font-medium">No pudimos cargar esta ficha.</p>
++        <p className="text-muted-foreground">{motivo}</p>
++      </div>
++    </div>
++  );
++}
+diff --git a/apps/web/components/webinar/fecha-de-la-org.tsx b/apps/web/components/webinar/fecha-de-la-org.tsx
+new file mode 100644
+index 00000000..9e188123
+--- /dev/null
++++ b/apps/web/components/webinar/fecha-de-la-org.tsx
+@@ -0,0 +1,15 @@
++"use client";
++
++import { formatearInstante } from "@/lib/webinar/leads/config";
++import { useZonaDeLaOrganizacion } from "@/providers/zona-de-la-organizacion-provider";
++
++/**
++ * Un instante en la zona horaria de la organización (SCRUM-545, DT-17). La
++ * zona llega por el provider del layout de la plataforma; sin provider (o sin
++ * zona elegida) se usa la de por defecto. Es la única hoja con hook de Leads y
++ * de la ficha fuera del envoltorio del panel: sólo lee el contexto.
++ */
++export function FechaDeLaOrg({ iso }: { iso: string }) {
++  const zona = useZonaDeLaOrganizacion();
++  return <time dateTime={iso}>{formatearInstante(iso, zona)}</time>;
++}
+diff --git a/apps/web/components/webinar/ficha-del-lead.tsx b/apps/web/components/webinar/ficha-del-lead.tsx
+new file mode 100644
+index 00000000..78cc01d1
+--- /dev/null
++++ b/apps/web/components/webinar/ficha-del-lead.tsx
+@@ -0,0 +1,149 @@
++import { MessageCircle } from "lucide-react";
++import { Badge } from "@ai-coo/ui";
++import { CartelDatosDeEjemplo } from "@/components/webinar/cartel-datos-de-ejemplo";
++import { TEXTO_SIN_TELEFONO, nombreVisible, textoDelOrigen } from "@/lib/webinar/leads/config";
++import {
++  ETIQUETA_DEL_EVENTO,
++  type CompraDelLead,
++  type VistaFichaDelLead,
++} from "@/lib/webinar/vistas/contratos";
++import { ETIQUETA_DE_FUENTE, tieneValor } from "@/lib/webinar/vistas/dato";
++import { AvisoDeEstado } from "./aviso-de-estado";
++import { FechaDeLaOrg } from "./fecha-de-la-org";
++import { PanelDeVentaCliente } from "./panel-de-venta-cliente";
++
++/**
++ * ⭐ La ficha del lead de Limitless Webinars (SCRUM-545, AC-7): contacto,
++ * WhatsApp, registros por lanzamiento, línea de tiempo con la fuente de cada
++ * evento y quién lo cargó, avisos de fuentes que no están al día, compras y el
++ * panel de venta. Dibuja lo que devuelve `leerFichaDelLead` y nada más. Sin
++ * estado ni efectos: el estado local vive en el envoltorio del panel.
++ */
++export function FichaDelLead({ vista }: { vista: VistaFichaDelLead }) {
++  const { lead, lanzamientoElegido } = vista;
++
++  return (
++    <div className="flex flex-col gap-6">
++      <CartelDatosDeEjemplo visible={vista.esEjemplo} />
++
++      <section aria-label="Contacto" className="flex flex-col gap-2">
++        <h2 className="text-lg font-semibold">{nombreVisible(lead)}</h2>
++        <p className="text-sm text-muted-foreground">{lead.email}</p>
++        {lead.telefono ? <p className="text-sm text-muted-foreground">{lead.telefono}</p> : null}
++        <p className="text-xs text-muted-foreground">
++          Primera vez: <FechaDeLaOrg iso={lead.primeraVezAt} />
++        </p>
++        {vista.whatsappUrl ? (
++          <a
++            href={vista.whatsappUrl}
++            target="_blank"
++            rel="noopener noreferrer"
++            className="inline-flex items-center gap-1.5 self-start text-sm text-primary underline-offset-4 hover:underline"
++          >
++            <MessageCircle className="h-4 w-4" aria-hidden="true" />
++            Escribir por WhatsApp
++          </a>
++        ) : (
++          <p className="text-sm text-muted-foreground">{TEXTO_SIN_TELEFONO}</p>
++        )}
++      </section>
++
++      {vista.avisosDeFuentes.length > 0 ? (
++        <section aria-label="Fuentes que no están al día" className="flex flex-col gap-2">
++          {vista.avisosDeFuentes.map((aviso) => (
++            <AvisoDeEstado
++              key={aviso.fuente}
++              estado={aviso.state}
++              reason={aviso.reason}
++              que={ETIQUETA_DE_FUENTE[aviso.fuente]}
++            />
++          ))}
++        </section>
++      ) : null}
++
++      <section aria-label="Registros" className="flex flex-col gap-2">
++        <h3 className="text-sm font-medium">Registros</h3>
++        <ul className="flex flex-col gap-2 text-sm">
++          {vista.registros.map((registro) => (
++            <li key={registro.lanzamiento.id} className="rounded-lg border border-border px-3 py-2">
++              <p className="font-medium">{registro.lanzamiento.nombre}</p>
++              <p className="text-xs text-muted-foreground">
++                <FechaDeLaOrg iso={registro.registradoAt} /> · Origen: {textoDelOrigen(registro.origen)}
++              </p>
++              {registro.calificacion ? (
++                <p className="text-xs text-muted-foreground">Calificación: {registro.calificacion}</p>
++              ) : null}
++            </li>
++          ))}
++        </ul>
++      </section>
++
++      <section aria-label={`Estado de venta en ${lanzamientoElegido.nombre}`} className="flex flex-col gap-2">
++        <h3 className="text-sm font-medium">Estado de venta · {lanzamientoElegido.nombre}</h3>
++        <PanelDeVentaCliente
++          key={lead.id + lanzamientoElegido.id}
++          leadId={lead.id}
++          launchId={lanzamientoElegido.id}
++          estadoDeVenta={vista.estadoDeVenta}
++          notas={vista.notas}
++          equipo={vista.equipo}
++        />
++      </section>
++
++      <section aria-label="Línea de tiempo" className="flex flex-col gap-2">
++        <h3 className="text-sm font-medium">Línea de tiempo</h3>
++        {vista.lineaDeTiempo.state !== "medido" ? (
++          <AvisoDeEstado
++            estado={vista.lineaDeTiempo.state}
++            reason={vista.lineaDeTiempo.reason}
++            que="Línea de tiempo"
++          />
++        ) : null}
++        {tieneValor(vista.lineaDeTiempo) ? (
++          <ol className="flex flex-col gap-2 text-sm">
++            {vista.lineaDeTiempo.value.map((evento) => (
++              <li key={evento.id} data-evento={evento.id} className="flex flex-col">
++                <span className="font-medium">{ETIQUETA_DEL_EVENTO[evento.tipo]}</span>
++                <span className="text-xs text-muted-foreground">
++                  <FechaDeLaOrg iso={evento.occurredAt} /> · Fuente: {ETIQUETA_DE_FUENTE[evento.fuente]}
++                  {evento.cargadoPor ? ` · Cargado por ${evento.cargadoPor.nombre}` : null}
++                </span>
++              </li>
++            ))}
++          </ol>
++        ) : null}
++      </section>
++
++      <section aria-label="Compras" className="flex flex-col gap-2">
++        <h3 className="text-sm font-medium">Compras</h3>
++        {vista.compras.state !== "medido" ? (
++          <AvisoDeEstado estado={vista.compras.state} reason={vista.compras.reason} que="Compras" />
++        ) : null}
++        {tieneValor(vista.compras) ? (
++          vista.compras.value.length === 0 ? (
++            <p className="text-sm text-muted-foreground">Sin compras.</p>
++          ) : (
++            <ul className="flex flex-col gap-2 text-sm">
++              {vista.compras.value.map((compra) => (
++                <li key={compra.eventoId} data-compra={compra.eventoId} className="flex flex-wrap items-center gap-2">
++                  <span className="font-medium">{compra.producto}</span>
++                  <span>{montoDeLaCompra(compra)}</span>
++                  <Badge variant="outline">{compra.estado === "cobrada" ? "Cobrada" : "Reembolsada"}</Badge>
++                  <span className="text-xs text-muted-foreground">
++                    <FechaDeLaOrg iso={compra.occurredAt} /> · Fuente: {ETIQUETA_DE_FUENTE[compra.fuente]}
++                  </span>
++                </li>
++              ))}
++            </ul>
++          )
++        ) : null}
++      </section>
++    </div>
++  );
++}
++
++/** El monto con su moneda; sin monto, "—" (nunca un cero inventado). */
++function montoDeLaCompra(compra: CompraDelLead): string {
++  if (compra.monto === null) return "—";
++  return `${compra.moneda} ${compra.monto.toLocaleString("es-AR")}`;
++}
+diff --git a/apps/web/components/webinar/filtros-de-leads.tsx b/apps/web/components/webinar/filtros-de-leads.tsx
+new file mode 100644
+index 00000000..f78490c2
+--- /dev/null
++++ b/apps/web/components/webinar/filtros-de-leads.tsx
+@@ -0,0 +1,73 @@
++import Link from "next/link";
++import { cn } from "@ai-coo/ui";
++import { urlDeLeads } from "@/lib/webinar/leads/url";
++import type {
++  ConteoDeFiltro,
++  FiltroDeLeads,
++  ParametrosDeLeads,
++} from "@/lib/webinar/vistas/contratos";
++import { ETIQUETA_DEL_ESTADO, tieneValor } from "@/lib/webinar/vistas/dato";
++import { AvisoDeEstado } from "./aviso-de-estado";
++
++/**
++ * Los filtros de trabajo de Leads con su conteo (SCRUM-545, AC-2, AC-3). Son
++ * enlaces: el filtro vive en la URL, elegir uno navega sin recargar la
++ * pantalla a mano y la URL se puede compartir (DT-16). Cambiar de filtro vuelve
++ * a la primera página. Sin estado ni efectos.
++ *
++ * Un conteo que no llegó `medido` no muestra un número: muestra su estado, y
++ * abajo el motivo (AC-4, CD-4).
++ */
++export function FiltrosDeLeads({
++  filtros,
++  filtroElegido,
++  actual,
++}: {
++  filtros: ConteoDeFiltro[];
++  filtroElegido: FiltroDeLeads;
++  /** Los parámetros de la URL de hoy (para conservar búsqueda y lanzamiento). */
++  actual: ParametrosDeLeads;
++}) {
++  const sinMedir = filtros.filter((f) => f.personas.state !== "medido");
++  const motivos = new Map<string, (typeof sinMedir)[number]["personas"]>();
++  for (const f of sinMedir) motivos.set(`${f.personas.state}|${f.personas.reason}`, f.personas);
++
++  return (
++    <div className="flex flex-col gap-2">
++      <nav aria-label="Filtros de leads" className="flex flex-wrap gap-1.5">
++        {filtros.map((conteo) => {
++          const activo = conteo.filtro === filtroElegido;
++          return (
++            <Link
++              key={conteo.filtro}
++              href={urlDeLeads(actual, { filtro: conteo.filtro })}
++              aria-current={activo ? "page" : undefined}
++              data-filtro={conteo.filtro}
++              className={cn(
++                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors",
++                activo
++                  ? "border-primary bg-primary/10 text-primary"
++                  : "border-border text-muted-foreground hover:border-primary/40"
++              )}
++            >
++              <span>{conteo.etiqueta}</span>
++              <span className="font-medium" data-conteo={conteo.personas.state}>
++                {tieneValor(conteo.personas)
++                  ? conteo.personas.value
++                  : ETIQUETA_DEL_ESTADO[conteo.personas.state]}
++              </span>
++            </Link>
++          );
++        })}
++      </nav>
++      {[...motivos.values()].map((dato) => (
++        <AvisoDeEstado
++          key={`${dato.state}|${dato.reason}`}
++          estado={dato.state}
++          reason={dato.reason}
++          que="Conteos de los filtros"
++        />
++      ))}
++    </div>
++  );
++}
+diff --git a/apps/web/components/webinar/panel-de-venta-cliente.tsx b/apps/web/components/webinar/panel-de-venta-cliente.tsx
+new file mode 100644
+index 00000000..368a2cfd
+--- /dev/null
++++ b/apps/web/components/webinar/panel-de-venta-cliente.tsx
+@@ -0,0 +1,112 @@
++"use client";
++
++import { useState, useTransition } from "react";
++import {
++  agregarNotaDelLeadAction,
++  asignarResponsableDelLeadAction,
++  marcarAvanceDelLeadAction,
++} from "@/app/leads/actions";
++import { correrMutacion } from "@/lib/client/correr-accion";
++import {
++  agregarNotaLocal,
++  aplicarAvance,
++  aplicarResponsable,
++  estadoInicial,
++  type EstadoLocalDelLead,
++} from "@/lib/webinar/leads/estado-local";
++import type {
++  EstadoDeVenta,
++  EtapaDelLead,
++  NotaDelLead,
++  PersonaDelEquipo,
++} from "@/lib/webinar/vistas/contratos";
++import { tieneValor, type Dato } from "@/lib/webinar/vistas/dato";
++import { useToast } from "@/providers/toast-provider";
++import { PanelDeVentaDelLead } from "./panel-de-venta-del-lead";
++
++/**
++ * El envoltorio cliente del panel de venta (SCRUM-545, DT-11): guarda el
++ * cambio de ejemplo en el estado local y llama a las acciones simuladas. Con
++ * éxito aplica el cambio sólo acá (se pierde al recargar); con error,
++ * `correrMutacion` avisa con el motivo y no cambia nada.
++ *
++ * La ficha lo dibuja con `key` de lead y lanzamiento: al pasar a otra ficha
++ * no arrastra el estado.
++ */
++export function PanelDeVentaCliente({
++  leadId,
++  launchId,
++  estadoDeVenta,
++  notas,
++  equipo,
++}: {
++  leadId: string;
++  launchId: string;
++  estadoDeVenta: Dato<EstadoDeVenta>;
++  notas: Dato<NotaDelLead[]>;
++  equipo: PersonaDelEquipo[];
++}) {
++  const [local, setLocal] = useState<EstadoLocalDelLead | null>(() =>
++    tieneValor(estadoDeVenta) ? estadoInicial(estadoDeVenta.value) : null
++  );
++  const [borrador, setBorrador] = useState("");
++  const [ocupado, startTransition] = useTransition();
++  const { push } = useToast();
++
++  function marcarAvance(etapaActual: EtapaDelLead) {
++    startTransition(() =>
++      correrMutacion({
++        accion: () => marcarAvanceDelLeadAction({ leadId, launchId, etapaActual }),
++        avisar: push,
++        tituloError: "No se pudo marcar el avance",
++        etiqueta: "[PanelDeVentaCliente] marcar avance",
++        alExito: ({ etapa }) => setLocal((previo) => (previo ? aplicarAvance(previo, etapa) : previo)),
++      })
++    );
++  }
++
++  function asignarResponsable(responsableUserId: string | null) {
++    startTransition(() =>
++      correrMutacion({
++        accion: () => asignarResponsableDelLeadAction({ leadId, launchId, responsableUserId }),
++        avisar: push,
++        tituloError: "No se pudo asignar el responsable",
++        etiqueta: "[PanelDeVentaCliente] asignar responsable",
++        alExito: (data) => {
++          const persona = equipo.find((p) => p.userId === data.responsableUserId) ?? null;
++          setLocal((previo) => (previo ? aplicarResponsable(previo, persona) : previo));
++        },
++      })
++    );
++  }
++
++  function agregarNota() {
++    startTransition(() =>
++      correrMutacion({
++        accion: () => agregarNotaDelLeadAction({ leadId, launchId, texto: borrador }),
++        avisar: push,
++        tituloError: "No se pudo agregar la nota",
++        etiqueta: "[PanelDeVentaCliente] agregar nota",
++        alExito: ({ texto, creadaAt }) => {
++          setLocal((previo) => (previo ? agregarNotaLocal(previo, { launchId, texto, creadaAt }) : previo));
++          setBorrador("");
++        },
++      })
++    );
++  }
++
++  return (
++    <PanelDeVentaDelLead
++      estadoDeVenta={estadoDeVenta}
++      notas={notas}
++      equipo={equipo}
++      local={local}
++      borradorDeNota={borrador}
++      ocupado={ocupado}
++      alMarcarAvance={marcarAvance}
++      alAsignarResponsable={asignarResponsable}
++      alCambiarBorrador={setBorrador}
++      alAgregarNota={agregarNota}
++    />
++  );
++}
+diff --git a/apps/web/components/webinar/panel-de-venta-del-lead.tsx b/apps/web/components/webinar/panel-de-venta-del-lead.tsx
+new file mode 100644
+index 00000000..961333de
+--- /dev/null
++++ b/apps/web/components/webinar/panel-de-venta-del-lead.tsx
+@@ -0,0 +1,170 @@
++import { Badge, Button, Textarea } from "@ai-coo/ui";
++import {
++  TEXTO_SIN_CONTACTAR,
++  TEXTO_SIN_RESPONSABLE,
++  siguienteEtapa,
++} from "@/lib/webinar/leads/config";
++import type { EstadoLocalDelLead } from "@/lib/webinar/leads/estado-local";
++import {
++  ETIQUETA_DEL_EVENTO,
++  type EstadoDeVenta,
++  type EtapaDelLead,
++  type NotaDelLead,
++  type PersonaDelEquipo,
++} from "@/lib/webinar/vistas/contratos";
++import { tieneValor, type Dato } from "@/lib/webinar/vistas/dato";
++import { AvisoDeEstado } from "./aviso-de-estado";
++import { FechaDeLaOrg } from "./fecha-de-la-org";
++
++/**
++ * ⭐ El panel de venta de la ficha (SCRUM-545, DT-11): estado de venta,
++ * responsable, botón de avance y notas. Sólo presentación: no tiene estado ni
++ * efectos y recibe todo por props; el estado local y las acciones viven en
++ * `panel-de-venta-cliente.tsx`.
++ *
++ * "Marcar avance" es un solo botón, sin menú, con el paso del mapa explícito
++ * de `config.ts` (AC-9b); si la etapa no tiene paso, no hay botón. Los cambios
++ * son de ejemplo y el panel lo dice siempre, y otra vez después de un cambio
++ * (AC-9, CD-8). Un `Dato` sin valor muestra su estado y no sus controles.
++ */
++export function PanelDeVentaDelLead({
++  estadoDeVenta,
++  notas,
++  equipo,
++  local,
++  borradorDeNota,
++  ocupado,
++  alMarcarAvance,
++  alAsignarResponsable,
++  alCambiarBorrador,
++  alAgregarNota,
++}: {
++  estadoDeVenta: Dato<EstadoDeVenta>;
++  notas: Dato<NotaDelLead[]>;
++  equipo: PersonaDelEquipo[];
++  /** El estado de venta con los cambios de ejemplo; `null` si no hay estado de venta. */
++  local: EstadoLocalDelLead | null;
++  borradorDeNota: string;
++  ocupado: boolean;
++  alMarcarAvance: (etapaActual: EtapaDelLead) => void;
++  alAsignarResponsable: (userId: string | null) => void;
++  alCambiarBorrador: (texto: string) => void;
++  alAgregarNota: () => void;
++}) {
++  const siguiente = local ? siguienteEtapa(local.etapa) : null;
++
++  return (
++    <section aria-label="Estado de venta" className="flex flex-col gap-4">
++      <p className="text-xs text-muted-foreground" data-aviso="acciones-de-ejemplo">
++        Estas acciones son de ejemplo: no se guardan.
++      </p>
++      {local?.huboCambios ? (
++        <p role="status" className="rounded-lg border border-warning/40 px-3 py-2 text-sm text-warning">
++          Cambio de ejemplo: no se guardó y se pierde al recargar.
++        </p>
++      ) : null}
++
++      {estadoDeVenta.state !== "medido" ? (
++        <AvisoDeEstado estado={estadoDeVenta.state} reason={estadoDeVenta.reason} que="Estado de venta" />
++      ) : null}
++      {tieneValor(estadoDeVenta) && local ? (
++        <div className="flex flex-col gap-3">
++          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
++            <dt className="text-muted-foreground">Etapa</dt>
++            <dd>
++              <Badge variant="outline">{ETIQUETA_DEL_EVENTO[local.etapa]}</Badge>
++            </dd>
++            <dt className="text-muted-foreground">Último contacto</dt>
++            <dd>
++              {estadoDeVenta.value.ultimoContactoAt ? (
++                <FechaDeLaOrg iso={estadoDeVenta.value.ultimoContactoAt} />
++              ) : (
++                TEXTO_SIN_CONTACTAR
++              )}
++            </dd>
++          </dl>
++
++          {siguiente ? (
++            <Button
++              type="button"
++              size="sm"
++              disabled={ocupado}
++              data-accion="marcar-avance"
++              onClick={() => alMarcarAvance(local.etapa)}
++            >
++              {`Marcar como ${ETIQUETA_DEL_EVENTO[siguiente]}`}
++            </Button>
++          ) : null}
++
++          <label className="flex flex-col gap-1 text-sm">
++            <span className="text-muted-foreground">Responsable</span>
++            <select
++              name="responsable"
++              value={local.responsable?.userId ?? ""}
++              disabled={ocupado}
++              onChange={(evento) => alAsignarResponsable(evento.target.value || null)}
++              className="h-9 rounded-[10px] border border-input bg-background px-3 text-sm"
++            >
++              <option value="">{TEXTO_SIN_RESPONSABLE}</option>
++              {equipo.map((persona) => (
++                <option key={persona.userId} value={persona.userId}>
++                  {persona.nombre}
++                </option>
++              ))}
++            </select>
++          </label>
++        </div>
++      ) : null}
++
++      <div className="flex flex-col gap-2">
++        <h3 className="text-sm font-medium">Notas</h3>
++        {notas.state !== "medido" ? (
++          <AvisoDeEstado estado={notas.state} reason={notas.reason} que="Notas" />
++        ) : null}
++        {tieneValor(notas) && local ? (
++          <form
++            className="flex flex-col gap-2"
++            onSubmit={(evento) => {
++              evento.preventDefault();
++              alAgregarNota();
++            }}
++          >
++            <Textarea
++              name="texto"
++              value={borradorDeNota}
++              disabled={ocupado}
++              onChange={(evento) => alCambiarBorrador(evento.target.value)}
++              placeholder="Escribí una nota"
++              aria-label="Nota"
++            />
++            <Button type="submit" size="sm" variant="outline" disabled={ocupado} className="self-start">
++              Agregar nota
++            </Button>
++          </form>
++        ) : null}
++        {tieneValor(notas) ? (
++          <ul className="flex flex-col gap-2 text-sm">
++            {(local?.notasLocales ?? []).map((nota) => (
++              <li key={nota.id} data-nota={nota.id} className="rounded-lg border border-border px-3 py-2">
++                <p>{nota.texto}</p>
++                <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
++                  <Badge variant="outline">Nota de ejemplo</Badge>
++                  <FechaDeLaOrg iso={nota.creadaAt} />
++                </p>
++              </li>
++            ))}
++            {notas.value.map((nota) => (
++              <li key={nota.id} data-nota={nota.id} className="rounded-lg border border-border px-3 py-2">
++                <p>{nota.texto}</p>
++                <p className="mt-1 text-xs text-muted-foreground">
++                  {nota.autor ? `${nota.autor.nombre} · ` : null}
++                  <FechaDeLaOrg iso={nota.creadaAt} />
++                </p>
++              </li>
++            ))}
++          </ul>
++        ) : null}
++      </div>
++    </section>
++  );
++}
+diff --git a/apps/web/components/webinar/pantalla-de-leads.tsx b/apps/web/components/webinar/pantalla-de-leads.tsx
+new file mode 100644
+index 00000000..aff87788
+--- /dev/null
++++ b/apps/web/components/webinar/pantalla-de-leads.tsx
+@@ -0,0 +1,164 @@
++import Link from "next/link";
++import { Search } from "lucide-react";
++import { Button, Input, cn } from "@ai-coo/ui";
++import { EmptyState } from "@/components/shared/empty-state";
++import { CartelDatosDeEjemplo } from "@/components/webinar/cartel-datos-de-ejemplo";
++import { RUTA_PARA_CREAR_LANZAMIENTO } from "@/lib/webinar/leads/config";
++import { urlDeLeads } from "@/lib/webinar/leads/url";
++import type { ParametrosDeLeads, VistaLeads } from "@/lib/webinar/vistas/contratos";
++import { tieneValor } from "@/lib/webinar/vistas/dato";
++import { paths } from "@/routes/paths";
++import { AvisoDeEstado } from "./aviso-de-estado";
++import { FiltrosDeLeads } from "./filtros-de-leads";
++import { TablaDeLeads } from "./tabla-de-leads";
++
++/**
++ * ⭐ La pantalla de Leads de Limitless Webinars (SCRUM-545). Dibuja lo que
++ * devuelve `leerLeads` y nada más: el orden, las 50 filas y los totales vienen
++ * del contrato (CD-16). Filtro, búsqueda, lanzamiento y cursor viven en la URL
++ * (AC-2): los filtros, el selector y la paginación son enlaces y el buscador es
++ * un formulario GET (DT-16). Sin estado ni efectos.
++ *
++ * Un dato que no llegó `medido` muestra su estado y su motivo, nunca un cero ni
++ * la lista de todos (AC-4); sin valor, tampoco los controles de esa parte.
++ */
++export function PantallaDeLeads({
++  vista,
++  cursor,
++  hrefCrearLanzamiento = RUTA_PARA_CREAR_LANZAMIENTO,
++}: {
++  vista: VistaLeads;
++  /** El cursor de la URL (la página pedida), para "Volver al principio". */
++  cursor: string | null;
++  /** Adónde lleva el estado vacío; sin ruta no hay enlace (DT-22). */
++  hrefCrearLanzamiento?: string | null;
++}) {
++  const launchId = vista.lanzamientoElegido?.id ?? null;
++  const actual: ParametrosDeLeads = {
++    filtro: vista.filtroElegido,
++    busqueda: vista.busqueda || null,
++    launchId,
++    cursor,
++  };
++
++  if (tieneValor(vista.lanzamientos) && vista.lanzamientos.value.length === 0) {
++    return (
++      <div className="flex flex-col gap-4">
++        <CartelDatosDeEjemplo visible={vista.esEjemplo} />
++        <EmptyState
++          title="Todavía no hay lanzamientos."
++          description="Cuando exista uno, sus leads van a aparecer acá."
++          action={
++            hrefCrearLanzamiento ? (
++              <Button asChild size="sm">
++                <Link href={hrefCrearLanzamiento}>Crear un lanzamiento</Link>
++              </Button>
++            ) : undefined
++          }
++        />
++      </div>
++    );
++  }
++
++  return (
++    <div className="flex flex-col gap-4">
++      <CartelDatosDeEjemplo visible={vista.esEjemplo} />
++
++      {vista.lanzamientos.state !== "medido" ? (
++        <AvisoDeEstado
++          estado={vista.lanzamientos.state}
++          reason={vista.lanzamientos.reason}
++          que="Lanzamientos"
++        />
++      ) : null}
++      {tieneValor(vista.lanzamientos) ? (
++        <nav aria-label="Lanzamiento" className="flex flex-wrap gap-1.5">
++          {vista.lanzamientos.value.map((opcion) => {
++            const elegido = opcion.id === launchId;
++            return (
++              <Link
++                key={opcion.id}
++                href={urlDeLeads(actual, { launchId: opcion.id })}
++                aria-current={elegido ? "page" : undefined}
++                className={cn(
++                  "rounded-full border px-3 py-1 text-xs transition-colors",
++                  elegido
++                    ? "border-primary bg-primary/10 text-primary"
++                    : "border-border text-muted-foreground hover:border-primary/40"
++                )}
++              >
++                {opcion.nombre}
++              </Link>
++            );
++          })}
++        </nav>
++      ) : null}
++
++      <form
++        method="get"
++        action={paths.platform.webinars.leads}
++        role="search"
++        className="flex max-w-md items-center gap-2"
++      >
++        <input type="hidden" name="filtro" value={vista.filtroElegido} />
++        {launchId ? <input type="hidden" name="lanzamiento" value={launchId} /> : null}
++        <Input
++          type="search"
++          name="busqueda"
++          defaultValue={vista.busqueda}
++          placeholder="Buscar por nombre o email"
++          aria-label="Buscar por nombre o email"
++        />
++        <Button type="submit" variant="outline" size="sm">
++          <Search aria-hidden="true" />
++          Buscar
++        </Button>
++      </form>
++
++      <FiltrosDeLeads filtros={vista.filtros} filtroElegido={vista.filtroElegido} actual={actual} />
++
++      {vista.total.state !== "medido" ? (
++        <AvisoDeEstado estado={vista.total.state} reason={vista.total.reason} que="Total" />
++      ) : null}
++      {tieneValor(vista.total) ? (
++        <p className="text-sm text-muted-foreground" data-total>
++          {vista.total.value === 1 ? "1 lead" : `${vista.total.value} leads`}
++        </p>
++      ) : null}
++
++      {vista.filas.state !== "medido" ? (
++        <AvisoDeEstado estado={vista.filas.state} reason={vista.filas.reason} que="Leads" />
++      ) : null}
++      {tieneValor(vista.filas) ? (
++        <>
++          {vista.filas.value.length === 0 ? (
++            <p className="text-sm text-muted-foreground">Ningún lead coincide con este filtro.</p>
++          ) : (
++            <TablaDeLeads filas={vista.filas.value} launchId={launchId} />
++          )}
++          {/* También con la lista vacía: un cursor más allá del final vuelve al principio. */}
++          {vista.siguienteCursor || cursor ? (
++            <nav aria-label="Páginas" className="flex items-center gap-3 text-sm">
++              {cursor ? (
++                <Link
++                  href={urlDeLeads(actual, { cursor: null })}
++                  className="text-muted-foreground hover:text-foreground hover:underline"
++                >
++                  Volver al principio
++                </Link>
++              ) : null}
++              {vista.siguienteCursor ? (
++                <Link
++                  href={urlDeLeads(actual, { cursor: vista.siguienteCursor })}
++                  className="text-primary hover:underline"
++                >
++                  Siguiente
++                </Link>
++              ) : null}
++            </nav>
++          ) : null}
++        </>
++      ) : null}
++    </div>
++  );
++}
+diff --git a/apps/web/components/webinar/tabla-de-leads.tsx b/apps/web/components/webinar/tabla-de-leads.tsx
+new file mode 100644
+index 00000000..9b8d6a80
+--- /dev/null
++++ b/apps/web/components/webinar/tabla-de-leads.tsx
+@@ -0,0 +1,91 @@
++import Link from "next/link";
++import type { ReactNode } from "react";
++import {
++  Badge,
++  Table,
++  TableBody,
++  TableCell,
++  TableHead,
++  TableHeader,
++  TableRow,
++} from "@ai-coo/ui";
++import {
++  COLUMNAS_DE_LEADS,
++  TEXTO_SIN_CONTACTAR,
++  TEXTO_SIN_RESPONSABLE,
++  nombreVisible,
++  textoDelOrigen,
++} from "@/lib/webinar/leads/config";
++import { urlDeLaFicha } from "@/lib/webinar/leads/url";
++import { ETIQUETA_DEL_EVENTO, type FilaDeLead } from "@/lib/webinar/vistas/contratos";
++import { FechaDeLaOrg } from "./fecha-de-la-org";
++
++type IdDeColumna = (typeof COLUMNAS_DE_LEADS)[number]["id"];
++
++/**
++ * El contenido de la celda `id` de una fila. Las celdas se dibujan recorriendo
++ * `COLUMNAS_DE_LEADS`, así siempre caen bajo su encabezado aunque cambie el
++ * orden (DT-13).
++ */
++function celda(id: IdDeColumna, fila: FilaDeLead, launchId: string | null): ReactNode {
++  switch (id) {
++    case "lead":
++      return (
++        <Link
++          href={urlDeLaFicha(fila.leadId, launchId)}
++          className="font-medium after:absolute after:inset-0 hover:underline"
++        >
++          {nombreVisible(fila)}
++        </Link>
++      );
++    case "etapa":
++      return <Badge variant="outline">{ETIQUETA_DEL_EVENTO[fila.etapa]}</Badge>;
++    case "origen":
++      return textoDelOrigen(fila.origen);
++    case "responsable":
++      return fila.responsable?.nombre ?? TEXTO_SIN_RESPONSABLE;
++    case "ultimoContacto":
++      return fila.ultimoContactoAt ? (
++        <FechaDeLaOrg iso={fila.ultimoContactoAt} />
++      ) : (
++        TEXTO_SIN_CONTACTAR
++      );
++  }
++}
++
++/**
++ * La tabla de Leads (SCRUM-545, AC-1). Dibuja las filas en el orden en que
++ * llegan del contrato, sin reordenar ni recortar (CD-16). Cada fila enlaza a
++ * la ficha con el lanzamiento elegido (DT-15); el enlace cubre toda la fila
++ * (`relative` en la fila, `after:absolute after:inset-0` en el enlace), así un
++ * clic en cualquier parte abre la ficha (AC-11). Sin estado ni efectos.
++ */
++export function TablaDeLeads({
++  filas,
++  launchId,
++}: {
++  filas: FilaDeLead[];
++  /** El lanzamiento elegido, para que la ficha muestre su estado de venta. */
++  launchId: string | null;
++}) {
++  return (
++    <Table>
++      <TableHeader>
++        <TableRow>
++          {COLUMNAS_DE_LEADS.map((columna) => (
++            <TableHead key={columna.id}>{columna.etiqueta}</TableHead>
++          ))}
++        </TableRow>
++      </TableHeader>
++      <TableBody>
++        {filas.map((fila) => (
++          <TableRow key={fila.leadId} className="relative" data-lead={fila.leadId}>
++            {COLUMNAS_DE_LEADS.map((columna) => (
++              <TableCell key={columna.id}>{celda(columna.id, fila, launchId)}</TableCell>
++            ))}
++          </TableRow>
++        ))}
++      </TableBody>
++    </Table>
++  );
++}
+diff --git a/apps/web/lib/navigation/__tests__/menu-por-experiencia.test.ts b/apps/web/lib/navigation/__tests__/menu-por-experiencia.test.ts
+index f35720c0..8ea415b9 100644
+--- a/apps/web/lib/navigation/__tests__/menu-por-experiencia.test.ts
++++ b/apps/web/lib/navigation/__tests__/menu-por-experiencia.test.ts
+@@ -101,12 +101,13 @@ describe("⭐ barra de una organización full: igual que antes", () => {
+ describe("⭐ barra de una organización webinar", () => {
+   const webinar = buildPlatformSidebarNav(["operaciones", "producto"], "webinar");
+ 
+-  it("sólo las entradas listas del menú (hoy, Equipo), aunque tenga add-ons", () => {
+-    expect(webinar.rootItems.map(describir)).toEqual(["/team"]);
++  it("sólo las entradas listas del menú (hoy, Leads y Equipo), aunque tenga add-ons", () => {
++    expect(webinar.rootItems.map(describir)).toEqual(["/leads", "/team"]);
+   });
+ 
+   it("cada entrada lleva su módulo de permisos", () => {
+-    const [equipo] = webinar.rootItems;
++    const [leads, equipo] = webinar.rootItems;
++    expect(leads).toMatchObject({ type: "link", module: { label: "Leads", permissionId: "sales" } });
+     expect(equipo).toMatchObject({ type: "link", module: { label: "Equipo", permissionId: "team" } });
+   });
+ 
+@@ -116,9 +117,9 @@ describe("⭐ barra de una organización webinar", () => {
+   });
+ 
+   it("además, filtrada por los permisos de siempre", () => {
+-    expect(visibles(webinar, FOUNDER)).toEqual(["Equipo"]);
++    expect(visibles(webinar, FOUNDER)).toEqual(["Leads", "Equipo"]);
+     expect(visibles(webinar, MIEMBRO_CON_EQUIPO)).toEqual(["Equipo"]);
+-    expect(visibles(webinar, MIEMBRO_SIN_EQUIPO)).toEqual([]);
++    expect(visibles(webinar, MIEMBRO_SIN_EQUIPO)).toEqual(["Leads"]);
+   });
+ });
+ 
+@@ -172,10 +173,11 @@ describe("⭐ paleta de comandos", () => {
+ 
+   it("webinar: sólo las entradas listas, filtradas por permiso, sin acciones rápidas", () => {
+     expect(itemsDeLaPaleta("webinar", FOUNDER)).toEqual([
++      { label: "Leads", href: "/leads", group: "Plataforma", keywords: "Leads" },
+       { label: "Equipo", href: "/team", group: "Plataforma", keywords: "Equipo" },
+     ]);
+     expect(itemsDeLaPaleta("webinar", MIEMBRO_CON_EQUIPO).map((i) => i.href)).toEqual(["/team"]);
+-    expect(itemsDeLaPaleta("webinar", MIEMBRO_SIN_EQUIPO)).toEqual([]);
++    expect(itemsDeLaPaleta("webinar", MIEMBRO_SIN_EQUIPO).map((i) => i.href)).toEqual(["/leads"]);
+   });
+ 
+   it("⭐ limitless: Clientes, Tablero, los hijos de Ventas y Equipo, filtrados por permiso, sin acciones rápidas", () => {
+diff --git a/apps/web/lib/navigation/__tests__/rutas-por-experiencia-en-disco.test.ts b/apps/web/lib/navigation/__tests__/rutas-por-experiencia-en-disco.test.ts
+index 5a0d30ef..5f8afde2 100644
+--- a/apps/web/lib/navigation/__tests__/rutas-por-experiencia-en-disco.test.ts
++++ b/apps/web/lib/navigation/__tests__/rutas-por-experiencia-en-disco.test.ts
+@@ -63,14 +63,14 @@ describe("⭐ bloqueo por experiencia en app/(platform)", () => {
+     expect(dePlataforma.filter((p) => p.archivo.split(sep).length < 3)).toEqual([]);
+   });
+ 
+-  it("⭐ webinar: toda pantalla fuera de Equipo y de las libres redirige a Equipo", () => {
++  it("⭐ webinar: toda pantalla fuera de Leads, Equipo y de las libres redirige a Leads (founder)", () => {
+     const abiertas = new Set<string>();
+     for (const p of dePlataforma) {
+       const destino = redireccionPorExperiencia("webinar", p.ruta, FOUNDER);
+       if (destino === null) abiertas.add(`/${segmento(p)}`);
+-      else expect(destino, p.ruta).toBe("/team");
++      else expect(destino, p.ruta).toBe("/leads");
+     }
+-    expect([...abiertas].sort()).toEqual(["/holding", "/onboarding", "/settings", "/team"]);
++    expect([...abiertas].sort()).toEqual(["/holding", "/leads", "/onboarding", "/settings", "/team"]);
+   });
+ 
+   it("⭐ limitless: toda pantalla fuera de Clientes, Tablero, Ventas, Equipo, Integraciones, SOP, contexto del negocio y las libres redirige a Clientes", () => {
+diff --git a/apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts b/apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts
+index f7a6d910..dc86abf5 100644
+--- a/apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts
++++ b/apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts
+@@ -102,8 +102,8 @@ describe("⭐ la config de los menús", () => {
+     ]);
+   });
+ 
+-  it("webinar hoy: sólo Equipo está lista (las demás pantallas son de 534, 529 y 537)", () => {
+-    expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["equipo"]);
++  it("webinar hoy: Leads y Equipo están listas (las demás pantallas son de 534 y 529)", () => {
++    expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["leads", "equipo"]);
+   });
+ 
+   it("limitless hoy: Clientes, Tablero, Ventas y Equipo listas; Administración (SCRUM-551) oculta", () => {
+@@ -112,7 +112,8 @@ describe("⭐ la config de los menús", () => {
+ 
+   it("⭐ no regresión: webinar y full no cambian con Equipo en limitless", () => {
+     expect(WEBINAR.map((e) => e.label)).toEqual(["Inicio", "Lanzamientos", "Leads", "Equipo"]);
+-    expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["equipo"]);
++    // Leads lista desde SCRUM-545.
++    expect(entradasListas(WEBINAR).map((e) => e.id)).toEqual(["leads", "equipo"]);
+     expect(RUTAS_EXTRA_POR_EXPERIENCIA.webinar).toEqual([]);
+     for (const ruta of ["/team", "/team/roles", "/dashboard", "/finance", "/administracion", "/lanzamientos", "/holding"]) {
+       expect(rutaPermitidaParaLaExperiencia("full", ruta), ruta).toBe(true);
+@@ -220,11 +221,20 @@ describe("⭐ pantalla de inicio", () => {
+     expect(pantallaDeInicio("full", SIN_NADA)).toBe("/dashboard");
+   });
+ 
+-  it("webinar hoy: la primera entrada lista que se ve, Equipo", () => {
+-    expect(pantallaDeInicio("webinar", FOUNDER)).toBe("/team");
++  it("webinar hoy: la primera entrada lista que se ve, Leads para el founder; Equipo para quien no ve Leads", () => {
++    expect(pantallaDeInicio("webinar", FOUNDER)).toBe("/leads");
+     expect(pantallaDeInicio("webinar", CON_EQUIPO)).toBe("/team");
+   });
+ 
++  it("⭐ SCRUM-545: webinar sin Ventas sigue yendo a Equipo; con Ventas, a Leads", () => {
++    expect(pantallaDeInicio("webinar", CON_EQUIPO)).toBe("/team");
++    expect(redireccionPorExperiencia("webinar", "/finance", CON_EQUIPO)).toBe("/team");
++    expect(pantallaDeInicio("webinar", SOLO_VENTAS)).toBe("/leads");
++    expect(
++      pantallaDeInicio("webinar", { isFounder: false, modules: { ...CON_EQUIPO.modules, sales: "view" } })
++    ).toBe("/leads");
++  });
++
+   it("⭐ webinar, un miembro sin Equipo: Ajustes, no una pantalla con «No tenés acceso»", () => {
+     expect(pantallaDeInicio("webinar", SIN_EQUIPO)).toBe("/settings");
+     expect(redireccionPorExperiencia("webinar", "/finance", SIN_EQUIPO)).toBe("/settings");
+@@ -309,7 +319,14 @@ describe("⭐ rutas por experiencia", () => {
+ 
+   it("webinar: las entradas listas (con sus subrutas) y las libres", () => {
+     const abiertas = plataforma.filter((ruta) => rutaPermitidaParaLaExperiencia("webinar", ruta));
+-    expect(abiertas).toEqual(["/team", "/team/roles", "/settings", "/holding", "/onboarding/holding"]);
++    expect(abiertas).toEqual(["/leads", "/team", "/team/roles", "/settings", "/holding", "/onboarding/holding"]);
++  });
++
++  it("⭐ SCRUM-545 (AC-13): /leads y /leads/abc en full no redirigen, con cualquier permiso", () => {
++    for (const permisos of [FOUNDER, CON_EQUIPO, SIN_EQUIPO, SOLO_VENTAS, SIN_NADA]) {
++      expect(redireccionPorExperiencia("full", "/leads", permisos)).toBeNull();
++      expect(redireccionPorExperiencia("full", "/leads/abc", permisos)).toBeNull();
++    }
+   });
+ 
+   it("⭐ limitless: Clientes, Tablero y todo Ventas (con sus subrutas), Integraciones, Equipo (con sus subrutas) y las libres; Administración no", () => {
+@@ -329,14 +346,14 @@ describe("⭐ rutas por experiencia", () => {
+     ]);
+   });
+ 
+-  it("webinar: el resto, incluidas las rutas anidadas, va a Equipo (las entradas no listas, en cuanto su carpeta exista)", () => {
+-    for (const ruta of ["/finance", "/marketing", "/lanzamientos", "/finance/expenses", "/inicio", "/leads", "/llamadas", "/dashboard", "/clients"]) {
+-      expect(redireccionPorExperiencia("webinar", ruta, FOUNDER)).toBe("/team");
++  it("webinar: el resto, incluidas las rutas anidadas, va a Leads para el founder (las entradas no listas, en cuanto su carpeta exista)", () => {
++    for (const ruta of ["/finance", "/marketing", "/lanzamientos", "/finance/expenses", "/inicio", "/llamadas", "/dashboard", "/clients"]) {
++      expect(redireccionPorExperiencia("webinar", ruta, FOUNDER)).toBe("/leads");
+     }
+   });
+ 
+   // La decisión de la función. En la app la aplica el layout del segmento:
+-  // `/administracion`, `/inicio` y `/leads` todavía no tienen carpeta y dan 404
++  // `/administracion` e `/inicio` todavía no tienen carpeta y dan 404
+   // (ver "entradas no listas" más abajo).
+   it("⭐ limitless: el resto va a Clientes (para Administración, en cuanto su carpeta exista)", () => {
+     for (const ruta of ["/dashboard", "/finance", "/marketing", "/administracion", "/inicio", "/lanzamientos"]) {
+@@ -352,7 +369,7 @@ describe("⭐ rutas por experiencia", () => {
+     expect(pantallaDeInicio("limitless", CON_EQUIPO)).toBe("/team");
+   });
+ 
+-  it("⭐ limitless abre las pantallas fuera del menú adonde enlazan la Bandeja y el Tablero; webinar las manda a Equipo", () => {
++  it("⭐ limitless abre las pantallas fuera del menú adonde enlazan la Bandeja y el Tablero; webinar las manda a su inicio (Leads, founder)", () => {
+     // sales-inbox-layout y zernio-inbox-panel: «Conectar integración», «Conectar
+     // Zernio», «Gestionar Zernio». workboard-task-resources: el SOP vinculado y
+     // los documentos del contexto del negocio de una tarea.
+@@ -366,7 +383,7 @@ describe("⭐ rutas por experiencia", () => {
+     for (const ruta of enlazadas) {
+       expect(rutaPermitidaParaLaExperiencia("limitless", ruta), ruta).toBe(true);
+       expect(redireccionPorExperiencia("limitless", ruta, FOUNDER), ruta).toBeNull();
+-      expect(redireccionPorExperiencia("webinar", ruta, FOUNDER), ruta).toBe("/team");
++      expect(redireccionPorExperiencia("webinar", ruta, FOUNDER), ruta).toBe("/leads");
+     }
+     // La biblioteca de SOP (/operations/sops) no: nadie de limitless enlaza ahí.
+     // `/sops/create` sí pasa el bloqueo, pero next.config la manda a la biblioteca.
+@@ -415,7 +432,7 @@ describe("⭐ entradas no listas: qué ve hoy quien tipea su URL (fix-pack 1 de
+     return bloquea ? "redirige" : "pantalla sin bloqueo";
+   }
+ 
+-  it("Inicio, Leads y Administración no tienen pantalla: 404; Lanzamientos tiene pantalla y layout con el bloqueo: redirige", () => {
++  it("Inicio y Administración no tienen pantalla: 404; Lanzamientos tiene pantalla y layout con el bloqueo: redirige", () => {
+     const resultado = Object.fromEntries(
+       CON_MENU_PROPIO.flatMap((experiencia) =>
+         MENU_POR_EXPERIENCIA[experiencia]
+@@ -426,7 +443,6 @@ describe("⭐ entradas no listas: qué ve hoy quien tipea su URL (fix-pack 1 de
+     expect(resultado).toEqual({
+       "webinar /inicio": "404",
+       "webinar /lanzamientos": "redirige",
+-      "webinar /leads": "404",
+       "limitless /administracion": "404",
+     });
+   });
+diff --git a/apps/web/lib/navigation/menu-por-experiencia.ts b/apps/web/lib/navigation/menu-por-experiencia.ts
+index fc78c328..e180c30d 100644
+--- a/apps/web/lib/navigation/menu-por-experiencia.ts
++++ b/apps/web/lib/navigation/menu-por-experiencia.ts
+@@ -16,7 +16,7 @@ import type { SidebarParentKey } from "./sidebar-modules";
+  *       - Lanzamientos: SCRUM-529 (la ruta es la de hoy, que sigue escondida
+  *         para todos por `ESCONDIDO.lanzamientos`; encenderla obliga a revisar
+  *         su layout).
+- *       - Leads: SCRUM-537.
++ *       - Leads: SCRUM-545 (`/leads` y la ficha `/leads/[id]`).
+  *       - Equipo: ya existe (`/team`).
+  *   - `limitless` (Limitless de gestión; PO, 28-oct-2026): Clientes, Tablero
+  *     de trabajo, Ventas, Equipo y Administración, en ese orden. Las cuatro
+@@ -28,7 +28,7 @@ import type { SidebarParentKey } from "./sidebar-modules";
+  *
+  * Una entrada con `lista: false` no se muestra (nada de "Próximamente") y su
+  * ruta no se abre. Lo que ve quien la tipea depende de si su pantalla existe:
+- * hoy `/inicio`, `/leads` y `/administracion` no tienen carpeta en
++ * hoy `/inicio` y `/administracion` no tienen carpeta en
+  * `app/(platform)`, así que la URL da el 404 de la app (sin la barra); cuando
+  * la tarea cree la carpeta, su `layout.tsx` llama a `exigirRutaDeLaExperiencia`
+  * (lo exige un test) y esa ruta redirige a la pantalla de inicio mientras la
+@@ -81,7 +81,7 @@ export const MENU_POR_EXPERIENCIA: Record<ExperienciaConMenuPropio, readonly Ent
+       href: paths.platform.webinars.leads,
+       icon: "user-round",
+       permissionId: "sales",
+-      lista: false, // SCRUM-537
++      lista: true,
+     },
+     {
+       id: "equipo",
+diff --git a/apps/web/lib/navigation/module-for-path.ts b/apps/web/lib/navigation/module-for-path.ts
+index 7d4bbea5..5bd002bd 100644
+--- a/apps/web/lib/navigation/module-for-path.ts
++++ b/apps/web/lib/navigation/module-for-path.ts
+@@ -23,10 +23,11 @@ import type { PermissionModuleId } from "@/constants/permission-modules";
+  */
+ const MODULE_BY_PREFIX: { prefix: string; moduleId: PermissionModuleId }[] = [
+   { prefix: "/dashboard", moduleId: "dashboard" },
+-  // Menús por experiencia (SCRUM-524): las pantallas todavía no existen
+-  // (`/inicio` es de SCRUM-534; `/leads`, de SCRUM-537; `/administracion`, de
+-  // SCRUM-551, con un módulo provisorio que decide esa tarea), pero el módulo
+-  // queda decidido acá y en `lib/navigation/menu-por-experiencia.ts`.
++  // Menús por experiencia (SCRUM-524). `/leads` y la ficha `/leads/[id]` son de
++  // SCRUM-545. Las otras dos pantallas todavía no existen (`/inicio` es de
++  // SCRUM-534; `/administracion`, de SCRUM-551, con un módulo provisorio que
++  // decide esa tarea), pero el módulo queda decidido acá y en
++  // `lib/navigation/menu-por-experiencia.ts`.
+   { prefix: "/inicio", moduleId: "dashboard" },
+   { prefix: "/leads", moduleId: "sales" },
+   { prefix: "/administracion", moduleId: "finance" },
+diff --git a/apps/web/lib/navigation/page-meta.ts b/apps/web/lib/navigation/page-meta.ts
+index 8b0cd10e..4e90460c 100644
+--- a/apps/web/lib/navigation/page-meta.ts
++++ b/apps/web/lib/navigation/page-meta.ts
+@@ -155,6 +155,8 @@ const PAGE_META: Record<string, PageMeta> = {
+     title: "Equipo",
+     subtitle: "Miembros y roles de la organización",
+   },
++  // Limitless Webinars (SCRUM-545). La ficha (`/leads/[id]`) va por prefijo, abajo.
++  "/leads": { title: "Leads" },
+   "/business-context/documents": {
+     title: "Base de conocimiento",
+     subtitle: "Documentos, calls y frameworks para la IA",
+@@ -367,6 +369,9 @@ function resolveMeta(pathname: string): PageMeta {
+   if (pathname.startsWith("/lanzamientos/") && pathname !== "/lanzamientos") {
+     return { title: "Lanzamiento", subtitle: "Plan, ejecución e impacto" };
+   }
++  if (pathname.startsWith("/leads/") && pathname !== "/leads") {
++    return { title: "Ficha del lead" };
++  }
+   if (pathname.startsWith("/marketing/content/") && pathname !== "/marketing/content") {
+     return { title: "Publicación", subtitle: "Detalle de contenido — Marketing" };
+   }
+diff --git a/apps/web/lib/webinar/leads/__tests__/config.test.ts b/apps/web/lib/webinar/leads/__tests__/config.test.ts
+new file mode 100644
+index 00000000..df863f7d
+--- /dev/null
++++ b/apps/web/lib/webinar/leads/__tests__/config.test.ts
+@@ -0,0 +1,106 @@
++import { describe, expect, it } from "vitest";
++import {
++  COLUMNAS_DE_LEADS,
++  RUTA_PARA_CREAR_LANZAMIENTO,
++  SIGUIENTE_ETAPA,
++  TEXTO_ORIGEN_VACIO,
++  formatearInstante,
++  nombreVisible,
++  siguienteEtapa,
++  textoDelOrigen,
++} from "@/lib/webinar/leads/config";
++import { ETAPAS_DEL_LEAD, type EtapaDelLead } from "@/lib/webinar/vistas/contratos";
++
++/**
++ * SCRUM-545 · El módulo único de etiquetas, columnas y mapa de avance de Leads
++ * (DT-13, DT-14).
++ */
++
++describe("siguienteEtapa: el mapa explícito de avance (AC-9b)", () => {
++  // Tabla de las 12 etapas: sólo `raised_hand` y `contacted` tienen paso.
++  const ESPERADO: Record<EtapaDelLead, EtapaDelLead | null> = {
++    registered: null,
++    attended: null,
++    stayed_to_offer: null,
++    raised_hand: "contacted",
++    contacted: "qualified",
++    qualified: null,
++    disqualified: null,
++    call_booked: null,
++    call_attended: null,
++    call_no_show: null,
++    purchased: null,
++    refunded: null,
++  };
++
++  it("la tabla cubre las 12 etapas del contrato", () => {
++    expect(Object.keys(ESPERADO).sort()).toEqual([...ETAPAS_DEL_LEAD].sort());
++  });
++
++  for (const etapa of ETAPAS_DEL_LEAD) {
++    it(`${etapa} -> ${ESPERADO[etapa] ?? "sin paso"}`, () => {
++      expect(siguienteEtapa(etapa)).toBe(ESPERADO[etapa]);
++    });
++  }
++
++  it("el mapa tiene exactamente los dos pasos", () => {
++    expect(SIGUIENTE_ETAPA).toEqual({ raised_hand: "contacted", contacted: "qualified" });
++  });
++});
++
++describe("nombreVisible", () => {
++  it("el nombre si lo hay", () => {
++    expect(nombreVisible({ nombre: "Ana Pérez", email: "ana@correo.com" })).toBe("Ana Pérez");
++  });
++
++  it("el email si el nombre es null", () => {
++    expect(nombreVisible({ nombre: null, email: "ana@correo.com" })).toBe("ana@correo.com");
++  });
++});
++
++describe("textoDelOrigen", () => {
++  const vacio = { utmSource: null, utmMedium: null, utmCampaign: null, utmContent: null };
++
++  it("el utm_source si lo hay", () => {
++    expect(textoDelOrigen({ ...vacio, utmSource: "instagram" })).toBe("instagram");
++  });
++
++  it("sin utm_source: «Directo o sin dato»", () => {
++    expect(textoDelOrigen(vacio)).toBe("Directo o sin dato");
++    expect(TEXTO_ORIGEN_VACIO).toBe("Directo o sin dato");
++  });
++});
++
++describe("formatearInstante", () => {
++  const ISO = "2026-11-02T03:30:00.000Z";
++
++  it("usa la zona pedida", () => {
++    expect(formatearInstante(ISO, "UTC")).toBe("02/11/2026 03:30");
++    expect(formatearInstante(ISO, "America/Lima")).toBe("01/11/2026 22:30");
++  });
++
++  it("sin zona o con una inventada, la de por defecto (Buenos Aires)", () => {
++    expect(formatearInstante(ISO, null)).toBe("02/11/2026 00:30");
++    expect(formatearInstante(ISO, "Marte/Olympus")).toBe("02/11/2026 00:30");
++  });
++
++  it("un texto que no es un instante vuelve tal cual (no inventa una fecha)", () => {
++    expect(formatearInstante("no-es-fecha", "UTC")).toBe("no-es-fecha");
++  });
++});
++
++describe("columnas y ruta de creación", () => {
++  it("el orden de las columnas de la tabla", () => {
++    expect(COLUMNAS_DE_LEADS.map((c) => c.etiqueta)).toEqual([
++      "Lead",
++      "Etapa",
++      "Origen",
++      "Responsable",
++      "Último contacto",
++    ]);
++  });
++
++  it("hoy no hay ruta para crear un lanzamiento (DT-22)", () => {
++    expect(RUTA_PARA_CREAR_LANZAMIENTO).toBeNull();
++  });
++});
+diff --git a/apps/web/lib/webinar/leads/__tests__/estado-local.test.ts b/apps/web/lib/webinar/leads/__tests__/estado-local.test.ts
+new file mode 100644
+index 00000000..6c34e1e4
+--- /dev/null
++++ b/apps/web/lib/webinar/leads/__tests__/estado-local.test.ts
+@@ -0,0 +1,110 @@
++import { describe, expect, it } from "vitest";
++import {
++  agregarNotaLocal,
++  aplicarAvance,
++  aplicarResponsable,
++  estadoInicial,
++  type EstadoLocalDelLead,
++} from "@/lib/webinar/leads/estado-local";
++import type { EstadoDeVenta } from "@/lib/webinar/vistas/contratos";
++
++/**
++ * SCRUM-545 · El cambio simulado vive sólo en el estado local de la ficha
++ * (AC-9, DT-18): funciones puras que no mutan la entrada.
++ */
++
++const LANZAMIENTO = "8f0e7c52-3a1b-4c6d-9e2f-1a2b3c4d5e6f";
++const SETTER = { userId: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e", nombre: "Sofía" };
++
++const VENTA: EstadoDeVenta = {
++  etapa: "raised_hand",
++  responsable: null,
++  ultimoContactoAt: null,
++};
++
++function congelado(estado: EstadoLocalDelLead): EstadoLocalDelLead {
++  return Object.freeze({ ...estado, notasLocales: Object.freeze([...estado.notasLocales]) as never });
++}
++
++describe("estadoInicial", () => {
++  it("toma etapa y responsable del estado de venta, sin notas ni cambios", () => {
++    expect(estadoInicial(VENTA)).toEqual({
++      etapa: "raised_hand",
++      responsable: null,
++      notasLocales: [],
++      huboCambios: false,
++    });
++  });
++});
++
++describe("aplicarAvance", () => {
++  it("cambia la etapa y marca el cambio, sin mutar la entrada", () => {
++    const antes = congelado(estadoInicial(VENTA));
++    const despues = aplicarAvance(antes, "contacted");
++    expect(despues).toEqual({ ...antes, etapa: "contacted", huboCambios: true });
++    expect(antes.etapa).toBe("raised_hand");
++    expect(antes.huboCambios).toBe(false);
++  });
++});
++
++describe("aplicarResponsable", () => {
++  it("asigna y quita responsable, sin mutar la entrada", () => {
++    const antes = congelado(estadoInicial(VENTA));
++    const asignado = aplicarResponsable(antes, SETTER);
++    expect(asignado).toEqual({ ...antes, responsable: SETTER, huboCambios: true });
++    expect(antes.responsable).toBeNull();
++    expect(aplicarResponsable(congelado(asignado), null)).toMatchObject({
++      responsable: null,
++      huboCambios: true,
++    });
++  });
++});
++
++describe("agregarNotaLocal", () => {
++  it("la nota nueva va primero, con id local, sin autor y marcada de ejemplo", () => {
++    const antes = congelado(estadoInicial(VENTA));
++    const una = agregarNotaLocal(antes, {
++      launchId: LANZAMIENTO,
++      texto: "Primera",
++      creadaAt: "2026-11-02T10:00:00.000Z",
++    });
++    const dos = agregarNotaLocal(congelado(una), {
++      launchId: LANZAMIENTO,
++      texto: "Segunda",
++      creadaAt: "2026-11-02T11:00:00.000Z",
++    });
++    expect(dos.notasLocales).toEqual([
++      {
++        id: "local-2",
++        launchId: LANZAMIENTO,
++        texto: "Segunda",
++        autor: null,
++        creadaAt: "2026-11-02T11:00:00.000Z",
++        deEjemplo: true,
++      },
++      {
++        id: "local-1",
++        launchId: LANZAMIENTO,
++        texto: "Primera",
++        autor: null,
++        creadaAt: "2026-11-02T10:00:00.000Z",
++        deEjemplo: true,
++      },
++    ]);
++    expect(dos.huboCambios).toBe(true);
++    expect(antes.notasLocales).toEqual([]);
++    expect(una.notasLocales).toHaveLength(1);
++  });
++
++  it("no toca la etapa ni el responsable (ni inventa un último contacto)", () => {
++    const antes = estadoInicial(VENTA);
++    const despues = agregarNotaLocal(antes, {
++      launchId: LANZAMIENTO,
++      texto: "Hola",
++      creadaAt: "2026-11-02T10:00:00.000Z",
++    });
++    expect(despues.etapa).toBe(antes.etapa);
++    expect(despues.responsable).toBe(antes.responsable);
++    expect(Object.keys(despues).sort()).toEqual(["etapa", "huboCambios", "notasLocales", "responsable"]);
++  });
++});
+diff --git a/apps/web/lib/webinar/leads/__tests__/url.test.ts b/apps/web/lib/webinar/leads/__tests__/url.test.ts
+new file mode 100644
+index 00000000..dbd9c491
+--- /dev/null
++++ b/apps/web/lib/webinar/leads/__tests__/url.test.ts
+@@ -0,0 +1,162 @@
++import { describe, expect, it } from "vitest";
++import {
++  lanzamientoDesdeUrl,
++  parametrosDesdeUrl,
++  urlDeLaFicha,
++  urlDeLeads,
++} from "@/lib/webinar/leads/url";
++
++/**
++ * SCRUM-545 · Filtro, búsqueda, lanzamiento y cursor viven en la URL (AC-2,
++ * AC-3); la fila enlaza a la ficha con su lanzamiento (DT-15).
++ */
++
++const LANZAMIENTO = "8f0e7c52-3a1b-4c6d-9e2f-1a2b3c4d5e6f";
++const LEAD = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
++
++/** Los parámetros de una URL armada por `urlDeLeads`, como los vería la página. */
++function leer(url: string) {
++  const [ruta, query = ""] = url.split("?");
++  const params: Record<string, string | string[]> = {};
++  for (const [clave, valor] of new URLSearchParams(query)) {
++    const previo = params[clave];
++    params[clave] = previo === undefined ? valor : [...[previo].flat(), valor];
++  }
++  return { ruta, params };
++}
++
++describe("parametrosDesdeUrl", () => {
++  it("lee los cuatro parámetros de /leads", () => {
++    expect(
++      parametrosDesdeUrl({
++        filtro: "levanto_la_mano_sin_contactar",
++        busqueda: "ana",
++        lanzamiento: LANZAMIENTO,
++        cursor: "50",
++      })
++    ).toEqual({
++      filtro: "levanto_la_mano_sin_contactar",
++      busqueda: "ana",
++      launchId: LANZAMIENTO,
++      cursor: "50",
++    });
++  });
++
++  it("sin parámetros, todo null", () => {
++    expect(parametrosDesdeUrl({})).toEqual({
++      filtro: null,
++      busqueda: null,
++      launchId: null,
++      cursor: null,
++    });
++  });
++
++  it("tolera valores repetidos en la URL: se queda con el primero", () => {
++    expect(
++      parametrosDesdeUrl({
++        filtro: ["agendado_sin_cerrar", "todos"],
++        busqueda: ["uno", "dos"],
++        lanzamiento: [LANZAMIENTO, "otro"],
++        cursor: ["100", "150"],
++      })
++    ).toEqual({
++      filtro: "agendado_sin_cerrar",
++      busqueda: "uno",
++      launchId: LANZAMIENTO,
++      cursor: "100",
++    });
++  });
++
++  it("una lista vacía o un texto vacío es null", () => {
++    expect(parametrosDesdeUrl({ filtro: [], busqueda: "" })).toMatchObject({
++      filtro: null,
++      busqueda: null,
++    });
++  });
++});
++
++describe("urlDeLeads", () => {
++  const actual = {
++    filtro: "registrado_sin_asistir",
++    busqueda: "ana",
++    launchId: LANZAMIENTO,
++    cursor: "50",
++  };
++
++  it("sin cambios, la misma URL (con cursor)", () => {
++    expect(leer(urlDeLeads(actual))).toEqual({
++      ruta: "/leads",
++      params: { filtro: "registrado_sin_asistir", busqueda: "ana", lanzamiento: LANZAMIENTO, cursor: "50" },
++    });
++  });
++
++  it("cambiar el filtro borra el cursor y conserva lo demás", () => {
++    expect(leer(urlDeLeads(actual, { filtro: "agendado_sin_cerrar" }))).toEqual({
++      ruta: "/leads",
++      params: { filtro: "agendado_sin_cerrar", busqueda: "ana", lanzamiento: LANZAMIENTO },
++    });
++  });
++
++  it("cambiar el lanzamiento también borra el cursor", () => {
++    expect(leer(urlDeLeads(actual, { launchId: "otro" })).params).toEqual({
++      filtro: "registrado_sin_asistir",
++      busqueda: "ana",
++      lanzamiento: "otro",
++    });
++  });
++
++  it("pasar de página cambia sólo el cursor; volver al principio lo borra", () => {
++    expect(leer(urlDeLeads(actual, { cursor: "100" })).params.cursor).toBe("100");
++    expect(leer(urlDeLeads(actual, { cursor: null })).params).toEqual({
++      filtro: "registrado_sin_asistir",
++      busqueda: "ana",
++      lanzamiento: LANZAMIENTO,
++    });
++  });
++
++  it("sin parámetros, /leads a secas", () => {
++    expect(urlDeLeads({})).toBe("/leads");
++  });
++
++  it("una búsqueda con caracteres especiales va codificada y vuelve igual", () => {
++    const busqueda = "ana+pérez & co/?#=%";
++    const url = urlDeLeads({ busqueda });
++    expect(url).not.toContain("#");
++    expect(url).not.toContain(" ");
++    expect(leer(url).params.busqueda).toBe(busqueda);
++  });
++
++  it("ida y vuelta: la URL armada se lee como los mismos parámetros", () => {
++    const parametros = {
++      filtro: "levanto_la_mano_sin_contactar",
++      busqueda: "josé & maría",
++      launchId: LANZAMIENTO,
++      cursor: "150",
++    };
++    expect(parametrosDesdeUrl(leer(urlDeLeads(parametros)).params)).toEqual(parametros);
++  });
++});
++
++describe("urlDeLaFicha", () => {
++  it("con lanzamiento, lo lleva en ?lanzamiento=", () => {
++    expect(urlDeLaFicha(LEAD, LANZAMIENTO)).toBe(`/leads/${LEAD}?lanzamiento=${LANZAMIENTO}`);
++  });
++
++  it("sin lanzamiento, la ficha a secas", () => {
++    expect(urlDeLaFicha(LEAD)).toBe(`/leads/${LEAD}`);
++    expect(urlDeLaFicha(LEAD, null)).toBe(`/leads/${LEAD}`);
++  });
++});
++
++describe("lanzamientoDesdeUrl", () => {
++  it("el ?lanzamiento= de la ficha, el primero si se repite, o null", () => {
++    expect(lanzamientoDesdeUrl({ lanzamiento: LANZAMIENTO })).toBe(LANZAMIENTO);
++    expect(lanzamientoDesdeUrl({ lanzamiento: [LANZAMIENTO, "otro"] })).toBe(LANZAMIENTO);
++    expect(lanzamientoDesdeUrl({})).toBeNull();
++    expect(lanzamientoDesdeUrl({ lanzamiento: "" })).toBeNull();
++  });
++
++  it("ida y vuelta con urlDeLaFicha", () => {
++    expect(lanzamientoDesdeUrl(leer(urlDeLaFicha(LEAD, LANZAMIENTO)).params)).toBe(LANZAMIENTO);
++  });
++});
+diff --git a/apps/web/lib/webinar/leads/config.ts b/apps/web/lib/webinar/leads/config.ts
+new file mode 100644
+index 00000000..fcd6c782
+--- /dev/null
++++ b/apps/web/lib/webinar/leads/config.ts
+@@ -0,0 +1,83 @@
++import { resolverZonaHoraria } from "@/lib/fechas/calendario";
++import type {
++  EtapaDelLead,
++  FilaDeLead,
++  OrigenDelRegistro,
++} from "@/lib/webinar/vistas/contratos";
++
++/**
++ * ⭐ Leads y ficha del lead de Limitless Webinars (SCRUM-545): el módulo único
++ * de etiquetas, orden de columnas y mapa de avance (DT-13). Si después de la
++ * sesión con el cliente cambian las etapas, el mapa o el origen, se cambia acá.
++ *
++ * Sin `server-only`: lo usan la acción (servidor) y el panel (cliente).
++ */
++
++/**
++ * El paso de "marcar avance" de cada etapa (DT-14). Explícito a propósito: no
++ * se deriva del orden de `ETAPAS_DEL_LEAD`, porque ese orden mezcla caminos
++ * (calificado y descalificado, asistió y no se presentó). Una etapa que no está
++ * acá no tiene botón de avance.
++ */
++export const SIGUIENTE_ETAPA: Partial<Record<EtapaDelLead, EtapaDelLead>> = {
++  raised_hand: "contacted",
++  contacted: "qualified",
++};
++
++/** El paso siguiente de `etapa`, o `null` si no tiene. */
++export function siguienteEtapa(etapa: EtapaDelLead): EtapaDelLead | null {
++  return SIGUIENTE_ETAPA[etapa] ?? null;
++}
++
++export const TEXTO_SIN_CONTACTAR = "Sin contactar";
++export const TEXTO_SIN_TELEFONO = "No dejó teléfono";
++export const TEXTO_ORIGEN_VACIO = "Directo o sin dato";
++export const TEXTO_SIN_RESPONSABLE = "Sin responsable";
++
++/** Las columnas de la tabla de Leads, en orden. */
++export const COLUMNAS_DE_LEADS = [
++  { id: "lead", etiqueta: "Lead" },
++  { id: "etapa", etiqueta: "Etapa" },
++  { id: "origen", etiqueta: "Origen" },
++  { id: "responsable", etiqueta: "Responsable" },
++  { id: "ultimoContacto", etiqueta: "Último contacto" },
++] as const;
++
++/** El nombre de la persona o, si la landing no lo pidió, su email. */
++export function nombreVisible(lead: Pick<FilaDeLead, "nombre" | "email">): string {
++  return lead.nombre ?? lead.email;
++}
++
++/** El `utm_source` del registro, o "Directo o sin dato". */
++export function textoDelOrigen(origen: OrigenDelRegistro): string {
++  return origen.utmSource ?? TEXTO_ORIGEN_VACIO;
++}
++
++/**
++ * Un instante (ISO 8601) como `dd/mm/aaaa hh:mm` en la zona de la
++ * organización (`null` o una zona que no existe: la de por defecto). Un texto
++ * que no es un instante vuelve tal cual: no se inventa una fecha.
++ */
++export function formatearInstante(iso: string, zona: string | null | undefined): string {
++  const instante = new Date(iso);
++  if (Number.isNaN(instante.getTime())) return iso;
++  const partes = new Intl.DateTimeFormat("es-AR", {
++    timeZone: resolverZonaHoraria(zona),
++    day: "2-digit",
++    month: "2-digit",
++    year: "numeric",
++    hour: "2-digit",
++    minute: "2-digit",
++    hourCycle: "h23",
++  }).formatToParts(instante);
++  const parte = (tipo: Intl.DateTimeFormatPartTypes) =>
++    partes.find((p) => p.type === tipo)?.value ?? "";
++  return `${parte("day")}/${parte("month")}/${parte("year")} ${parte("hour")}:${parte("minute")}`;
++}
++
++/**
++ * Adónde lleva el estado vacío de Leads para crear un lanzamiento (AC-6). Hoy
++ * no hay pantalla de creación (la pone SCRUM-544): sin ruta, el estado vacío no
++ * dibuja el enlace (DT-22).
++ */
++export const RUTA_PARA_CREAR_LANZAMIENTO: string | null = null;
+diff --git a/apps/web/lib/webinar/leads/esquemas.ts b/apps/web/lib/webinar/leads/esquemas.ts
+new file mode 100644
+index 00000000..1bd7ba36
+--- /dev/null
++++ b/apps/web/lib/webinar/leads/esquemas.ts
+@@ -0,0 +1,38 @@
++import { z } from "zod";
++import { uuidSchema } from "@/lib/validations";
++import { ETAPAS_DEL_LEAD } from "@/lib/webinar/vistas/contratos";
++
++/**
++ * ⭐ Las entradas de las tres acciones simuladas de la ficha (SCRUM-545,
++ * DT-12). Viven acá y no en `app/leads/actions.ts` porque un archivo
++ * `"use server"` sólo exporta funciones async.
++ *
++ * `ETAPAS_DEL_LEAD` se usa sólo para validar la etapa recibida: el paso
++ * siguiente sale del mapa explícito de `config.ts` (DT-14).
++ */
++
++export const marcarAvanceSchema = z.object({
++  leadId: uuidSchema,
++  launchId: uuidSchema,
++  etapaActual: z.enum(ETAPAS_DEL_LEAD, "Etapa inválida"),
++});
++
++export const asignarResponsableSchema = z.object({
++  leadId: uuidSchema,
++  launchId: uuidSchema,
++  responsableUserId: uuidSchema.nullable(),
++});
++
++export const agregarNotaSchema = z.object({
++  leadId: uuidSchema,
++  launchId: uuidSchema,
++  texto: z
++    .string()
++    .trim()
++    .min(1, "Escribí la nota antes de agregarla")
++    .max(5000, "Máximo 5.000 caracteres"),
++});
++
++export type MarcarAvanceInput = z.input<typeof marcarAvanceSchema>;
++export type AsignarResponsableInput = z.input<typeof asignarResponsableSchema>;
++export type AgregarNotaInput = z.input<typeof agregarNotaSchema>;
+diff --git a/apps/web/lib/webinar/leads/estado-local.ts b/apps/web/lib/webinar/leads/estado-local.ts
+new file mode 100644
+index 00000000..0e0584dd
+--- /dev/null
++++ b/apps/web/lib/webinar/leads/estado-local.ts
+@@ -0,0 +1,65 @@
++import type {
++  EstadoDeVenta,
++  EtapaDelLead,
++  NotaDelLead,
++  PersonaDelEquipo,
++} from "@/lib/webinar/vistas/contratos";
++
++/**
++ * ⭐ El cambio simulado de la ficha (SCRUM-545, DT-18). Las acciones no
++ * escriben en ninguna base: con éxito, la ficha refleja el cambio sólo acá, en
++ * el estado local, que se pierde al recargar (AC-9).
++ *
++ * Funciones puras: no mutan la entrada. `ultimoContactoAt` no se toca: marcar
++ * "Contactado" de ejemplo no es un contacto medido.
++ */
++
++/** Una nota agregada en esta pantalla: no se guardó ("Nota de ejemplo"). */
++export type NotaLocal = NotaDelLead & { deEjemplo: true };
++
++export type EstadoLocalDelLead = {
++  etapa: EtapaDelLead;
++  responsable: PersonaDelEquipo | null;
++  /** Las notas agregadas en esta pantalla, la más nueva primero. */
++  notasLocales: NotaLocal[];
++  /** Hubo al menos un cambio de ejemplo (para el aviso). */
++  huboCambios: boolean;
++};
++
++export function estadoInicial(venta: EstadoDeVenta): EstadoLocalDelLead {
++  return {
++    etapa: venta.etapa,
++    responsable: venta.responsable,
++    notasLocales: [],
++    huboCambios: false,
++  };
++}
++
++export function aplicarAvance(
++  estado: EstadoLocalDelLead,
++  etapa: EtapaDelLead
++): EstadoLocalDelLead {
++  return { ...estado, etapa, huboCambios: true };
++}
++
++export function aplicarResponsable(
++  estado: EstadoLocalDelLead,
++  responsable: PersonaDelEquipo | null
++): EstadoLocalDelLead {
++  return { ...estado, responsable, huboCambios: true };
++}
++
++export function agregarNotaLocal(
++  estado: EstadoLocalDelLead,
++  nota: { launchId: string; texto: string; creadaAt: string }
++): EstadoLocalDelLead {
++  const nueva: NotaLocal = {
++    id: `local-${estado.notasLocales.length + 1}`,
++    launchId: nota.launchId,
++    texto: nota.texto,
++    autor: null,
++    creadaAt: nota.creadaAt,
++    deEjemplo: true,
++  };
++  return { ...estado, notasLocales: [nueva, ...estado.notasLocales], huboCambios: true };
++}
+diff --git a/apps/web/lib/webinar/leads/url.ts b/apps/web/lib/webinar/leads/url.ts
+new file mode 100644
+index 00000000..c9dd4ade
+--- /dev/null
++++ b/apps/web/lib/webinar/leads/url.ts
+@@ -0,0 +1,63 @@
++import { paths } from "@/routes/paths";
++import type { ParametrosDeLeads } from "@/lib/webinar/vistas/contratos";
++
++/**
++ * ⭐ La URL de Leads y de la ficha (SCRUM-545). Filtro, búsqueda, lanzamiento
++ * y cursor viven en la URL (AC-2): un filtro se comparte y se abre con
++ * `/leads?filtro=<id>` (AC-3).
++ *
++ * Parámetros de `/leads`: `filtro`, `busqueda`, `lanzamiento`, `cursor`.
++ * De `/leads/[id]`: `lanzamiento`.
++ */
++
++/** Los `searchParams` que Next le pasa a una página. */
++export type ParametrosDeLaUrl = Record<string, string | string[] | undefined>;
++
++/** El primer valor de un parámetro (la URL puede repetirlo), o `null`. */
++function primero(valor: string | string[] | undefined): string | null {
++  const texto = Array.isArray(valor) ? valor[0] : valor;
++  return texto ? texto : null;
++}
++
++/** Lo que `leerLeads` necesita, desde la URL de `/leads`. */
++export function parametrosDesdeUrl(params: ParametrosDeLaUrl): ParametrosDeLeads {
++  return {
++    filtro: primero(params.filtro),
++    busqueda: primero(params.busqueda),
++    launchId: primero(params.lanzamiento),
++    cursor: primero(params.cursor),
++  };
++}
++
++/**
++ * La URL de `/leads` con `actual` y los `cambios`. Un cambio de filtro, de
++ * búsqueda o de lanzamiento vuelve a la primera página (borra el cursor) y
++ * conserva lo demás; el cursor sólo se mueve si viene en `cambios`.
++ */
++export function urlDeLeads(
++  actual: ParametrosDeLeads,
++  cambios: ParametrosDeLeads = {}
++): string {
++  const sinCambios = Object.keys(cambios).length === 0;
++  const cursor = "cursor" in cambios ? cambios.cursor : sinCambios ? actual.cursor : null;
++  const valores = { ...actual, ...cambios, cursor };
++  const query = new URLSearchParams();
++  if (valores.filtro) query.set("filtro", valores.filtro);
++  if (valores.busqueda) query.set("busqueda", valores.busqueda);
++  if (valores.launchId) query.set("lanzamiento", valores.launchId);
++  if (valores.cursor) query.set("cursor", valores.cursor);
++  const texto = query.toString();
++  return texto ? `${paths.platform.webinars.leads}?${texto}` : paths.platform.webinars.leads;
++}
++
++/** La ficha de un lead; con lanzamiento, el del estado de venta (DT-15). */
++export function urlDeLaFicha(leadId: string, launchId?: string | null): string {
++  const ficha = paths.platform.webinars.lead(encodeURIComponent(leadId));
++  if (!launchId) return ficha;
++  return `${ficha}?${new URLSearchParams({ lanzamiento: launchId }).toString()}`;
++}
++
++/** El `?lanzamiento=` de la ficha, o `null`. */
++export function lanzamientoDesdeUrl(params: ParametrosDeLaUrl): string | null {
++  return primero(params.lanzamiento);
++}
+diff --git a/apps/web/routes/paths.ts b/apps/web/routes/paths.ts
+index 26f008ee..98d11826 100644
+--- a/apps/web/routes/paths.ts
++++ b/apps/web/routes/paths.ts
+@@ -25,15 +25,17 @@ export const paths = {
+     dashboard: `${PLATFORM}/dashboard`,
+ 
+     /**
+-     * Rutas de los menús por experiencia (SCRUM-524) cuyas pantallas todavía
+-     * no existen. Limitless Webinars: `/inicio` es de SCRUM-534 y Leads, de
+-     * SCRUM-537 (Lanzamientos usa `lanzamientos`, SCRUM-529). Limitless de
+-     * gestión: Administración es de SCRUM-551. Qué entradas ve cada
++     * Rutas de los menús por experiencia (SCRUM-524). Limitless Webinars:
++     * `/inicio` es de SCRUM-534 y su pantalla todavía no existe; Leads y la
++     * ficha del lead son de SCRUM-545 (Lanzamientos usa `lanzamientos`,
++     * SCRUM-529). Limitless de gestión: Administración es de SCRUM-551 y su
++     * pantalla todavía no existe. Qué entradas ve cada
+      * experiencia y cuál está lista vive en `lib/navigation/menu-por-experiencia.ts`.
+      */
+     inicio: `${PLATFORM}/inicio`,
+     webinars: {
+       leads: `${PLATFORM}/leads`,
++      lead: (id: string) => `${PLATFORM}/leads/${id}`,
+     },
+     administracion: `${PLATFORM}/administracion`,
+ 
+diff --git a/docs/FUNCIONAL.md b/docs/FUNCIONAL.md
+index 01fb727f..cc9188c6 100644
+--- a/docs/FUNCIONAL.md
++++ b/docs/FUNCIONAL.md
+@@ -42,13 +42,13 @@ cambio, igual que el doc técnico del área.
+ | [Clientes](#clientes) | 28 | 20 | 5 | 0 | 1 | 2 |
+ | [Ventas](#ventas) | 28 | 14 | 9 | 2 | 2 | 1 |
+ | [Marketing](#marketing) | 27 | 9 | 7 | 4 | 3 | 4 |
+-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 24 | 11 | 3 | 1 | 3 | 6 |
++| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 25 | 11 | 3 | 1 | 4 | 6 |
+ | [Agente de negocio e IA](#agente-de-negocio-e-ia) | 28 | 15 | 10 | 0 | 3 | 0 |
+ | [Operaciones y equipo](#operaciones-y-equipo) | 23 | 16 | 4 | 0 | 2 | 1 |
+ | [Finanzas](#finanzas) | 12 | 6 | 4 | 0 | 2 | 0 |
+ | [Producto](#producto) | 15 | 13 | 0 | 0 | 2 | 0 |
+ | [Discord](#discord) | 13 | 0 | 2 | 0 | 1 | 10 |
+-| **Total** | **228** | **116** | **57** | **8** | **22** | **25** |
++| **Total** | **229** | **116** | **57** | **8** | **23** | **25** |
+ 
+ Lecturas rápidas:
+ 
+@@ -362,6 +362,7 @@ Doc técnico: [`docs/areas/embudos.md`](./areas/embudos.md)
+ | F-EMB-22 | El sistema guarda la historia de cada embudo por período y manda un pulso diario | A medias | `EMBUDOS-SNAPSHOTS` | [`areas/embudos.md` § Modelo de datos](./areas/embudos.md#modelo-de-datos) · `lib/funnels/resolve.ts` | |
+ | F-EMB-23 | El founder puede crear lanzamientos con objetivos, cargar métricas diarias y generar un post-mortem con IA | A medias | `LANZAMIENTOS-DORMIDO` | [`areas/embudos.md` § Lanzamientos](./areas/embudos.md#lanzamientos) · `app/(platform)/lanzamientos/page.tsx` | |
+ | F-EMB-24 | El equipo puede asignar tareas del Tablero de trabajo a un lanzamiento y filtrar por lanzamiento | Funciona | `LANZAMIENTOS-DORMIDO` | [`areas/embudos.md` § Lanzamientos](./areas/embudos.md#lanzamientos) · `app/(platform)/workboard/page.tsx` | |
++| F-EMB-25 | En Limitless Webinars, el setter puede ver los leads de un lanzamiento en `/leads` (etapa, origen, responsable y último contacto, con los filtros de trabajo y su conteo en la URL), abrir la ficha de cada uno (WhatsApp, registros, línea de tiempo con la fuente, compras) y marcar avance, asignar responsable o agregar una nota; hoy sólo la organización de demo ve datos (de ejemplo) y esas tres acciones no se guardan: la ficha avisa que el cambio es de ejemplo y se pierde al recargar | A medias | `WEBINAR-LEADS-PERSISTIR`, `WEBINAR-VISTAS-LECTURA-REAL`, `WEBINAR-ORG-DE-DEMO`, `WEBINAR-LEADS-CREAR-LANZAMIENTO`, `WEBINAR-LEADS-SIN-ORGANIZACION` | [`areas/webinars-contratos-de-vista.md`](./areas/webinars-contratos-de-vista.md) · `app/(platform)/leads/page.tsx` · `app/(platform)/leads/[id]/page.tsx` | |
+ 
+ ### Prometido y no existe
+ 
+diff --git a/docs/areas/webinars-contratos-de-vista.md b/docs/areas/webinars-contratos-de-vista.md
+index 5db23c57..a7b43a26 100644
+--- a/docs/areas/webinars-contratos-de-vista.md
++++ b/docs/areas/webinars-contratos-de-vista.md
+@@ -4,7 +4,7 @@ SCRUM-542 (A2 del plan "UI primero, datos después"). Qué recibe cada pantalla
+ y qué cambia cuando lea la base (B4). Es la referencia para construir Inicio (SCRUM-543), Lanzamientos
+ (SCRUM-544), Leads y la Ficha (SCRUM-545) y la Configuración del lanzamiento.
+ 
+-Código: `apps/web/lib/webinar/vistas/`. Las pantallas todavía no existen.
++Código: `apps/web/lib/webinar/vistas/`. Leads y la ficha del lead (SCRUM-545) ya existen, en `apps/web/app/(platform)/leads/`; las demás pantallas todavía no.
+ 
+ ## La regla
+ 
+@@ -106,7 +106,7 @@ Las tres pantallas de un lanzamiento o de un lead devuelven `Lectura` (`lib/clie
+ 
+ ```tsx
+ const lectura = await leerDetalleDelLanzamiento(params.id);
+-if (!lectura.ok) return <ErrorDeCarga motivo={lectura.motivo} />;
++if (!lectura.ok) return <ErrorDeCarga motivo={lectura.motivo} />; // components/webinar/aviso-de-estado.tsx
+ if (!lectura.data) notFound();
+ const vista = lectura.data;
+ ```
+diff --git a/docs/arquitectura/auth-organizaciones-y-permisos.md b/docs/arquitectura/auth-organizaciones-y-permisos.md
+index bfb29c46..0c4b6e1f 100644
+--- a/docs/arquitectura/auth-organizaciones-y-permisos.md
++++ b/docs/arquitectura/auth-organizaciones-y-permisos.md
+@@ -225,7 +225,7 @@ SCRUM-551) y Administración para `limitless`) y toda otra ruta de `app/(platfor
+ segmentos de `/integrations`, `/sops/[id]` y `/business-context/[id]`, adonde enlazan la Bandeja
+ y el Tablero, con todo su contenido: `/integrations/*`, `/sops/*` y `/business-context/*`; fix-pack 1 de A1), redirige a la
+ pantalla de inicio de esa experiencia. Una entrada no lista cuya pantalla todavía no existe
+-(`/inicio`, `/leads`, `/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
++(`/inicio`, `/administracion`) no redirige: da el 404 de la app. El bloqueo vive en
+ el layout de cada segmento de primer nivel, porque el de `(platform)` no se vuelve a ejecutar en
+ una navegación del cliente. Detalle en
+ [`diseno/ui-y-navegacion.md` § Menú por experiencia](../diseno/ui-y-navegacion.md#menú-por-experiencia-limitless-webinars-y-limitless-de-gestión).
+diff --git a/docs/backlog/historias-jira.csv b/docs/backlog/historias-jira.csv
+index 10777526..7329aa18 100644
+--- a/docs/backlog/historias-jira.csv
++++ b/docs/backlog/historias-jira.csv
+@@ -1127,6 +1127,26 @@ Funcionalidad: F-EMB-21 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog
+ * Agustín: ¿el pulso diario que ya existe tiene que sumar los números de los embudos?
+ 
+ Funcionalidad: F-EMB-22 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-22]",H-EMB-22,Embudos y Lanzamientos,P2,,EMBUDOS-SNAPSHOTS,
++[H-EMB-25] Seguir a los leads de un lanzamiento y marcar su avance (Limitless Webinars),Story,Medium,historia,embudos-y-lanzamientos,p2,para-confirmar,,,"*Historia:* Como setter de Limitless Webinars, quiero ver a los leads de un lanzamiento filtrados por lo que falta hacer y marcar el avance de cada uno desde su ficha, para encontrar rápido a quien levantó la mano y no dejar a nadie sin contactar.
++
++*Criterios de aceptación:*
++* Dado un lanzamiento con leads, cuando abro {{/leads?filtro=levanto_la_mano_sin_contactar}}, entonces veo ese filtro aplicado, con su conteo, y llego a marcar avance en 2 clics: la fila y el botón de la ficha.
++* Dado que marco avance, asigno responsable o agrego una nota, entonces el cambio queda guardado y lo ve el resto del equipo al recargar (hoy es de ejemplo y la ficha lo avisa).
++* Dada una organización que no es la de demo, cuando abro {{/leads}}, entonces veo sus leads reales y nunca un cero ni una lista inventada cuando una fuente no está conectada.
++* Dada una organización sin lanzamientos, cuando abro {{/leads}}, entonces veo cómo crear uno.
++
++*Tareas técnicas (PENDIENTES.md):*
++* [WEBINAR-LEADS-PERSISTIR] Las acciones de la ficha del lead guardan de verdad y /leads lee la base (B4) (P2)
++* [WEBINAR-VISTAS-LECTURA-REAL] Las funciones de lectura de Webinars leen la base (B4) (P2)
++* [WEBINAR-ORG-DE-DEMO] Cargar la organización de demo de Webinars (P2)
++* [WEBINAR-LEADS-CREAR-LANZAMIENTO] El estado vacío de Leads no tiene enlace para crear un lanzamiento (P3)
++* [WEBINAR-LEADS-SIN-ORGANIZACION] Una cuenta sin organización que abre /leads deja dos eventos en Sentry (P3)
++
++*Para confirmar:*
++* Martín: ""menos de 3 clics"" se interpretó como 2 desde la lista ya filtrada (abrir la ficha y pulsar el botón de avance).
++* ---
++
++Funcionalidad: F-EMB-25 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-25]",H-EMB-25,Embudos y Lanzamientos,P2,,WEBINAR-LEADS-PERSISTIR WEBINAR-VISTAS-LECTURA-REAL WEBINAR-ORG-DE-DEMO WEBINAR-LEADS-CREAR-LANZAMIENTO WEBINAR-LEADS-SIN-ORGANIZACION,
+ [H-FIN-11] Ver cobros y saldo de Stripe,Story,Medium,historia,operaciones-y-equipo,p2,para-confirmar,,,"*Historia:* Como founder, quiero conectar mi cuenta de Stripe y ver mis cobros y saldo, para tener mi plata en un solo lugar.
+ 
+ *Criterios de aceptación:*
+@@ -1475,7 +1495,6 @@ Funcionalidad: F-VEN-16 · No funciona · docs/FUNCIONAL.md · Fuente: docs/back
+ 
+ *Para confirmar:*
+ * Decisión: construir lo que falta o sacarlo de la pantalla.
+-* ---
+ 
+ Funcionalidad: F-EMB-23 · A medias · docs/FUNCIONAL.md · Fuente: docs/backlog/historias.md [H-EMB-23]",H-EMB-23,Embudos y Lanzamientos,P3,,LANZAMIENTOS-DORMIDO,
+ [H-OPS-19] Dar de alta a un miembro con el rol correcto,Story,Low,historia,operaciones-y-equipo,p3,para-confirmar,,,"*Historia:* Como founder, quiero dar de alta a un miembro con un rol y que reciba una contraseña temporal para su primer ingreso, para sumar gente al equipo con el acceso justo.
+diff --git a/docs/backlog/historias.md b/docs/backlog/historias.md
+index 29e18d7c..7f366ab9 100644
+--- a/docs/backlog/historias.md
++++ b/docs/backlog/historias.md
+@@ -774,6 +774,17 @@ Quien agregue o cambie una funcionalidad actualiza su historia acá, en el mismo
+ - **Tareas técnicas:** `[LANZAMIENTOS-DORMIDO]`
+ - **Para confirmar:** Decisión: construir lo que falta o sacarlo de la pantalla.
+ 
++### [H-EMB-25] Seguir a los leads de un lanzamiento y marcar su avance (Limitless Webinars)
++- **Funcionalidad:** F-EMB-25 · A medias
++- **Historia:** Como setter de Limitless Webinars, quiero ver a los leads de un lanzamiento filtrados por lo que falta hacer y marcar el avance de cada uno desde su ficha, para encontrar rápido a quien levantó la mano y no dejar a nadie sin contactar.
++- **Criterios de aceptación:**
++  - Dado un lanzamiento con leads, cuando abro `/leads?filtro=levanto_la_mano_sin_contactar`, entonces veo ese filtro aplicado, con su conteo, y llego a marcar avance en 2 clics: la fila y el botón de la ficha.
++  - Dado que marco avance, asigno responsable o agrego una nota, entonces el cambio queda guardado y lo ve el resto del equipo al recargar (hoy es de ejemplo y la ficha lo avisa).
++  - Dada una organización que no es la de demo, cuando abro `/leads`, entonces veo sus leads reales y nunca un cero ni una lista inventada cuando una fuente no está conectada.
++  - Dada una organización sin lanzamientos, cuando abro `/leads`, entonces veo cómo crear uno.
++- **Tareas técnicas:** `[WEBINAR-LEADS-PERSISTIR]`, `[WEBINAR-VISTAS-LECTURA-REAL]`, `[WEBINAR-ORG-DE-DEMO]`, `[WEBINAR-LEADS-CREAR-LANZAMIENTO]`, `[WEBINAR-LEADS-SIN-ORGANIZACION]`
++- **Para confirmar:** Martín: "menos de 3 clics" se interpretó como 2 desde la lista ya filtrada (abrir la ficha y pulsar el botón de avance).
++
+ ---
+ 
+ ## Agente de negocio e IA
+diff --git a/docs/backlog/jira-import.csv b/docs/backlog/jira-import.csv
+index da09a30d..ec74280e 100644
+--- a/docs/backlog/jira-import.csv
++++ b/docs/backlog/jira-import.csv
+@@ -2158,6 +2158,15 @@ Fuente: PENDIENTES.md [WEBINAR-VISTAS-LECTURA-REAL] · Doc del área: docs/areas
+ *Dónde:* {{apps/web/lib/webinar/vistas/{filas,calcular}.ts}}, {{docs/areas/webinars-contratos-de-vista.md}}.
+ 
+ Fuente: PENDIENTES.md [WEBINAR-REEMBOLSOS-POR-ORDEN] · Doc del área: docs/areas/embudos.md",WEBINAR-REEMBOLSOS-POR-ORDEN,Embudos y Lanzamientos,P2,,deuda técnica
++[WEBINAR-LEADS-PERSISTIR] Las acciones de la ficha del lead guardan de verdad y /leads lee la base (B4),Story,Medium,embudos,p2,feature,,,,"*Tipo:* feature
++
++*Estado verificado:* las tres Server Actions de la ficha ({{marcarAvanceDelLeadAction}}, {{asignarResponsableDelLeadAction}}, {{agregarNotaDelLeadAction}}, {{apps/web/app/leads/actions.ts}}, SCRUM-545) exigen organización con {{requireOrganizationId()}}, validan la entrada y devuelven éxito sin escribir en ninguna base; la ficha muestra el cambio sólo en su estado local y avisa que es de ejemplo. No miran el módulo de permisos: {{/leads}} lo protege el layout de la plataforma con {{sales}}. {{/leads}} y {{/leads/[id]}} leen de {{leerLeads}} y {{leerFichaDelLead}}, que devuelven el escenario a la organización de demo y {{sin_fuente}} o ""no existe"" a las demás ({{[WEBINAR-VISTAS-LECTURA-REAL]}}).
++
++*Qué hay que hacer:* cuando B4 migre el modelo, que las tres acciones escriban la etapa, el responsable y la nota, con el chequeo de módulo {{sales}} en la acción ({{[PERMISOS-SERVER-ACTIONS]}}: hoy se apoyan sólo en el layout); que la ficha deje el estado local y el aviso de ejemplo y muestre lo guardado; y, cuando {{/leads}} lea la base, un chequeo de permisos propio en la página para lo que no tiene que llegarle a alguien sin {{sales}} (R-8 de SCRUM-545).
++
++*Dónde:* {{apps/web/app/leads/actions.ts}}, {{apps/web/components/webinar/panel-de-venta-cliente.tsx}}, {{apps/web/lib/webinar/leads/estado-local.ts}}, {{apps/web/app/(platform)/leads/}}.
++
++Fuente: PENDIENTES.md [WEBINAR-LEADS-PERSISTIR] · Doc del área: docs/areas/embudos.md",WEBINAR-LEADS-PERSISTIR,Embudos y Lanzamientos,P2,,feature
+ [EMBUDOS-SALUD] Habilitar el estado de salud (bandas de la §04) ⏸️,Task,Medium,embudos,p2,decision-de-negocio,feature,,,"*Tipo:* decisión de negocio / feature
+ 
+ *Estado verificado:* {{applyHealthBand}}, {{resolveBenchmark}}, {{CROSS_FUNNEL_BANDS}} sólo se usan en tests; la tabla de pasos muestra {{benchmarkLabel}} como texto. {{funnel_benchmarks}} sin uso. {{diagnoseFunnel()}} no existe.
+@@ -3362,6 +3371,33 @@ Fuente: PENDIENTES.md [FEAT-2] · Doc del área: docs/areas/marketing.md",FEAT-2
+ *Dónde:* {{apps/web/app/marketing/content/sync-actions.ts}}, {{apps/reel-worker/src/}}
+ 
+ Fuente: PENDIENTES.md [MKT-TESTS-SYNC-WORKER] · Doc del área: docs/areas/marketing.md",MKT-TESTS-SYNC-WORKER,Marketing,P3,,tests
++[WEBINAR-LEADS-SIN-ORGANIZACION] Una cuenta sin organización que abre /leads deja dos eventos en Sentry,Bug,Low,embudos,p3,bug,,,,"*Tipo:* bug
++
++*Estado verificado:* para SCRUM-542 (dueño de {{lib/webinar/vistas/}}). Una cuenta sin organización (un super admin) que abre {{/leads}} o {{/leads/<id>}} pasa el bloqueo por experiencia (queda en {{full}}) y la página llama a {{leerLeads}} o {{leerFichaDelLead}}, que lanzan en {{requireOrganizationId}} ({{apps/web/lib/webinar/vistas/leer.ts:60}}) en vez de devolver {{sin_fuente}}. Next dibuja {{app/(platform)/error.tsx}} y quedan dos eventos en Sentry: el del servidor por {{onRequestError}} y el del navegador por {{components/platform/pantalla-de-error.tsx}}. Leído en el código, no ejecutado en la app (DT-28 y R-10 de SCRUM-545; {{app/(platform)/leads/__tests__/pantallas-de-leads.test.ts}} prueba que las dos páginas rechazan con {{SIN_ORGANIZACION_VINCULADA}}). SCRUM-545 no cambia {{lib/webinar/vistas/}}.
++
++*Qué hay que hacer:* que las funciones de lectura de Webinars traten la cuenta sin organización como ""sin fuente"" (o ""no existe"" en la ficha) sin lanzar, igual que hace {{getOrganizationExperience}} con {{SIN_ORGANIZACION_VINCULADA}}.
++
++*Dónde:* {{apps/web/lib/webinar/vistas/leer.ts}}, {{apps/web/app/(platform)/leads/}}.
++
++Fuente: PENDIENTES.md [WEBINAR-LEADS-SIN-ORGANIZACION] · Doc del área: docs/areas/embudos.md",WEBINAR-LEADS-SIN-ORGANIZACION,Embudos y Lanzamientos,P3,,bug
++[WEBINAR-LEADS-CREAR-LANZAMIENTO] El estado vacío de Leads no tiene enlace para crear un lanzamiento,Story,Low,embudos,p3,feature,,,,"*Tipo:* feature
++
++*Estado verificado:* sin lanzamientos, {{/leads}} muestra «Todavía no hay lanzamientos.» sin enlace: {{RUTA_PARA_CREAR_LANZAMIENTO}} es {{null}} en {{apps/web/lib/webinar/leads/config.ts}} porque no existe la pantalla de creación (SCRUM-544). {{PantallaDeLeads}} dibuja el enlace «Crear un lanzamiento» en cuanto la constante tenga una ruta. AC-6 de SCRUM-545 quedó parcial (DT-22).
++
++*Qué hay que hacer:* que SCRUM-544 ponga en {{RUTA_PARA_CREAR_LANZAMIENTO}} la ruta de su pantalla de creación (desde {{routes/paths.ts}}).
++
++*Dónde:* {{apps/web/lib/webinar/leads/config.ts}}.
++
++Fuente: PENDIENTES.md [WEBINAR-LEADS-CREAR-LANZAMIENTO] · Doc del área: docs/areas/embudos.md",WEBINAR-LEADS-CREAR-LANZAMIENTO,Embudos y Lanzamientos,P3,,feature
++[WEBINAR-NUMEROS-DE-TICKET] Los comentarios y docs de Webinars citan SCRUM-534 y SCRUM-529 donde corresponde 543 y 544,Task,Low,embudos,p3,deuda-tecnica,,,,"*Tipo:* deuda técnica
++
++*Estado verificado:* Inicio figura como SCRUM-534 y Lanzamientos como SCRUM-529, y el plan de Webinars los tiene como SCRUM-543 y SCRUM-544 (drift detectado en el SDD de SCRUM-545, que no los corrigió): {{apps/web/lib/navigation/menu-por-experiencia.ts:15,16,66,74}}, {{apps/web/routes/paths.ts:29,31}}, {{apps/web/lib/navigation/module-for-path.ts:26}}, {{apps/web/lib/navigation/__tests__/rutas-por-experiencia.test.ts:103}}, {{docs/diseno/ui-y-navegacion.md:88-89}} y {{PENDIENTES.md:457}}.
++
++*Qué hay que hacer:* confirmar con Martín qué ticket es cada pantalla y corregir los números donde corresponda.
++
++*Dónde:* archivos citados.
++
++Fuente: PENDIENTES.md [WEBINAR-NUMEROS-DE-TICKET] · Doc del área: docs/areas/embudos.md",WEBINAR-NUMEROS-DE-TICKET,Embudos y Lanzamientos,P3,,deuda técnica
+ [FEAT-GHL-OAUTH] App del Marketplace de GHL,Story,Low,embudos,p3,feature,,,,"*Tipo:* feature
+ 
+ *Estado verificado:* sólo PIT + {{location_id}} ({{ghl-connect-dialog.tsx}}); no hay rutas OAuth de GHL.
+diff --git a/docs/diseno/ui-y-navegacion.md b/docs/diseno/ui-y-navegacion.md
+index fa395b46..b6406618 100644
+--- a/docs/diseno/ui-y-navegacion.md
++++ b/docs/diseno/ui-y-navegacion.md
+@@ -86,8 +86,8 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
+ - **Config:** `lib/navigation/menu-por-experiencia.ts`. `MENU_POR_EXPERIENCIA` tiene un menú por
+   experiencia salvo `full` (que ve el menú de siempre), con las entradas del PO en orden:
+   - `webinar` (19-oct y 28-oct-2026): Inicio (`/inicio`, módulo `dashboard`, SCRUM-534), Lanzamientos
+-    (`/lanzamientos`, `funnels`, SCRUM-529), Leads (`/leads`, `sales`, SCRUM-537) y Equipo (`/team`,
+-    `team`). Llamadas salió del menú el 28-oct. Hoy sólo Equipo está lista.
++    (`/lanzamientos`, `funnels`, SCRUM-529), Leads (`/leads`, `sales`, SCRUM-545) y Equipo (`/team`,
++    `team`). Llamadas salió del menú el 28-oct. Hoy están listas Leads y Equipo.
+   - `limitless` (28-oct-2026): Clientes (`/clients`, `clients`), Tablero de trabajo (`/workboard`,
+     `workboard`), Ventas (el grupo `ventas` del menú completo, con sus hijos, `sales`; lleva a
+     `/sales/inbox`), Equipo (`/team`, `team`) y Administración (`/administracion`, SCRUM-551; el módulo
+@@ -99,7 +99,7 @@ activa (la del negocio elegido, en un holding), una vez por request; si falla, e
+ 
+   Cada entrada tiene `lista`. Una entrada que no está lista no se muestra (sin "Próximamente") y su
+   ruta no se abre. Lo que ve quien tipea la URL depende de si la pantalla existe: mientras no exista
+-  (hoy `/inicio`, `/leads` y `/administracion`, sin carpeta en `app/(platform)`), la URL da el 404 de la
++  (hoy `/inicio` y `/administracion`, sin carpeta en `app/(platform)`), la URL da el 404 de la
+   app, sin la barra, porque no hay layout de segmento que redirija; cuando su tarea cree la carpeta,
+   su `layout.tsx` aplica el bloqueo y la ruta redirige a la pantalla de inicio mientras la entrada no
+   esté lista (como hoy `/lanzamientos`). Lo fija el test "entradas no listas" de
+diff --git a/docs/operacion/testing.md b/docs/operacion/testing.md
+index 88644dbf..c3e4f796 100644
+--- a/docs/operacion/testing.md
++++ b/docs/operacion/testing.md
+@@ -8,7 +8,7 @@
+ |---|---|---|---|
+ | Tipos | `tsc --noEmit` | `apps/web`, `packages/ui`, `packages/types`, `apps/discord-bot`, `apps/reel-worker` | sí (`pnpm typecheck`, job `checks`) |
+ | Lint | ESLint 9 (`next lint` en web; `eslint src/` con la base de `packages/config` en ui, reel-worker y bot) | `apps/web`, `packages/ui`, `apps/reel-worker`, `apps/discord-bot` | sí (`pnpm lint`, job `checks`) |
+-| Unitarios | Vitest 3, entorno `node` | `apps/web` (306 archivos) | sí (`pnpm test`) |
++| Unitarios | Vitest 3, entorno `node` | `apps/web` (315 archivos) | sí (`pnpm test`) |
+ | E2E | Playwright | `apps/web/e2e/` (1 spec) | **no** (se activa con staging, ver E2E) |
+ | Migraciones | Postgres 17 + pgvector desde cero | `supabase/ci/check-migrations.sh` | sí (job `migrations`) |
+ | RLS | SQL: cada test actúa como distintos usuarios sobre la base recién armada | `supabase/ci/tests/*.sql` | sí (job `migrations`, paso 5) |
+@@ -82,7 +82,7 @@ Qué no testear en Vitest: componentes React con estado o efectos, actions que s
+ 
+ ## Cobertura actual por área
+ 
+-Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **306 archivos, ~3.581 casos** (SCRUM-542 suma sobre la cadena, recontado en la cadena de prueba con `contar-casos`; SCRUM-552 suma sobre la cadena, recontado en la cadena de prueba con `contar-casos`; SCRUM-524 suma sobre main con 540 y 523, recontado en la cadena de prueba con `contar-casos`; SCRUM-540 suma 12 archivos y 104 casos; el runner ejecuta 4.389. SCRUM-523 suma 6 archivos y 45 casos (merge de prueba de la cadena). Recontado el 2026-10-13 con la AR pasada 2 de SCRUM-502 integrada sobre la rama de SCRUM-519, base `main` `0353ec05`, que tenía 251 archivos y 2.848 casos, con `contar-casos.py` de la evidencia; el runner ejecuta 4.226 por los `it.each`, 3.859 en `main`; la tabla lista todas las carpetas con tests y sus filas suman ese total; las carpetas anidadas, como `app/api/integrations/fathom`, cuentan en la fila de su carpeta padre). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
++Archivos de test y casos declarados (`it`/`test`; el runner reporta más por los `it.each`). Total: **315 archivos, ~3.692 casos** (SCRUM-545 suma sobre la cadena, recontado en la cadena de prueba con `contar-casos`; SCRUM-542 suma sobre la cadena, recontado en la cadena de prueba con `contar-casos`; SCRUM-552 suma sobre la cadena, recontado en la cadena de prueba con `contar-casos`; SCRUM-524 suma sobre main con 540 y 523, recontado en la cadena de prueba con `contar-casos`; SCRUM-540 suma 12 archivos y 104 casos; el runner ejecuta 4.389. SCRUM-523 suma 6 archivos y 45 casos (merge de prueba de la cadena). Recontado el 2026-10-13 con la AR pasada 2 de SCRUM-502 integrada sobre la rama de SCRUM-519, base `main` `0353ec05`, que tenía 251 archivos y 2.848 casos, con `contar-casos.py` de la evidencia; el runner ejecuta 4.226 por los `it.each`, 3.859 en `main`; la tabla lista todas las carpetas con tests y sus filas suman ese total; las carpetas anidadas, como `app/api/integrations/fathom`, cuentan en la fila de su carpeta padre). No hay medición de cobertura (`@vitest/coverage-v8` no está instalado).
+ 
+ | Carpeta | Archivos | Casos | Qué cubre |
+ |---|---|---|---|
+diff --git a/docs/operacion/verificacion-manual.md b/docs/operacion/verificacion-manual.md
+index 3c6f9884..0ed5e529 100644
+--- a/docs/operacion/verificacion-manual.md
++++ b/docs/operacion/verificacion-manual.md
+@@ -16,7 +16,7 @@ sumá su bloque en la sección de su área con el mismo formato.
+ | [Clientes](#clientes) | 14 |
+ | [Ventas](#ventas) | 11 |
+ | [Marketing](#marketing) | 14 |
+-| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 11 |
++| [Embudos y Lanzamientos](#embudos-y-lanzamientos) | 12 |
+ | [Agente de negocio e IA](#agente-de-negocio-e-ia) | 12 |
+ | [Operaciones, Finanzas y Producto](#operaciones-finanzas-y-producto) | 8 |
+ | [Infraestructura](#infraestructura) | 14 |
+@@ -835,6 +835,15 @@ con una sesión real.
+ 5. Cambiar de período mueve todo junto.
+ 6. ⚠️ Dos embudos de precio distinto en la misma org: spend, revenue y KPIs idénticos (limitación conocida, [EMBUDOS-MEDIDAS-POR-EMBUDO]).
+ 
++### V12. Leads y ficha del lead de Webinars (SCRUM-545) ⭐ — `[WEBINAR-ORG-DE-DEMO]`
++**Prerrequisitos:** después de la ventana de SCRUM-532 (migración `20261019120000_organizations_experience.sql`), con `WEBINAR_DEMO_ORGANIZATION_ID` cargada (SCRUM-522): una organización `webinar` que sea la de demo y una organización `full` con dos cuentas de rol configurado (una con Ventas y otra sin Ventas), el founder y una cuenta sin rol configurado. Los tests de Vitest no cubren el conteo de clics ni la interacción en el navegador.
++1. ⭐ Abrir `/leads?filtro=levanto_la_mano_sin_contactar`. Resultado: el filtro «Levantó la mano sin contactar» aparece aplicado.
++2. ⭐ Contar clics desde esa lista: clic en una fila (se abre la ficha), clic en «Marcar como Contactado». Resultado: 2 clics.
++3. ⭐ Resultado del paso 2: aparece «Cambio de ejemplo: no se guardó y se pierde al recargar.»; al recargar, la etapa vuelve a la de antes.
++4. Repetir con asignar responsable y con agregar una nota. Resultado: lo mismo; la nota aparece primero, marcada «Nota de ejemplo». En una ficha con una etapa sin paso siguiente (por ejemplo, Calificado) no hay botón de avance.
++5. Clic en cualquier parte de una fila de la tabla, no sólo en el nombre. Resultado: abre la ficha.
++6. 🔒 Con la organización `full`: tipear `/leads` con la cuenta con Ventas. Resultado: la pantalla, sin entrada «Leads» en el menú. Con la cuenta con rol configurado sin Ventas: «No tenés acceso a Ventas». Como founder y con la cuenta sin rol configurado: la pantalla.
++
+ ---
+ 
+ ## Agente de negocio e IA

@@ -1,0 +1,808 @@
+
+> @ai-coo/web@0.0.0 test /tmp/claude-0/-home-user-limitless-system/eb655034-939f-5e58-bf6d-d85166bb2702/scratchpad/wt-cadena/apps/web
+> vitest run
+
+
+ RUN  v3.2.7 /tmp/claude-0/-home-user-limitless-system/eb655034-939f-5e58-bf6d-d85166bb2702/scratchpad/wt-cadena/apps/web
+
+ ✓ app/super-admin/__tests__/guard-de-staff-por-accion.test.ts (318 tests) 1425ms
+   ✓ inventario del panel interno > Test 2: cada export de app/super-admin/actions.ts tiene caso o está exento  828ms
+ ✓ app/auth/__tests__/sin-alta-publica.test.ts (1 test) 807ms
+   ✓ sin alta pública de cuentas > las actions de auth no exponen un signUpAction  806ms
+ ✓ app/__tests__/bloqueo-por-experiencia.test.ts (19 tests) 3339ms
+ ✓ lib/fathom/__tests__/sync-corridas.test.ts (19 tests) 600ms
+   ✓ sync de la organización: dos corridas > ⭐ la que falló en la corrida 1 se vuelve a pedir y se guarda en la corrida 2  506ms
+ ✓ lib/marketing/__tests__/sync-content-metrics.test.ts (33 tests) 442ms
+ ✓ app/__tests__/lecturas-rechazan-sin-modulo.test.ts (63 tests) 2138ms
+ ✓ app/api/health/__tests__/route.test.ts (9 tests) 173ms
+ ✓ app/clients/__tests__/seguimiento-errores-como-valor.test.ts (350 tests) 189ms
+ ✓ app/marketing/content/__tests__/contenido-errores-como-valor.test.ts (83 tests) 185ms
+ ✓ app/clients/__tests__/importacion-errores-como-valor.test.ts (36 tests) 116ms
+ ✓ components/platform/__tests__/pantalla-de-error.test.ts (37 tests) 128ms
+ ✓ lib/navigation/__tests__/lecturas-por-modulo.test.ts (34 tests) 504ms
+ ✓ app/api/integrations/__tests__/oauth-callbacks.test.ts (6 tests) 119ms
+ ✓ app/marketing/__tests__/sincronizacion-errores-como-valor.test.ts (25 tests) 94ms
+ ✓ app/clients/__tests__/growth-partners-errores-como-valor.test.ts (146 tests) 103ms
+ ✓ lib/fechas/__tests__/calendario.test.ts (34 tests) 60ms
+1:45:30 PM [vite] (ssr) warning: invalid import "../../../${config}". A file extension must be included in the static part of the import. For example: import(`./foo/${bar}.js`).
+  Plugin: vite:dynamic-import-vars
+  File: /tmp/claude-0/-home-user-limitless-system/eb655034-939f-5e58-bf6d-d85166bb2702/scratchpad/wt-cadena/apps/web/lib/observability/__tests__/limpiar-evento-sentry.test.ts
+ ✓ lib/observability/__tests__/limpiar-evento-sentry.test.ts (19 tests) 99ms
+ ✓ app/marketing/__tests__/drive-errores-como-valor.test.ts (46 tests) 63ms
+ ✓ app/workboard/__tests__/tablero-errores-como-valor.test.ts (102 tests) 90ms
+ ✓ lib/zernio/__tests__/error-http.test.ts (6 tests) 68ms
+ ✓ components/super-admin/__tests__/infrastructure-page.test.ts (6 tests) 79ms
+ ✓ app/sales/__tests__/lecturas-de-ventas-errores-como-valor.test.ts (39 tests) 66ms
+ ✓ app/clients/__tests__/wins-errores-como-valor.test.ts (83 tests) 61ms
+ ✓ components/shared/__tests__/campo-fecha.test.ts (10 tests) 58ms
+ ✓ components/sales/__tests__/pantalla-de-metricas-avisos.test.ts (3 tests) 84ms
+ ✓ app/sales/__tests__/seguimiento-errores-como-valor.test.ts (57 tests) 53ms
+ ✓ lib/observability/__tests__/registro-de-corridas.test.ts (32 tests) 56ms
+ ✓ components/integrations/__tests__/integracion-sin-leer.test.ts (5 tests) 69ms
+ ✓ lib/metrics/__tests__/derive-monthly-series.test.ts (20 tests) 45ms
+ ✓ lib/intelligence/__tests__/org-pausada-al-procesar.test.ts (40 tests) 56ms
+ ✓ lib/fathom/__tests__/leer-ventana.test.ts (16 tests) 54ms
+ ✓ app/workboard/__tests__/vinculos-de-tareas-errores-como-valor.test.ts (55 tests) 40ms
+ ✓ lib/metrics/__tests__/excel-parser.test.ts (2 tests) 49ms
+ ✓ app/finance/__tests__/campos-del-marco-por-modulo.test.ts (7 tests) 36ms
+ ✓ lib/custom-fields/__tests__/format.test.ts (15 tests) 32ms
+ ✓ app/marketing/__tests__/llamadores-errores-como-valor.test.ts (25 tests) 57ms
+ ✓ app/marketing/__tests__/patrones-errores-como-valor.test.ts (16 tests) 21ms
+ ✓ app/clients/__tests__/planes-errores-como-valor.test.ts (48 tests) 47ms
+ ✓ lib/dashboard/__tests__/fin-de-mes-en-la-zona-de-la-org.test.ts (4 tests) 41ms
+ ✓ lib/sales/__tests__/rango-de-metricas.test.ts (5 tests) 42ms
+ ✓ lib/metrics/__tests__/revenue-period.test.ts (75 tests) 59ms
+ ✓ components/clients/__tests__/seguimiento-pantallas-errores-como-valor.test.ts (50 tests) 48ms
+ ✓ app/sales/__tests__/cobros-errores-como-valor.test.ts (54 tests) 57ms
+ ✓ lib/sales/__tests__/lead-thread.test.ts (28 tests) 42ms
+ ✓ lib/webhooks/__tests__/webhooks-sin-perdida.test.ts (22 tests) 32ms
+ ✓ components/sales/__tests__/pantallas-de-ventas-errores-como-valor.test.ts (47 tests) 45ms
+ ✓ providers/__tests__/zona-de-la-organizacion-provider.test.ts (5 tests) 44ms
+ ✓ app/(platform)/marketing/__tests__/pantallas-de-contenido.test.ts (13 tests) 61ms
+ ✓ app/sales/__tests__/closers-errores-como-valor.test.ts (43 tests) 42ms
+ ✓ lib/checkpoints/__tests__/fecha-del-hito.test.ts (10 tests) 48ms
+ ✓ lib/client-onboarding/__tests__/questions.test.ts (7 tests) 13ms
+ ✓ app/operations/__tests__/reporte-semanal-org-no-activa.test.ts (10 tests) 47ms
+ ✓ lib/executive-reports/__tests__/generate-monthly.test.ts (15 tests) 27ms
+ ✓ components/clients/__tests__/pantallas-de-clientes-errores-como-valor.test.ts (52 tests) 34ms
+ ✓ app/operations/__tests__/inputs-semanales-errores-como-valor.test.ts (28 tests) 48ms
+ ✓ lib/sales/__tests__/recorrido-del-lead.test.ts (16 tests) 35ms
+ ✓ app/marketing/__tests__/resumen-errores-como-valor.test.ts (44 tests) 50ms
+ ✓ app/finance/__tests__/configuracion-con-pagos-caidos.test.ts (6 tests) 24ms
+ ✓ providers/__tests__/workboard-provider-errores.test.ts (34 tests) 38ms
+ ✓ lib/navigation/__tests__/module-for-path.test.ts (14 tests) 27ms
+ ✓ app/invite/__tests__/pagina-invitacion.test.ts (11 tests) 50ms
+ ✓ app/marketing/content/__tests__/zernio-en-vivo-errores-como-valor.test.ts (26 tests) 39ms
+ ✓ lib/metrics/__tests__/derive-finance-summary.test.ts (36 tests) 68ms
+ ✓ app/__tests__/layout-plataforma-experiencia.test.ts (16 tests) 50ms
+ ✓ lib/dashboard/__tests__/datos-del-panel.test.ts (2 tests) 36ms
+ ✓ lib/clients/__tests__/excel-parser.test.ts (2 tests) 29ms
+ ✓ lib/server/__tests__/action-result.test.ts (64 tests) 22ms
+ ✓ app/finance/__tests__/resumen-de-ventas-en-la-zona-de-la-org.test.ts (2 tests) 24ms
+ ✓ lib/fathom/__tests__/one-on-ones-zona.test.ts (4 tests) 27ms
+ ✓ lib/auth/__tests__/acceso-a-modulo.test.ts (22 tests) 21ms
+ ✓ lib/integrations/__tests__/health.test.ts (23 tests) 15ms
+ ✓ app/clients/__tests__/clientes-errores-como-valor.test.ts (26 tests) 28ms
+ ✓ app/api/queue/publish-reel-variation/__tests__/falla-de-zernio-en-la-variante.test.ts (9 tests) 28ms
+ ✓ lib/checkpoints/__tests__/stalled.test.ts (27 tests) 37ms
+ ✓ app/clients/__tests__/tareas-errores-como-valor.test.ts (39 tests) 31ms
+ ✓ lib/fechas/__tests__/organizacion.test.ts (5 tests) 24ms
+ ✓ app/api/integrations/fathom/__tests__/webhook-token.test.ts (6 tests) 21ms
+ ✓ lib/clients/__tests__/weekly-review.test.ts (24 tests) 30ms
+ ✓ lib/fathom/__tests__/deep-call-analysis-fecha.test.ts (3 tests) 21ms
+ ✓ lib/clients/__tests__/next-task.test.ts (14 tests) 27ms
+ ✓ lib/metrics/__tests__/derive-dashboard-data.test.ts (1 test) 30ms
+ ✓ app/__tests__/layout-plataforma-lecturas.test.ts (9 tests) 25ms
+ ✓ lib/sales/__tests__/follow-up-options.test.ts (17 tests) 29ms
+ ✓ components/workboard/__tests__/shell-modal-de-tiempo.test.ts (2 tests) 28ms
+ ✓ lib/fathom/__tests__/one-on-one-stats.test.ts (11 tests) 27ms
+ ✓ lib/workboard/__tests__/fecha-de-la-tarea.test.ts (2 tests) 20ms
+stderr | app/__tests__/paginas-cortan-antes-de-leer.test.ts > layout del Agente > ⭐ sin el módulo no monta el provider que pide las conversaciones
+[organizacion:experiencia] la lectura falló; se usa el valor por defecto
+
+stderr | app/__tests__/paginas-cortan-antes-de-leer.test.ts > layout del Agente > con el módulo monta el provider con la página adentro
+[organizacion:experiencia] la lectura falló; se usa el valor por defecto
+
+ ✓ app/__tests__/paginas-cortan-antes-de-leer.test.ts (5 tests) 33ms
+ ✓ app/(platform)/workboard/__tests__/pantalla-del-tablero.test.ts (3 tests) 16ms
+ ✓ lib/metrics/__tests__/revenue-events.test.ts (13 tests) 25ms
+ ✓ lib/clients/__tests__/revenue.test.ts (18 tests) 25ms
+ ✓ components/business-context/__tests__/generar-sop-por-experiencia.test.ts (2 tests) 25ms
+ ✓ lib/organization/__tests__/experiencias-de-la-base.test.ts (3 tests) 20ms
+ ✓ lib/ghl/__tests__/sync-contacts.test.ts (3 tests) 20ms
+ ✓ app/marketing/content/__tests__/trial-reels-errores-como-valor.test.ts (34 tests) 26ms
+ ✓ app/__tests__/ficha-de-cliente.test.ts (5 tests) 22ms
+ ✓ app/fathom/__tests__/one-on-one-actions-zona.test.ts (1 test) 28ms
+ ✓ lib/navigation/__tests__/rutas-por-experiencia.test.ts (52 tests) 18ms
+ ✓ components/workboard/__tests__/modal-de-tiempo.test.ts (9 tests) 20ms
+ ✓ lib/client-onboarding/__tests__/form.test.ts (17 tests) 30ms
+ ✓ components/workboard/__tests__/avisos-del-tablero.test.ts (11 tests) 23ms
+ ✓ lib/super-admin/__tests__/founder-de-la-org.test.ts (4 tests) 22ms
+ ✓ lib/agent/__tests__/fechas-del-agente.test.ts (1 test) 22ms
+ ✓ app/__tests__/layout-plataforma-permisos-caidos.test.ts (3 tests) 17ms
+ ✓ components/navigation/__tests__/paleta-por-experiencia.test.ts (6 tests) 17ms
+ ✓ lib/custom-fields/__tests__/validate.test.ts (23 tests) 25ms
+ ✓ lib/onboarding/__tests__/derive.test.ts (36 tests) 17ms
+ ✓ lib/organization/__tests__/experience.test.ts (23 tests) 20ms
+ ✓ lib/agent/__tests__/contenido-sin-metricas.test.ts (4 tests) 50ms
+ ✓ app/team/__tests__/lecturas-de-equipo-errores-como-valor.test.ts (19 tests) 15ms
+ ✓ lib/client/__tests__/correr-accion.test.ts (18 tests) 19ms
+ ✓ components/workboard/__tests__/modal-de-tiempo-cierre.test.ts (2 tests) 23ms
+ ✓ lib/auth/__tests__/lecturas-del-marco.test.ts (7 tests) 16ms
+ ✓ app/team/__tests__/aceptar-invitacion.test.ts (15 tests) 12ms
+ ✓ app/__tests__/layout-plataforma-permisos.test.ts (6 tests) 22ms
+ ✓ lib/operations/__tests__/weekly-utils.test.ts (4 tests) 22ms
+ ✓ lib/clients/__tests__/client-tasks-fecha.test.ts (3 tests) 21ms
+ ✓ lib/navigation/__tests__/page-meta.test.ts (9 tests) 10ms
+ ✓ lib/observability/__tests__/digest-de-next.test.ts (10 tests) 12ms
+ ✓ lib/funnels/__tests__/sources.test.ts (25 tests) 16ms
+ ✓ lib/funnels/__tests__/templates.conformance.test.ts (72 tests) 20ms
+ ✓ providers/__tests__/lecturas-del-marco-de-los-providers.test.ts (12 tests) 12ms
+ ✓ components/layout/__tests__/platform-shell-holding-degradado.test.ts (3 tests) 13ms
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts (17 tests | 15 failed) 33ms
+   × ⭐ login con contraseña > full: al Panel, como siempre (sin leer permisos) 11ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ login con contraseña > ⭐ webinar, un miembro sin Equipo: a Ajustes 1ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ login con contraseña > webinar: a su pantalla de inicio (hoy, Equipo) 1ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   ✓ ⭐ login con contraseña > webinar con una invitación en el next: vuelve a la invitación 1ms
+   × ⭐ login con contraseña > webinar con un next que no es invitación: se ignora, como siempre, y va a su inicio 1ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ login con contraseña > ⭐ limitless: a Clientes; un miembro con sólo Ventas, a la Bandeja 0ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ login con contraseña > una cuenta holding sigue yendo a su holding, sea cual sea la experiencia 0ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ login con contraseña > el super admin sigue yendo a su panel 0ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ /auth/callback > sin next: full al Panel, webinar a Equipo 2ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ /auth/callback > sin next: limitless a Clientes 1ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ /auth/callback > ⭐ sin next, un miembro webinar sin Equipo: a Ajustes 1ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ /auth/callback > un next interno se respeta (el bloqueo lo decide el layout del destino) 4ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ /auth/callback > un next que no pasa destinoSeguro cae en la pantalla de inicio de la experiencia 1ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   ✓ ⭐ /auth/callback > la invitación en el next: vuelve a ella sin crear organización 4ms
+   × ⭐ /auth/callback > el super admin sigue yendo a su panel 1ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ /auth/callback > ⭐ sin next, una cuenta holding va a su holding como en el login, sea cual sea la experiencia (fix-pack 1 de A1, MNR-1) 1ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+   × ⭐ /auth/callback > una cuenta holding con un next interno: el next gana, como antes 1ms
+     → [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+ ✓ lib/marketing/__tests__/patrones-de-contenido.test.ts (5 tests) 22ms
+ ✓ app/__tests__/boundaries.test.ts (35 tests) 25ms
+ ✓ lib/payments/__tests__/webhook-secret.test.ts (9 tests) 16ms
+ ✓ lib/clients/__tests__/plan-utils.test.ts (2 tests) 20ms
+ ✓ lib/wins/__tests__/derive-case.test.ts (19 tests) 17ms
+ ✓ app/__tests__/errores-de-next-se-relanzan.test.ts (8 tests) 17ms
+ ✓ app/(platform)/team/__tests__/pantalla-de-equipo.test.ts (2 tests) 15ms
+ ✓ lib/ai/__tests__/credential-resolver.test.ts (7 tests) 11ms
+ ✓ components/layout/__tests__/menu-celular-por-experiencia.test.ts (6 tests) 18ms
+ ✓ lib/funnels/__tests__/compute.test.ts (31 tests) 13ms
+ ✓ app/api/content/analyze/__tests__/ruta-de-analisis.test.ts (5 tests) 24ms
+ ✓ lib/funnels/__tests__/health-bands.test.ts (33 tests) 8ms
+ ✓ app/closing/__tests__/actualizar-llamada-errores-como-valor.test.ts (11 tests) 15ms
+ ✓ providers/__tests__/workboard-provider-confirmacion.test.ts (4 tests) 9ms
+ ✓ components/navigation/notch-nav/__tests__/barra-por-experiencia.test.ts (13 tests) 10ms
+ ✓ app/(platform)/holding/__tests__/negocio-hereda-la-experiencia.test.ts (10 tests) 38ms
+ ✓ lib/payments/__tests__/normalize.test.ts (33 tests) 19ms
+ ✓ lib/server/__tests__/lectura-degradable.test.ts (13 tests) 11ms
+ ✓ lib/dashboard/__tests__/panel-en-vivo.test.ts (8 tests) 14ms
+ ✓ lib/auth/__tests__/bootstrap-staff-en-limitless.test.ts (8 tests) 8ms
+ ✓ lib/checkpoints/__tests__/journey.test.ts (12 tests) 15ms
+ ✓ lib/security/__tests__/encryption.test.ts (16 tests) 18ms
+ ✓ app/(platform)/sales/closing/__tests__/pantalla-de-closing.test.ts (2 tests) 8ms
+ ✓ components/marketing/__tests__/contenido-pantallas-errores-como-valor.test.ts (16 tests) 29ms
+ ✓ app/__tests__/paginas-de-inteligencia-permisos.test.ts (6 tests) 20ms
+ ✓ lib/observability/__tests__/salud.test.ts (16 tests) 20ms
+ ✓ app/executive-reports/__tests__/latest-reports.test.ts (4 tests) 21ms
+ ✓ lib/auth/__tests__/require-staff.test.ts (18 tests) 17ms
+ ✓ lib/marketing/__tests__/cola-de-metricas.test.ts (11 tests) 10ms
+ ✓ lib/funnels/__tests__/validate-template.test.ts (16 tests) 8ms
+ ✓ lib/queue/__tests__/verify-queue-request.test.ts (4 tests) 9ms
+ ✓ app/marketing/content/__tests__/vincular-drive-errores-como-valor.test.ts (6 tests) 15ms
+ ✓ app/marketing/content/__tests__/top-performing-content.test.ts (4 tests) 10ms
+ ✓ app/executive-reports/__tests__/pipeline-org-no-activa.test.ts (8 tests) 9ms
+ ✓ lib/checkpoints/__tests__/metric-schema.test.ts (16 tests) 7ms
+ ✓ app/auth/force-password-change/__tests__/cambio-de-contrasena-errores-como-valor.test.ts (10 tests) 11ms
+ ✓ lib/calendly/__tests__/closer-sync-rechazos.test.ts (14 tests) 17ms
+ ✓ components/workboard/__tests__/protecciones-del-tablero.test.ts (7 tests) 8ms
+ ✓ lib/custom-fields/__tests__/resolve.test.ts (13 tests) 7ms
+stderr | app/auth/__tests__/recuperar-contrasena.test.ts > requestPasswordResetAction > si Supabase falla (o la cuenta no existe) responde lo mismo: no revela nada
+[requestPasswordReset] Supabase no mandó el mail: User not found
+
+ ✓ app/auth/__tests__/recuperar-contrasena.test.ts (4 tests) 10ms
+ ✓ lib/discord/__tests__/activity.test.ts (17 tests) 12ms
+ ✓ lib/auth/__tests__/permisos-falla-cerrada.test.ts (21 tests) 14ms
+ ✓ lib/discord/__tests__/classify-messages.test.ts (11 tests) 7ms
+ ✓ lib/forms/__tests__/paginar-respuestas.test.ts (6 tests) 23ms
+ ✓ lib/super-admin/__tests__/estado-de-corridas.test.ts (11 tests) 12ms
+ ✓ lib/ghl/__tests__/stage-transition.test.ts (14 tests) 8ms
+ ✓ lib/super-admin/__tests__/onboarding-progress.test.ts (15 tests) 12ms
+ ✓ app/team/__tests__/crear-rol-repetido.test.ts (3 tests) 10ms
+ ✓ app/__tests__/layout-plataforma-orden-de-providers.test.ts (1 test) 13ms
+ ✓ lib/fathom/__tests__/seed-identities.test.ts (12 tests) 13ms
+ ✓ lib/navigation/__tests__/rutas-por-experiencia-en-disco.test.ts (7 tests) 12ms
+ ✓ app/super-admin/__tests__/altas-nacen-en-webinars.test.ts (3 tests) 10ms
+ ✓ lib/discord/__tests__/profile.test.ts (10 tests) 12ms
+ ✓ lib/security/__tests__/reencrypt.test.ts (10 tests) 11ms
+ ✓ lib/super-admin/__tests__/signed-file-url.test.ts (2 tests) 8ms
+ ✓ lib/fathom/__tests__/fallas-de-sync.test.ts (6 tests) 6ms
+ ✓ lib/funnels/__tests__/kpis.test.ts (15 tests) 11ms
+ ✓ lib/calendly/__tests__/webhook-signature.test.ts (11 tests) 7ms
+ ✓ lib/fathom/__tests__/match-appointment.test.ts (14 tests) 7ms
+ ✓ app/fathom/__tests__/get-sales-calls-action.test.ts (5 tests) 10ms
+ ✓ lib/storage/__tests__/org-path.test.ts (6 tests) 8ms
+ ✓ lib/super-admin/__tests__/estado-de-org.test.ts (8 tests) 8ms
+ ✓ lib/fathom/__tests__/sales-calls.test.ts (5 tests) 6ms
+ ✓ lib/payments/__tests__/verify-signature.test.ts (15 tests) 6ms
+ ✓ lib/fathom/__tests__/plazo-del-cron.test.ts (20 tests) 7ms
+ ✓ lib/supabase/__tests__/middleware-login-del-staff.test.ts (3 tests) 9ms
+ ✓ lib/auth/__tests__/super-admin-una-consulta.test.ts (8 tests) 13ms
+ ✓ lib/agent/__tests__/top-contenido-tool.test.ts (6 tests) 12ms
+ ✓ lib/fathom/__tests__/cursor.test.ts (33 tests) 16ms
+ ✓ app/api/integrations/fathom/__tests__/sync-cron.test.ts (2 tests) 17ms
+ ✓ lib/marketing/__tests__/ranking-de-contenido.test.ts (7 tests) 7ms
+ ✓ lib/payments/__tests__/aggregate.test.ts (14 tests) 11ms
+ ✓ lib/custom-fields/__tests__/date-alert.test.ts (11 tests) 6ms
+ ✓ lib/observability/__tests__/on-request-error.test.ts (4 tests) 10ms
+ ✓ lib/sops/__tests__/attachment-markers.test.ts (10 tests) 10ms
+ ✓ lib/fathom/__tests__/resolve-counterparty.test.ts (22 tests) 9ms
+ ✓ lib/checkpoints/__tests__/match-proposal.test.ts (19 tests) 10ms
+ ✓ lib/ghl/__tests__/verify-webhook.test.ts (9 tests) 7ms
+ ✓ app/closing/__tests__/list-closing-calls.test.ts (2 tests) 11ms
+ ✓ lib/funnels/__tests__/instrumentation.test.ts (14 tests) 14ms
+ ✓ lib/ghl/__tests__/opportunity-event.test.ts (13 tests) 9ms
+ ✓ app/(platform)/sales/metrics/__tests__/pantalla-de-metricas.test.ts (3 tests) 10ms
+ ✓ lib/executive-reports/__tests__/cadences.test.ts (11 tests) 9ms
+ ✓ app/intelligence/__tests__/actions.test.ts (2 tests) 5ms
+ ✓ lib/fathom/__tests__/one-on-one-tasks.test.ts (16 tests) 10ms
+ ✓ lib/marketing/__tests__/rechazos-de-contenido.test.ts (11 tests) 5ms
+ ✓ lib/sops/__tests__/audio-chunks.test.ts (15 tests) 11ms
+ ✓ lib/team/__tests__/invitacion.test.ts (8 tests) 6ms
+ ✓ lib/operations/__tests__/resultado-reporte-semanal.test.ts (6 tests) 9ms
+ ✓ lib/fathom/__tests__/crm-matches.test.ts (7 tests) 6ms
+ ✓ lib/fathom/__tests__/webhook-signature.test.ts (7 tests) 5ms
+ ✓ lib/navigation/__tests__/menu-por-experiencia.test.ts (14 tests) 8ms
+ ✓ app/auth/__tests__/login-vuelve-a-la-invitacion.test.ts (9 tests) 10ms
+ ✓ lib/observability/__tests__/cron-monitor.test.ts (6 tests) 6ms
+ ✓ lib/observability/__tests__/reportar-falla.test.ts (4 tests) 6ms
+ ✓ lib/zernio/__tests__/integration.test.ts (5 tests) 8ms
+ ✓ lib/clients/__tests__/payment-utils.test.ts (18 tests) 9ms
+ ✓ lib/ai/__tests__/clave-rechazada.test.ts (3 tests) 9ms
+ ✓ lib/checkpoints/__tests__/effective-stage.test.ts (11 tests) 6ms
+ ✓ lib/supabase/__tests__/public-paths.test.ts (29 tests) 5ms
+ ✓ lib/marketing/__tests__/contenido-de-la-conversacion.test.ts (4 tests) 5ms
+ ✓ lib/clients/__tests__/cliente-visible.test.ts (5 tests) 14ms
+ ✓ lib/auth/__tests__/permisos-sin-log.test.ts (1 test) 7ms
+ ✓ lib/marketing/__tests__/ad-metrics-snapshot-orgs.test.ts (2 tests) 5ms
+ ✓ lib/marketing/__tests__/ad-metrics-snapshot.test.ts (13 tests) 7ms
+ ✓ lib/payments/__tests__/retention.test.ts (16 tests) 6ms
+ ✓ lib/discord/__tests__/suggest-identity.test.ts (12 tests) 9ms
+ ✓ lib/fathom/__tests__/share-link.test.ts (13 tests) 11ms
+ ✓ lib/queue/__tests__/fanout-registro-de-corridas.test.ts (2 tests) 11ms
+ ✓ lib/wins/__tests__/consent.test.ts (15 tests) 8ms
+ ✓ lib/auth/__tests__/limite-login.test.ts (8 tests) 6ms
+ ✓ lib/team/__tests__/rol-de-la-org.test.ts (6 tests) 10ms
+ ✓ lib/hyros/__tests__/resolve-attribution.test.ts (11 tests) 7ms
+ ✓ lib/auth/__tests__/require-org-role.test.ts (5 tests) 4ms
+ ✓ lib/super-admin/__tests__/load-onboarding-progress.test.ts (3 tests) 6ms
+ ✓ lib/fathom/__tests__/member-key.test.ts (3 tests) 7ms
+ ✓ lib/fathom/__tests__/cliente-de-la-org.test.ts (5 tests) 7ms
+ ✓ lib/checkpoints/__tests__/progress.test.ts (10 tests) 9ms
+ ✓ lib/unipile/__tests__/process-hosted-auth.test.ts (2 tests) 6ms
+ ✓ lib/fathom/__tests__/webhook-meeting.test.ts (3 tests) 4ms
+ ✓ lib/super-admin/__tests__/deletion-plan.test.ts (15 tests) 8ms
+ ✓ lib/onboarding/__tests__/tours.test.ts (12 tests) 7ms
+ ✓ lib/closing/__tests__/call-status.test.ts (20 tests) 10ms
+ ✓ lib/funnels/__tests__/period.test.ts (9 tests) 5ms
+ ✓ lib/organization/__tests__/altas-conocidas.test.ts (9 tests) 5ms
+ ✓ lib/metrics/__tests__/match-closer.test.ts (14 tests) 6ms
+ ✓ lib/supabase/__tests__/fetch-all-rows.test.ts (4 tests) 6ms
+ ✓ providers/__tests__/permisos-estables.test.ts (3 tests) 7ms
+ ✓ lib/clients/__tests__/sub-clients.test.ts (11 tests) 6ms
+ ✓ lib/custom-fields/__tests__/key.test.ts (10 tests) 10ms
+ ✓ lib/funnels/__tests__/spine.test.ts (7 tests) 6ms
+ ✓ lib/discord/__tests__/channels.test.ts (10 tests) 6ms
+ ✓ constants/__tests__/permisos-consolidados.test.ts (12 tests) 5ms
+ ✓ lib/custom-fields/__tests__/merge.test.ts (10 tests) 5ms
+ ✓ lib/auth/__tests__/bootstrap-nace-en-webinars.test.ts (2 tests) 11ms
+ ✓ lib/vturb/__tests__/resolve-stats.test.ts (20 tests) 6ms
+ ✓ lib/intelligence/__tests__/organizaciones-activas.test.ts (3 tests) 8ms
+ ✓ lib/clients/__tests__/satisfaction.test.ts (9 tests) 7ms
+ ✓ lib/webinarjam/__tests__/normalize-registrant.test.ts (13 tests) 10ms
+ ✓ app/clients/__tests__/cobrado-por-cliente.test.ts (3 tests) 10ms
+ ✓ lib/zernio/__tests__/filas-de-contenido.test.ts (4 tests) 6ms
+ ✓ lib/funnels/__tests__/source-signal.test.ts (16 tests) 7ms
+ ✓ lib/zernio/__tests__/metricas-para-guardar.test.ts (5 tests) 6ms
+ ✓ lib/workboard/__tests__/filtrar-por-responsable.test.ts (6 tests) 6ms
+ ✓ lib/ghl/__tests__/appointment-status.test.ts (6 tests) 6ms
+ ✓ lib/metrics/__tests__/build-sales-funnel-stages.test.ts (7 tests) 5ms
+ ✓ lib/custom-fields/__tests__/onboarding-config.test.ts (3 tests) 5ms
+ ✓ lib/workboard/__tests__/duracion.test.ts (6 tests) 5ms
+ ✓ lib/onboarding/__tests__/gate-routing.test.ts (16 tests) 8ms
+ ✓ lib/unipile/__tests__/verify-secret.test.ts (3 tests) 6ms
+ ✓ lib/security/__tests__/safe-equal.test.ts (2 tests) 4ms
+ ✓ lib/zernio/__tests__/triggers.test.ts (7 tests) 6ms
+ ✓ lib/fathom/__tests__/member-sync.test.ts (4 tests) 6ms
+ ✓ lib/release/__tests__/escondido.test.ts (4 tests) 12ms
+ ✓ lib/server/__tests__/tabla-ausente.test.ts (9 tests) 4ms
+ ✓ lib/clients/__tests__/llamadas-sin-asociar.test.ts (3 tests) 3ms
+ ✓ lib/clients/__tests__/signals.test.ts (5 tests) 5ms
+ ✓ lib/integrations/__tests__/oauth-state.test.ts (5 tests) 4ms
+ ✓ lib/queue/__tests__/failure-callback.test.ts (3 tests) 5ms
+ ✓ lib/discord/__tests__/intent-contenido.test.ts (5 tests) 5ms
+ ✓ lib/chart/__tests__/funnel-scale.test.ts (5 tests) 6ms
+ ✓ lib/fathom/__tests__/sync-window.test.ts (7 tests) 5ms
+ ✓ lib/ai/__tests__/aviso-clave-ia.test.ts (5 tests) 4ms
+ ✓ lib/auth/__tests__/cuenta-desactivada.test.ts (6 tests) 4ms
+ ✓ lib/marketing/__tests__/metricas-medidas.test.ts (5 tests) 6ms
+ ✓ lib/marketing/__tests__/orden-de-piezas.test.ts (4 tests) 6ms
+ ✓ lib/auth/__tests__/redirect-seguro.test.ts (5 tests) 4ms
+ ✓ lib/executive-reports/__tests__/mensaje-del-pipeline.test.ts (4 tests) 4ms
+ ✓ lib/fathom/__tests__/reclaim-stuck.test.ts (7 tests) 7ms
+ ✓ lib/youtube/__tests__/metricas-de-video.test.ts (2 tests) 4ms
+ ✓ constants/__tests__/permission-modules.test.ts (4 tests) 4ms
+ ✓ lib/auth/__tests__/recuperar-contrasena.test.ts (3 tests) 4ms
+ ✓ lib/onboarding/__tests__/items.test.ts (1 test) 4ms
+ ✓ lib/client-onboarding/__tests__/assign.test.ts (1 test) 4ms
+ ✓ lib/vturb/__tests__/stats.test.ts (3 tests) 3ms
+ ✓ components/clients/__tests__/validar-plan.test.ts (3 tests) 3ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  app/auth/__tests__/login-del-staff.test.ts [ app/auth/__tests__/login-del-staff.test.ts ]
+Error: Cannot find package 'server-only' imported from '/tmp/claude-0/-home-user-limitless-system/eb655034-939f-5e58-bf6d-d85166bb2702/scratchpad/wt-cadena/apps/web/lib/auth/destino-despues-del-login.ts'
+ ❯ lib/auth/destino-despues-del-login.ts:16:1
+     14|  * deciden antes, en cada llamador.
+     15|  */
+     16| import "server-only";
+       | ^
+     17| import { loadProfileOrganizationContext } from "@/lib/auth/bootstrap";
+     18| import { pantallaDeInicioDeLaOrganizacionActiva } from "@/lib/organiza…
+
+Caused by: Error: Failed to load url server-only (resolved id: server-only) in /tmp/claude-0/-home-user-limitless-system/eb655034-939f-5e58-bf6d-d85166bb2702/scratchpad/wt-cadena/apps/web/lib/organization/ruta-de-la-experiencia.ts. Does the file exist?
+ ❯ loadAndTransform ../../../../../../../../home/user/limitless-system/node_modules/.pnpm/vite@7.3.6_@types+node@22.19.19_jiti@1.21.7_terser@5.50.0_tsx@4.22.4/node_modules/vite/dist/node/chunks/config.js:22739:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/16]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ login con contraseña > full: al Panel, como siempre (sin leer permisos)
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ postAuthRedirect app/auth/actions.ts:115:31
+ ❯ Module.signInAction app/auth/actions.ts:185:3
+ ❯ login app/auth/__tests__/destino-por-experiencia.test.ts:96:5
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:127:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ login con contraseña > ⭐ webinar, un miembro sin Equipo: a Ajustes
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ postAuthRedirect app/auth/actions.ts:115:31
+ ❯ Module.signInAction app/auth/actions.ts:185:3
+ ❯ login app/auth/__tests__/destino-por-experiencia.test.ts:96:5
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:134:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ login con contraseña > webinar: a su pantalla de inicio (hoy, Equipo)
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ postAuthRedirect app/auth/actions.ts:115:31
+ ❯ Module.signInAction app/auth/actions.ts:185:3
+ ❯ login app/auth/__tests__/destino-por-experiencia.test.ts:96:5
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:139:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ login con contraseña > webinar con un next que no es invitación: se ignora, como siempre, y va a su inicio
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ postAuthRedirect app/auth/actions.ts:115:31
+ ❯ Module.signInAction app/auth/actions.ts:185:3
+ ❯ login app/auth/__tests__/destino-por-experiencia.test.ts:96:5
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:149:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ login con contraseña > ⭐ limitless: a Clientes; un miembro con sólo Ventas, a la Bandeja
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ postAuthRedirect app/auth/actions.ts:115:31
+ ❯ Module.signInAction app/auth/actions.ts:185:3
+ ❯ login app/auth/__tests__/destino-por-experiencia.test.ts:96:5
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:154:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ login con contraseña > una cuenta holding sigue yendo a su holding, sea cual sea la experiencia
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ postAuthRedirect app/auth/actions.ts:115:31
+ ❯ Module.signInAction app/auth/actions.ts:185:3
+ ❯ login app/auth/__tests__/destino-por-experiencia.test.ts:96:5
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:162:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ login con contraseña > el super admin sigue yendo a su panel
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ postAuthRedirect app/auth/actions.ts:115:31
+ ❯ Module.signInAction app/auth/actions.ts:185:3
+ ❯ login app/auth/__tests__/destino-por-experiencia.test.ts:96:5
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:168:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ /auth/callback > sin next: full al Panel, webinar a Equipo
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ Module.GET app/auth/callback/route.ts:61:32
+ ❯ volverDelMail app/auth/__tests__/destino-por-experiencia.test.ts:110:21
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:174:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ /auth/callback > sin next: limitless a Clientes
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ Module.GET app/auth/callback/route.ts:61:32
+ ❯ volverDelMail app/auth/__tests__/destino-por-experiencia.test.ts:110:21
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:181:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ /auth/callback > ⭐ sin next, un miembro webinar sin Equipo: a Ajustes
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ Module.GET app/auth/callback/route.ts:61:32
+ ❯ volverDelMail app/auth/__tests__/destino-por-experiencia.test.ts:110:21
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:187:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ /auth/callback > un next interno se respeta (el bloqueo lo decide el layout del destino)
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ Module.GET app/auth/callback/route.ts:61:32
+ ❯ volverDelMail app/auth/__tests__/destino-por-experiencia.test.ts:110:21
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:192:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ /auth/callback > un next que no pasa destinoSeguro cae en la pantalla de inicio de la experiencia
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ Module.GET app/auth/callback/route.ts:61:32
+ ❯ volverDelMail app/auth/__tests__/destino-por-experiencia.test.ts:110:21
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:197:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ /auth/callback > el super admin sigue yendo a su panel
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ Module.GET app/auth/callback/route.ts:61:32
+ ❯ volverDelMail app/auth/__tests__/destino-por-experiencia.test.ts:110:21
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:209:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ /auth/callback > ⭐ sin next, una cuenta holding va a su holding como en el login, sea cual sea la experiencia (fix-pack 1 de A1, MNR-1)
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ Module.GET app/auth/callback/route.ts:61:32
+ ❯ volverDelMail app/auth/__tests__/destino-por-experiencia.test.ts:110:21
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:216:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/16]⎯
+
+ FAIL  app/auth/__tests__/destino-por-experiencia.test.ts > ⭐ /auth/callback > una cuenta holding con un next interno: el next gana, como antes
+Error: [vitest] No "getSupabaseUrl" export is defined on the "@/lib/supabase/env" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+vi[33m.[39m[34mmock[39m([35mimport[39m([32m"@/lib/supabase/env"[39m)[33m,[39m [35masync[39m (importOriginal) [33m=>[39m {
+  [35mconst[39m actual [33m=[39m [35mawait[39m [34mimportOriginal[39m()
+  [35mreturn[39m {
+    [33m...[39mactual[33m,[39m
+    [90m// your mocked methods[39m
+  }
+})
+
+ ❯ createAdminClient lib/supabase/admin.ts:6:23
+      4| /** Solo servidor — bypass RLS. NUNCA importar en componentes cliente.…
+      5| export function createAdminClient() {
+      6|   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+       |                       ^
+      7|     auth: {
+      8|       autoRefreshToken: false,
+ ❯ isStaffEmail lib/auth/require-staff.ts:27:17
+ ❯ Module.GET app/auth/callback/route.ts:61:32
+ ❯ volverDelMail app/auth/__tests__/destino-por-experiencia.test.ts:110:21
+ ❯ app/auth/__tests__/destino-por-experiencia.test.ts:223:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/16]⎯
+
+
+ Test Files  2 failed | 298 passed (300)
+      Tests  15 failed | 4927 passed (4942)
+   Start at  13:45:20
+   Duration  66.00s (transform 29.19s, setup 0ms, collect 86.68s, tests 15.83s, environment 72ms, prepare 25.62s)
+
+ ELIFECYCLE  Test failed. See above for more details.
