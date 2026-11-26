@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { isAllowedBrainFile } from "@/lib/ai-brain/file-types";
 import { AI_BRAIN_BUCKET, uiContentTypeToDb } from "@/lib/ai-brain/mapper";
-import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import { requireStaff } from "@/lib/auth/require-staff";
 import { isMissingTableError } from "@/lib/auth/bootstrap";
 import { generateTempPassword } from "@/lib/auth/generate-temp-password";
 import { tempPasswordProfileFields } from "@/lib/auth/temp-password-expiry";
@@ -30,9 +30,13 @@ import {
   getAiBrainSignedUrlSchema,
   prepareAiBrainFileUploadSchema,
   regenerateTempPasswordSchema,
+  setOrganizationExperienceSchema,
   setOrganizationStatusSchema,
   updateOrganizationMrrSchema,
 } from "@/lib/validations";
+import { leerExperienciaDeLaOrganizacion } from "@/lib/organization/experience";
+import { motivoParaNoCambiarLaExperiencia } from "@/lib/administracion/experiencia";
+import { ErrorEsperable } from "@/lib/server/error-esperable";
 import { ADD_ON_IDS } from "@/lib/auth/add-on-ids";
 import { processAiBrainDocument } from "@/lib/ai-brain/process-document";
 import { resolveBrainFileMimeType, isAllowedBrainFile as validateBrainFile } from "@/lib/ai-brain/file-types";
@@ -87,12 +91,14 @@ function revalidateSuperAdmin() {
   for (const p of REVALIDATE_ORGS) {
     revalidatePath(p);
   }
+  // La consola de Administración (SCRUM-551) muestra lo mismo.
+  revalidatePath(paths.platform.administracion, "layout");
   revalidatePath(paths.superAdmin.infrastructure);
   revalidatePath(paths.superAdmin.aiBrain.root);
   revalidatePath(paths.superAdmin.aiBrain.library);
 }
 
-async function requireSuperAdminAndParse<T extends z.ZodTypeAny>(
+async function requireStaffAndParse<T extends z.ZodTypeAny>(
   schema: T,
   input: unknown
 ): Promise<
@@ -100,7 +106,7 @@ async function requireSuperAdminAndParse<T extends z.ZodTypeAny>(
   | { success: false; error: string }
 > {
   try {
-    await requireSuperAdmin();
+    await requireStaff();
   } catch (error) {
     return { success: false, error: actionErrorMessage(error) };
   }
@@ -116,7 +122,7 @@ async function requireSuperAdminAndParse<T extends z.ZodTypeAny>(
 export async function createFounderAccountAction(
   input: unknown
 ): Promise<MutationResult<CreateFounderResult>> {
-  const auth = await requireSuperAdminAndParse(createFounderAccountSchema, input);
+  const auth = await requireStaffAndParse(createFounderAccountSchema, input);
   if (!auth.success) {
     return { success: false, error: auth.error };
   }
@@ -184,7 +190,7 @@ export async function createFounderAccountAction(
 export async function createOrganizationFromHoldingAction(
   input: unknown
 ): Promise<MutationResult<{ orgId: string; tempCredentials: TempCredentials }>> {
-  const auth = await requireSuperAdminAndParse(
+  const auth = await requireStaffAndParse(
     createOrganizationFromHoldingSchema,
     input
   );
@@ -287,7 +293,7 @@ export async function setOrganizationStatusAction(
   organizationId: string,
   active: boolean
 ): Promise<MutationResult> {
-  const auth = await requireSuperAdminAndParse(setOrganizationStatusSchema, {
+  const auth = await requireStaffAndParse(setOrganizationStatusSchema, {
     organizationId,
     active,
   });
@@ -310,11 +316,42 @@ export async function setOrganizationStatusAction(
   });
 }
 
+/**
+ * Cambia la experiencia de una organización desde Administración (SCRUM-551):
+ * sólo entre `webinar` y `full`; la org de Limitless (`limitless`) no se toca
+ * desde acá. Sólo staff (`requireStaff`).
+ */
+export async function setOrganizationExperienceAction(
+  organizationId: string,
+  experiencia: string
+): Promise<MutationResult> {
+  const auth = await requireStaffAndParse(setOrganizationExperienceSchema, {
+    organizationId,
+    experiencia,
+  });
+  if (!auth.success) {
+    return { success: false, error: auth.error };
+  }
+
+  const { organizationId: orgId, experiencia: nueva } = auth.data;
+
+  return runMutation(async () => {
+    const admin = createAdminClient();
+    const actual = await leerExperienciaDeLaOrganizacion(admin, orgId);
+    const motivo = motivoParaNoCambiarLaExperiencia(actual, nueva);
+    if (motivo) throw new ErrorEsperable(motivo);
+    const { error } = await admin.from("organizations").update({ experience: nueva }).eq("id", orgId);
+    if (error) throw new Error(error.message);
+    revalidateSuperAdmin();
+    revalidatePath(`${paths.superAdmin.organizations}/${orgId}`);
+  });
+}
+
 export async function updateOrganizationMrrAction(
   organizationId: string,
   mrrUsd: number
 ): Promise<MutationResult> {
-  const auth = await requireSuperAdminAndParse(updateOrganizationMrrSchema, {
+  const auth = await requireStaffAndParse(updateOrganizationMrrSchema, {
     organizationId,
     mrrUsd,
   });
@@ -342,7 +379,7 @@ export async function addOrganizationNoteAction(
   note: string,
   createdBy = "Super Admin"
 ): Promise<MutationResult> {
-  const auth = await requireSuperAdminAndParse(addOrganizationNoteSchema, {
+  const auth = await requireStaffAndParse(addOrganizationNoteSchema, {
     organizationId,
     note,
     createdBy,
@@ -373,7 +410,7 @@ export async function addOrganizationNoteAction(
 export async function deactivateUserAction(
   userId: string
 ): Promise<MutationResult> {
-  const auth = await requireSuperAdminAndParse(deactivateUserSchema, { userId });
+  const auth = await requireStaffAndParse(deactivateUserSchema, { userId });
   if (!auth.success) {
     return { success: false, error: auth.error };
   }
@@ -397,7 +434,7 @@ export async function prepareAiBrainFileUploadAction(
     contentType: string;
   }>
 > {
-  const auth = await requireSuperAdminAndParse(
+  const auth = await requireStaffAndParse(
     prepareAiBrainFileUploadSchema,
     input
   );
@@ -453,7 +490,7 @@ export type CreateAiBrainDocumentInput = {
 export async function createAiBrainDocumentAction(
   input: unknown
 ): Promise<MutationResult<{ id: string }>> {
-  const auth = await requireSuperAdminAndParse(createAiBrainDocumentSchema, input);
+  const auth = await requireStaffAndParse(createAiBrainDocumentSchema, input);
   if (!auth.success) {
     return { success: false, error: auth.error };
   }
@@ -520,7 +557,7 @@ export async function createAiBrainDocumentAction(
 export async function archiveAiBrainDocumentAction(
   id: string
 ): Promise<MutationResult> {
-  const auth = await requireSuperAdminAndParse(archiveAiBrainDocumentSchema, {
+  const auth = await requireStaffAndParse(archiveAiBrainDocumentSchema, {
     id,
   });
   if (!auth.success) {
@@ -546,7 +583,7 @@ export async function archiveAiBrainDocumentAction(
 export async function deleteAiBrainDocumentAction(
   id: string
 ): Promise<MutationResult> {
-  const auth = await requireSuperAdminAndParse(deleteAiBrainDocumentSchema, {
+  const auth = await requireStaffAndParse(deleteAiBrainDocumentSchema, {
     id,
   });
   if (!auth.success) {
@@ -581,7 +618,7 @@ export async function deleteAiBrainDocumentAction(
 export async function getAiBrainSignedUrlAction(
   storagePath: string
 ): Promise<MutationResult<{ url: string }>> {
-  const auth = await requireSuperAdminAndParse(getAiBrainSignedUrlSchema, {
+  const auth = await requireStaffAndParse(getAiBrainSignedUrlSchema, {
     storagePath,
   });
   if (!auth.success) {
@@ -606,7 +643,7 @@ export async function processAiBrainDocumentAction(
   documentId: string
 ): Promise<MutationResult<{ charCount: number }>> {
   return runMutation(async () => {
-    await requireSuperAdmin();
+    await requireStaff();
     const result = await processAiBrainDocument(documentId);
     if (!result.ok) throw new Error(result.error);
     revalidatePath(paths.superAdmin.aiBrain.document(documentId));
@@ -631,11 +668,11 @@ export async function importDriveFileForBrainAction(input: {
     mimeType: string;
   }>
 > {
-  await requireSuperAdmin();
+  await requireStaff();
 
   return runMutation(async () => {
     // Use the super-admin's own Google Drive token (stored by user_id)
-    const user = await requireSuperAdmin();
+    const user = await requireStaff();
     const adminDb = createAdminClient();
     const { data: tokenRow } = await adminDb
       .from("super_admin_google_tokens")
@@ -722,7 +759,7 @@ export async function importDriveFileForBrainAction(input: {
 export async function createHoldingOrgAction(
   input: unknown
 ): Promise<MutationResult<{ orgId: string; tempCredentials: TempCredentials }>> {
-  const auth = await requireSuperAdminAndParse(createHoldingOrgSchema, input);
+  const auth = await requireStaffAndParse(createHoldingOrgSchema, input);
   if (!auth.success) {
     return { success: false, error: auth.error };
   }
@@ -793,7 +830,7 @@ export async function createHoldingOrgAction(
 export async function regenerateTempPasswordAction(
   userId: string
 ): Promise<MutationResult<TempCredentials>> {
-  const auth = await requireSuperAdminAndParse(regenerateTempPasswordSchema, {
+  const auth = await requireStaffAndParse(regenerateTempPasswordSchema, {
     userId,
   });
   if (!auth.success) {
@@ -819,7 +856,7 @@ export async function submitBrainSummaryBatchAction(): Promise<
   MutationResult<{ batchId: string; docCount: number }>
 > {
   return runMutation(async () => {
-    await requireSuperAdmin();
+    await requireStaff();
 
     const admin = createAdminClient();
 
@@ -878,7 +915,7 @@ export async function syncBrainBatchResultsAction(
   MutationResult<{ status: string; processed: number; pending: number }>
 > {
   return runMutation(async () => {
-    await requireSuperAdmin();
+    await requireStaff();
 
     const admin = createAdminClient();
     const client = await getPlatformAnthropicClient();
@@ -945,7 +982,7 @@ export async function updateOrgAddOnsAction(
   addOns: string[]
 ): Promise<MutationResult<{ enabledAddOns: string[] }>> {
   return runMutation(async () => {
-    await requireSuperAdmin();
+    await requireStaff();
 
     const validated = addOns.filter((id): id is (typeof ADD_ON_IDS)[number] =>
       ADD_ON_IDS.includes(id as (typeof ADD_ON_IDS)[number])

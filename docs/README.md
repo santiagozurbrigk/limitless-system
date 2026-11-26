@@ -36,7 +36,8 @@ integraciones, reglas de negocio no obvias, limitaciones, tests y archivos clave
 | Ventas (bandeja, closing, llamadas, cobros, métricas) | [`areas/ventas.md`](./areas/ventas.md) | `/sales/*` |
 | Marketing (contenido Zernio, anuncios, UTMs, formularios, Trial Reels) | [`areas/marketing.md`](./areas/marketing.md) | `/marketing/*` |
 | Embudos y Lanzamientos | [`areas/embudos.md`](./areas/embudos.md) | `/funnels`, `/lanzamientos` |
-| ↳ Limitless Webinars: contratos de vista y escenario de ejemplo | [`areas/webinars-contratos-de-vista.md`](./areas/webinars-contratos-de-vista.md) | Lo que leen Inicio, Lanzamientos, Leads y la Ficha (pantallas sin construir) |
+| ↳ Limitless Webinars: contratos de vista y escenario de ejemplo | [`areas/webinars-contratos-de-vista.md`](./areas/webinars-contratos-de-vista.md) | Lo que leen Inicio, Lanzamientos, Detalle, Configuración, Leads y la Ficha |
+| ↳ Limitless Webinars: fichas de datos | [`areas/webinars-fichas-de-datos.md`](./areas/webinars-fichas-de-datos.md) | De dónde sale cada número de cada pantalla, a qué tabla se ata, frescura, estados y quién lo ve; huecos del modelo |
 | Agente de negocio e IA (agente, RAG, BYOK, reportes, inteligencia) | [`areas/agente-ia.md`](./areas/agente-ia.md) | `/agent`, `/business-context/*`, `/executive-reports/*`, `/intelligence` |
 | Operaciones y equipo (tablero, SOPs, inputs, equipo) | [`areas/operaciones.md`](./areas/operaciones.md) | `/workboard`, `/operations/*`, `/team` |
 | Finanzas | [`areas/finanzas.md`](./areas/finanzas.md) | `/finance/*` |

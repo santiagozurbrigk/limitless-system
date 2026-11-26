@@ -38,7 +38,14 @@ export function AvisoDeEstado({
  * AC-8): el título fijo y el motivo. Lo usa la página dentro de la cáscara de
  * la plataforma.
  */
-export function ErrorDeCarga({ motivo }: { motivo: string }) {
+export function ErrorDeCarga({
+  motivo,
+  titulo = "No pudimos cargar esta ficha.",
+}: {
+  motivo: string;
+  /** El título fijo; el Detalle del lanzamiento usa el suyo (SCRUM-544). */
+  titulo?: string;
+}) {
   return (
     <div
       role="alert"
@@ -46,7 +53,7 @@ export function ErrorDeCarga({ motivo }: { motivo: string }) {
     >
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
       <div>
-        <p className="font-medium">No pudimos cargar esta ficha.</p>
+        <p className="font-medium">{titulo}</p>
         <p className="text-muted-foreground">{motivo}</p>
       </div>
     </div>

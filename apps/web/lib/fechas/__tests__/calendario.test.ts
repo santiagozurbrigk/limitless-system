@@ -350,3 +350,34 @@ describe("esFechaCalendario", () => {
     expect(esFechaCalendario("5/10/2026")).toBe(false);
   });
 });
+
+describe("instanteAHoraLocalEnZona / horaLocalEnZonaAInstante (revisión de #153)", () => {
+  it("⭐ una sesión de las 20:00 de Buenos Aires es 20:00, sea cual sea la zona del proceso", async () => {
+    const { instanteAHoraLocalEnZona, horaLocalEnZonaAInstante } = await import("../calendario");
+    expect(instanteAHoraLocalEnZona("2026-11-03T23:00:00.000Z", "America/Argentina/Buenos_Aires")).toBe("2026-11-03T20:00");
+    expect(horaLocalEnZonaAInstante("2026-11-03T20:00", "America/Argentina/Buenos_Aires")).toBe("2026-11-03T23:00:00.000Z");
+  });
+
+  it("respeta el horario de verano de la zona (Madrid en enero y en julio)", async () => {
+    const { instanteAHoraLocalEnZona, horaLocalEnZonaAInstante } = await import("../calendario");
+    expect(horaLocalEnZonaAInstante("2026-01-15T20:00", "Europe/Madrid")).toBe("2026-01-15T19:00:00.000Z");
+    expect(horaLocalEnZonaAInstante("2026-07-15T20:00", "Europe/Madrid")).toBe("2026-07-15T18:00:00.000Z");
+    expect(instanteAHoraLocalEnZona("2026-07-15T18:00:00.000Z", "Europe/Madrid")).toBe("2026-07-15T20:00");
+  });
+
+  it("⭐ una hora que no existe en la zona es null, no la de antes ni la de después", async () => {
+    const { horaLocalEnZonaAInstante } = await import("../calendario");
+    expect(horaLocalEnZonaAInstante("2026-09-06T00:30", "America/Santiago")).toBeNull();
+    expect(horaLocalEnZonaAInstante("2026-03-08T02:30", "America/New_York")).toBeNull();
+    expect(horaLocalEnZonaAInstante("2026-03-29T02:30", "Europe/Madrid")).toBeNull();
+    expect(horaLocalEnZonaAInstante("2026-03-29T03:30", "Europe/Madrid")).toBe("2026-03-29T01:30:00.000Z");
+  });
+
+  it("lo que no es una hora local válida es null o vacío", async () => {
+    const { instanteAHoraLocalEnZona, horaLocalEnZonaAInstante } = await import("../calendario");
+    expect(horaLocalEnZonaAInstante("2026-02-30T20:00", null)).toBeNull();
+    expect(horaLocalEnZonaAInstante("2026-11-03 20:00", null)).toBeNull();
+    expect(horaLocalEnZonaAInstante("2026-11-03T24:00", null)).toBeNull();
+    expect(instanteAHoraLocalEnZona("no", null)).toBe("");
+  });
+});

@@ -12,7 +12,7 @@ El detalle de sesión, organización efectiva, holding y permisos por módulo es
 | Sesión | Supabase Auth con cookies (`@supabase/ssr`), refresco en el middleware | `apps/web/lib/supabase/middleware.ts` |
 | Rutas | Todo requiere sesión salvo la lista de `isPublicPath` | `apps/web/lib/supabase/public-paths.ts` |
 | Permisos por rol | Bloqueo del **render** por módulo en el layout de plataforma | `apps/web/app/(platform)/layout.tsx`, `lib/auth/get-current-permissions.ts` |
-| Super-admin | `requireSuperAdmin()` en todas sus acciones | `apps/web/lib/auth/require-super-admin.ts` |
+| Super-admin (staff) | `requireStaff()` en todas sus acciones y `isStaffUser()` en el layout: decide la lista `super_admin_users` y se rechaza al staff con `profiles.is_active` en false (motivo `desactivado`) | `apps/web/lib/auth/require-staff.ts` |
 | Secretos de integraciones | Tablas sin lectura para el usuario + service role en servidor + AES-256-GCM | `lib/supabase/admin.ts`, `lib/security/encryption.ts` |
 | Jobs | `CRON_SECRET`, `WORKER_AUTH_SECRET`, firma QStash, comparación en tiempo constante | `lib/integrations/cron-auth.ts`, `lib/queue/verify-queue-request.ts`, `lib/security/safe-equal.ts` |
 | Webhooks | Firma o secreto por proveedor, fail-closed | ver `docs/arquitectura/jobs-webhooks-y-colas.md` |
@@ -106,7 +106,7 @@ Contador en Postgres (`consume_rate_limit`), fail-open. Límites y usos en `docs
 ## Archivos clave
 
 - `apps/web/lib/supabase/{middleware,public-paths,admin}.ts`
-- `apps/web/lib/auth/{bootstrap,require-auth,require-super-admin,get-current-permissions}.ts`
+- `apps/web/lib/auth/{bootstrap,require-auth,require-staff,get-current-permissions}.ts` (`require-super-admin.ts` es un alias `@deprecated` de `require-staff.ts`)
 - `apps/web/lib/security/{encryption,safe-equal}.ts`
 - `apps/web/lib/integrations/{cron-auth,oauth-redirect,oauth-callback-headers,oauth-state,oauth-sesion}.ts`
 - `apps/web/lib/queue/verify-queue-request.ts`

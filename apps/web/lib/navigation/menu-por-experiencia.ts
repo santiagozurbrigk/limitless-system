@@ -12,21 +12,22 @@ import type { SidebarParentKey } from "./sidebar-modules";
  *
  *   - `webinar` (Limitless Webinars; PO, 19-oct y 28-oct-2026): Inicio,
  *     Lanzamientos, Leads y Equipo, en ese orden.
- *       - Inicio: SCRUM-534.
- *       - Lanzamientos: SCRUM-529 (la ruta es la de hoy, que sigue escondida
- *         para todos por `ESCONDIDO.lanzamientos`; encenderla obliga a revisar
- *         su layout).
+ *       - Inicio: SCRUM-543 (`/inicio`, el lanzamiento activo).
+ *       - Lanzamientos: SCRUM-544 (`/lanzamientos` y el detalle
+ *         `/lanzamientos/[id]`; crear y configurar es de SCRUM-529).
  *       - Leads: SCRUM-545 (`/leads` y la ficha `/leads/[id]`).
  *       - Equipo: ya existe (`/team`).
  *   - `limitless` (Limitless de gestión; PO, 28-oct-2026): Clientes, Tablero
- *     de trabajo, Ventas y Administración, en ese orden. Las tres primeras son
- *     las pantallas de siempre, con el mismo nombre, ícono y módulo de permisos
- *     que en el menú completo; Ventas es el mismo grupo, con sus hijos.
- *     Administración es de SCRUM-551.
+ *     de trabajo, Ventas, Equipo y Administración, en ese orden. Las cuatro
+ *     primeras son las pantallas de siempre, con el mismo nombre, ícono y
+ *     módulo de permisos que en el menú completo; Ventas es el mismo grupo,
+ *     con sus hijos. Equipo es provisoria hasta SCRUM-551 (sin ella no se
+ *     puede invitar staff nuevo) y se revisa al cerrarla. Administración es
+ *     de SCRUM-551.
  *
  * Una entrada con `lista: false` no se muestra (nada de "Próximamente") y su
  * ruta no se abre. Lo que ve quien la tipea depende de si su pantalla existe:
- * hoy `/inicio` y `/administracion` no tienen carpeta en
+ * hoy ninguna entrada está en ese caso; una que no tenga carpeta en
  * `app/(platform)`, así que la URL da el 404 de la app (sin la barra); cuando
  * la tarea cree la carpeta, su `layout.tsx` llama a `exigirRutaDeLaExperiencia`
  * (lo exige un test) y esa ruta redirige a la pantalla de inicio mientras la
@@ -49,6 +50,12 @@ export type EntradaDelMenu = {
   icon: string;
   permissionId: PermissionModuleId;
   grupo?: SidebarParentKey;
+  /**
+   * Sólo la ve el staff de Limitless (la lista de `super_admin_users`), sea
+   * cual sea su rol: Administración (SCRUM-551). El rol sigue filtrando
+   * además, pero no alcanza.
+   */
+  soloStaff?: boolean;
   lista: boolean;
 };
 
@@ -63,7 +70,7 @@ export const MENU_POR_EXPERIENCIA: Record<ExperienciaConMenuPropio, readonly Ent
       href: paths.platform.inicio,
       icon: "layout-dashboard",
       permissionId: "dashboard",
-      lista: false, // SCRUM-534
+      lista: true,
     },
     {
       id: "lanzamientos",
@@ -71,7 +78,7 @@ export const MENU_POR_EXPERIENCIA: Record<ExperienciaConMenuPropio, readonly Ent
       href: paths.platform.lanzamientos,
       icon: "rocket",
       permissionId: "funnels",
-      lista: false, // SCRUM-529
+      lista: true,
     },
     {
       id: "leads",
@@ -117,13 +124,27 @@ export const MENU_POR_EXPERIENCIA: Record<ExperienciaConMenuPropio, readonly Ent
       lista: true,
     },
     {
+      // Provisoria hasta SCRUM-551, se revisa al cerrarla: sin Equipo no se
+      // puede invitar staff nuevo (SCRUM-552 lo suma por invitación).
+      id: "equipo",
+      label: "Equipo",
+      href: paths.platform.team.root,
+      icon: "users",
+      permissionId: "team",
+      lista: true,
+    },
+    {
       id: "administracion",
       label: "Administración",
-      href: paths.platform.administracion,
+      href: paths.platform.consola.organizaciones,
       icon: "building-2",
-      // Provisorio: el módulo de permisos de Administración lo decide SCRUM-551.
-      permissionId: "finance",
-      lista: false, // SCRUM-551
+      // El acceso lo decide la lista de staff (`soloStaff` y el layout de
+      // `/administracion`), no el rol: `settings` sólo cumple el contrato de
+      // que toda entrada tenga módulo (SCRUM-551).
+      permissionId: "settings",
+      grupo: "administracion",
+      soloStaff: true,
+      lista: true,
     },
   ],
 };

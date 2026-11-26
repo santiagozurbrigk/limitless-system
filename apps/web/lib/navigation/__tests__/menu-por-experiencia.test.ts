@@ -101,12 +101,14 @@ describe("⭐ barra de una organización full: igual que antes", () => {
 describe("⭐ barra de una organización webinar", () => {
   const webinar = buildPlatformSidebarNav(["operaciones", "producto"], "webinar");
 
-  it("sólo las entradas listas del menú (hoy, Leads y Equipo), aunque tenga add-ons", () => {
-    expect(webinar.rootItems.map(describir)).toEqual(["/leads", "/team"]);
+  it("sólo las entradas listas del menú (hoy, Inicio, Lanzamientos, Leads y Equipo), aunque tenga add-ons", () => {
+    expect(webinar.rootItems.map(describir)).toEqual(["/inicio", "/lanzamientos", "/leads", "/team"]);
   });
 
   it("cada entrada lleva su módulo de permisos", () => {
-    const [leads, equipo] = webinar.rootItems;
+    const [inicio, lanzamientos, leads, equipo] = webinar.rootItems;
+    expect(lanzamientos).toMatchObject({ type: "link", module: { label: "Lanzamientos", permissionId: "funnels" } });
+    expect(inicio).toMatchObject({ type: "link", module: { label: "Inicio", permissionId: "dashboard" } });
     expect(leads).toMatchObject({ type: "link", module: { label: "Leads", permissionId: "sales" } });
     expect(equipo).toMatchObject({ type: "link", module: { label: "Equipo", permissionId: "team" } });
   });
@@ -117,7 +119,7 @@ describe("⭐ barra de una organización webinar", () => {
   });
 
   it("además, filtrada por los permisos de siempre", () => {
-    expect(visibles(webinar, FOUNDER)).toEqual(["Leads", "Equipo"]);
+    expect(visibles(webinar, FOUNDER)).toEqual(["Inicio", "Lanzamientos", "Leads", "Equipo"]);
     expect(visibles(webinar, MIEMBRO_CON_EQUIPO)).toEqual(["Equipo"]);
     expect(visibles(webinar, MIEMBRO_SIN_EQUIPO)).toEqual(["Leads"]);
   });
@@ -127,15 +129,15 @@ describe("⭐ barra de una organización limitless", () => {
   const limitless = buildPlatformSidebarNav(["operaciones", "producto"], "limitless");
   const SOLO_VENTAS: Permisos = { isFounder: false, modules: { ...emptyPermissions(), sales: "view" } };
 
-  it("Clientes, Tablero de trabajo y el grupo Ventas, en ese orden, aunque tenga add-ons; Administración no", () => {
-    expect(limitless.rootItems.map(describir)).toEqual(["/clients", "/workboard", "[ventas]"]);
+  it("Clientes, Tablero de trabajo, el grupo Ventas y Equipo, en ese orden, aunque tenga add-ons; Administración no", () => {
+    expect(limitless.rootItems.map(describir)).toEqual(["/clients", "/workboard", "[ventas]", "/team"]);
   });
 
   it("⭐ los mismos items que el menú completo: links con su módulo y el grupo Ventas con sus hijos", () => {
     const completo = buildPlatformSidebarNav([], "full");
     const linkDe = (config: SidebarNavConfig, href: string) =>
       config.rootItems.find((i) => i.type === "link" && i.module.href === href);
-    for (const href of ["/clients", "/workboard"]) {
+    for (const href of ["/clients", "/workboard", "/team"]) {
       expect(linkDe(limitless, href)).toEqual(linkDe(completo, href));
     }
     expect(limitless.modulesWithChildren).toEqual({ ventas: completo.modulesWithChildren.ventas });
@@ -151,9 +153,9 @@ describe("⭐ barra de una organización limitless", () => {
   });
 
   it("además, filtrada por los permisos de siempre", () => {
-    expect(visibles(limitless, FOUNDER)).toEqual(["Clientes", "Tablero de trabajo", "Ventas"]);
+    expect(visibles(limitless, FOUNDER)).toEqual(["Clientes", "Tablero de trabajo", "Ventas", "Equipo"]);
     expect(visibles(limitless, SOLO_VENTAS)).toEqual(["Ventas"]);
-    expect(visibles(limitless, MIEMBRO_CON_EQUIPO)).toEqual([]);
+    expect(visibles(limitless, MIEMBRO_CON_EQUIPO)).toEqual(["Equipo"]);
   });
 });
 
@@ -173,6 +175,8 @@ describe("⭐ paleta de comandos", () => {
 
   it("webinar: sólo las entradas listas, filtradas por permiso, sin acciones rápidas", () => {
     expect(itemsDeLaPaleta("webinar", FOUNDER)).toEqual([
+      { label: "Inicio", href: "/inicio", group: "Plataforma", keywords: "Inicio" },
+      { label: "Lanzamientos", href: "/lanzamientos", group: "Plataforma", keywords: "Lanzamientos" },
       { label: "Leads", href: "/leads", group: "Plataforma", keywords: "Leads" },
       { label: "Equipo", href: "/team", group: "Plataforma", keywords: "Equipo" },
     ]);
@@ -180,7 +184,7 @@ describe("⭐ paleta de comandos", () => {
     expect(itemsDeLaPaleta("webinar", MIEMBRO_SIN_EQUIPO).map((i) => i.href)).toEqual(["/leads"]);
   });
 
-  it("⭐ limitless: Clientes, Tablero y los hijos de Ventas, filtrados por permiso, sin acciones rápidas", () => {
+  it("⭐ limitless: Clientes, Tablero, los hijos de Ventas y Equipo, filtrados por permiso, sin acciones rápidas", () => {
     expect(itemsDeLaPaleta("limitless", FOUNDER).map((i) => `${i.group}: ${i.label} ${i.href}`)).toEqual([
       "Plataforma: Clientes /clients",
       "Plataforma: Tablero de trabajo /workboard",
@@ -189,6 +193,7 @@ describe("⭐ paleta de comandos", () => {
       "Ventas: Closing /sales/closing",
       "Ventas: Cobros /sales/cobros",
       "Ventas: Llamadas /sales/llamadas",
+      "Plataforma: Equipo /team",
     ]);
     expect(itemsDeLaPaleta("limitless", MIEMBRO_SIN_EQUIPO).map((i) => i.href)).toEqual([
       "/sales/inbox",
@@ -197,6 +202,8 @@ describe("⭐ paleta de comandos", () => {
       "/sales/cobros",
       "/sales/llamadas",
     ]);
-    expect(itemsDeLaPaleta("limitless", MIEMBRO_CON_EQUIPO)).toEqual([]);
+    expect(itemsDeLaPaleta("limitless", MIEMBRO_CON_EQUIPO)).toEqual([
+      { label: "Equipo", href: "/team", group: "Plataforma", keywords: "Equipo" },
+    ]);
   });
 });

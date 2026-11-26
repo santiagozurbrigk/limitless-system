@@ -100,7 +100,7 @@ describe("columnas y ruta de creación", () => {
     ]);
   });
 
-  it("hoy no hay ruta para crear un lanzamiento (DT-22)", () => {
-    expect(RUTA_PARA_CREAR_LANZAMIENTO).toBeNull();
+  it("SCRUM-529: la ruta para crear un lanzamiento es la pantalla de creación", () => {
+    expect(RUTA_PARA_CREAR_LANZAMIENTO).toBe("/lanzamientos/nuevo");
   });
 });

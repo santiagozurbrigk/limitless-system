@@ -17,6 +17,10 @@ import {
 } from "@/lib/queue/qstash-client";
 import type { CalendlyFormAnswer } from "@/types/closing";
 import { assertClienteDeLaOrg } from "@/lib/fathom/cliente-de-la-org";
+import { EXPERIENCIAS_SIN_PROCESOS_DE_FONDO } from "@/lib/organization/procesos-de-fondo";
+
+/** El valor de `.not("organizations.experience", "in", …)`: las experiencias sin procesos de fondo. */
+export const FILTRO_SIN_PROCESOS_DE_FONDO = `(${EXPERIENCIAS_SIN_PROCESOS_DE_FONDO.join(",")})`;
 
 function formAnswersToRecord(
   answers: CalendlyFormAnswer[] | null | undefined
@@ -95,15 +99,29 @@ export async function processPendingFathomCalls(
   const now = new Date().toISOString();
   const startedAt = Date.now();
 
-  const { data: pending, error } = await admin
+  // SCRUM-525: las llamadas de una cuenta webinar no se analizan con IA. Se
+  // excluyen en la consulta, con un join a `organizations` por su experiencia
+  // (no después, para que no ocupen el lote; y no con la lista de orgs en la
+  // URL, que crece con cada cuenta webinar). Quedan `pending`.
+  const { data, error } = await admin
     .from("fathom_calls")
-    .select("*")
+    .select("*, organizations!inner(experience)")
     .eq("status", "pending")
     .lte("processed_after", now)
+    .not("organizations.experience", "in", FILTRO_SIN_PROCESOS_DE_FONDO)
     .order("processed_after", { ascending: true })
     .limit(limit);
 
-  if (error || !pending?.length) return 0;
+  // Una consulta caída no es "nada pendiente": el cron responde error y queda
+  // a la vista, en vez de decir `ok` con 0 procesadas.
+  if (error) throw new Error(`[processPendingFathomCalls] ${error.message}`);
+  if (!data?.length) return 0;
+  // El join sólo filtra: se saca para que la fila sea la de `fathom_calls`.
+  const pending = data.map((fila) => {
+    const call: Record<string, unknown> = { ...fila };
+    delete call.organizations;
+    return call;
+  });
 
   let processed = 0;
   for (const call of pending as FathomCallRow[]) {

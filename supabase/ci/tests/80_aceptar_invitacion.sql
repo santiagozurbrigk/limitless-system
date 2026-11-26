@@ -2,8 +2,12 @@
 -- Aceptar una invitación de equipo: sólo la cuenta que ya existe con el email
 -- de la invitación (confirmado), una sola vez, con el rol de la org; si no se
 -- puede, la invitación y el perfil quedan como estaban. Nadie con su JWT puede
--- llamar a la función: la llama la app con el service role.
--- Migración: 20261005150000_aceptar_invitacion_de_equipo.
+-- llamar a la función: la llama la app con el service role. El staff invitado
+-- a una org que no es la de Limitless sigue en cuenta_de_staff (las orgs de
+-- este test no son limitless; la invitación a la org de Limitless está en
+-- 98_staff_en_org_de_limitless.sql).
+-- Migraciones: 20261005150000_aceptar_invitacion_de_equipo,
+-- 20261101120000_staff_en_org_de_limitless.
 
 begin;
 
@@ -108,7 +112,7 @@ select ci.espera((select count(*) from public.profiles
   where id = '80000000-0000-0000-0000-0000000000a4' and organization_id = '80000000-0000-0000-0000-000000000b00' and role = 'founder'), 1,
   'la cuenta de otra org sigue en su org y con su rol');
 
--- El staff no queda como miembro de la org, tenga perfil o no.
+-- El staff no queda como miembro de una org que no es la de Limitless, tenga perfil o no.
 select ci.espera(
   (select count(*) from (select public.aceptar_invitacion_de_equipo('tok-staff', '80000000-0000-0000-0000-0000000000a5') as m) x where m = 'cuenta_de_staff'),
   1, 'el super admin con perfil sin org no se suma a una org por invitación');
